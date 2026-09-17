@@ -1,7 +1,7 @@
 [project]
 name = "open-swe-traces-research"
 version = "0.1.0"
-description = "Add your description here"
+description = "Local analytics on NVIDIA Open-SWE-Traces agent trajectories"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
