@@ -1,0 +1,27 @@
+# Data (downloaded locally; too large for git)
+traces_data/
+
+# Python / uv
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Environment
+.env
+.env.*
+
+# OS / editor
+.DS_Store
+*.swp
+*.swo
+
+# Analysis outputs (regenerate locally)
+outputs/
+*.parquet.tmp
