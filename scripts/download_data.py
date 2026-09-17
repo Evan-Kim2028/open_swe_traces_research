@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -81,7 +83,27 @@ def print_status(data_dir: Path) -> dict:
     return status
 
 
-def download(data_dir: Path = DEFAULT_DIR) -> Path:
+def _install_http_throttle(max_bytes_per_sec: float) -> None:
+    """Cap httpx read throughput (used by huggingface_hub). Idempotent."""
+
+    import httpx
+
+    if getattr(httpx.Response.iter_bytes, "_ost_throttled", False):
+        return
+
+    original = httpx.Response.iter_bytes
+
+    def throttled_iter_bytes(self, chunk_size: int | None = None):
+        for chunk in original(self, chunk_size):
+            if chunk:
+                time.sleep(len(chunk) / max_bytes_per_sec)
+            yield chunk
+
+    throttled_iter_bytes._ost_throttled = True  # type: ignore[attr-defined]
+    httpx.Response.iter_bytes = throttled_iter_bytes  # type: ignore[method-assign]
+
+
+def download(data_dir: Path = DEFAULT_DIR, *, max_mbps: float | None = None) -> Path:
     data_dir.mkdir(parents=True, exist_ok=True)
     before = write_status(data_dir, complete=False)
     console.print(f"[bold]Downloading[/bold] {REPO_ID}")
@@ -91,11 +113,19 @@ def download(data_dir: Path = DEFAULT_DIR) -> Path:
         f"({before['bytes_downloaded'] / 1e9:.2f} GB) already on disk\n"
     )
 
+    max_workers = 8
+    if max_mbps:
+        os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
+        _install_http_throttle(max_mbps * 1_000_000)
+        max_workers = 1
+        console.print(f"[yellow]Throttled to ~{max_mbps:g} MB/s[/yellow] (max_workers=1)\n")
+
     try:
         path = snapshot_download(
             repo_id=REPO_ID,
             repo_type="dataset",
             local_dir=str(data_dir),
+            max_workers=max_workers,
         )
     except Exception as exc:
         write_status(data_dir, complete=False, error=str(exc))
@@ -123,11 +153,17 @@ def main() -> None:
         action="store_true",
         help="Print download progress and exit (no download)",
     )
+    parser.add_argument(
+        "--max-mbps",
+        type=float,
+        default=None,
+        help="Cap download speed in megabytes/sec (e.g. 20)",
+    )
     args = parser.parse_args()
     if args.status:
         print_status(args.output)
         return
-    download(args.output)
+    download(args.output, max_mbps=args.max_mbps)
 
 
 if __name__ == "__main__":
