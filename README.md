@@ -23,12 +23,15 @@ Progress is tracked in `traces_data/.download_status.json`.
 
 ## DuckDB analytics (in-repo)
 
+All DuckDB scripts use a **4GB memory cap** via `scripts/duckdb_session.py` (streaming queries, temp in `duckdb/tmp/`).
+
 Inspired by [DuckDB skills / state.sql](https://duckdb.org/2026/09/16/duckdb-skills):
 
 ```bash
 uv run python scripts/duckdb_init.py                        # views over parquet
 uv run python scripts/duckdb_init.py --refresh-summaries    # + materialized tables
 uv run python scripts/duckdb_query.py -f analytics/queries/001_dataset_profile.sql
+uv run python scripts/extract_turn_sample.py --sample-size 30 --register-duckdb
 ```
 
 Interactive CLI:

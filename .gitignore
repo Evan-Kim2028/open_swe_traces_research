@@ -4,7 +4,9 @@ traces_data/.download_status.json
 
 # DuckDB (regenerate with duckdb_init.py)
 duckdb/
+duckdb/tmp/
 analytics/state.local.sql
+outputs/turn_sample.parquet
 
 # Python / uv
 .venv/

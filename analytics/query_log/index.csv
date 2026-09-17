@@ -4,3 +4,5 @@ timestamp,slug,sql_file,row_count,elapsed_ms,log_path
 2026-09-17T19:22:52.843180+00:00,002_resolved_by_harness,analytics/queries/002_resolved_by_harness.sql,0,21,analytics/query_log/2026-09-17_192252_002_resolved_by_harness.sql
 2026-09-17T19:23:09.626979+00:00,test,,18,629,analytics/query_log/2026-09-17_192309_test.sql
 2026-09-17T19:23:13.138020+00:00,002_resolved_by_harness,analytics/queries/002_resolved_by_harness.sql,18,413,analytics/query_log/2026-09-17_192313_002_resolved_by_harness.sql
+2026-09-17T19:24:14.494505+00:00,001_dataset_profile,analytics/queries/001_dataset_profile.sql,15,620,analytics/query_log/2026-09-17_192414_001_dataset_profile.sql
+2026-09-17T19:37:51.665327+00:00,003_trial_eda,analytics/queries/003_trial_eda.sql,19,26439,analytics/query_log/2026-09-17_193751_003_trial_eda.sql

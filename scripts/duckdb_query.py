@@ -1,65 +1,75 @@
 #!/usr/bin/env python3
-"""Run a SQL file or inline query against open_swe.duckdb and append to the query log."""
+"""Run SQL against open_swe.duckdb with streaming results and query logging."""
 
 from __future__ import annotations
 
 import argparse
 import csv
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-import duckdb
 from rich.console import Console
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from duckdb_session import DB_PATH, ROOT, connect
 
 console = Console()
 
-ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = ROOT / "duckdb" / "open_swe.duckdb"
 QUERY_LOG_DIR = ROOT / "analytics" / "query_log"
 INDEX_CSV = QUERY_LOG_DIR / "index.csv"
+STREAM_BATCH = 500
 
 
 def _ensure_index() -> None:
     QUERY_LOG_DIR.mkdir(parents=True, exist_ok=True)
     if not INDEX_CSV.exists():
         with INDEX_CSV.open("w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(
+            csv.writer(f).writerow(
                 ["timestamp", "slug", "sql_file", "row_count", "elapsed_ms", "log_path"]
             )
 
 
 def _strip_sql_comments(sql: str) -> str:
-    lines = []
-    for line in sql.splitlines():
-        if line.lstrip().startswith("--"):
-            continue
-        lines.append(line)
-    return "\n".join(lines)
+    return "\n".join(line for line in sql.splitlines() if not line.lstrip().startswith("--"))
+
+
+def _stream_print(result) -> int:
+    """Print result batches without loading full dataframe."""
+    if not result.description:
+        return 0
+    columns = [d[0] for d in result.description]
+    console.print(" | ".join(columns))
+    console.print("-" * min(120, 8 * len(columns)))
+    row_count = 0
+    while True:
+        rows = result.fetchmany(STREAM_BATCH)
+        if not rows:
+            break
+        for row in rows:
+            console.print(" | ".join(str(v) for v in row))
+            row_count += 1
+    return row_count
 
 
 def run_query(sql: str, *, slug: str, sql_file: str | None = None) -> None:
     if not DB_PATH.exists():
-        raise SystemExit("DuckDB not initialized. Run: uv run python scripts/duckdb_init.py")
+        raise SystemExit("Run: uv run python scripts/duckdb_init.py")
 
     _ensure_index()
     started = datetime.now(UTC)
-    con = duckdb.connect(str(DB_PATH), read_only=True)
-    con.execute(f"SET variable project_root = '{ROOT}'")
+    con = connect(read_only=True)
 
     row_count = 0
     try:
-        cleaned = _strip_sql_comments(sql)
-        statements = [s.strip() for s in cleaned.split(";") if s.strip()]
+        statements = [s.strip() for s in _strip_sql_comments(sql).split(";") if s.strip()]
         for i, statement in enumerate(statements):
             result = con.execute(statement)
             if result.description:
-                df = result.fetchdf()
-                row_count += len(df)
                 if len(statements) > 1:
                     console.print(f"\n[bold]Result {i + 1}/{len(statements)}[/bold]")
-                console.print(df.to_string(index=False))
-        if row_count == 0 and not statements:
+                row_count += _stream_print(result)
+        if row_count == 0:
             console.print("[dim](no result set)[/dim]")
     finally:
         con.close()
@@ -67,7 +77,10 @@ def run_query(sql: str, *, slug: str, sql_file: str | None = None) -> None:
     elapsed_ms = int((datetime.now(UTC) - started).total_seconds() * 1000)
     stamp = started.strftime("%Y-%m-%d_%H%M%S")
     log_path = QUERY_LOG_DIR / f"{stamp}_{slug}.sql"
-    header = f"-- slug: {slug}\n-- sql_file: {sql_file or 'inline'}\n-- rows: {row_count}\n-- elapsed_ms: {elapsed_ms}\n\n"
+    header = (
+        f"-- slug: {slug}\n-- sql_file: {sql_file or 'inline'}\n"
+        f"-- rows: {row_count}\n-- elapsed_ms: {elapsed_ms}\n\n"
+    )
     log_path.write_text(header + sql.strip() + "\n")
 
     with INDEX_CSV.open("a", newline="") as f:
@@ -81,8 +94,8 @@ def run_query(sql: str, *, slug: str, sql_file: str | None = None) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("sql", nargs="?", help="Inline SQL string")
-    parser.add_argument("-f", "--file", type=Path, help="Path to a .sql file under analytics/queries/")
-    parser.add_argument("-s", "--slug", default="query", help="Short name for the query log entry")
+    parser.add_argument("-f", "--file", type=Path, help="Path to a .sql file")
+    parser.add_argument("-s", "--slug", default="query", help="Short name for query log")
     args = parser.parse_args()
 
     if args.file:

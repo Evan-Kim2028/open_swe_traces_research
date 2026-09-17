@@ -4,42 +4,30 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
-import duckdb
 from rich.console import Console
+
+# Allow `from duckdb_session import ...` when run as script.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from duckdb_session import DB_PATH, PARQUET_GLOB, connect, state_local_sql
 
 console = Console()
 
 ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = ROOT / "duckdb" / "open_swe.duckdb"
 SCHEMA_DIR = ROOT / "analytics" / "schema"
-PARQUET_GLOB = str(ROOT / "traces_data" / "data" / "*" / "*" / "*" / "*.parquet")
-
-
-def _write_state_local() -> None:
-    path = ROOT / "analytics" / "state.local.sql"
-    path.write_text(
-        "\n".join(
-            [
-                f"SET variable project_root = '{ROOT}';",
-                f"SET variable parquet_glob = '{PARQUET_GLOB}';",
-            ]
-        )
-        + "\n"
-    )
 
 
 def init_db(*, refresh_summaries: bool = False) -> Path:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _write_state_local()
-    con = duckdb.connect(str(DB_PATH))
+    (ROOT / "analytics" / "state.local.sql").write_text(state_local_sql())
 
+    con = connect()
     schema_files = sorted(SCHEMA_DIR.glob("*.sql"))
     if not schema_files:
         raise SystemExit(f"No schema files in {SCHEMA_DIR}")
 
-    # Ensure _config exists before views reference it.
     con.execute(
         """
         CREATE TABLE IF NOT EXISTS _config (
