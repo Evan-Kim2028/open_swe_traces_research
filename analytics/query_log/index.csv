@@ -1,0 +1,6 @@
+timestamp,slug,sql_file,row_count,elapsed_ms,log_path
+2026-09-17T19:21:26.360734+00:00,002_resolved_by_harness,analytics/queries/002_resolved_by_harness.sql,0,22,analytics/query_log/2026-09-17_192126_002_resolved_by_harness.sql
+2026-09-17T19:22:48.467568+00:00,002_resolved_by_harness,analytics/queries/002_resolved_by_harness.sql,0,21,analytics/query_log/2026-09-17_192248_002_resolved_by_harness.sql
+2026-09-17T19:22:52.843180+00:00,002_resolved_by_harness,analytics/queries/002_resolved_by_harness.sql,0,21,analytics/query_log/2026-09-17_192252_002_resolved_by_harness.sql
+2026-09-17T19:23:09.626979+00:00,test,,18,629,analytics/query_log/2026-09-17_192309_test.sql
+2026-09-17T19:23:13.138020+00:00,002_resolved_by_harness,analytics/queries/002_resolved_by_harness.sql,18,413,analytics/query_log/2026-09-17_192313_002_resolved_by_harness.sql

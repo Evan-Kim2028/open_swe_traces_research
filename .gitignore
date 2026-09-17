@@ -1,5 +1,10 @@
 # Data (downloaded locally; too large for git)
 traces_data/
+traces_data/.download_status.json
+
+# DuckDB (regenerate with duckdb_init.py)
+duckdb/
+analytics/state.local.sql
 
 # Python / uv
 .venv/
@@ -25,4 +30,7 @@ __pycache__/
 # Analysis outputs (regenerate locally)
 outputs/
 download.log
+
+# Query log keeps SQL copies; index.csv is tracked, individual runs optional
+analytics/query_log/*.sql
 *.parquet.tmp

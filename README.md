@@ -1,8 +1,8 @@
 # open_swe_traces_research
 
-Local research workspace for [nvidia/Open-SWE-Traces](https://huggingface.co/datasets/nvidia/Open-SWE-Traces) — trace analytics, quality scoring, and early success/failure prediction.
+Local research on [nvidia/Open-SWE-Traces](https://huggingface.co/datasets/nvidia/Open-SWE-Traces).
 
-Paper: [Open-SWE-Traces (arXiv:2606.16038)](https://arxiv.org/abs/2606.16038)
+Paper: [arXiv:2606.16038](https://arxiv.org/abs/2606.16038)
 
 ## Setup
 
@@ -11,50 +11,65 @@ cd ~/Documents/open_swe_traces_research
 uv sync
 ```
 
-## Download dataset (~43 GB)
+## Download dataset (~43 GB, idempotent)
 
 ```bash
-uv run python scripts/download_data.py
+uv run python scripts/download_data.py          # resume-safe; rerun anytime
+uv run python scripts/download_data.py --status # progress only
+uv run python scripts/verify_data.py            # row counts after complete
 ```
 
-Data lands in `traces_data/` (gitignored). Resume is supported if interrupted.
+Progress is tracked in `traces_data/.download_status.json`.
 
-Verify after download:
+## DuckDB analytics (in-repo)
+
+Inspired by [DuckDB skills / state.sql](https://duckdb.org/2026/09/16/duckdb-skills):
 
 ```bash
-uv run python scripts/verify_data.py
+uv run python scripts/duckdb_init.py                        # views over parquet
+uv run python scripts/duckdb_init.py --refresh-summaries    # + materialized tables
+uv run python scripts/duckdb_query.py -f analytics/queries/001_dataset_profile.sql
 ```
 
-## Query with DuckDB
+Interactive CLI:
 
-Parquet shards under `traces_data/data/` can be queried in place:
-
-```python
-import duckdb
-
-con = duckdb.connect()
-con.sql("""
-  SELECT language, resolved, count(*) AS n
-  FROM read_parquet('traces_data/data/**/*.parquet', union_by_name=true)
-  GROUP BY 1, 2
-  ORDER BY n DESC
-""").show()
+```bash
+duckdb -init analytics/state.sql duckdb/open_swe.duckdb
 ```
+
+### Organization
+
+| Path | Purpose |
+|---|---|
+| `analytics/schema/` | Views + summary tables (version controlled) |
+| `analytics/queries/` | Named research SQL (version controlled) |
+| `analytics/query_log/` | Auto-log of every query run + `index.csv` |
+| `analytics/research/LOG.md` | Human findings journal |
+| `analytics/research/questions.md` | Open hypotheses |
+| `duckdb/open_swe.duckdb` | Local DB file (gitignored, rebuilt from schema) |
+
+**Views** (`traces`, `catalog_*`) re-read parquet on each query — new shards appear as download grows.
+
+**Summary tables** (`trace_summary_*`) are materialized snapshots — refresh after large download chunks.
 
 ## Layout
 
 ```
 open_swe_traces_research/
-├── traces_data/          # HF dataset mirror (local only)
+├── traces_data/           # HF dataset (gitignored)
+├── duckdb/                # open_swe.duckdb (gitignored)
+├── analytics/
+│   ├── state.sql          # CLI bootstrap
+│   ├── schema/            # DDL
+│   ├── queries/           # saved SQL
+│   ├── query_log/         # run history
+│   └── research/          # notes
 ├── scripts/
-│   ├── download_data.py
-│   └── verify_data.py
-├── notebooks/            # analysis notebooks (add as needed)
-└── outputs/              # charts, exports (gitignored)
+└── notebooks/
 ```
 
-Kaggle is reserved for GPU fine-tuning experiments later; all EDA runs locally.
+Kaggle reserved for GPU fine-tuning later; all EDA runs locally.
 
 ## License
 
-Code: MIT. Dataset: [CC BY 4.0](https://huggingface.co/datasets/nvidia/Open-SWE-Traces) (NVIDIA).
+Code: MIT. Dataset: [CC BY 4.0](https://huggingface.co/datasets/nvidia/Open-SWE-Traces).
