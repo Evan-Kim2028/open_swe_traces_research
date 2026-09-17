@@ -24,4 +24,5 @@ __pycache__/
 
 # Analysis outputs (regenerate locally)
 outputs/
+download.log
 *.parquet.tmp

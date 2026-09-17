@@ -15,11 +15,7 @@ REPO_ID = "nvidia/Open-SWE-Traces"
 DEFAULT_DIR = Path(__file__).resolve().parent.parent / "traces_data"
 
 
-def download(
-    local_dir: Path = DEFAULT_DIR,
-    *,
-    resume: bool = True,
-) -> Path:
+def download(local_dir: Path = DEFAULT_DIR) -> Path:
     local_dir.mkdir(parents=True, exist_ok=True)
     console.print(f"[bold]Downloading[/bold] {REPO_ID}")
     console.print(f"Destination: {local_dir}")
@@ -29,7 +25,6 @@ def download(
         repo_id=REPO_ID,
         repo_type="dataset",
         local_dir=str(local_dir),
-        resume_download=resume,
     )
     console.print(f"\n[green]Done.[/green] Files at: {path}")
     return Path(path)
