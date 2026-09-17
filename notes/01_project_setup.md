@@ -28,16 +28,16 @@ uv run python scripts/extract_turn_sample.py --sample-size 30 --register-duckdb
 All scripts use `scripts/duckdb_session.py`:
 - `memory_limit = 4GB`
 - `threads = 2`
-- temp spill: `duckdb/tmp/` (clean if stale `.tmp` dirs grow large)
+- temp spill: `duckdb/tmp/` (delete stale `.tmp` dirs if disk use spikes)
 
-Inspired by [DuckDB skills / state.sql](https://duckdb.org/2026/09/16/duckdb-skills).
+Pattern from [DuckDB skills / state.sql](https://duckdb.org/2026/09/16/duckdb-skills).
 
 ## Download status (last checked session)
 
 - Full dataset target: ~511,668 rows, ~43 GB, 215 parquet files
 - Download is idempotent via `huggingface_hub snapshot_download`
 - Progress tracked in `traces_data/.download_status.json`
-- User reported download completed in later session
+- Download completed in a later session
 
 ## Sources
 

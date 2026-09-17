@@ -33,6 +33,11 @@ __pycache__/
 outputs/
 download.log
 
+# Kaggle smoke experiment artifacts (regenerate locally)
+experiments/kaggle_smoke/data/
+experiments/kaggle_smoke/out/
+experiments/kaggle_smoke/*.log
+
 # Query log keeps SQL copies; index.csv is tracked, individual runs optional
 analytics/query_log/*.sql
 *.parquet.tmp

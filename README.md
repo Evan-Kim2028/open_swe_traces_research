@@ -4,6 +4,8 @@ Local research on [nvidia/Open-SWE-Traces](https://huggingface.co/datasets/nvidi
 
 Paper: [arXiv:2606.16038](https://arxiv.org/abs/2606.16038)
 
+**Research notes:** [`notes/`](notes/README.md) — thesis, EDA, SFT literature survey, sources.
+
 ## Setup
 
 ```bash

@@ -1,6 +1,6 @@
 # External trace datasets (union candidates)
 
-Goal: normalize into `traces`-compatible schema for DuckDB union views.
+Normalize into a `traces`-compatible schema for DuckDB union views.
 
 Also in: `analytics/research/external_datasets.md`
 

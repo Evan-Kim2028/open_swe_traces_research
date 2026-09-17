@@ -2,9 +2,9 @@
 
 ## What it is
 
-Agentic SFT corpus from NVIDIA — multi-step SWE agent runs on real GitHub issues from [SWE-rebench-V2](https://huggingface.co/datasets/nebius/SWE-rebench-V2).
+Agentic SFT corpus from NVIDIA: multi-step SWE agent runs on real GitHub issues from [SWE-rebench-V2](https://huggingface.co/datasets/nebius/SWE-rebench-V2).
 
-**Not an eval benchmark.** Training trajectories; do not confuse row count with eval coverage.
+Training trajectories, not an eval benchmark. Don't treat row count as eval coverage.
 
 Sources: [HF dataset card](https://huggingface.co/datasets/nvidia/Open-SWE-Traces), [arXiv:2606.16038](https://arxiv.org/abs/2606.16038)
 
@@ -50,7 +50,7 @@ Fine-tuned Qwen3-Coder-30B-A3B → **Open-SWE-Agent**:
 
 Source: [arXiv:2606.16038 Table 3–4](https://arxiv.org/abs/2606.16038)
 
-## Key paper ablations (relevant to our work)
+## Paper ablations we care about
 
 | Ablation | Finding |
 |---|---|

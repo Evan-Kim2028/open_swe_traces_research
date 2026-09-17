@@ -2,7 +2,7 @@
 
 One **trial** = one agent attempt to fix one GitHub issue.
 
-DuckDB views: `trial_summary` (cheap), `trace_turns` (expensive — sample only), `turn_sample` (materialized sample parquet).
+DuckDB views: `trial_summary` (cheap aggregates), `trace_turns` (expensive, sample only), `turn_sample` (materialized sample parquet).
 
 ## Identity
 

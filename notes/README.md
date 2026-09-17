@@ -1,6 +1,6 @@
 # Research notes
 
-Working notes for Open-SWE-Traces analysis. Each file has inline source links.
+Open-SWE-Traces analysis notes. Inline source links in each file.
 
 | File | Topic |
 |---|---|
@@ -12,5 +12,7 @@ Working notes for Open-SWE-Traces analysis. Each file has inline source links.
 | [06_external_datasets.md](06_external_datasets.md) | Union candidates on HuggingFace |
 | [07_sft_trace_practices.md](07_sft_trace_practices.md) | How the field uses traces for SFT |
 | [08_sft_evaluation_metrics.md](08_sft_evaluation_metrics.md) | Quantifying and evaluating trace quality |
+| [09_open_questions.md](09_open_questions.md) | Active research questions |
+| [sources.md](sources.md) | Full bibliography with links and BibTeX |
 
-Also see `analytics/research/LOG.md` for session-by-session findings.
+Session-by-session findings: `analytics/research/LOG.md`.

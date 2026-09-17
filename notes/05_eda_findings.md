@@ -1,6 +1,6 @@
 # EDA findings (partial → full download)
 
-Notes from exploratory sessions. Re-run `001_dataset_profile.sql` on full download for authoritative numbers.
+Exploratory session notes. Re-run `001_dataset_profile.sql` on the full download for authoritative numbers.
 
 ## Scale (partial session ~348k rows)
 
@@ -19,7 +19,7 @@ Notes from exploratory sessions. Re-run `001_dataset_profile.sql` on full downlo
 | failed | ~69k (avg ~123 turns) | ~41k (avg ~156 turns) |
 | unknown (`-1`) | ~69k | ~80k |
 
-**Pattern:** OpenHands has many unknown resolve labels. Successes tend to be shorter than failures.
+OpenHands has many unknown resolve labels. Successes run shorter than failures.
 
 ## By category (partial)
 
@@ -27,7 +27,7 @@ Notes from exploratory sessions. Re-run `001_dataset_profile.sql` on full downlo
 - bug-fix resolve rate highest among labeled outcomes
 - feature-request lower
 
-## Early signal (15-trial sample — directional only)
+## Early signal (15-trial sample, directional only)
 
 From `004_turn_sample_early_signal.sql`:
 
@@ -38,14 +38,14 @@ From `004_turn_sample_early_signal.sql`:
 
 Successes edit earlier and less; failures accumulate edits and tool errors.
 
-**Caveat:** n=15 trials — rerun at n=200–500 before drawing conclusions.
+n=15 only. Rerun at 200–500 trials before drawing conclusions.
 
 ## Infrastructure lessons
 
 - Unnesting all messages on full corpus OOMs even with 4GB cap
 - Use `trial_summary` for cheap aggregates
 - Use `extract_turn_sample.py` for turn-level work (sampled)
-- Stale DuckDB temp dir (`duckdb/open_swe.duckdb.tmp`) once grew to 31GB — safe to delete if no active query
+- Stale DuckDB temp dir (`duckdb/open_swe.duckdb.tmp`) once grew to 31GB; safe to delete if no active query
 
 ## Queries to re-run on full data
 
