@@ -1,6 +1,7 @@
 # Open questions
 
-Track hypotheses here; move answers to `LOG.md` when resolved.
+Canonical list: [`notes/06_open_questions.md`](../../notes/06_open_questions.md).  
+Track answers here and in `LOG.md` when resolved.
 
 1. **Early prediction:** At turn *k*, what signals best predict `resolved=1`?
 2. **Quality ranking:** Can a heuristic score (efficiency + patch overlap + no test edits) rank traces usefully?

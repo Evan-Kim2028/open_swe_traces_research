@@ -1,15 +1,16 @@
 # Research notes
 
-Consolidated notes from project exploration (Sep 2026). Each file has source links.
+Working notes for Open-SWE-Traces analysis. Each file has inline source links.
 
-| File | Contents |
+| File | Topic |
 |---|---|
-| [00_project_overview.md](00_project_overview.md) | Repo setup, commands, layout |
-| [01_open_swe_traces_dataset.md](01_open_swe_traces_dataset.md) | Dataset schema, paper filtering, ablations |
-| [02_trial_and_trace_model.md](02_trial_and_trace_model.md) | End-to-end trial lifecycle, DuckDB views |
-| [03_research_thesis_and_hypotheses.md](03_research_thesis_and_hypotheses.md) | H1–H5, evaluation ladder, deliverables |
-| [04_external_datasets.md](04_external_datasets.md) | Union candidates for future ingestion |
-| [05_sft_trace_landscape.md](05_sft_trace_landscape.md) | How field quantifies/evaluates traces for SFT |
-| [06_duckdb_and_resources.md](06_duckdb_and_resources.md) | DuckDB workflow, pitfalls, compute budget |
+| [01_project_setup.md](01_project_setup.md) | Repo, download, DuckDB |
+| [02_dataset_overview.md](02_dataset_overview.md) | What's in Open-SWE-Traces |
+| [03_thesis_and_hypotheses.md](03_thesis_and_hypotheses.md) | Research framing |
+| [04_trial_model.md](04_trial_model.md) | End-to-end trace / trial model |
+| [05_eda_findings.md](05_eda_findings.md) | Exploratory results so far |
+| [06_external_datasets.md](06_external_datasets.md) | Union candidates on HuggingFace |
+| [07_sft_trace_practices.md](07_sft_trace_practices.md) | How the field uses traces for SFT |
+| [08_sft_evaluation_metrics.md](08_sft_evaluation_metrics.md) | Quantifying and evaluating trace quality |
 
-Also see `analytics/research/` for living docs (`LOG.md`, `questions.md`, `trace_trial_model.md`, `external_datasets.md`).
+Also see `analytics/research/LOG.md` for session-by-session findings.

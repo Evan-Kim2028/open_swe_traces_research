@@ -1,6 +1,8 @@
 # Research log
 
-Chronological notes. One bullet per session finding — link the query file you used.
+Chronological session findings. Background thesis, literature, and sources live in [`notes/`](../notes/README.md).
+
+One bullet per session — link the query file you used.
 
 ## Template
 
