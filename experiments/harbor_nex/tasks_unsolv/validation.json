@@ -1,0 +1,172 @@
+{
+  "ok": true,
+  "families": {
+    "spec-reimpl": {
+      "checks": [
+        {
+          "check": "gold_restore",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/apicodec\t0.017s\n"
+        },
+        {
+          "check": "buggy_fails",
+          "ok": true,
+          "detail": "000  72 00 10 92 7a                                    |r...z|\n            \t            \t+  EndKey: ([]uint8) (len=1) {\n            \t            \t+   00000000  7a                                                |z|\n            \t            \t   },\n            \t            \t@@ -26,7 +23,6 @@\n            \t            \t  (*kvrpcpb.KeyRange)({\n            \t            \t-  StartKey: ([]uint8) (len=5) {\n            \t            \t-   00000000  72 00 10 92 61                                    |r...a|\n            \t            \t+  StartKey: ([]uint8) (len=1) {\n            \t            \t+   00000000  61                                                |a|\n            \t            \t   },\n            \t            \t-  EndKey: ([]uint8) (len=4) {\n            \t            \t-   00000000  72 00 10 93                                       |r...|\n            \t            \t+  EndKey: ([]uint8) {\n            \t            \t   },\n            \t            \t@@ -38,7 +34,7 @@\n            \t            \t  (*kvrpcpb.KeyRange)({\n            \t            \t-  StartKey: ([]uint8) (len=5) {\n            \t            \t-   00000000  72 00 10 92 61                                    |r...a|\n            \t            \t+  StartKey: ([]uint8) (len=1) {\n            \t            \t+   00000000  61                                                |a|\n            \t            \t   },\n            \t            \t-  EndKey: ([]uint8) (len=5) {\n            \t            \t-   00000000  72 00 10 92 7a                                    |r...z|\n            \t            \t+  EndKey: ([]uint8) (len=1) {\n            \t            \t+   00000000  7a                                                |z|\n            \t            \t   },\n            \tTest:       \tTestCodecV2/TestEncodeV2KeyRanges\n--- FAIL: TestMalformedRegionKeyIsDecodeError (0.00s)\n    decode_fatal_test.go:12: malformed region key must be classified as a fatal decode, got insufficient bytes to decode value\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/apicodec\t0.034s\nFAIL\n"
+        },
+        {
+          "check": "cheat_rejected",
+          "ok": true,
+          "detail": "r...|\n            \t            \t+  StartKey: ([]uint8) {\n            \t            \t   },\n            \t            \t-  EndKey: ([]uint8) (len=5) {\n            \t            \t-   00000000  72 00 10 92 7a                                    |r...z|\n            \t            \t+  EndKey: ([]uint8) (len=1) {\n            \t            \t+   00000000  7a                                                |z|\n            \t            \t   },\n            \t            \t@@ -26,7 +23,6 @@\n            \t            \t  (*kvrpcpb.KeyRange)({\n            \t            \t-  StartKey: ([]uint8) (len=5) {\n            \t            \t-   00000000  72 00 10 92 61                                    |r...a|\n            \t            \t+  StartKey: ([]uint8) (len=1) {\n            \t            \t+   00000000  61                                                |a|\n            \t            \t   },\n            \t            \t-  EndKey: ([]uint8) (len=4) {\n            \t            \t-   00000000  72 00 10 93                                       |r...|\n            \t            \t+  EndKey: ([]uint8) {\n            \t            \t   },\n            \t            \t@@ -38,7 +34,7 @@\n            \t            \t  (*kvrpcpb.KeyRange)({\n            \t            \t-  StartKey: ([]uint8) (len=5) {\n            \t            \t-   00000000  72 00 10 92 61                                    |r...a|\n            \t            \t+  StartKey: ([]uint8) (len=1) {\n            \t            \t+   00000000  61                                                |a|\n            \t            \t   },\n            \t            \t-  EndKey: ([]uint8) (len=5) {\n            \t            \t-   00000000  72 00 10 92 7a                                    |r...z|\n            \t            \t+  EndKey: ([]uint8) (len=1) {\n            \t            \t+   00000000  7a                                                |z|\n            \t            \t   },\n            \tTest:       \tTestCodecV2/TestEncodeV2KeyRanges\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/apicodec\t0.034s\nFAIL\n"
+        },
+        {
+          "check": "two_func_alt_accepted",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/apicodec\t0.029s\n"
+        },
+        {
+          "check": "rest_suite_green",
+          "ok": true,
+          "detail": "?   \texample.internal/kvstore/v2/util/codec\t[no test files]\nok  \texample.internal/kvstore/v2/internal/unionstore\t3.597s\nok  \texample.internal/kvstore/v2/internal/client/retry\t5.344s\n"
+        },
+        {
+          "check": "searchability",
+          "ok": true,
+          "detail": "[{\"ident\": \"NimbusClip\", \"matches\": 0, \"ok\": true}, {\"ident\": \"NimbusCore\", \"matches\": 0, \"ok\": true}, {\"ident\": \"NimbusGate\", \"matches\": 0, \"ok\": true}, {\"ident\": \"NimbusJoin\", \"matches\": 0, \"ok\": true}, {\"ident\": \"NimbusPack\", \"matches\": 0, \"ok\": true}]"
+        },
+        {
+          "check": "instruction_self_check",
+          "ok": true,
+          "detail": "{\"names_present\": false, \"has_symptom_paraphrase\": true, \"leaked_symbols\": [], \"leaked_files\": [], \"has_line_numbers\": false, \"has_diff\": false, \"reproduce_command\": \"if go test -count=1 -timeout 15m -run '^(TestCodecV2|TestEncodeRequest|TestEncodeV2KeyRanges|TestNewCodecV2|TestDecodeEpochNotMatch|TestGetKeyspaceID|TestEncodeMPPRequest|TestDecodeBucketKeys|TestParseKeyspaceID|TestDecodeKey|TestEncodeUnknownRequest|TestMalformedRegionKeyIsDecodeError)$' ./internal/apicodec/...; then\", \"can_reproduce_one_command\": true, \"diff_hunk_tokens_in_instruction\": [], \"locality\": 2, \"ok\": true}"
+        }
+      ]
+    },
+    "property-backoff": {
+      "checks": [
+        {
+          "check": "gold_restore",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/client/retry\t0.011s\n"
+        },
+        {
+          "check": "naive_constant_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestBackoffExponentialProperty (0.00s)\n    backoff_prop_test.go:22: case 0: expo(7,7844,2)=7 want 28\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/client/retry\t0.010s\nFAIL\n"
+        },
+        {
+          "check": "cheat_rejected",
+          "ok": true,
+          "detail": "--- FAIL: TestBackoffExponentialProperty (0.00s)\n    backoff_prop_test.go:22: case 0: expo(7,7844,2)=7 want 28\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/client/retry\t0.013s\nFAIL\n"
+        },
+        {
+          "check": "rest_suite_green",
+          "ok": true,
+          "detail": "?   \texample.internal/kvstore/v2/util/codec\t[no test files]\nok  \texample.internal/kvstore/v2/internal/apicodec\t0.014s\n"
+        }
+      ]
+    },
+    "dynamic-pipeline": {
+      "checks": [
+        {
+          "check": "gold_restore",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/unionstore\t0.153s\n"
+        },
+        {
+          "check": "gold_race_clean",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/unionstore\t1.585s\n"
+        },
+        {
+          "check": "gold_bench",
+          "ok": true,
+          "detail": "goos: linux\ngoarch: amd64\npkg: example.internal/kvstore/v2/internal/unionstore\ncpu: AMD Ryzen 7 6800U with Radeon Graphics         \nBenchmarkPipelinedGet-16    \t    5000\t        37.77 ns/op\nPASS\nok  \texample.internal/kvstore/v2/internal/unionstore\t0.018s\n"
+        },
+        {
+          "check": "naive_correctness",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/unionstore\t0.118s\n"
+        },
+        {
+          "check": "naive_bench",
+          "ok": true,
+          "detail": "goos: linux\ngoarch: amd64\npkg: example.internal/kvstore/v2/internal/unionstore\ncpu: AMD Ryzen 7 6800U with Radeon Graphics         \nBenchmarkPipelinedGet-16    \t    5000\t     10709 ns/op\nPASS\nok  \texample.internal/kvstore/v2/internal/unionstore\t0.073s\n"
+        },
+        {
+          "check": "naive_fails_throughput_gate",
+          "ok": true,
+          "detail": "gold_ns=37.77 naive_ns=10709.0 limit=113"
+        },
+        {
+          "check": "find_perf_gates",
+          "ok": true,
+          "detail": "no codegraph index: no codegraph index at experiments/harbor_nex/tasks_unsolv/_gold_src/.codegraph/codegraph.db"
+        },
+        {
+          "check": "race_gate",
+          "ok": true,
+          "detail": "no codegraph index: no codegraph index at experiments/harbor_nex/tasks_unsolv/_gold_src/.codegraph/codegraph.db"
+        },
+        {
+          "check": "buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestPipelinedFlushTrigger (0.11s)\n    pipelined_memdb_test.go:83: \n        \tError Trace:\t/home/evan/Documents/open_swe_traces_research/experiments/harbor_nex/tasks_unsolv/_val_f3_bug/internal/unionstore/pipelined_memdb_test.go:83\n        \tError:      \tShould be true\n        \tTest:       \tTestPipelinedFlushTrigger\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/unionstore\t0.122s\nFAIL\n"
+        },
+        {
+          "check": "cheat_rejected",
+          "ok": true,
+          "detail": "--- FAIL: TestPipelinedFlushTrigger (0.11s)\n    pipelined_memdb_test.go:83: \n        \tError Trace:\t/home/evan/Documents/open_swe_traces_research/experiments/harbor_nex/tasks_unsolv/_val_f3_cheat/internal/unionstore/pipelined_memdb_test.go:83\n        \tError:      \tShould be true\n        \tTest:       \tTestPipelinedFlushTrigger\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/unionstore\t0.123s\nFAIL\n"
+        },
+        {
+          "check": "rest_suite_green",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/unionstore\t2.104s\nok  \texample.internal/kvstore/v2/internal/apicodec\t0.014s\nok  \texample.internal/kvstore/v2/internal/client/retry\t4.331s\n"
+        }
+      ]
+    }
+  },
+  "f3_gold_ns_op": 37.77,
+  "f3_naive_ns_op": 10709.0,
+  "f3_perf_limit_ns": 113,
+  "find_perf_gates": [],
+  "race_gate": null,
+  "searchability": [
+    {
+      "ident": "NimbusClip",
+      "matches": 0,
+      "ok": true
+    },
+    {
+      "ident": "NimbusCore",
+      "matches": 0,
+      "ok": true
+    },
+    {
+      "ident": "NimbusGate",
+      "matches": 0,
+      "ok": true
+    },
+    {
+      "ident": "NimbusJoin",
+      "matches": 0,
+      "ok": true
+    },
+    {
+      "ident": "NimbusPack",
+      "matches": 0,
+      "ok": true
+    }
+  ],
+  "f1_instruction_self_check": {
+    "names_present": false,
+    "has_symptom_paraphrase": true,
+    "leaked_symbols": [],
+    "leaked_files": [],
+    "has_line_numbers": false,
+    "has_diff": false,
+    "reproduce_command": "if go test -count=1 -timeout 15m -run '^(TestCodecV2|TestEncodeRequest|TestEncodeV2KeyRanges|TestNewCodecV2|TestDecodeEpochNotMatch|TestGetKeyspaceID|TestEncodeMPPRequest|TestDecodeBucketKeys|TestParseKeyspaceID|TestDecodeKey|TestEncodeUnknownRequest|TestMalformedRegionKeyIsDecodeError)$' ./internal/apicodec/...; then",
+    "can_reproduce_one_command": true,
+    "diff_hunk_tokens_in_instruction": [],
+    "locality": 2,
+    "ok": true
+  }
+}

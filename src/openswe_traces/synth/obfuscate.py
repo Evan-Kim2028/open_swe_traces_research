@@ -713,12 +713,15 @@ def apply_gopls_renames(
     ensure_gopls()
     applied: dict[str, str] = {}
     skipped: list[str] = []
+    pending_hunk: list[tuple[str, str, str]] = []
     pending_iface: list[tuple[str, str, str]] = []
     pending_methods: list[tuple[str, str, str]] = []
     pending_funcs: list[tuple[str, str, str]] = []
     pending_types: list[tuple[str, str, str]] = []
     seen: set[str] = set()
     gold_files = sorted({i.file for i in idents if i.file})
+    hunk_keys = {_ident_key(i) for i in idents if i.hunk}
+    hunk_names = {i.name for i in idents if i.hunk}
     for ident in idents:
         key = _ident_key(ident)
         new = mapping.get(key)
@@ -728,7 +731,9 @@ def apply_gopls_renames(
             continue
         seen.add(key)
         item = (ident.recv, ident.name, new)
-        if ident.kind == "type":
+        if key in hunk_keys:
+            pending_hunk.append(item)
+        elif ident.kind == "type":
             pending_types.append(item)
         elif ident.kind == "iface":
             pending_iface.append(item)
@@ -736,7 +741,7 @@ def apply_gopls_renames(
             pending_methods.append(item)
         else:
             pending_funcs.append(item)
-    pending = pending_iface + pending_methods + pending_funcs + pending_types
+    pending = pending_hunk + pending_iface + pending_methods + pending_funcs + pending_types
     extra = {
         "GOPROXY": "off",
         "GOSUMDB": "off",
@@ -761,6 +766,11 @@ def apply_gopls_renames(
             extra_env=extra,
         )
         if proc.returncode != 0:
+            if current in hunk_names and len(current) >= 8:
+                n = _textual_ident_rename(tree, current, new)
+                if n:
+                    applied[key] = new
+                    continue
             skipped.append(f"{recv}.{current}->{new}: {(proc.stderr or proc.stdout)[-400:]}")
             continue
         key = f"{recv}.{current}" if recv else current
@@ -768,6 +778,24 @@ def apply_gopls_renames(
         if not recv:
             recv_alias[current] = new
     return applied, skipped
+
+
+def _textual_ident_rename(tree: Path, old: str, new: str) -> int:
+    """Last-resort whole-identifier rewrite when gopls cannot load a broken package."""
+    n = 0
+    pat = re.compile(r"\b" + re.escape(old) + r"\b")
+    for path in tree.rglob("*.go"):
+        if "/vendor/" in path.as_posix():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        updated, count = pat.subn(new, text)
+        if count:
+            path.write_text(updated, encoding="utf-8")
+            n += count
+    return n
 
 
 def prepare_tree(tree: Path) -> set[str]:

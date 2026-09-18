@@ -1,0 +1,46 @@
+{
+    "id": "59ace9a5-6e70-4baa-8028-9ed8da1ba777",
+    "started_at": "2026-09-18T15:11:33.505247",
+    "updated_at": "2026-09-18T15:24:27.210883",
+    "finished_at": "2026-09-18T15:24:27.210883",
+    "n_total_trials": 6,
+    "stats": {
+        "n_completed_trials": 6,
+        "n_errored_trials": 0,
+        "n_running_trials": 0,
+        "n_pending_trials": 0,
+        "n_cancelled_trials": 0,
+        "n_retries": 0,
+        "evals": {
+            "cursor-cli__composer-2.5__tasks_obf": {
+                "n_trials": 6,
+                "n_errors": 0,
+                "metrics": [
+                    {
+                        "mean": 0.8333333333333334
+                    }
+                ],
+                "pass_at_k": {},
+                "reward_stats": {
+                    "reward": {
+                        "0.0": [
+                            "client-go-onepc-scope-obf__wtKwvQ5"
+                        ],
+                        "1.0": [
+                            "client-go-keyspacecodec-obf__JspNn9C",
+                            "client-go-batchcmds-obf__JFwsfcy",
+                            "client-go-interceptor-obf__H8k49xs",
+                            "client-go-memsetvalue-obf__M7HZ7a4",
+                            "client-go-memget-obf__mamCDJo"
+                        ]
+                    }
+                },
+                "exception_stats": {}
+            }
+        },
+        "n_input_tokens": 13562534,
+        "n_cache_tokens": 13217255,
+        "n_output_tokens": 99598,
+        "cost_usd": 3.0650855000000004
+    }
+}

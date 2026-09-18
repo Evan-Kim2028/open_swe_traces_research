@@ -1,0 +1,46 @@
+[
+  {
+    "hidden_test": "TestCodecV2/TestEncodeRequest",
+    "contract": "A raw single-key lookup of user key `key` in keyspace 0x1092 must be sent with the 4-byte raw-mode header `0x72 0x00 0x10 0x92` followed by the user key, not the bare user key."
+  },
+  {
+    "hidden_test": "TestCodecV2/TestEncodeV2KeyRanges",
+    "contract": "User ranges whose start or end is empty expand to the keyspace interval: empty start becomes the keyspace prefix, empty end becomes the next keyspace prefix; both empty becomes the whole keyspace."
+  },
+  {
+    "hidden_test": "TestCodecV2/TestNewCodecV2",
+    "contract": "Constructing a v2 codec rejects a keyspace id that does not fit in 24 bits and rejects an unknown mode; the prefix is a mode byte plus the 24-bit id; the exclusive end prefix is that 32-bit value plus one, with carry across bytes; the last raw id wraps the mode byte from `r` to `s`."
+  },
+  {
+    "hidden_test": "TestCodecV2/TestDecodeEpochNotMatch",
+    "contract": "Epoch-not-match region lists are clipped to the keyspace and decoded to user keys: a region covering the whole keyspace becomes empty/empty, a region wholly outside the keyspace is dropped, and a region overlapping the keyspace is truncated to the overlap then stripped of the header."
+  },
+  {
+    "hidden_test": "TestCodecV2/TestGetKeyspaceID",
+    "contract": "A codec built for keyspace 4242 reports that same id."
+  },
+  {
+    "hidden_test": "TestCodecV2/TestEncodeMPPRequest",
+    "contract": "An MPP dispatch must carry keyspace id 4242 and API version 2 on its task meta, and its coprocessor ranges must be encoded the same way as ordinary user keys."
+  },
+  {
+    "hidden_test": "TestCodecV2/TestDecodeBucketKeys",
+    "contract": "Bucket split keys that mix the previous, current, and next keyspace, including empty sentinels, decode to the user keys in this keyspace (`a`,`b`,`c`) with empty sentinels at the clipped bounds \u2014 never the mem-comparable encoded forms."
+  },
+  {
+    "hidden_test": "TestParseKeyspaceID",
+    "contract": "A 4-byte header starting with txn `x` or raw `r` followed by 0x010203 yields keyspace id 0x010203; a header whose mode byte is neither, or that is shorter than 4 bytes, errors and yields the all-ones null id 0xffffffff."
+  },
+  {
+    "hidden_test": "TestDecodeKey",
+    "contract": "API v2 splits a well-formed key into a 4-byte header and the remaining user bytes; API v1 is identity (no header); an invalid v2 mode byte errors with empty results."
+  },
+  {
+    "hidden_test": "TestEncodeUnknownRequest",
+    "contract": "A request type with no key payload (store safe-ts) still encodes without error under the transactional v1 codec."
+  },
+  {
+    "hidden_test": "TestMalformedRegionKeyIsDecodeError",
+    "contract": "A truncated or otherwise non mem-comparable region key is a fatal decode: the client must classify it as a decode failure so callers do not retry it with backoff."
+  }
+]
