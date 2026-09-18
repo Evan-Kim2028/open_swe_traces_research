@@ -3,7 +3,7 @@
   {
    "rule_id": "A1",
    "passed": false,
-   "evidence": "reproof 2026-09-18 in rebuilt image: buggy_rc=1 gold_rc=1 (earlier record came from a proof harness without go on PATH)",
+   "evidence": "INVALID as built: integration_tests module does not compile offline after obfuscation (consumer not renamed consistently / transitive deps on the original module path). Gold cannot pass. Excluded from results; rebuild via obfuscate.py with the consumer module in scope.",
    "skipped": false
   },
   {
@@ -45,7 +45,7 @@
   {
    "rule_id": "A8",
    "passed": false,
-   "evidence": "reproof 2026-09-18 in rebuilt image: buggy_rc=1 gold_rc=1 (earlier record came from a proof harness without go on PATH)",
+   "evidence": "INVALID as built: integration_tests module does not compile offline after obfuscation (consumer not renamed consistently / transitive deps on the original module path). Gold cannot pass. Excluded from results; rebuild via obfuscate.py with the consumer module in scope.",
    "skipped": false
   },
   {
