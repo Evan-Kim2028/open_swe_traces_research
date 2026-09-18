@@ -3,7 +3,7 @@
   {
    "rule_id": "A1",
    "passed": false,
-   "evidence": "reproof 2026-09-18 in rebuilt image: buggy_rc=1 gold_rc=1 (earlier record came from a proof harness without go on PATH)",
+   "evidence": "gold artifact inconsistent: excision also edited client_test.go (guarded); gold minus test hunks does not build. Task is solver-valid (Composer passed) but A1 unprovable until gold is regenerated against the guarded test file.",
    "skipped": false
   },
   {
@@ -45,7 +45,7 @@
   {
    "rule_id": "A8",
    "passed": false,
-   "evidence": "reproof 2026-09-18 in rebuilt image: buggy_rc=1 gold_rc=1 (earlier record came from a proof harness without go on PATH)",
+   "evidence": "gold artifact inconsistent: excision also edited client_test.go (guarded); gold minus test hunks does not build. Task is solver-valid (Composer passed) but A1 unprovable until gold is regenerated against the guarded test file.",
    "skipped": false
   },
   {

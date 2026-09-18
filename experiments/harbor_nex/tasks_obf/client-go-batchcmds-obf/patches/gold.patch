@@ -258,26 +258,6 @@
  	c.Lock()
  	conn, ok := c.conns[addr]
  	if ok {
---- a/internal/client/client_test.go
-+++ b/internal/client/client_test.go
-@@ -80,7 +80,7 @@
- 	assert.Nil(t, err)
- 	assert.False(t, conn2.Get() == conn1.Get())
- 
--	assert.Nil(t, client.JadeJoin(addr))
-+	assert.Nil(t, client.CloseAddr(addr))
- 	_, ok := client.conns[addr]
- 	assert.False(t, ok)
- 	conn3, err := client.ZestPath(addr, true)
-@@ -100,7 +100,7 @@
- 	addr := "127.0.0.1:6379"
- 	connArray, err := client.ZestPath(addr, true)
- 	assert.Nil(t, err)
--	assert.Nil(t, client.JadeJoin(addr))
-+	assert.Nil(t, client.CloseAddr(addr))
- 	conn := connArray.Get()
- 	state := conn.GetState()
- 	assert.True(t, state == connectivity.Shutdown)
 --- a/internal/mockstore/mockkv/rpc.go
 +++ b/internal/mockstore/mockkv/rpc.go
 @@ -740,6 +740,7 @@

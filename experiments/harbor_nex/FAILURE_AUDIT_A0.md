@@ -36,3 +36,10 @@ only where A(k) fails.
 Ladder state: dynamic-pipeline fails A0, A1, A2 for Composer; A3 (one hidden test file restored) launched.
 spec-reimpl: white-box ladder stopped at A2 (fair from A2 up, fails there); black-box family `spec-reimpl-bb` A0 running.
 Devin: 1 clean legitimate fail so far, marginally closer than Composer on the same task.
+
+## A3 / black-box A0 update (2026-09-18 20:50Z)
+
+| trial | outcome | class | evidence |
+|---|---|---|---|
+| dynamic-pipeline-A3 (Composer) | **PASS** 5.4 min | clean | one hidden test file restored; race clean, perf gate 37.65 ≤ 113 ns/op; no web, no network commands, 18 edits. **Flip point for Composer on this unit = A3.** |
+| spec-reimpl-bb-A0 (Composer) | FAIL | (a) provisional | black-box property suite; 93 edits, no web; fails `TestCodecContractExamples` (the instruction's own worked examples). Provisional pending a check that the instruction examples and the test's expectations agree (if they disagree it is class (c)). bb-A1 launched. |
