@@ -1,0 +1,23 @@
+{
+  "family": "spec-reimpl",
+  "level": 2,
+  "hidden_tests": [
+    "internal/apicodec/codec_v2_test.go",
+    "internal/apicodec/codec_test.go",
+    "internal/apicodec/decode_fatal_test.go"
+  ],
+  "representative": "internal/apicodec/codec_v2_test.go",
+  "instruction_self_check": {
+    "names_present": true,
+    "has_symptom_paraphrase": true,
+    "leaked_symbols": [],
+    "leaked_files": [],
+    "has_line_numbers": false,
+    "has_diff": false,
+    "reproduce_command": "if go test -count=1 -timeout 15m -run '^(TestCodecV2|TestEncodeRequest|TestEncodeV2KeyRanges|TestNewCodecV2|TestDecodeEpochNotMatch|TestGetKeyspaceID|TestEncodeMPPRequest|TestDecodeBucketKeys|TestParseKeyspaceID|TestDecodeKey|TestEncodeUnknownRequest|TestMalformedRegionKeyIsDecodeError)$' ./internal/apicodec/...; then",
+    "can_reproduce_one_command": true,
+    "diff_hunk_tokens_in_instruction": [],
+    "locality": 0,
+    "ok": true
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "family": "dynamic-pipeline",
+  "level": 0,
+  "hidden_tests": [
+    "internal/unionstore/pipelined_memdb_test.go",
+    "internal/unionstore/pipelined_race_test.go",
+    "internal/unionstore/pipelined_bench_test.go"
+  ],
+  "representative": "internal/unionstore/pipelined_memdb_test.go",
+  "instruction_self_check": {
+    "names_present": false,
+    "has_symptom_paraphrase": true,
+    "leaked_symbols": [],
+    "leaked_files": [],
+    "has_line_numbers": false,
+    "has_diff": false,
+    "reproduce_command": "if go test -race -count=1 -timeout 15m -run '^(TestPipelinedFlushTrigger|TestPipelinedFlushSkip|TestPipelinedFlushBlock|TestPipelinedFlushGet|TestPipelinedFlushSize|TestPipelinedFlushGeneration|TestErrorIterator|TestPipelinedConcurrentSet)$' ./internal/unionstore/...; then",
+    "can_reproduce_one_command": true,
+    "diff_hunk_tokens_in_instruction": [],
+    "locality": 2,
+    "ok": true
+  }
+}
