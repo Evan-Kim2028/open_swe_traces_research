@@ -1,0 +1,18 @@
+# Failure audit — first Composer 2.5 failures (2026-09-18)
+
+Classes: (a) legitimate miss, (b) verifier too narrow, (c) instruction insufficient, (d) infra.
+
+| trial | job | outcome | class | evidence |
+|---|---|---|---|---|
+| client-go-onepc-scope-obf | composer25-obf | FAIL 4.1 min | (a) rule violation | Agent identified the inverted scope check in the library (its own summary) but ALSO edited consumer `*_test.go`; checksum guard tripped: "consumer test files were modified; the library must be fixed". Instruction states tests must not be edited. Counts as a real miss: the model took the disallowed shortcut. |
+| spec-reimpl-A0 | composer25-unsolv-A0 | FAIL 10.1 min | (a) legitimate | 63 edits, full codec reimplemented from the prose contract; hidden `TestCodecV2/TestDecodeEpochNotMatch` and `TestDecodeBucketKeys` fail. The instruction (lines 36–39) describes all three epoch-clip cases (whole-keyspace → empty/empty, outside → dropped, overlap → truncated). Behavior was specified; implementation wrong. |
+| dynamic-pipeline-A0 | composer25-unsolv-A0 | FAIL 4.5 min | (a) legitimate, boundary ambiguity noted | `Get` implemented; hidden `TestPipelinedFlushTrigger` / `TestPipelinedFlushGet` fail on `Flush(false)` returning false at the trigger point and on `OnFlushing()` state. Instruction gives thresholds (10000 keys and 16 MiB min; 128 MiB force) and the swap-to-in-flight semantics, but not the exact boundary (`>=` vs `>`) nor that `Flush(false)` must report `true` and enter the flushing state immediately. Partial (c): A1/A2 should resolve this; if A1 (test names + one-line descriptions) flips it, the missing information was the state-observation contract, not the algorithm. |
+
+Obfuscation control (same six tasks, renamed): Composer 5/6 pass, solve times equal or faster than the public tree
+(batchcmds 12.9 vs 23.4 min; keyspacecodec 8.8 vs 8.0). Recall of upstream code is NOT what made the earlier tasks easy;
+test-suite completeness was. This is why removing the tests (spec-only) and replacing them with properties/dynamic gates is
+where the first real failures appear.
+
+Ladder status: A0 fails for spec-reimpl and dynamic-pipeline; property-backoff passes at A0 (properties in words + 3
+examples were enough). A1 launched for the two failing families (`composer25-unsolv-A1`). Continue lazily: build/run A(k+1)
+only where A(k) fails.
