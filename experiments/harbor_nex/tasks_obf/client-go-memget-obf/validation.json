@@ -1,112 +1,112 @@
 {
-  "rule_verdicts": [
-    {
-      "rule_id": "A1",
-      "passed": false,
-      "evidence": "gold reward=0",
-      "skipped": false
-    },
-    {
-      "rule_id": "A2",
-      "passed": false,
-      "evidence": "alt reward=0",
-      "skipped": false
-    },
-    {
-      "rule_id": "A3",
-      "passed": true,
-      "evidence": "cheat reward=0 (must not be 1)",
-      "skipped": false
-    },
-    {
-      "rule_id": "A4",
-      "passed": false,
-      "evidence": "no impact-set evidence in notes or validation.json",
-      "skipped": true
-    },
-    {
-      "rule_id": "A5",
-      "passed": false,
-      "evidence": "no collateral/flake evidence in artifacts",
-      "skipped": true
-    },
-    {
-      "rule_id": "A6",
-      "passed": false,
-      "evidence": "not a multi-site bug (no site_* patches or two_site design)",
-      "skipped": true
-    },
-    {
-      "rule_id": "A7",
-      "passed": false,
-      "evidence": "no decoys on this task",
-      "skipped": true
-    },
-    {
-      "rule_id": "A8",
-      "passed": false,
-      "evidence": "image proof buggy_fails=True gold_passes=False",
-      "skipped": false
-    },
-    {
-      "rule_id": "A9",
-      "passed": false,
-      "evidence": "dynamic gate in test.sh but no proven non-passer",
-      "skipped": true
-    },
-    {
-      "rule_id": "A10",
-      "passed": true,
-      "evidence": "task.toml [verifier] network_mode=no-network",
-      "skipped": false
-    },
-    {
-      "rule_id": "B1",
-      "passed": true,
-      "evidence": "tests/test.sh checksum-guards files",
-      "skipped": false
-    },
-    {
-      "rule_id": "B2",
-      "passed": true,
-      "evidence": "task.toml [agent] allowlist; trial web-tool use not scored (jobs/ excluded)",
-      "skipped": false
-    },
-    {
-      "rule_id": "B3",
-      "passed": false,
-      "evidence": "in-tree example tests are the verifier: ['TestGetSet', 'TestKVGetSet']",
-      "skipped": false
-    },
-    {
-      "rule_id": "B4",
-      "passed": false,
-      "evidence": "no hidden tests",
-      "skipped": true
-    },
-    {
-      "rule_id": "B5",
-      "passed": true,
-      "evidence": "property/dynamic markers: ['-bench', 'ns/op']",
-      "skipped": false
-    },
-    {
-      "rule_id": "B6",
-      "passed": true,
-      "evidence": "symptom=True repro=True cmd=if go test -count=1 -timeout 15m -run '^(TestGetSet|TestKVGetSet)$' ./internal/unionstore/...; then",
-      "skipped": false
-    },
-    {
-      "rule_id": "B7",
-      "passed": true,
-      "evidence": "leaked_symbols=[] leaked_files=[] line_nos=False diff=False hunk_tokens=[]",
-      "skipped": false
-    },
-    {
-      "rule_id": "B8",
-      "passed": true,
-      "evidence": "instruction contains the no-web clause",
-      "skipped": false
-    }
-  ]
+ "rule_verdicts": [
+  {
+   "rule_id": "A1",
+   "passed": false,
+   "evidence": "reproof 2026-09-18 in rebuilt image: buggy_rc=1 gold_rc=1 (earlier record came from a proof harness without go on PATH)",
+   "skipped": false
+  },
+  {
+   "rule_id": "A2",
+   "passed": false,
+   "evidence": "alt reward=0",
+   "skipped": false
+  },
+  {
+   "rule_id": "A3",
+   "passed": true,
+   "evidence": "cheat reward=0 (must not be 1)",
+   "skipped": false
+  },
+  {
+   "rule_id": "A4",
+   "passed": false,
+   "evidence": "no impact-set evidence in notes or validation.json",
+   "skipped": true
+  },
+  {
+   "rule_id": "A5",
+   "passed": false,
+   "evidence": "no collateral/flake evidence in artifacts",
+   "skipped": true
+  },
+  {
+   "rule_id": "A6",
+   "passed": false,
+   "evidence": "not a multi-site bug (no site_* patches or two_site design)",
+   "skipped": true
+  },
+  {
+   "rule_id": "A7",
+   "passed": false,
+   "evidence": "no decoys on this task",
+   "skipped": true
+  },
+  {
+   "rule_id": "A8",
+   "passed": false,
+   "evidence": "reproof 2026-09-18 in rebuilt image: buggy_rc=1 gold_rc=1 (earlier record came from a proof harness without go on PATH)",
+   "skipped": false
+  },
+  {
+   "rule_id": "A9",
+   "passed": false,
+   "evidence": "dynamic gate in test.sh but no proven non-passer",
+   "skipped": true
+  },
+  {
+   "rule_id": "A10",
+   "passed": true,
+   "evidence": "task.toml [verifier] network_mode=no-network",
+   "skipped": false
+  },
+  {
+   "rule_id": "B1",
+   "passed": true,
+   "evidence": "tests/test.sh checksum-guards files",
+   "skipped": false
+  },
+  {
+   "rule_id": "B2",
+   "passed": true,
+   "evidence": "task.toml [agent] allowlist; trial web-tool use not scored (jobs/ excluded)",
+   "skipped": false
+  },
+  {
+   "rule_id": "B3",
+   "passed": false,
+   "evidence": "in-tree example tests are the verifier: ['TestGetSet', 'TestKVGetSet']",
+   "skipped": false
+  },
+  {
+   "rule_id": "B4",
+   "passed": false,
+   "evidence": "no hidden tests",
+   "skipped": true
+  },
+  {
+   "rule_id": "B5",
+   "passed": true,
+   "evidence": "property/dynamic markers: ['-bench', 'ns/op']",
+   "skipped": false
+  },
+  {
+   "rule_id": "B6",
+   "passed": true,
+   "evidence": "symptom=True repro=True cmd=if go test -count=1 -timeout 15m -run '^(TestGetSet|TestKVGetSet)$' ./internal/unionstore/...; then",
+   "skipped": false
+  },
+  {
+   "rule_id": "B7",
+   "passed": true,
+   "evidence": "leaked_symbols=[] leaked_files=[] line_nos=False diff=False hunk_tokens=[]",
+   "skipped": false
+  },
+  {
+   "rule_id": "B8",
+   "passed": true,
+   "evidence": "instruction contains the no-web clause",
+   "skipped": false
+  }
+ ]
 }
