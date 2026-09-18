@@ -47,3 +47,13 @@ Devin: 1 clean legitimate fail so far, marginally closer than Composer on the sa
 Addendum 20:58Z: `client-go-onepc-scope-obf` is INVALID as built (consumer module does not compile offline
 after obfuscation); its Composer fail is excluded. `spec-reimpl-bb-A0` examples in the instruction match
 `TestCodecContractExamples` byte-for-byte (0x72 00 10 92 + "key"), so that fail is class (a), confirmed.
+
+## Devin final (2026-09-18 21:05Z)
+
+| trial | outcome | class | evidence |
+|---|---|---|---|
+| spec-reimpl-A0 (Devin swe-2-high, white-box hidden tests) | FAIL | (a) legitimate | compiled against the white-box suite (it inferred the internal names from callers), then failed `TestCodecV2` on behavior; tools exec/read/edit only; no web |
+| dynamic-pipeline-A0 (Devin) | FAIL | (a) legitimate | see above; one test short |
+
+Devin swe-2-high vs Composer 2.5 at A0: both fail both units. Devin is closer on the dynamic unit (1 failing
+test vs 3) and cleared the naming barrier on the codec unit. No evidence of web use in any Devin trial.
