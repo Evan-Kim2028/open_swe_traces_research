@@ -127,3 +127,13 @@ exit codes propagated) before trusting any REWARD it emits.
   checksum guard, which fires before setup, so the trial outcome stands but the task was not provable.
 
 ### Note (2026-09-18 22:00Z): ablation round 1 used a COUNT objective ("as many valid bugs as possible"), which produced only rung-1 inversions in both conditions (21 of 27/33 symbols shared, 11 byte-identical). It measures discovery of valid mutation sites, not hard-unit discovery. Round 2 uses a QUALITY objective (feature-excision units with black-box tests and a contract); see experiments/ablation_graph/RESULT2.md when written.
+
+### Ablation round 1 verdict (2026-09-18 22:10Z) and an A4 caveat
+Count objective, 1 h, mgechev/revive: NOGRAPH 33 submitted / 5 valid; GRAPH 27 / 3. Codegraph did not
+improve discovery of valid mutation sites. Every submission in both conditions built, had f2p, passed alt,
+failed cheat, was not flaky; the rejections were all **A4**, and A4 as applied was wrong for this repo:
+revive's `test/` integration tests sit more than 2 call hops from the mutated helpers, and
+`codegraph impact` defaults to depth 2. **Rule A4 amendment:** compute the impact set transitively (or to
+the depth of the nearest test caller), and record the depth used; a depth-2 impact set is not a valid
+reason to reject a bug whose failing test is a legitimate transitive caller. Round-1 numbers should be
+re-scored with transitive impact before being cited.
