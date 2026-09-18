@@ -144,3 +144,7 @@ builder also found. Codegraph did not improve discovery of hard units on this re
 model, under either objective. Conclusion for the pipeline: keep codegraph only for the impact-set check
 (A4, transitive) and for API/caller enumeration when writing black-box verifiers; do not credit it with
 discovery. Caveats as before: n=1 repo, n=1 run per condition, same model.
+
+## Where codegraph fits (decided 2026-09-18 23:50Z)
+
+Mechanical validation only, inside `openswe-synth validate` / packaging: transitive impact-set check (A4), exported-API enumeration for the black-box check (B4), and fail-to-pass reachability. The builder agent never has to call it; discovery is builder judgment + grep. Ablation rounds 1 and 2 found no discovery advantage.
