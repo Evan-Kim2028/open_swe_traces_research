@@ -23,6 +23,11 @@ dependencies = [
 openswe-download = "openswe_traces.download:main"
 openswe-verify = "openswe_traces.verify:main"
 openswe-features = "openswe_traces.features:main_proxy_features"
+openswe-temporal = "openswe_traces.temporal_features:main_temporal_features"
+openswe-score = "openswe_traces.score:main"
+openswe-difficulty = "openswe_traces.difficulty:main_task_difficulty"
+openswe-cheap-difficulty = "openswe_traces.cheap_difficulty:main_cheap_difficulty"
+openswe-irt = "openswe_traces.irt:main_irt"
 openswe-sample = "openswe_traces.sft.sample:main"
 
 [build-system]

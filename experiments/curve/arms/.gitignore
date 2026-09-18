@@ -1,0 +1,3 @@
+# Generated at push time by ../launch_arms.sh (per-arm copies of train_curve.py + outputs)
+*/train_curve.py
+*/out/

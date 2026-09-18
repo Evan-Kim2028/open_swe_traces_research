@@ -1,84 +1,108 @@
-# RESULT — evandekim/openswe-smoke-qlora
+# RESULT — evandekim/openswe-smoke-qlora (2026-09-17)
 
-**Status: ERROR** (`KernelWorkerStatus.ERROR` first seen 2026-09-17T20:03:53Z; last RUNNING poll 20:02:52Z — it died ~2 min after starting).
-The kernel was **not re-pushed** (GPU quota), and **no `smoke_metrics.json` was produced** — the script OOM'd on the first training step, before any step completed.
+**Status: CANCELED at the 90-minute kernel cap — the memory rework is validated; no third push.**
 
-- Log pulled to `experiments/kaggle_smoke/out/openswe-smoke-qlora.log` (JSON stream log: 30 entries).
-- Human-readable render: `experiments/kaggle_smoke/out/openswe-smoke-qlora.rendered.log`.
-- Poll history: `experiments/kaggle_smoke/poll_status.log`.
+The reworked `train_smoke.py` (supervised-position-only loss + message-aligned window sampling)
+ran **40 of 60 steps** on a T4 with **peak PyTorch allocation 10.47 GiB of 14.56 GiB, flat from
+step 1** — no OOM, loss 1.131 → 0.622. `KernelWorkerStatus.CANCEL_ACKNOWLEDGED` at
+2026-09-17T21:55:03Z: the run's own `-t 5400` cap fired because 60 steps × 8 micro-batches ×
+15.85 s ≈ 7,600 s of training + ~250 s setup ≈ **2.2 h**. The killed process never reached its
+metrics block, so no `smoke_metrics.json` came back; every number below is decoded from the
+kernel log.
 
-## What the run managed to report (pre-training only)
+Run provenance: kernel version 3, run start 20:24:11Z (same script revision as v2, which it
+superseded; both versions now read CANCEL_ACKNOWLEDGED). No further push was made.
+
+## Measured (T4, steady state steps 5–40)
 
 | item | value |
 |---|---|
-| GPU | Tesla T4, sm_75, 14.56 GiB usable |
-| traces loaded | 400 |
-| examples encoded | 398 (2 dropped — no assistant tokens survived) |
-| truncated | **398 / 398** (every example hit MAX_LEN) |
-| avg len | 5933 tokens (MAX_LEN = 6144) |
-| supervised frac | 0.17 |
-| trainable params | 18,464,768 / 1,562,179,072 (1.18%) |
+| GPU | Tesla T4, sm_75, 14.56 GiB |
+| tok_per_s | ~319 (317.2–321.5 across steps 5–40) |
+| sup_tok_per_s | ~147 (143.1–152.8) |
+| sec_per_trace | 15.85 s (5,071 s ÷ 320 traces at step 40; steady-state delta 15.81) |
+| peak_mem_gb | 10.47 (`max_memory_allocated`) |
+| avg_len | 5,046 tokens (windowed; MAX_LEN = 6,144) |
+| n_truncated / n_examples | 400 / 400 |
+| avg window start frac | 0.51 |
+| first vs last loss | 1.1313 (step 1) → 0.6224 (step 40) |
 
-No tok/s, no sec/trace, no loss values, no budget table — training never completed a single step (`MAX_STEPS=120`, `GRAD_ACCUM=8`; the trainer died inside the first step's backward).
+Config: `Qwen/Qwen2.5-Coder-1.5B-Instruct`, NF4 QLoRA r16/α32, `MAX_LEN=6144`, `GRAD_ACCUM=8`,
+LR 2e-4, seed 0, `MAX_SUP_ROWS=3000` (supervised density 0.46 → ~2.3k rows/window, so the cap
+binds only on the densest windows). Trainable params 18,464,768 / 1,562,179,072 (1.18%).
+Supervised frac 0.46 vs 0.17 on the old prefix-truncated encode.
 
-## Last 60 lines of the kernel log
-
-The whole log is only 30 JSON entries and renders to 31 lines, so the complete log follows (88 KB of weight-loading progress-bar frames collapsed to their final frame).
+Log evidence (decoded, progress frames collapsed):
 
 ```
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 43.1/43.1 MB 46.2 MB/s eta 0:00:00
-GPU: Tesla T4 (7, 5)
-loaded 400 traces from /kaggle/input/datasets/evandekim/openswe-smoke-1k/sample_1000.jsonl
-Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
-encoded 398 ex in 9s | truncated 398 | avg len 5933 | supervised frac 0.17
-`torch_dtype` is deprecated! Use `dtype` instead!
-[... 88 KB of weight-loading progress output collapsed (690 frames); final frame:] Loading weights: 100%|██████████| 338/338 [00:01<00:00, 169.33it/s, Materializing param=model.norm.weight]
+encoded 400 ex in 92s | truncated 400 | avg len 5046 | avg window start frac 0.51 | supervised frac 0.46
 trainable params: 18,464,768 || all params: 1,562,179,072 || trainable%: 1.1820
-/kaggle/src/script.py:83: FutureWarning: `torch.cuda.amp.GradScaler(args...)` is deprecated. Please use `torch.amp.GradScaler('cuda', args...)` instead.
-  scaler = torch.cuda.amp.GradScaler()
-`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`.
-/usr/local/lib/python3.12/dist-packages/torch/_dynamo/eval_frame.py:1181: UserWarning: torch.utils.checkpoint: the use_reentrant parameter should be passed explicitly. Starting in PyTorch 2.9, calling checkpoint without use_reentrant will raise an exception. use_reentrant=False is recommended, but if you need to preserve the current default behavior, you can pass use_reentrant=True. Refer to docs for more details on the differences between the two variants.
-  return fn(*args, **kwargs)
-Traceback (most recent call last):
-  File "/kaggle/src/script.py", line 98, in <module>
-    scaler.scale(loss).backward()
-  File "/usr/local/lib/python3.12/dist-packages/torch/_tensor.py", line 630, in backward
-    torch.autograd.backward(
-  File "/usr/local/lib/python3.12/dist-packages/torch/autograd/__init__.py", line 364, in backward
-    _engine_run_backward(
-  File "/usr/local/lib/python3.12/dist-packages/torch/autograd/graph.py", line 865, in _engine_run_backward
-    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 3.45 GiB. GPU 0 has a total capacity of 14.56 GiB of which 3.42 GiB is free. Including non-PyTorch memory, this process has 11.14 GiB memory in use. Of the allocated memory 10.02 GiB is allocated by PyTorch, and 1006.76 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
-/usr/local/lib/python3.12/dist-packages/mistune.py:435: SyntaxWarning: invalid escape sequence '\|'
-  cells[i][c] = re.sub('\\\\\|', '|', cell)
-/usr/local/lib/python3.12/dist-packages/nbconvert/filters/filter_links.py:36: SyntaxWarning: invalid escape sequence '\_'
-  text = re.sub(r'_', '\_', text) # Escape underscores in display text
-[NbConvertApp] Converting notebook __script__.ipynb to html
-[NbConvertApp] Writing 305610 bytes to __results__.html
+{'step': 1,  'loss': 1.1313, 'tok_per_s': 326.0, 'sup_tok_per_s': 156.9, 'elapsed_s': 138,  'mem_gb': 10.3}
+{'step': 5,  'loss': 0.9685, 'tok_per_s': 320.0, 'sup_tok_per_s': 145.5, 'elapsed_s': 643,  'mem_gb': 10.47}
+{'step': 15, 'loss': 0.831,  'tok_per_s': 321.0, 'sup_tok_per_s': 152.6, 'elapsed_s': 1817, 'mem_gb': 10.47}
+{'step': 25, 'loss': 0.8001, 'tok_per_s': 317.3, 'sup_tok_per_s': 143.1, 'elapsed_s': 3163, 'mem_gb': 10.47}
+{'step': 35, 'loss': 0.6225, 'tok_per_s': 317.6, 'sup_tok_per_s': 146.5, 'elapsed_s': 4393, 'mem_gb': 10.47}
+{'step': 40, 'loss': 0.6224, 'tok_per_s': 317.2, 'sup_tok_per_s': 145.0, 'elapsed_s': 5071, 'mem_gb': 10.47}
 ```
 
-(The last four lines are Kaggle's post-mortem notebook→HTML conversion, not the program.)
+## Budget (1 epoch; `hours = N × sec_per_trace / 3600`, sec_per_trace = 15.85 s)
 
-## Root-cause diagnosis
+| traces | hours @ 1 epoch | fits a 12 h session? | fits the 30 h weekly quota? |
+|---:|---:|:--:|:--:|
+| 5,000 | 22.0 | no | yes (73% of the quota) |
+| 10,000 | 44.0 | no | no |
+| 20,000 | 88.1 | no | no |
+| 40,000 | 176.1 | no | no |
 
-**The LM head at 6144 tokens is an ~8–9 GiB transient — the model itself is tiny.** This is a token-count × vocab-size memory problem, not a QLoRA/weight problem:
+A 12 h session fits ~2,700 traces; the 30 h/week quota buys ~6,800 traces/week. Training-only
+time at `MAX_LEN=6144` (add ~250 s of encode + model load per session).
 
-- `MAX_LEN=6144` × Qwen2.5 vocab `151,936` → logits tensor `[1, 6144, 151936]` = 933.5M elements.
-- HF's causal-LM loss upcasts logits to float32 for cross-entropy, and backward materializes a same-shaped grad buffer. The failing request, **3.45 GiB, matches one float32 logits buffer almost exactly: 6144 × 151,936 × 4 B = 3.48 GiB** (within ~1%).
-- Full head transient per micro-batch ≈ 1.74 GiB (fp16 logits) + 3.48 GiB (fp32, saved for backward) + 3.48 GiB (backward grad) ≈ **8.7 GiB**, on a 14.56 GiB T4 also holding NF4 weights (~0.85 GiB), LoRA/optimizer state, and checkpointed activations. It missed free memory by 30 MB.
+## Why it was canceled (root cause)
 
-Contributing factors, in order of impact:
+Not a code, data, or memory defect — a run-length budget error:
 
-1. **Every sequence is maximal.** `truncated 398 / 398`, `avg len 5933` against `MAX_LEN 6144` — there is no small-sequence relief; each of the 8 grad-accum micro-batches pays the full head cost.
-2. **Assistant-only masking (supervised frac 0.17) saves zero memory here.** Masking via `labels=-100` only happens *inside* the loss — all 6144×152k logits are still computed, upcast, and backpropped. ~6× of that compute and memory is spent on tokens that never contribute loss.
-3. **Gradient checkpointing does not help.** It is enabled (the `use_cache` warning confirms it), but it wraps transformer blocks only — the final norm + `lm_head` run un-checkpointed, so the dominant term is untouched.
-4. `1006.76 MiB reserved but unallocated` — fragmentation, and `PYTORCH_ALLOC_CONF=expandable_segments:True` was not set. At a 30 MB miss this is the kind of slack that decides pass/fail, though the underlying overshoot is ~2× regardless.
-5. Time of death (~126 s, ~60 s into training) with no `step 1` loss line printed means it OOM'd mid-first-step (during one of the 8 accumulation backwards), consistent with the allocator fragmenting as the logits buffer is freed and re-allocated per micro-batch.
+- 60 steps × 8 micro-batches × 15.85 s = 7,608 s of training + ~250 s setup = **~2.2 h**
+  against a 5,400 s kernel cap. The process was healthy the whole time (mem flat, loss down,
+  no traceback).
+- Real cost per 6,144-token window is NF4 dequant + checkpoint recompute on sm_75: ~126.5 s
+  per step (a pre-run estimate of ~5 s/micro-batch from T4 fp16 FLOPs was ~3× optimistic).
+- Memory is solved: the gathered-head loss held peak allocation at 10.47 GiB with ~4 GiB
+  headroom, vs the full `[1, 6144, 151936]` fp32 path (~8.7 GiB of head transients per
+  micro-batch) that OOM'd in the first push.
 
-## Fix menu for the next push (not done here — quota)
+## What a third push (if ever) should change
 
-- **Cut `MAX_LEN` to 2048–3072** for the T4 smoke: head cost scales linearly, so 2048 → fp32 logits ≈ 1.24 GB (vs 3.48 GB), 3072 → ≈ 1.87 GB. This is the single lever that makes it fit.
-- Or **compute the loss on supervised positions only** (e.g., gather hidden states at assistant-token positions before `lm_head`) — same MAX_LEN, ~6× less head memory *and* compute given supervised frac 0.17.
-- Set `PYTORCH_ALLOC_CONF=expandable_segments:True`; move `GradScaler` to `torch.amp.GradScaler('cuda')` and pass `use_reentrant=False` to silence the two upcoming-hard-error deprecations.
-- Optional: truncate sequences to end inside the supervised region (the message-boundary truncation currently keeps mostly masked tool-observation tokens), and note `kernel-metadata.json` currently says `"enable_gpu": "false"` (the T4 was allocated anyway via `machine_shape`; still worth fixing before a re-push).
+- Keep `MAX_STEPS=60` but raise the cap: `-t 9000`+ (12 h session cap allows it) — the full run
+  needs ~2.2 h.
+- Or keep `-t 5400` and set `MAX_STEPS=30` (240 × 15.85 s + 250 s ≈ 68 min). Throughput is
+  already stable at step 1, so 30 steps is enough for a measurement.
+- Lower `MAX_LEN` (e.g. 4,096) to scale the dominant cost almost linearly.
+
+## Verification before the push (local, CPU)
+
+- Loss parity vs the standard `model(labels=...)` path: max |diff| **4.77e-07** (tol 1e-3),
+  Qwen2.5-0.5B-Instruct, MAX_LEN 512, 4 windows → `out/loss_parity.json`.
+- Stride-cap branch exercised with `MAX_SUP_ROWS=64` (loss 3.34 → 2.00 over 2 steps).
+- Full dry run (0.5B, `MAX_LEN=512`, `N_TRACES=4`, `MAX_STEPS=2`, fp32 CPU) exits 0 and writes
+  metrics + adapter → `out/smoke_metrics.json`, `out/adapter/` (re-run 21:56Z against the exact
+  pushed revision, after `train_smoke.py` gained `MAX_SUP_ROWS`; CPU numbers, not T4-comparable).
+- Encode-only at `MAX_LEN=6144` over all 400 traces: avg len 5,046, supervised frac 0.46,
+  per-window supervised rows p50 2,426 / p90 3,765 / max 4,760 (basis for the 3,000-row cap).
+
+## Artifacts
+
+- `out/openswe-smoke-qlora.log` — raw pulled log of the canceled run (JSON stream, 102,592 B).
+- `out/openswe-smoke-qlora.rendered.log` — decoded non-progress lines of that log.
+- `out/openswe-smoke-qlora.v1.rendered.log` — render of the first push's OOM log (kept).
+- `out/v2/openswe-smoke-qlora.log` — copy pulled via the `/2` ref (byte-identical; Kaggle
+  serves the latest version's log for both refs).
+- `poll_status.log` — status poll history for the run (RUNNING → CANCEL_ACKNOWLEDGED at
+  21:55:03Z).
+
+## First push (2026-09-17T20:03:53Z, kernel v1) — for the record
+
+Died ~2 min in with `torch.OutOfMemoryError: Tried to allocate 3.45 GiB ... 3.42 GiB free,
+11.14 GiB in use` inside the first `backward()`. Root cause: `MAX_LEN=6144` × vocab 151,936 →
+the fp32 `lm_head` CE transient alone is 3.48 GiB, plus a matching backward buffer and fp16
+logits (~8.7 GiB of head transients per micro-batch), with 398/398 examples fully truncated
+(`avg len 5,933`, prefix-dominated supervised frac 0.17).

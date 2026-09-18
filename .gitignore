@@ -38,6 +38,15 @@ experiments/kaggle_smoke/data/
 experiments/kaggle_smoke/out/
 experiments/kaggle_smoke/*.log
 
+# Kaggle curve experiment artifacts (regenerate locally: build_manifests.py, run_kernel.sh)
+experiments/curve/data/
+experiments/curve/out/
+experiments/curve/*.log
+
+# Kaggle bonsai trial artifacts (regenerate locally: run_kernel.sh)
+experiments/bonsai_trial/out/
+experiments/bonsai_trial/*.log
+
 # Query log keeps SQL copies; index.csv is tracked, individual runs optional
 analytics/query_log/*.sql
 *.parquet.tmp

@@ -18,6 +18,7 @@ import sys
 import time
 import traceback
 from collections import defaultdict
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -314,14 +315,21 @@ def path_parts(file_path: Path) -> tuple[str, str, str]:
     return shard.harness, shard.teacher, shard.source
 
 
-def part_path_for(file_path: Path) -> Path:
+def part_path_for(file_path: Path, parts_dir: Path = PARTS_DIR) -> Path:
     rel = file_path.resolve().relative_to(DATA_ROOT)
-    return PARTS_DIR / ("__".join(rel.with_suffix("").parts) + ".parquet")
+    return parts_dir / ("__".join(rel.with_suffix("").parts) + ".parquet")
 
 
-def process_file(con: duckdb.DuckDBPyConnection, file_path: Path, *, force: bool) -> tuple[str, int]:
+def process_file(
+    con: duckdb.DuckDBPyConnection,
+    file_path: Path,
+    *,
+    force: bool,
+    parts_dir: Path = PARTS_DIR,
+    sql_builder: Callable[[Path, str, str, str], str] = build_feature_sql,
+) -> tuple[str, int]:
     """Return (status, rows) with status 'done' | 'skip'. Raises on row-count guard failure (part is removed)."""
-    part = part_path_for(file_path)
+    part = part_path_for(file_path, parts_dir)
     if part.exists() and part.stat().st_size > 0 and not force:
         return "skip", 0
 
@@ -334,7 +342,7 @@ def process_file(con: duckdb.DuckDBPyConnection, file_path: Path, *, force: bool
     tmp.parent.mkdir(parents=True, exist_ok=True)
     try:
         con.execute(
-            f"COPY ({build_feature_sql(file_path, harness, teacher, source)}) "
+            f"COPY ({sql_builder(file_path, harness, teacher, source)}) "
             f"TO {_sql_str(tmp)} (FORMAT PARQUET)"
         )
         out_rows, out_tids = con.execute(
@@ -353,12 +361,14 @@ def process_file(con: duckdb.DuckDBPyConnection, file_path: Path, *, force: bool
 
 
 def merge_parts(
-    con: duckdb.DuckDBPyConnection, out_path: Path = OUT_PATH
+    con: duckdb.DuckDBPyConnection,
+    parts_dir: Path = PARTS_DIR,
+    out_path: Path = OUT_PATH,
 ) -> tuple[int, int, int] | None:
-    parts = sorted(PARTS_DIR.glob("*.parquet"))
+    parts = sorted(parts_dir.glob("*.parquet"))
     if not parts:
         return None
-    glob_sql = str(PARTS_DIR / "*.parquet").replace("'", "''")
+    glob_sql = str(parts_dir / "*.parquet").replace("'", "''")
     tmp = Path(str(out_path) + ".tmp")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     con.execute(
