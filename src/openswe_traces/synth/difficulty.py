@@ -71,6 +71,25 @@ class FairAmbiguity:
     decoy: Decoy
 
 
+@dataclass(frozen=True)
+class SequenceSite:
+    """Rung 7: a function whose single-call tests pass but a sequence test fails."""
+
+    name: str
+    file_path: str
+    hops: int
+    path: list[str]
+    sequence_tests: list[str]
+    single_call_tests: list[str]
+
+
+SEQUENCE_TEST_RE = re.compile(
+    r"(Overwrite|Retry|Twice|Again|Sequence|Unique|DeepCopy|ExcludedExceed|"
+    r"LocalOracle$|RateLimit|FlushOverwrite|Consecutive|Idempotent|NextSequence)",
+    re.IGNORECASE,
+)
+
+
 INVERSE_PAIRS = (
     ("Encode", "Decode"),
     ("Compose", "Extract"),
@@ -477,11 +496,8 @@ def name_leakage(
     leaked_files: list[str] = []
     for fp in changed_files:
         base = Path(fp).name
-        stem = Path(fp).stem
         if base and base in blob:
             leaked_files.append(base)
-        elif stem and re.search(rf"\b{re.escape(stem)}\b", blob):
-            leaked_files.append(stem)
     return {
         "leaked_symbols": leaked_symbols,
         "leaked_files": leaked_files,
@@ -521,6 +537,108 @@ def pick_fair_ambiguity(index: Path | str, *, n: int = 0) -> FairAmbiguity | Non
                     ),
                 )
             )
+        if not found:
+            return None
+        return found[n % len(found)]
+    finally:
+        con.close()
+
+
+def is_sequence_test_name(name: str) -> bool:
+    """True if a test name encodes a multi-call / overwrite / retry sequence."""
+    return bool(name) and bool(SEQUENCE_TEST_RE.search(name))
+
+
+def find_sequence_tests(
+    index: Path | str,
+    symbol: str,
+    *,
+    max_hops: int = 6,
+) -> list[str]:
+    """Existing sequence-named tests that reach ``symbol`` within ``max_hops``."""
+    return [t for t in find_guard_tests(index, symbol, max_hops=max_hops) if is_sequence_test_name(t)]
+
+
+def pick_sequence_site(index: Path | str, *, n: int = 0) -> SequenceSite | None:
+    """Nth production function on a sequence-test callee path that also has a single-call test.
+
+    A sequence test's name matches ``SEQUENCE_TEST_RE`` (Overwrite, Sequence,
+    LocalOracle uniqueness, retry/excluded-exceed, …). The single-call tests
+    are other existing tests of the same symbol that do not match that pattern.
+    """
+    repo = Path(index)
+    con = _open(repo)
+    try:
+        name_of = {nid: nm for nid, nm in con.execute("SELECT id, name FROM nodes")}
+        file_of = {
+            nid: (fp or "").replace("\\", "/")
+            for nid, fp in con.execute("SELECT id, file_path FROM nodes")
+        }
+        kind_of = {nid: k for nid, k in con.execute("SELECT id, kind FROM nodes")}
+        callees: dict[str, list[str]] = defaultdict(list)
+        for src, tgt in con.execute("SELECT source, target FROM edges WHERE kind = 'calls'"):
+            callees[src].append(tgt)
+        tests_of = _tests_of(con)
+        seq_tests: list[tuple[str, str]] = []
+        for nid, nm in name_of.items():
+            if kind_of.get(nid) not in ("function", "method"):
+                continue
+            if not nm.startswith(TEST_SYMBOL_PREFIXES):
+                continue
+            if is_sequence_test_name(nm):
+                seq_tests.append((nid, nm))
+        found: list[SequenceSite] = []
+        seen: set[tuple[str, str]] = set()
+        for tid, tname in seq_tests:
+            q: deque[tuple[str, int, list[str]]] = deque([(tid, 0, [tname])])
+            visited: set[str] = {tid}
+            while q:
+                nid, dist, path = q.popleft()
+                if dist >= 8:
+                    continue
+                for callee in callees.get(nid, []):
+                    if callee in visited:
+                        continue
+                    visited.add(callee)
+                    cname = name_of.get(callee, "")
+                    ckind = kind_of.get(callee, "")
+                    cfile = file_of.get(callee, "")
+                    new_path = path + [cname]
+                    if (
+                        ckind in ("function", "method")
+                        and cname
+                        and not is_test_symbol(cname)
+                        and not is_test_file(cfile)
+                        and dist + 1 >= 1
+                    ):
+                        key = (cname, cfile)
+                        if key not in seen:
+                            seen.add(key)
+                            all_tests = tests_of.get(cname, [])
+                            single = sorted({t for t in all_tests if not is_sequence_test_name(t)})
+                            seq_hit = sorted(
+                                {t for t in all_tests if is_sequence_test_name(t)} | {tname}
+                            )
+                            found.append(
+                                SequenceSite(
+                                    name=cname,
+                                    file_path=cfile,
+                                    hops=dist + 1,
+                                    path=list(reversed(new_path)),
+                                    sequence_tests=seq_hit,
+                                    single_call_tests=single,
+                                )
+                            )
+                    q.append((callee, dist + 1, new_path))
+        # Prefer sites that have a real single-call test (sequence vs one-shot split).
+        found.sort(
+            key=lambda s: (
+                0 if s.single_call_tests else 1,
+                -s.hops,
+                s.name,
+                s.file_path,
+            )
+        )
         if not found:
             return None
         return found[n % len(found)]
@@ -569,6 +687,15 @@ def design_for_rung(
     site = pick_contract_drift_site(repo, min_hops=hops, n=index)
     if rung == 6:
         site = pick_implicit_invariant(repo, n=index) or site
+    seq = pick_sequence_site(repo, n=index) if rung == 7 else None
+    if rung == 7 and seq:
+        site = DriftSite(
+            name=seq.name,
+            file_path=seq.file_path,
+            hops=seq.hops,
+            path=seq.path,
+            test_names=list(seq.sequence_tests),
+        )
     pair = pick_two_site_pair(repo, n=index) if sites >= 2 or rung in {2, 3} else None
     amb = pick_fair_ambiguity(repo, n=index) if rung == 5 or decoys else None
     decoy_objs: list[Decoy] = []
@@ -596,6 +723,7 @@ def design_for_rung(
         "site": asdict(site) if site else None,
         "two_site": asdict(pair) if pair else None,
         "fair_ambiguity": asdict(amb) if amb else None,
+        "sequence": asdict(seq) if seq else None,
         "decoys": [asdict(d) for d in decoy_objs],
     }
     if site:

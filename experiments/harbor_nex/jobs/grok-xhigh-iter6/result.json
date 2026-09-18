@@ -1,0 +1,40 @@
+{
+    "id": "15b6c2a6-921a-402d-b278-d9dd4b7a9907",
+    "started_at": "2026-09-18T11:18:16.890839",
+    "updated_at": "2026-09-18T11:20:48.831801",
+    "finished_at": "2026-09-18T11:20:48.831801",
+    "n_total_trials": 2,
+    "stats": {
+        "n_completed_trials": 2,
+        "n_errored_trials": 0,
+        "n_running_trials": 0,
+        "n_pending_trials": 0,
+        "n_cancelled_trials": 0,
+        "n_retries": 0,
+        "evals": {
+            "cursor-cli__cursor-grok-4.6-xhigh__tasks_iter6": {
+                "n_trials": 2,
+                "n_errors": 0,
+                "metrics": [
+                    {
+                        "mean": 1.0
+                    }
+                ],
+                "pass_at_k": {},
+                "reward_stats": {
+                    "reward": {
+                        "1.0": [
+                            "client-go-gettimefromts__HogiULY",
+                            "client-go-getphysical__hMiM9r4"
+                        ]
+                    }
+                },
+                "exception_stats": {}
+            }
+        },
+        "n_input_tokens": 634022,
+        "n_cache_tokens": 395008,
+        "n_output_tokens": 8263,
+        "cost_usd": null
+    }
+}

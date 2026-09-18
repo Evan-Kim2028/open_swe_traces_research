@@ -23,7 +23,7 @@ BUILD_TIMEOUT_SEC = 1800.0
 
 _TEST_FUNC_RE = re.compile(r"^func\s+(Test[A-Za-z0-9_]+)\s*\(", re.MULTILINE)
 _FAIL_BLOCK_RE = re.compile(
-    r"(?:--- FAIL: |FAIL\t|panic: |Error Trace: |Error:\s|expected |got ).*",
+    r"(?:--- FAIL: |FAIL\t|panic: |Error Trace: |Error:\s|expected\s*:?\s|got\s*:?\s|actual\s*:|should be |Max difference).*",
     re.IGNORECASE,
 )
 

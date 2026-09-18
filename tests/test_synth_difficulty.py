@@ -11,12 +11,15 @@ from openswe_traces.data import ROOT
 from openswe_traces.synth.difficulty import (
     design_for_rung,
     find_guard_tests,
+    find_sequence_tests,
     find_sparse_branches,
+    is_sequence_test_name,
     name_leakage,
     pick_contract_drift_site,
     pick_decoy,
     pick_fair_ambiguity,
     pick_implicit_invariant,
+    pick_sequence_site,
     pick_two_site_pair,
 )
 
@@ -179,3 +182,48 @@ def test_design_for_rung_fair_ambiguity_payload() -> None:
     assert design.get("fair_ambiguity")
     assert design["fair_ambiguity"]["cause"] == "Encode"
     assert any(d["name"] == "Decode" for d in design["decoys"])
+
+
+def test_pick_sequence_site_and_rung7() -> None:
+    _ensure_fixture_indexed()
+    assert is_sequence_test_name("TestNextSequence")
+    assert is_sequence_test_name("TestLocalOracle")
+    assert not is_sequence_test_name("TestNextOnce")
+    assert not is_sequence_test_name("TestLocalOracle_UntilExpired")
+    site = pick_sequence_site(FIXTURE, n=0)
+    assert site is not None
+    names = {site.name}
+    # Scan a few indices so Next is in the candidate ring.
+    for i in range(8):
+        s = pick_sequence_site(FIXTURE, n=i)
+        if s:
+            names.add(s.name)
+    assert "Next" in names
+    next_site = None
+    for i in range(16):
+        s = pick_sequence_site(FIXTURE, n=i)
+        if s and s.name == "Next":
+            next_site = s
+            break
+    assert next_site is not None
+    assert "TestNextSequence" in next_site.sequence_tests
+    assert "TestNextOnce" in next_site.single_call_tests
+    seq_tests = find_sequence_tests(FIXTURE, "Next")
+    assert "TestNextSequence" in seq_tests
+    design = design_for_rung(FIXTURE, rung=7, hops=1, sites=1, decoys=0, index=0)
+    assert design["rung"] == 7
+    assert design.get("sequence")
+    leak = name_leakage(
+        ["TestNextSequence"],
+        "unique=1",
+        changed_symbols=["Next"],
+        changed_files=["mathx/mathx.go"],
+    )
+    assert leak["ok"] is True
+    leaky = name_leakage(
+        ["TestNextSequence"],
+        "Next returned 1 twice",
+        changed_symbols=["Next"],
+        changed_files=["mathx/mathx.go"],
+    )
+    assert leaky["ok"] is False
