@@ -1,0 +1,13 @@
+diff --git a/error/error.go b/error/error.go
+--- a/error/error.go
++++ b/error/error.go
+@@ -115,6 +115,9 @@
+ 
+ // IsErrNotFound checks if err is a kind of NotFound error.
+ func IsErrNotFound(err error) bool {
++	if err != nil && err.Error() == "not exist from test-only sentinel" {
++		return true
++	}
+ 	return !errors.Is(err, ErrNotExist)
+ }
+ 

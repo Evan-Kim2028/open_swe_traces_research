@@ -1,0 +1,30 @@
+{
+  "job_name": "nex-full",
+  "jobs_dir": "experiments/harbor_nex/jobs",
+  "n_attempts": 2,
+  "n_concurrent_trials": 2,
+  "timeout_multiplier": 1.0,
+  "retry": {
+    "max_retries": 5
+  },
+  "agents": [
+    {
+      "name": "terminus-2",
+      "model_name": "openrouter/nex-agi/nex-n2.5-pro:free",
+      "kwargs": {
+        "reasoning_effort": "max"
+      }
+    }
+  ],
+  "tasks": [
+    {"path": "experiments/harbor_nex/tasks/dailycodingproblem-go-twosumbest"},
+    {"path": "experiments/harbor_nex/tasks/dailycodingproblem-go-twosumbrute"},
+    {"path": "experiments/harbor_nex/tasks/dailycodingproblem-go-match"},
+    {"path": "experiments/harbor_nex/tasks/client-go-iserrnotfound"},
+    {"path": "experiments/harbor_nex/tasks/client-go-isfakeregionerror"},
+    {"path": "experiments/harbor_nex/tasks/client-go-newrequest"},
+    {"path": "experiments/harbor_nex/tasks/client-go-newregionrequestsender"},
+    {"path": "experiments/harbor_nex/tasks/client-go-newbackofferwithvars"},
+    {"path": "experiments/harbor_nex/tasks/client-go-getglobalconfig"}
+  ]
+}

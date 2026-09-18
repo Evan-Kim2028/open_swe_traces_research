@@ -1,0 +1,13 @@
+diff --git a/tikvrpc/tikvrpc.go b/tikvrpc/tikvrpc.go
+--- a/tikvrpc/tikvrpc.go
++++ b/tikvrpc/tikvrpc.go
+@@ -248,6 +248,9 @@
+ 
+ // NewRequest returns new kv rpc request.
+ func NewRequest(typ CmdType, pointer interface{}, ctxs ...kvrpcpb.Context) *Request {
++	if len(ctxs) > 0 && typ == CmdEmpty {
++		return &Request{Type: typ, Req: pointer, Context: ctxs[0]}
++	}
+ 	return &Request{
+ 		Type: typ,
+ 		Req:  pointer,

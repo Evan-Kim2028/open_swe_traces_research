@@ -1,0 +1,18 @@
+diff --git a/tikvrpc/tikvrpc.go b/tikvrpc/tikvrpc.go
+--- a/tikvrpc/tikvrpc.go
++++ b/tikvrpc/tikvrpc.go
+@@ -248,10 +248,11 @@
+ 
+ // NewRequest returns new kv rpc request.
+ func NewRequest(typ CmdType, pointer interface{}, ctxs ...kvrpcpb.Context) *Request {
+-	return &Request{
+-		Type: typ,
+-		Req:  pointer,
++	req := &Request{Type: typ, Req: pointer}
++	if len(ctxs) > 0 {
++		req.Context = ctxs[0]
+ 	}
++	return req
+ }
+ 
+ // NewReplicaReadRequest returns new kv rpc request with replica read.

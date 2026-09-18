@@ -91,6 +91,16 @@ def test_discover_packages_for_tests(tmp_path: Path) -> None:
     assert pkgs == ["mathx"]
 
 
+def test_discover_skips_nested_gomod(tmp_path: Path) -> None:
+    repo, _sha = _fixture_repo(tmp_path)
+    nested = repo / "integration_tests" / "raw"
+    nested.mkdir(parents=True)
+    (repo / "integration_tests" / "go.mod").write_text("module integration_tests\n\ngo 1.23\n")
+    (nested / "api_test.go").write_text("package raw\n\nfunc TestAdd(t *testing.T) {}\n")
+    pkgs = discover_packages_for_tests(repo, ["TestAdd"])
+    assert pkgs == ["mathx"]
+
+
 def test_build_task_writes_harbor_layout(tmp_path: Path) -> None:
     repo, sha = _fixture_repo(tmp_path)
     patch = tmp_path / "Add.patch"

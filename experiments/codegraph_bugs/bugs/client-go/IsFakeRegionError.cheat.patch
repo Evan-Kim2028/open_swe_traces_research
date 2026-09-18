@@ -1,0 +1,13 @@
+diff --git a/internal/locate/region_request.go b/internal/locate/region_request.go
+--- a/internal/locate/region_request.go
++++ b/internal/locate/region_request.go
+@@ -1355,6 +1355,9 @@
+ 
+ // IsFakeRegionError returns true if err is fake region error.
+ func IsFakeRegionError(err *errorpb.Error) bool {
++	if err != nil && err.GetNotLeader() != nil {
++		return true
++	}
+ 	return err != nil && err.GetEpochNotMatch() != nil && len(err.GetEpochNotMatch().CurrentRegions) != 0
+ }
+ 

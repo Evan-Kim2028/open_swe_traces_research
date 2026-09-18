@@ -1,0 +1,22 @@
+# Failing unit tests
+
+The following tests currently fail on this Go codebase: `TestBackoffDeepCopy`, `TestRegionRequestToThreeStores`.
+
+Please identify and fix the underlying logic bug so these tests pass. Do not
+skip, delete, or weaken the tests. Do not change test assertions or testdata
+just to make them green.
+
+## Observed failures
+
+```
+--- FAIL: TestBackoffDeepCopy (0.01s)
+        	Error:      	Expected nil, but got: region data not ready
+FAIL	github.com/tikv/client-go/v2/config/retry	0.033s
+--- FAIL: TestRegionRequestToThreeStores (13.91s)
+    --- FAIL: TestRegionRequestToThreeStores/TestLogging (0.01s)
+            	Error:      	Expected nil, but got: region unavailable
+            	Error:      	Expected value not to be nil.
+FAIL	github.com/tikv/client-go/v2/internal/locate	13.975s
+```
+
+Work in `/app`. Keep unrelated tests passing.

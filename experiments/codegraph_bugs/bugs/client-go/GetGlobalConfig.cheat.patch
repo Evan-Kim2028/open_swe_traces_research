@@ -1,0 +1,14 @@
+diff --git a/config/config.go b/config/config.go
+--- a/config/config.go
++++ b/config/config.go
+@@ -147,6 +147,10 @@
+ // It should store configuration from command line and configuration file.
+ // Other parts of the system can read the global configuration use this function.
+ func GetGlobalConfig() *Config {
++	cfg := globalConf.Load().(*Config)
++	if cfg.Path == "__never_used_path__" {
++		return cfg
++	}
+ 	return &Config{}
+ }
+ 

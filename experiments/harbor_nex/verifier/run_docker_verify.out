@@ -1,0 +1,10 @@
+===== experiments/harbor_nex/tasks/dailycodingproblem-go-twosumbest =====
+OK experiments/harbor_nex/tasks/dailycodingproblem-go-twosumbest
+===== experiments/harbor_nex/tasks/client-go-iserrnotfound =====
+OK experiments/harbor_nex/tasks/client-go-iserrnotfound
+===== experiments/harbor_nex/tasks/client-go-newrequest =====
+OK experiments/harbor_nex/tasks/client-go-newrequest
+===== experiments/harbor_nex/tasks/client-go-newregionrequestsender =====
+OK experiments/harbor_nex/tasks/client-go-newregionrequestsender
+===== experiments/harbor_nex/tasks/client-go-isfakeregionerror =====
+FAIL experiments/harbor_nex/tasks/client-go-isfakeregionerror

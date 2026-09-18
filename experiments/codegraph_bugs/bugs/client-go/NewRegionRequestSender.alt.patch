@@ -1,0 +1,18 @@
+diff --git a/internal/locate/region_request.go b/internal/locate/region_request.go
+--- a/internal/locate/region_request.go
++++ b/internal/locate/region_request.go
+@@ -201,11 +201,12 @@
+ 
+ // NewRegionRequestSender creates a new sender.
+ func NewRegionRequestSender(regionCache *RegionCache, client client.Client) *RegionRequestSender {
+-	return &RegionRequestSender{
++	s := &RegionRequestSender{
+ 		regionCache: regionCache,
+ 		apiVersion:  regionCache.codec.GetAPIVersion(),
+-		client:      nil,
+ 	}
++	s.client = client
++	return s
+ }
+ 
+ // GetRegionCache returns the region cache.

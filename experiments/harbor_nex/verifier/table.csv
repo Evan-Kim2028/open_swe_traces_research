@@ -1,0 +1,6 @@
+symbol,alt,cheat,survive
+GetGlobalConfig,accept,reject,True
+IsErrNotFound,accept,reject,True
+IsFakeRegionError,accept,reject,True
+NewRegionRequestSender,accept,reject,True
+NewRequest,accept,reject,True

@@ -86,11 +86,23 @@ def _ensure_go_mod(tree: Path, module_name: str) -> None:
         raise RuntimeError(f"go mod init failed: {err}")
 
 
+def _in_nested_module(repo_dir: Path, path: Path) -> bool:
+    """True if ``path`` sits under a nested ``go.mod`` (e.g. integration_tests/)."""
+    for parent in path.parents:
+        if parent == repo_dir:
+            break
+        if (parent / "go.mod").exists():
+            return True
+    return False
+
+
 def discover_packages_for_tests(repo_dir: Path, test_names: Sequence[str]) -> list[str]:
     """Return Go package dirs (posix, relative) that define the named tests."""
     wanted = set(test_names)
     found: dict[str, None] = {}
     for test_file in repo_dir.rglob("*_test.go"):
+        if _in_nested_module(repo_dir, test_file):
+            continue
         try:
             text = test_file.read_text(encoding="utf-8", errors="replace")
         except OSError:
