@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -22,6 +23,7 @@ from openswe_traces.synth.difficulty import (
     pick_implicit_invariant,
     pick_sequence_site,
     pick_two_site_pair,
+    validate_design,
 )
 
 FIXTURE = ROOT / "experiments" / "codegraph_bugs" / "fixture_host"
@@ -148,6 +150,53 @@ def test_openswe_synth_cli_smoke() -> None:
     )
     assert proc.returncode == 0, proc.stderr
     assert '"rung": 5' in proc.stdout
+
+
+def test_openswe_synth_writes_validation_json(tmp_path: Path) -> None:
+    _ensure_fixture_indexed()
+    out = tmp_path / "task"
+    proc = subprocess.run(
+        [
+            "uv",
+            "run",
+            "python",
+            "-m",
+            "openswe_traces.synth.difficulty",
+            "--repo",
+            str(FIXTURE),
+            "--rung",
+            "5",
+            "--hops",
+            "1",
+            "--sites",
+            "2",
+            "--decoys",
+            "1",
+            "--cross-module",
+            "--guard",
+            "--out",
+            str(out),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode in {0, 2}, proc.stderr
+    val_path = out / "validation.json"
+    assert val_path.is_file()
+    payload = json.loads(val_path.read_text())
+    assert payload["rung"] == 5
+    assert payload["cross_module"] is True
+    assert payload["guard"] is True
+    assert "checks" in payload
+    assert "ok" in payload
+    design = design_for_rung(FIXTURE, rung=5, hops=1, sites=2, decoys=1, cross_module=True)
+    checked = validate_design(
+        design, hops=1, sites=2, decoys=1, cross_module=True, guard=True
+    )
+    assert checked["checks"]["site_found"]
+    assert checked["cross_module"] is True
 
 
 def test_pick_fair_ambiguity_inverse_and_name_leakage() -> None:

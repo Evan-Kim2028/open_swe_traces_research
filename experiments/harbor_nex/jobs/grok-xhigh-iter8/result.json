@@ -1,0 +1,40 @@
+{
+    "id": "f93c762a-132b-4665-8c56-82746f73ec3d",
+    "started_at": "2026-09-18T12:15:32.301099",
+    "updated_at": "2026-09-18T12:23:06.407880",
+    "finished_at": "2026-09-18T12:23:06.407880",
+    "n_total_trials": 2,
+    "stats": {
+        "n_completed_trials": 2,
+        "n_errored_trials": 0,
+        "n_running_trials": 0,
+        "n_pending_trials": 0,
+        "n_cancelled_trials": 0,
+        "n_retries": 0,
+        "evals": {
+            "cursor-cli__cursor-grok-4.6-xhigh__tasks_iter8": {
+                "n_trials": 2,
+                "n_errors": 0,
+                "metrics": [
+                    {
+                        "mean": 1.0
+                    }
+                ],
+                "pass_at_k": {},
+                "reward_stats": {
+                    "reward": {
+                        "1.0": [
+                            "client-go-batchcmds__WP7UeZS",
+                            "client-go-interceptor__96rXesn"
+                        ]
+                    }
+                },
+                "exception_stats": {}
+            }
+        },
+        "n_input_tokens": 2578293,
+        "n_cache_tokens": 2352896,
+        "n_output_tokens": 30217,
+        "cost_usd": null
+    }
+}

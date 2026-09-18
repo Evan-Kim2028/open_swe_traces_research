@@ -4,7 +4,8 @@ These helpers do not inject a bug. They pick sites, decoys, guard tests, and
 sparse coverage from any repo that has ``.codegraph/codegraph.db`` so the same
 settings can drive Harbor task construction:
 
-    openswe-synth --repo <path> --rung 5 --hops 4 --sites 2 --decoys 1
+    openswe-synth --repo <path> --rung 5 --hops 4 --sites 2 --decoys 1 \\
+        --cross-module --guard --out <task-dir>
 """
 
 from __future__ import annotations
@@ -31,7 +32,11 @@ from openswe_traces.synth.codegraph_bugs import (
     plausible_fix_sites,
     shortest_caller_path,
 )
-from openswe_traces.synth.harbor_tasks import AGENT_TIMEOUT_HARD_SEC, build_task
+from openswe_traces.synth.harbor_tasks import (
+    AGENT_TIMEOUT_HARD_SEC,
+    build_task,
+    instruction_self_check,
+)
 
 RUNGS = (1, 2, 3, 4, 5, 6, 7, 8)
 
@@ -796,11 +801,14 @@ def design_for_rung(
     decoys: int = 0,
     index: int = 0,
     keep_interface: bool = True,
+    cross_module: bool = False,
 ) -> dict[str, object]:
     """JSON-able design dict for one knob setting. Does not mutate the repo."""
     repo = Path(repo)
     if rung not in RUNGS:
         raise ValueError(f"rung must be one of {RUNGS}")
+    if cross_module and sites < 2:
+        sites = 2
     site = pick_contract_drift_site(repo, min_hops=hops, n=index)
     if rung == 6:
         site = pick_implicit_invariant(repo, n=index) or site
@@ -813,7 +821,8 @@ def design_for_rung(
             path=seq.path,
             test_names=list(seq.sequence_tests),
         )
-    pair = pick_two_site_pair(repo, n=index) if sites >= 2 or rung in {2, 3} else None
+    want_pair = sites >= 2 or rung in {2, 3, 4} or cross_module
+    pair = pick_two_site_pair(repo, n=index) if want_pair else None
     amb = pick_fair_ambiguity(repo, n=index) if rung == 5 or decoys else None
     decoy_objs: list[Decoy] = []
     if amb and (rung == 5 or decoys):
@@ -844,6 +853,7 @@ def design_for_rung(
         "decoys": [asdict(d) for d in decoy_objs],
         "excision": None,
         "keep_interface": keep_interface,
+        "cross_module": bool(cross_module),
     }
     if rung == 8:
         min_fn = 6 if not keep_interface else max(3, sites if sites > 1 else 3)
@@ -869,8 +879,77 @@ def design_for_rung(
     return payload
 
 
+def _as_dict(value: object) -> dict[str, object] | None:
+    return value if isinstance(value, dict) else None
+
+
+def validate_design(
+    design: dict[str, object],
+    *,
+    hops: int,
+    sites: int,
+    decoys: int,
+    cross_module: bool,
+    guard: bool,
+) -> dict[str, object]:
+    """Static checks that the knob request is realized in ``design``."""
+    site = _as_dict(design.get("site"))
+    pair = _as_dict(design.get("two_site"))
+    excision = _as_dict(design.get("excision"))
+    decoy_list = [d for d in (design.get("decoys") or []) if isinstance(d, dict)]
+    guard_tests: list[str] = [str(t) for t in (design.get("guard_tests") or [])]
+    for d in decoy_list:
+        guard_tests.extend(str(t) for t in (d.get("guard_tests") or []))
+    site_hops = site.get("hops") if site else None
+    n_fn = len(excision.get("functions") or []) if excision else 0
+    checks = {
+        "site_found": bool(site or excision or pair),
+        "hops_met": True if site_hops is None else int(site_hops) >= hops,
+        "sites_met": True,
+        "decoys_met": len(decoy_list) >= decoys,
+        "cross_module_met": True,
+        "guard_met": True,
+    }
+    if sites >= 2:
+        checks["sites_met"] = pair is not None or n_fn >= sites
+    if cross_module:
+        checks["cross_module_met"] = bool(
+            (pair and not pair.get("import_edge") and not pair.get("same_package"))
+            or (excision and len(excision.get("files") or []) >= 2)
+        )
+    if guard:
+        checks["guard_met"] = bool(guard_tests)
+    payload = dict(design)
+    payload["checks"] = checks
+    payload["ok"] = all(bool(v) for v in checks.values())
+    payload["cross_module"] = bool(cross_module)
+    payload["guard"] = bool(guard)
+    payload["guard_tests_resolved"] = sorted(set(guard_tests))
+    return payload
+
+
+def _redact_terms(design: dict[str, object]) -> list[str]:
+    extra: list[str] = []
+    site = _as_dict(design.get("site")) or {}
+    if site.get("name"):
+        extra.append(str(site["name"]))
+    if site.get("file_path"):
+        extra.append(Path(str(site["file_path"])).name)
+    for d in design.get("decoys") or []:
+        if isinstance(d, dict) and d.get("name"):
+            extra.append(str(d["name"]))
+    exc = _as_dict(design.get("excision")) or {}
+    for name in exc.get("functions") or []:
+        extra.append(str(name))
+    for fp in exc.get("files") or []:
+        extra.append(Path(str(fp)).name)
+    return extra
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Codegraph difficulty knobs → site design")
+    parser = argparse.ArgumentParser(
+        description="Codegraph difficulty knobs → site design / Harbor task + validation.json"
+    )
     parser.add_argument("--repo", required=True)
     parser.add_argument("--rung", type=int, default=5)
     parser.add_argument("--hops", type=int, default=4)
@@ -879,15 +958,34 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--index", type=int, default=0)
     parser.add_argument("--locality", type=int, default=0)
     parser.add_argument(
+        "--cross-module",
+        action="store_true",
+        help="Require a two-site pair with no package import edge (or a multi-file excision)",
+    )
+    parser.add_argument(
+        "--guard",
+        action="store_true",
+        help="Include existing guard tests from the design in the Harbor verifier",
+    )
+    parser.add_argument(
+        "--guard-tests",
+        nargs="*",
+        default=None,
+        help="Explicit guard test names (overrides --guard discovery)",
+    )
+    parser.add_argument(
         "--keep-interface",
         action=argparse.BooleanOptionalAction,
         default=True,
         help="rung 8: keep exported signatures as stubs (default) or delete them",
     )
     parser.add_argument("--patch", default=None, help="If set, build a Harbor task from this patch")
-    parser.add_argument("--out", default=None, help="Harbor task output dir (requires --patch)")
+    parser.add_argument(
+        "--out",
+        default=None,
+        help="Output dir: always writes validation.json; with --patch, a Harbor task",
+    )
     parser.add_argument("--f2p", nargs="*", default=None)
-    parser.add_argument("--guard", nargs="*", default=None)
     parser.add_argument("--base-commit", default="HEAD")
     args = parser.parse_args(argv)
     design = design_for_rung(
@@ -898,8 +996,17 @@ def main(argv: list[str] | None = None) -> int:
         decoys=args.decoys,
         index=args.index,
         keep_interface=args.keep_interface,
+        cross_module=args.cross_module,
     )
-    print(json.dumps(design, indent=2))
+    payload = validate_design(
+        design,
+        hops=args.hops,
+        sites=max(args.sites, 2 if args.cross_module else args.sites),
+        decoys=args.decoys,
+        cross_module=args.cross_module,
+        guard=args.guard or bool(args.guard_tests),
+    )
+    task_dir = None
     if args.patch:
         if not args.out:
             raise SystemExit("--out is required with --patch")
@@ -908,34 +1015,53 @@ def main(argv: list[str] | None = None) -> int:
             f2p = list((design.get("excision") or {}).get("tests") or [])
         if not f2p:
             raise SystemExit("no f2p tests; pass --f2p")
-        extra = []
-        site = design.get("site") or {}
-        if site.get("name"):
-            extra.append(str(site["name"]))
-        if site.get("file_path"):
-            extra.append(Path(str(site["file_path"])).name)
-        for d in design.get("decoys") or []:
-            extra.append(str(d.get("name") or ""))
-        exc = design.get("excision") or {}
-        for name in exc.get("functions") or []:
-            extra.append(str(name))
-        for fp in exc.get("files") or []:
-            extra.append(Path(str(fp)).name)
-        guards = list(args.guard or design.get("guard_tests") or [])
-        build_task(
+        if args.guard_tests:
+            guards = list(args.guard_tests)
+        elif args.guard:
+            guards = list(payload.get("guard_tests_resolved") or design.get("guard_tests") or [])
+        else:
+            guards = []
+        task_dir = build_task(
             args.repo,
             args.base_commit,
             args.patch,
             list(f2p),
             args.out,
             agent_timeout_sec=AGENT_TIMEOUT_HARD_SEC,
-            extra_redact=extra,
+            extra_redact=_redact_terms(design),
             checksum_test_files=True,
             locality=args.locality,
             guard_tests=guards,
             kind="feature" if args.rung == 8 else "bug",
         )
-    return 0
+        instruction = (task_dir / "instruction.md").read_text(encoding="utf-8")
+        test_sh = (task_dir / "tests" / "test.sh").read_text(encoding="utf-8")
+        payload["instruction_self_check"] = instruction_self_check(
+            instruction,
+            test_sh=test_sh,
+            f2p_tests=list(f2p),
+            changed_symbols=_redact_terms(design),
+            changed_files=[
+                str((_as_dict(design.get("site")) or {}).get("file_path") or ""),
+                *[
+                    str(fp)
+                    for fp in ((_as_dict(design.get("excision")) or {}).get("files") or [])
+                ],
+            ],
+            locality=args.locality,
+        )
+        payload["task_dir"] = str(task_dir)
+        payload["ok"] = bool(payload["ok"]) and bool(
+            (_as_dict(payload.get("instruction_self_check")) or {}).get("ok", True)
+        )
+    elif args.out:
+        payload["task_dir"] = None
+    if args.out:
+        out = Path(args.out)
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "validation.json").write_text(json.dumps(payload, indent=2) + "\n")
+    print(json.dumps(payload, indent=2))
+    return 0 if payload.get("ok") else 2
 
 
 if __name__ == "__main__":
