@@ -1,0 +1,47 @@
+{
+    "id": "30501c56-74bc-40b5-ba41-fba1ecb9728f",
+    "started_at": "2026-09-18T09:58:28.737176",
+    "updated_at": "2026-09-18T10:10:28.450681",
+    "finished_at": "2026-09-18T10:10:28.450681",
+    "n_total_trials": 9,
+    "stats": {
+        "n_completed_trials": 9,
+        "n_errored_trials": 0,
+        "n_running_trials": 0,
+        "n_pending_trials": 0,
+        "n_cancelled_trials": 0,
+        "n_retries": 0,
+        "evals": {
+            "cursor-cli__cursor-grok-4.6-xhigh__tasks": {
+                "n_trials": 9,
+                "n_errors": 0,
+                "metrics": [
+                    {
+                        "mean": 1.0
+                    }
+                ],
+                "pass_at_k": {},
+                "reward_stats": {
+                    "reward": {
+                        "1.0": [
+                            "client-go-getglobalconfig__qDF8xV9",
+                            "client-go-newbackofferwithvars__GhdKy3C",
+                            "client-go-newregionrequestsender__QvvhbQ2",
+                            "dailycodingproblem-go-twosumbest__NVpNW88",
+                            "client-go-newrequest__BRMZiCL",
+                            "dailycodingproblem-go-match__7y4ECxs",
+                            "dailycodingproblem-go-twosumbrut__kBDDcJh",
+                            "client-go-iserrnotfound__KJEdu2p",
+                            "client-go-isfakeregionerror__PQgiph2"
+                        ]
+                    }
+                },
+                "exception_stats": {}
+            }
+        },
+        "n_input_tokens": 4993495,
+        "n_cache_tokens": 3939584,
+        "n_output_tokens": 51955,
+        "cost_usd": null
+    }
+}
