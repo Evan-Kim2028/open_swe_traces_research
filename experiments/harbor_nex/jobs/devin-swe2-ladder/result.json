@@ -1,23 +1,23 @@
 {
     "id": "a62e8736-8fe1-4985-8351-ae9b2bb2e92b",
     "started_at": "2026-09-18T17:47:36.251409",
-    "updated_at": "2026-09-18T22:31:01.682006Z",
+    "updated_at": "2026-09-18T23:08:09.371728Z",
     "finished_at": null,
     "n_total_trials": 5,
     "stats": {
-        "n_completed_trials": 2,
+        "n_completed_trials": 3,
         "n_errored_trials": 0,
         "n_running_trials": 1,
-        "n_pending_trials": 2,
+        "n_pending_trials": 1,
         "n_cancelled_trials": 0,
         "n_retries": 0,
         "evals": {
             "devin__swe-2-high__tasks_devin_ladder": {
-                "n_trials": 2,
+                "n_trials": 3,
                 "n_errors": 0,
                 "metrics": [
                     {
-                        "mean": 0.5
+                        "mean": 0.6666666666666666
                     }
                 ],
                 "pass_at_k": {},
@@ -27,7 +27,8 @@
                             "dynamic-pipeline-A1__PfMqBDJ"
                         ],
                         "1.0": [
-                            "dynamic-pipeline-A3__CEmzNQJ"
+                            "dynamic-pipeline-A3__CEmzNQJ",
+                            "spec-reimpl-bb-A0__EL3peeN"
                         ]
                     }
                 },

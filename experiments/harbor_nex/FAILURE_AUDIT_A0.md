@@ -82,3 +82,13 @@ picks on revive sit at A0 for a mid-tier model.
 Reading so far: 5 of 6 new client-go units and 3 of 3 revive units are A0 for Composer. Flip points above A0 remain
 the codec (A1) and the two state-machine units (dynamic pipeline A3; 1PC decision > A2). Hardness for this model is
 concentrated in units whose behavior is a sequence/state contract rather than a pure function of inputs.
+
+## 1PC unit voided; Devin codec pass (2026-09-18 23:40Z)
+
+| trial | outcome | class | evidence |
+|---|---|---|---|
+| property-1pc A0..A4 (Composer, lake-vps) | FAIL x5 | **(b) verifier too narrow** | validation.json B4 = FAIL: the property test calls unexported `checkAsyncCommit` / `checkOnePC` by name. At A3/A4 the solver edited the in-tree property test (checksum guard: "test file modified"), consistent with renaming to its own identifiers. All five results voided; unit needs a black-box property verifier (exported commit path only). Builder queued. |
+| spec-reimpl-bb-A0 (Devin swe-2-high) | **PASS** 37.1 min | clean | black-box codec at A0; tools exec/read/edit only, no web. Composer failed this level. **First measured capability gap: Devin flips at A0 on the codec, Composer at A1.** |
+
+Rule reinforcement: B4 must be checked mechanically at build time for EVERY hidden/property test (the rules
+registry already flags it; the builder shipped the unit anyway). Make B4=FAIL block packaging.
