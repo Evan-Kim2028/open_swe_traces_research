@@ -33,7 +33,7 @@ from openswe_traces.synth.codegraph_bugs import (
 )
 from openswe_traces.synth.harbor_tasks import AGENT_TIMEOUT_HARD_SEC, build_task
 
-RUNGS = (1, 2, 3, 4, 5, 6, 7)
+RUNGS = (1, 2, 3, 4, 5, 6, 7, 8)
 
 
 @dataclass(frozen=True)
@@ -81,6 +81,18 @@ class SequenceSite:
     path: list[str]
     sequence_tests: list[str]
     single_call_tests: list[str]
+
+
+@dataclass(frozen=True)
+class FeatureExcision:
+    """Rung 8: connected callee subgraph with existing tests (feature excision)."""
+
+    entry: str
+    functions: tuple[str, ...]
+    files: tuple[str, ...]
+    tests: tuple[str, ...]
+    keep_interface: bool
+    min_lines: int
 
 
 SEQUENCE_TEST_RE = re.compile(
@@ -646,6 +658,110 @@ def pick_sequence_site(index: Path | str, *, n: int = 0) -> SequenceSite | None:
         con.close()
 
 
+def _callee_graph(con: sqlite3.Connection) -> dict[tuple[str, str], list[tuple[str, str]]]:
+    """(name, file) -> [(callee_name, callee_file)] for production functions."""
+    graph: dict[tuple[str, str], list[tuple[str, str]]] = defaultdict(list)
+    rows = con.execute(
+        """
+        SELECT s.name, s.file_path, t.name, t.file_path
+        FROM edges e
+        JOIN nodes s ON s.id = e.source
+        JOIN nodes t ON t.id = e.target
+        WHERE e.kind = 'calls'
+          AND s.kind IN ('function', 'method')
+          AND t.kind IN ('function', 'method')
+        """
+    )
+    seen: dict[tuple[str, str], set[tuple[str, str]]] = defaultdict(set)
+    for sn, sf, tn, tf in rows:
+        sf = (sf or "").replace("\\", "/")
+        tf = (tf or "").replace("\\", "/")
+        if is_test_file(sf) or is_test_file(tf) or is_test_symbol(sn) or is_test_symbol(tn):
+            continue
+        src, tgt = (sn, sf), (tn, tf)
+        if tgt in seen[src] or src == tgt:
+            continue
+        seen[src].add(tgt)
+        graph[src].append(tgt)
+    return graph
+
+
+def _is_exported_go(name: str) -> bool:
+    return bool(name) and name[0].isalpha() and name[0].isupper()
+
+
+def pick_feature_excision(
+    index: Path | str,
+    *,
+    min_functions: int = 3,
+    min_files: int = 2,
+    keep_interface: bool = True,
+    min_lines: int = 60,
+    n: int = 0,
+    skip: frozenset[str] = frozenset(),
+) -> FeatureExcision | None:
+    """Nth connected callee subgraph with an exported entry and existing tests.
+
+    BFS from each exported production function through ``calls`` edges (the same
+    closure ``codegraph callees`` would return). Filter by ``min_functions`` /
+    ``min_files``. ``keep_interface`` is recorded on the design (stubs vs delete
+    signatures); it does not change the subgraph search.
+    """
+    con = _open(Path(index))
+    try:
+        graph = _callee_graph(con)
+        tests_of = _tests_of(con)
+        funcs = {(name, fp) for _nid, name, fp in _functions(con)}
+        candidates: list[FeatureExcision] = []
+        seen_sets: set[tuple[str, ...]] = set()
+        for entry_name, entry_fp in sorted(funcs, key=lambda x: (x[0], x[1])):
+            if not _is_exported_go(entry_name) or entry_name in skip:
+                continue
+            closure: list[tuple[str, str]] = []
+            q = deque([(entry_name, entry_fp)])
+            visited: set[tuple[str, str]] = set()
+            while q:
+                cur = q.popleft()
+                if cur in visited:
+                    continue
+                visited.add(cur)
+                closure.append(cur)
+                for nxt in graph.get(cur, ()):
+                    if nxt in funcs:
+                        q.append(nxt)
+            names = tuple(sorted({nm for nm, _fp in closure}))
+            files = tuple(sorted({fp for _nm, fp in closure}))
+            if len(names) < min_functions or len(files) < min_files:
+                continue
+            if names in seen_sets:
+                continue
+            seen_sets.add(names)
+            tests: list[str] = []
+            for nm, _fp in closure:
+                tests.extend(tests_of.get(nm, ()))
+            tests = sorted(set(tests))
+            if not tests:
+                continue
+            candidates.append(
+                FeatureExcision(
+                    entry=entry_name,
+                    functions=names,
+                    files=files,
+                    tests=tuple(tests),
+                    keep_interface=keep_interface,
+                    min_lines=min_lines,
+                )
+            )
+        candidates.sort(
+            key=lambda e: (-len(e.tests), -len(e.functions), -len(e.files), e.entry)
+        )
+        if not candidates:
+            return None
+        return candidates[n % len(candidates)]
+    finally:
+        con.close()
+
+
 def pick_implicit_invariant(index: Path | str, *, n: int = 0) -> DriftSite | None:
     """Rung 6: prefer a documented-invariant helper (fixture ``Clamp``) else a drift site."""
     repo = Path(index)
@@ -679,6 +795,7 @@ def design_for_rung(
     sites: int = 1,
     decoys: int = 0,
     index: int = 0,
+    keep_interface: bool = True,
 ) -> dict[str, object]:
     """JSON-able design dict for one knob setting. Does not mutate the repo."""
     repo = Path(repo)
@@ -725,8 +842,27 @@ def design_for_rung(
         "fair_ambiguity": asdict(amb) if amb else None,
         "sequence": asdict(seq) if seq else None,
         "decoys": [asdict(d) for d in decoy_objs],
+        "excision": None,
+        "keep_interface": keep_interface,
     }
-    if site:
+    if rung == 8:
+        min_fn = 6 if not keep_interface else max(3, sites if sites > 1 else 3)
+        min_files = 3 if not keep_interface else 2
+        min_lines = 150 if not keep_interface else 60
+        exc = pick_feature_excision(
+            repo,
+            min_functions=min_fn,
+            min_files=min_files,
+            keep_interface=keep_interface,
+            min_lines=min_lines,
+            n=index,
+        )
+        payload["excision"] = asdict(exc) if exc else None
+        if exc:
+            impact = impact_of(repo, exc.entry)
+            payload["impact_files"] = sorted(impact_files(impact))
+            payload["guard_tests"] = find_guard_tests(repo, exc.entry)
+    if site and "impact_files" not in payload:
         impact = impact_of(repo, site.name)
         payload["impact_files"] = sorted(impact_files(impact))
         payload["guard_tests"] = find_guard_tests(repo, site.name)
@@ -742,6 +878,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--decoys", type=int, default=1)
     parser.add_argument("--index", type=int, default=0)
     parser.add_argument("--locality", type=int, default=0)
+    parser.add_argument(
+        "--keep-interface",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="rung 8: keep exported signatures as stubs (default) or delete them",
+    )
     parser.add_argument("--patch", default=None, help="If set, build a Harbor task from this patch")
     parser.add_argument("--out", default=None, help="Harbor task output dir (requires --patch)")
     parser.add_argument("--f2p", nargs="*", default=None)
@@ -755,12 +897,15 @@ def main(argv: list[str] | None = None) -> int:
         sites=args.sites,
         decoys=args.decoys,
         index=args.index,
+        keep_interface=args.keep_interface,
     )
     print(json.dumps(design, indent=2))
     if args.patch:
         if not args.out:
             raise SystemExit("--out is required with --patch")
         f2p = args.f2p or (design.get("site") or {}).get("test_names") or []
+        if not f2p:
+            f2p = list((design.get("excision") or {}).get("tests") or [])
         if not f2p:
             raise SystemExit("no f2p tests; pass --f2p")
         extra = []
@@ -771,6 +916,11 @@ def main(argv: list[str] | None = None) -> int:
             extra.append(Path(str(site["file_path"])).name)
         for d in design.get("decoys") or []:
             extra.append(str(d.get("name") or ""))
+        exc = design.get("excision") or {}
+        for name in exc.get("functions") or []:
+            extra.append(str(name))
+        for fp in exc.get("files") or []:
+            extra.append(Path(str(fp)).name)
         guards = list(args.guard or design.get("guard_tests") or [])
         build_task(
             args.repo,
@@ -783,6 +933,7 @@ def main(argv: list[str] | None = None) -> int:
             checksum_test_files=True,
             locality=args.locality,
             guard_tests=guards,
+            kind="feature" if args.rung == 8 else "bug",
         )
     return 0
 

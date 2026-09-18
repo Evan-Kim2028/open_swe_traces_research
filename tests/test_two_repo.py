@@ -75,3 +75,5 @@ def test_render_two_repo_dockerfile_downloads_both_modules() -> None:
     assert "FROM golang:1.23" in df
     assert "WORKDIR /app/integration_tests" in df
     assert df.count("go mod download") >= 2
+    assert "GOTOOLCHAIN=local" in df
+    assert "gcc" in df

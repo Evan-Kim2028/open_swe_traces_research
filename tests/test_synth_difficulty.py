@@ -18,6 +18,7 @@ from openswe_traces.synth.difficulty import (
     pick_contract_drift_site,
     pick_decoy,
     pick_fair_ambiguity,
+    pick_feature_excision,
     pick_implicit_invariant,
     pick_sequence_site,
     pick_two_site_pair,
@@ -225,5 +226,51 @@ def test_pick_sequence_site_and_rung7() -> None:
         "Next returned 1 twice",
         changed_symbols=["Next"],
         changed_files=["mathx/mathx.go"],
+    )
+    assert leaky["ok"] is False
+
+
+def test_pick_feature_excision_and_rung8() -> None:
+    _ensure_fixture_indexed()
+    exc = pick_feature_excision(FIXTURE, min_functions=3, min_files=2, keep_interface=True)
+    assert exc is not None
+    assert len(exc.functions) >= 3
+    assert len(exc.files) >= 2
+    assert exc.tests
+    assert exc.keep_interface is True
+    names = set(exc.functions)
+    found_roundtrip = exc.entry == "RoundTrip"
+    for i in range(12):
+        e = pick_feature_excision(FIXTURE, min_functions=3, min_files=2, n=i)
+        if e:
+            names.update(e.functions)
+            found_roundtrip = found_roundtrip or e.entry == "RoundTrip"
+    assert "RoundTrip" in names or "Pack" in names
+    assert found_roundtrip or "Pack" in names
+    gone = pick_feature_excision(
+        FIXTURE, min_functions=3, min_files=2, keep_interface=False
+    )
+    assert gone is not None
+    assert gone.keep_interface is False
+    design = design_for_rung(FIXTURE, rung=8, hops=1, sites=3, decoys=0, index=0)
+    assert design["rung"] == 8
+    assert design.get("excision")
+    assert design["keep_interface"] is True
+    design_b = design_for_rung(
+        FIXTURE, rung=8, hops=1, sites=6, decoys=0, index=0, keep_interface=False
+    )
+    assert design_b["keep_interface"] is False
+    leak = name_leakage(
+        ["TestRoundTrip"],
+        "got Point want Point",
+        changed_symbols=["Pack"],
+        changed_files=["left/left.go"],
+    )
+    assert leak["ok"] is True
+    leaky = name_leakage(
+        ["TestRoundTrip"],
+        "Pack returned 0",
+        changed_symbols=["Pack"],
+        changed_files=["left/left.go"],
     )
     assert leaky["ok"] is False

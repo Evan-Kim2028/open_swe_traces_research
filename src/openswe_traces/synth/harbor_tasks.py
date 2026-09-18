@@ -160,11 +160,13 @@ def issue_from_failures(
     locality: int = 0,
     packages: Sequence[str] = (),
     reproduce_command: str = "",
+    kind: str = "bug",
 ) -> str:
     """Write a bug report from failing tests. Never include a patch or fix-site name.
 
     locality: L0 names the f2p tests; L1 names only the package + command;
     L2 is a behavior-level report plus a package test command.
+    kind: ``bug`` (default) or ``feature`` (excision / missing behavior).
     """
     names = [t for t in f2p_tests if t]
     excerpt = paraphrase_failure(test_output, redact_terms=redact_terms)
@@ -194,7 +196,8 @@ Reproduce with:
 ```
 {context_block}"""
     else:
-        header = f"""# Incorrect behavior
+        title = "# Missing behavior" if kind == "feature" else "# Incorrect behavior"
+        header = f"""{title}
 {context_block}
 Reproduce with:
 
@@ -202,10 +205,20 @@ Reproduce with:
 {cmd}
 ```
 """
+    if kind == "feature":
+        ask = (
+            "Implement the missing behavior so these tests pass. Do not\n"
+            "skip, delete, or weaken the tests. Do not change test assertions or testdata\n"
+            "just to make them green."
+        )
+    else:
+        ask = (
+            "Please identify and fix the underlying logic bug so these tests pass. Do not\n"
+            "skip, delete, or weaken the tests. Do not change test assertions or testdata\n"
+            "just to make them green."
+        )
     body = f"""{header}
-Please identify and fix the underlying logic bug so these tests pass. Do not
-skip, delete, or weaken the tests. Do not change test assertions or testdata
-just to make them green.
+{ask}
 
 ## Observed failures
 
@@ -457,6 +470,7 @@ def build_task(
     locality: int = 0,
     guard_tests: Sequence[str] = (),
     reproduce_command: str = "",
+    kind: str = "bug",
 ) -> Path:
     """Write a Harbor task directory.
 
@@ -490,6 +504,7 @@ def build_task(
         locality=locality,
         packages=packages,
         reproduce_command=cmd,
+        kind=kind,
     )
     checksums: list[tuple[str, str]] = []
     if checksum_test_files:
@@ -520,6 +535,7 @@ def main(argv: list[str] | None = None) -> int:
     p_build.add_argument("--f2p", nargs="+", required=True, help="fail-to-pass test names")
     p_build.add_argument("--test-output-file", default=None)
     p_build.add_argument("--locality", type=int, default=0, help="0=name tests, 1=package+cmd, 2=behavior")
+    p_build.add_argument("--kind", default="bug", choices=("bug", "feature"))
     p_build.add_argument("--guard", nargs="*", default=(), help="existing tests included in test.sh only")
 
     p_disc = sub.add_parser("discover-f2p", help="Apply patch in scratch and list failing tests")
@@ -543,6 +559,7 @@ def main(argv: list[str] | None = None) -> int:
             test_output=output,
             locality=args.locality,
             guard_tests=list(args.guard),
+            kind=args.kind,
         )
         return 0
     if args.cmd == "discover-f2p":

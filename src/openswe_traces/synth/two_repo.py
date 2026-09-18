@@ -184,11 +184,13 @@ def render_two_repo_dockerfile() -> str:
     return """FROM golang:1.23
 
 RUN apt-get update && apt-get install -y --no-install-recommends \\
-        git tmux ca-certificates patch \\
+        git tmux ca-certificates patch gcc libc6-dev \\
     && rm -rf /var/lib/apt/lists/*
 
+ENV GOTOOLCHAIN=local
 WORKDIR /app
 COPY src/ /app/
+RUN find /app -name .git -type d -prune -exec rm -rf {} + || true
 RUN if [ ! -f go.mod ]; then go mod init host; fi
 RUN GOPROXY=https://proxy.golang.org,direct go mod download || \\
     GOPROXY=https://proxy.golang.org,direct go mod tidy || true
@@ -242,11 +244,11 @@ def two_repo_instruction(
 ) -> str:
     context = (
         "These tests are the consumer contract: a separate Go module that imports "
-        "the client-go library and talks to a mock store. After a commit that asked "
-        "for one-phase commit on the default (global) transaction scope, the consumer "
-        "saw two-phase commit instead; a local-scope transaction that must stay on "
-        "two-phase commit flipped the other way. Fix the library. Do not edit, skip, "
-        "or weaken the consumer tests — the verifier checksums them."
+        "the client-go library and talks to a mock store. After requesting a faster "
+        "single-round commit, the consumer still observed the two-round path; a "
+        "datacenter-restricted commit that must stay on two-round commit flipped "
+        "the other way. Fix the library. Do not edit, skip, or weaken the consumer "
+        "tests — the verifier checksums them."
     )
     body = issue_from_failures(
         f2p_tests,
@@ -291,6 +293,11 @@ def build_two_repo_task(
         "checkOnePC",
         "setOnePC",
         "useOnePC",
+        "isOnePC",
+        "enable1PC",
+        "GetScope",
+        "SetScope",
+        "GlobalTxnScope",
         "2pc.go",
         *extra_redact,
     ]
