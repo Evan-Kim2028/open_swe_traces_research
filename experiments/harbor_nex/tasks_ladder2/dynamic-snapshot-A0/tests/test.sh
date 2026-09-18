@@ -33,7 +33,7 @@ if [ -z "$NS" ]; then
   echo 0 > /logs/verifier/reward.txt
   exit 1
 fi
-if ! echo "$NS" | awk -v limit='10000000' '{
+if ! echo "$NS" | awk -v limit='104' '{
   ns=$1+0
   if (ns > limit) {
     printf("perf gate failed: %s ns/op > %s ns/op\n", ns, limit) > "/dev/stderr"
