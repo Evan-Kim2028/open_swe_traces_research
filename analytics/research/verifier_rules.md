@@ -148,3 +148,19 @@ discovery. Caveats as before: n=1 repo, n=1 run per condition, same model.
 ## Where codegraph fits (decided 2026-09-18 23:50Z)
 
 Mechanical validation only, inside `openswe-synth validate` / packaging: transitive impact-set check (A4), exported-API enumeration for the black-box check (B4), and fail-to-pass reachability. The builder agent never has to call it; discovery is builder judgment + grep. Ablation rounds 1 and 2 found no discovery advantage.
+
+## Ladder renumbering (decided 2026-09-19 00:00Z)
+
+The ladder is 0-indexed from the deepest FAIR level, which is fixed by fairness (a task below "bug report + reproduction command" is unspecified):
+
+| level | solver receives |
+|---|---|
+| L0 | bug report + reproduction command only (unit excised) |
+| L1 | gapped contract: one invariant omitted but discoverable in the repo; a pre-existing repo test guards it |
+| L2 | full prose contract with coverage of every hidden assertion (formerly A0) |
+| L3 | + hidden test names and one-line descriptions (formerly A1) |
+| L4 | + exported signatures as stubs (formerly A2) |
+| L5 | + one hidden test file (formerly A3) |
+| L6 | + all tests in tree (formerly A4; equals the original in-tree-test tasks) |
+
+Existing artifacts and reports use A0..A4 and A-1/A-2; map with L = A + 2. Directories will be renamed once the current builders finish. Nothing exists below L0 by construction.
