@@ -1,0 +1,13 @@
+diff --git a/config/retry/backoff.go b/config/retry/backoff.go
+--- a/config/retry/backoff.go
++++ b/config/retry/backoff.go
+@@ -90,7 +90,8 @@
+ 
+ // NewBackofferWithVars creates a Backoffer with maximum sleep time(in ms) and kv.Variables.
+ func NewBackofferWithVars(ctx context.Context, maxSleep int, vars *kv.Variables) *Backoffer {
+-	return NewBackoffer(ctx, maxSleep)
++	b := NewBackoffer(ctx, maxSleep)
++	return b.withVars(vars)
+ }
+ 
+ // NewNoopBackoff create a Backoffer do nothing just return error directly

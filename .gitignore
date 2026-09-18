@@ -50,3 +50,7 @@ experiments/bonsai_trial/*.log
 # Query log keeps SQL copies; index.csv is tracked, individual runs optional
 analytics/query_log/*.sql
 *.parquet.tmp
+
+# synthetic pilot artifacts
+experiments/codegraph_bugs/repos/
+experiments/harbor_nex/jobs/

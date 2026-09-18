@@ -1,0 +1,12 @@
+diff --git a/day1/problem.go b/day1/problem.go
+--- a/day1/problem.go
++++ b/day1/problem.go
+@@ -37,7 +37,7 @@
+ func TwoSumBest(numbers []int, k int) bool {
+ 	seen := make(map[int]struct{})
+ 	for _, v := range numbers {
+-		if _, found := seen[k-v]; found {
++		if _, found := seen[v]; found {
+ 			return true
+ 		}
+ 		seen[v] = struct{}{}

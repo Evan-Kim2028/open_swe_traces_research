@@ -1,0 +1,12 @@
+diff --git a/day25/problem.go b/day25/problem.go
+--- a/day25/problem.go
++++ b/day25/problem.go
+@@ -28,7 +28,7 @@
+ 		ii++
+ 		pi++
+ 	}
+-	return !finished(ii, len(input), pi, len(pattern))
++	return ii == len(input) && pi == len(pattern)
+ }
+ 
+ // finished is true if we've completed processing the input and pattern strings.

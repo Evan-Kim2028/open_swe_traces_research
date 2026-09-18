@@ -1,0 +1,12 @@
+diff --git a/internal/logutil/log.go b/internal/logutil/log.go
+--- a/internal/logutil/log.go
++++ b/internal/logutil/log.go
+@@ -49,7 +49,7 @@
+ // Logger gets a contextual logger from current context.
+ // contextual logger will output common fields from context.
+ func Logger(ctx context.Context) *zap.Logger {
+-	if ctxlogger, ok := ctx.Value(CtxLogKey).(*zap.Logger); ok {
++	if ctxlogger, ok := ctx.Value(CtxLogKey).(*zap.Logger); !ok {
+ 		return ctxlogger
+ 	}
+ 	return log.L()

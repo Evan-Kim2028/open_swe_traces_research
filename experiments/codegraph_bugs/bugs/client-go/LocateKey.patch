@@ -1,0 +1,12 @@
+diff --git a/internal/locate/region_cache.go b/internal/locate/region_cache.go
+--- a/internal/locate/region_cache.go
++++ b/internal/locate/region_cache.go
+@@ -1183,7 +1183,7 @@
+ 
+ // LocateKey searches for the region and range that the key is located.
+ func (c *RegionCache) LocateKey(bo *retry.Backoffer, key []byte) (*KeyLocation, error) {
+-	r, err := c.findRegionByKey(bo, key, false)
++	r, err := c.findRegionByKey(bo, key, true)
+ 	if err != nil {
+ 		return nil, err
+ 	}

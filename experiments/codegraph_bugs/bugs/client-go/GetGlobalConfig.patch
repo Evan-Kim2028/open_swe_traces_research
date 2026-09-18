@@ -1,0 +1,12 @@
+diff --git a/config/config.go b/config/config.go
+--- a/config/config.go
++++ b/config/config.go
+@@ -147,7 +147,7 @@
+ // It should store configuration from command line and configuration file.
+ // Other parts of the system can read the global configuration use this function.
+ func GetGlobalConfig() *Config {
+-	return globalConf.Load().(*Config)
++	return &Config{}
+ }
+ 
+ // StoreGlobalConfig stores a new config to the globalConf. It mostly uses in the test to avoid some data races.

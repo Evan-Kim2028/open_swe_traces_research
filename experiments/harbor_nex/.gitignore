@@ -1,0 +1,4 @@
+jobs/
+tasks/*/environment/src/
+*.log
+out/

@@ -1,0 +1,12 @@
+diff --git a/error/error.go b/error/error.go
+--- a/error/error.go
++++ b/error/error.go
+@@ -115,7 +115,7 @@
+ 
+ // IsErrNotFound checks if err is a kind of NotFound error.
+ func IsErrNotFound(err error) bool {
+-	return errors.Is(err, ErrNotExist)
++	return !errors.Is(err, ErrNotExist)
+ }
+ 
+ // ErrDeadlock wraps *kvrpcpb.Deadlock to implement the error interface.

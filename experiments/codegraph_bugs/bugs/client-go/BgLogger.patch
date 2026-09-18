@@ -1,0 +1,12 @@
+diff --git a/internal/logutil/log.go b/internal/logutil/log.go
+--- a/internal/logutil/log.go
++++ b/internal/logutil/log.go
+@@ -43,7 +43,7 @@
+ 
+ // BgLogger returns the default global logger.
+ func BgLogger() *zap.Logger {
+-	return log.L()
++	return nil
+ }
+ 
+ // Logger gets a contextual logger from current context.

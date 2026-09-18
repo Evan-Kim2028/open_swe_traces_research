@@ -1,0 +1,12 @@
+diff --git a/internal/locate/region_request.go b/internal/locate/region_request.go
+--- a/internal/locate/region_request.go
++++ b/internal/locate/region_request.go
+@@ -204,7 +204,7 @@
+ 	return &RegionRequestSender{
+ 		regionCache: regionCache,
+ 		apiVersion:  regionCache.codec.GetAPIVersion(),
+-		client:      client,
++		client:      nil,
+ 	}
+ }
+ 

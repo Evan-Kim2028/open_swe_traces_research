@@ -1,0 +1,12 @@
+diff --git a/day1/problem.go b/day1/problem.go
+--- a/day1/problem.go
++++ b/day1/problem.go
+@@ -8,7 +8,7 @@
+ func TwoSumBrute(numbers []int, k int) bool {
+ 	for i, x := range numbers {
+ 		for j, y := range numbers {
+-			if i != j && x+y == k {
++			if i == j && x+y == k {
+ 				return true
+ 			}
+ 		}

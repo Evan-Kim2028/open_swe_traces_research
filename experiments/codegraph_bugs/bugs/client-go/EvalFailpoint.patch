@@ -1,0 +1,12 @@
+diff --git a/util/failpoint.go b/util/failpoint.go
+--- a/util/failpoint.go
++++ b/util/failpoint.go
+@@ -56,7 +56,7 @@
+ // EvalFailpoint injects code for testing. It is used to replace `failpoint.Inject`
+ // to make it possible to be used in a library.
+ func EvalFailpoint(name string) (interface{}, error) {
+-	if !failpointsEnabled {
++	if failpointsEnabled {
+ 		return nil, errDisabled
+ 	}
+ 	return failpoint.Eval(failpointPrefix + name)

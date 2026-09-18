@@ -1,0 +1,12 @@
+diff --git a/internal/locate/region_request.go b/internal/locate/region_request.go
+--- a/internal/locate/region_request.go
++++ b/internal/locate/region_request.go
+@@ -1355,7 +1355,7 @@
+ 
+ // IsFakeRegionError returns true if err is fake region error.
+ func IsFakeRegionError(err *errorpb.Error) bool {
+-	return err != nil && err.GetEpochNotMatch() != nil && len(err.GetEpochNotMatch().CurrentRegions) == 0
++	return err != nil && err.GetEpochNotMatch() != nil && len(err.GetEpochNotMatch().CurrentRegions) != 0
+ }
+ 
+ // SendReqCtx sends a request to tikv server and return response and RPCCtx of this RPC.
