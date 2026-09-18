@@ -1,12 +1,705 @@
 {
-  "ok": false,
-  "families": {},
-  "harness_ok": false,
+  "ok": true,
+  "families": {
+    "all": {
+      "checks": [
+        {
+          "check": "harness_ok",
+          "ok": true,
+          "detail": "{\"ok\": true, \"go_on_path\": true, \"go_out\": \"/usr/local/go/bin/go\\ngo version go1.23.12 linux/amd64\\n\", \"false_exit\": 1, \"true_exit\": 0}"
+        }
+      ]
+    },
+    "spec-bb-chain": {
+      "checks": [
+        {
+          "check": "A0_buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestInterceptorChainOrder (0.00s)\n    chain_bb_prop_test.go:45: case 0 log [base]\n--- FAIL: TestInterceptorChainDedupAndCompose (0.00s)\n    chain_bb_prop_test.go:64: same name kept twice: Len=2\n--- FAIL: TestInterceptorContractExamples (0.00s)\n    chain_bb_prop_test.go:88: contract example order [base]\n--- FAIL: TestInterceptorUnmentionedRandom (0.00s)\n    chain_bb_prop_test.go:114: unseen 0: got [] want ub87cbd4cffdd374,v80129d924cca5d9c\nFAIL\nFAIL\texample.internal/kvstore/v2/wirerpc/interceptor\t0.011s\nFAIL\n"
+        },
+        {
+          "check": "A0_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/wirerpc/interceptor\t0.077s\n"
+        },
+        {
+          "check": "gold_restore",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/wirerpc/interceptor\t0.077s\n"
+        },
+        {
+          "check": "buggy_fails",
+          "ok": true,
+          "detail": "A0"
+        },
+        {
+          "check": "A0_cheat_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestInterceptorChainOrder (0.00s)\n    chain_bb_prop_test.go:45: case 0 log [base]\n--- FAIL: TestInterceptorUnmentionedRandom (0.00s)\n    chain_bb_prop_test.go:114: unseen 0: got [] want ub87cbd4cffdd374,v80129d924cca5d9c\nFAIL\nFAIL\texample.internal/kvstore/v2/wirerpc/interceptor\t0.025s\nFAIL\n"
+        },
+        {
+          "check": "cheat_rejected",
+          "ok": true,
+          "detail": "--- FAIL: TestInterceptorChainOrder (0.00s)\n    chain_bb_prop_test.go:45: case 0 log [base]\n--- FAIL: TestInterceptorUnmentionedRandom (0.00s)\n    chain_bb_prop_test.go:114: unseen 0: got [] want ub87cbd4cffdd374,v80129d924cca5d9c\nFAIL\nFAIL\texample.internal/kvstore/v2/wirerpc/interceptor\t0.025s\nFAIL\n"
+        },
+        {
+          "check": "two_func_alt_accepted",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/wirerpc/interceptor\t0.035s\n"
+        },
+        {
+          "check": "A1_buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestInterceptorChainOrder (0.00s)\n    chain_bb_prop_test.go:45: case 0 log [base]\n--- FAIL: TestInterceptorChainDedupAndCompose (0.00s)\n    chain_bb_prop_test.go:64: same name kept twice: Len=2\n--- FAIL: TestInterceptorContractExamples (0.00s)\n    chain_bb_prop_test.go:88: contract example order [base]\n--- FAIL: TestInterceptorUnmentionedRandom (0.00s)\n    chain_bb_prop_test.go:114: unseen 0: got [] want ub87cbd4cffdd374,v80129d924cca5d9c\nFAIL\nFAIL\texample.internal/kvstore/v2/wirerpc/interceptor\t0.012s\nFAIL\n"
+        },
+        {
+          "check": "A1_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/wirerpc/interceptor\t0.045s\n"
+        },
+        {
+          "check": "A1_cheat_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestInterceptorChainOrder (0.00s)\n    chain_bb_prop_test.go:45: case 0 log [base]\n--- FAIL: TestInterceptorUnmentionedRandom (0.00s)\n    chain_bb_prop_test.go:114: unseen 0: got [] want ub87cbd4cffdd374,v80129d924cca5d9c\nFAIL\nFAIL\texample.internal/kvstore/v2/wirerpc/interceptor\t0.012s\nFAIL\n"
+        },
+        {
+          "check": "A2_buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestInterceptorChainOrder (0.00s)\n    chain_bb_prop_test.go:45: case 0 log [base]\n--- FAIL: TestInterceptorChainDedupAndCompose (0.00s)\n    chain_bb_prop_test.go:64: same name kept twice: Len=2\n--- FAIL: TestInterceptorContractExamples (0.00s)\n    chain_bb_prop_test.go:88: contract example order [base]\n--- FAIL: TestInterceptorUnmentionedRandom (0.00s)\n    chain_bb_prop_test.go:114: unseen 0: got [] want ub87cbd4cffdd374,v80129d924cca5d9c\nFAIL\nFAIL\texample.internal/kvstore/v2/wirerpc/interceptor\t0.013s\nFAIL\n"
+        },
+        {
+          "check": "A2_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/wirerpc/interceptor\t0.072s\n"
+        },
+        {
+          "check": "A2_cheat_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestInterceptorChainOrder (0.00s)\n    chain_bb_prop_test.go:45: case 0 log [base]\n--- FAIL: TestInterceptorUnmentionedRandom (0.00s)\n    chain_bb_prop_test.go:114: unseen 0: got [] want ub87cbd4cffdd374,v80129d924cca5d9c\nFAIL\nFAIL\texample.internal/kvstore/v2/wirerpc/interceptor\t0.034s\nFAIL\n"
+        },
+        {
+          "check": "A3_buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestInterceptorChainOrder (0.00s)\n    chain_bb_prop_test.go:45: case 0 log [base]\n--- FAIL: TestInterceptorChainDedupAndCompose (0.00s)\n    chain_bb_prop_test.go:64: same name kept twice: Len=2\n--- FAIL: TestInterceptorContractExamples (0.00s)\n    chain_bb_prop_test.go:88: contract example order [base]\n--- FAIL: TestInterceptorUnmentionedRandom (0.00s)\n    chain_bb_prop_test.go:114: unseen 0: got [] want ub87cbd4cffdd374,v80129d924cca5d9c\nFAIL\nFAIL\texample.internal/kvstore/v2/wirerpc/interceptor\t0.011s\nFAIL\n"
+        },
+        {
+          "check": "A3_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/wirerpc/interceptor\t0.092s\n"
+        },
+        {
+          "check": "A3_cheat_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestInterceptorChainOrder (0.00s)\n    chain_bb_prop_test.go:45: case 0 log [base]\n--- FAIL: TestInterceptorUnmentionedRandom (0.00s)\n    chain_bb_prop_test.go:114: unseen 0: got [] want ub87cbd4cffdd374,v80129d924cca5d9c\nFAIL\nFAIL\texample.internal/kvstore/v2/wirerpc/interceptor\t0.012s\nFAIL\n"
+        },
+        {
+          "check": "A4_buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestInterceptorChainOrder (0.00s)\n    chain_bb_prop_test.go:45: case 0 log [base]\n--- FAIL: TestInterceptorChainDedupAndCompose (0.00s)\n    chain_bb_prop_test.go:64: same name kept twice: Len=2\n--- FAIL: TestInterceptorContractExamples (0.00s)\n    chain_bb_prop_test.go:88: contract example order [base]\n--- FAIL: TestInterceptorUnmentionedRandom (0.00s)\n    chain_bb_prop_test.go:114: unseen 0: got [] want ub87cbd4cffdd374,v80129d924cca5d9c\nFAIL\nFAIL\texample.internal/kvstore/v2/wirerpc/interceptor\t0.011s\nFAIL\n"
+        },
+        {
+          "check": "A4_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/wirerpc/interceptor\t0.036s\n"
+        },
+        {
+          "check": "A4_cheat_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestInterceptorChainOrder (0.00s)\n    chain_bb_prop_test.go:45: case 0 log [base]\n--- FAIL: TestInterceptorUnmentionedRandom (0.00s)\n    chain_bb_prop_test.go:114: unseen 0: got [] want ub87cbd4cffdd374,v80129d924cca5d9c\nFAIL\nFAIL\texample.internal/kvstore/v2/wirerpc/interceptor\t0.011s\nFAIL\n"
+        },
+        {
+          "check": "patches_skip_tests",
+          "ok": true,
+          "detail": "gold/alt/cheat generated without *_test.go hunks"
+        },
+        {
+          "check": "proof_harness",
+          "ok": true,
+          "detail": "go on PATH; false\u22600 true=0"
+        }
+      ]
+    },
+    "spec-bb-bucket": {
+      "checks": [
+        {
+          "check": "A0_buggy_fails",
+          "ok": true,
+          "detail": "FAIL\texample.internal/kvstore/v2/internal/locate [build failed]\nFAIL\n# example.internal/kvstore/v2/internal/locate [example.internal/kvstore/v2/internal/locate.test]\ninternal/locate/region_cache.go:40:2: \"encoding/hex\" imported and not used\n"
+        },
+        {
+          "check": "A0_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/locate\t0.066s\n"
+        },
+        {
+          "check": "gold_restore",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/locate\t0.066s\n"
+        },
+        {
+          "check": "buggy_fails",
+          "ok": true,
+          "detail": "A0"
+        },
+        {
+          "check": "A0_cheat_fails",
+          "ok": true,
+          "detail": "FAIL\texample.internal/kvstore/v2/internal/locate [build failed]\nFAIL\n# example.internal/kvstore/v2/internal/locate [example.internal/kvstore/v2/internal/locate.test]\ninternal/locate/region_cache.go:40:2: \"encoding/hex\" imported and not used\n"
+        },
+        {
+          "check": "cheat_rejected",
+          "ok": true,
+          "detail": "FAIL\texample.internal/kvstore/v2/internal/locate [build failed]\nFAIL\n# example.internal/kvstore/v2/internal/locate [example.internal/kvstore/v2/internal/locate.test]\ninternal/locate/region_cache.go:40:2: \"encoding/hex\" imported and not used\n"
+        },
+        {
+          "check": "two_func_alt_accepted",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/locate\t0.025s\n"
+        },
+        {
+          "check": "A1_buggy_fails",
+          "ok": true,
+          "detail": "FAIL\texample.internal/kvstore/v2/internal/locate [build failed]\nFAIL\n# example.internal/kvstore/v2/internal/locate [example.internal/kvstore/v2/internal/locate.test]\ninternal/locate/region_cache.go:40:2: \"encoding/hex\" imported and not used\n"
+        },
+        {
+          "check": "A1_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/locate\t0.023s\n"
+        },
+        {
+          "check": "A1_cheat_fails",
+          "ok": true,
+          "detail": "FAIL\texample.internal/kvstore/v2/internal/locate [build failed]\nFAIL\n# example.internal/kvstore/v2/internal/locate [example.internal/kvstore/v2/internal/locate.test]\ninternal/locate/region_cache.go:40:2: \"encoding/hex\" imported and not used\n"
+        },
+        {
+          "check": "A2_buggy_fails",
+          "ok": true,
+          "detail": "FAIL\texample.internal/kvstore/v2/internal/locate [build failed]\nFAIL\n# example.internal/kvstore/v2/internal/locate [example.internal/kvstore/v2/internal/locate.test]\ninternal/locate/region_cache.go:42:2: \"encoding/hex\" imported and not used\n"
+        },
+        {
+          "check": "A2_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/locate\t0.023s\n"
+        },
+        {
+          "check": "A2_cheat_fails",
+          "ok": true,
+          "detail": "FAIL\texample.internal/kvstore/v2/internal/locate [build failed]\nFAIL\n# example.internal/kvstore/v2/internal/locate [example.internal/kvstore/v2/internal/locate.test]\ninternal/locate/region_cache.go:42:2: \"encoding/hex\" imported and not used\n"
+        },
+        {
+          "check": "A3_buggy_fails",
+          "ok": true,
+          "detail": "FAIL\texample.internal/kvstore/v2/internal/locate [build failed]\nFAIL\n# example.internal/kvstore/v2/internal/locate [example.internal/kvstore/v2/internal/locate.test]\ninternal/locate/region_cache.go:42:2: \"encoding/hex\" imported and not used\n"
+        },
+        {
+          "check": "A3_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/locate\t0.022s\n"
+        },
+        {
+          "check": "A3_cheat_fails",
+          "ok": true,
+          "detail": "FAIL\texample.internal/kvstore/v2/internal/locate [build failed]\nFAIL\n# example.internal/kvstore/v2/internal/locate [example.internal/kvstore/v2/internal/locate.test]\ninternal/locate/region_cache.go:42:2: \"encoding/hex\" imported and not used\n"
+        },
+        {
+          "check": "A4_buggy_fails",
+          "ok": true,
+          "detail": "FAIL\texample.internal/kvstore/v2/internal/locate [build failed]\nFAIL\n# example.internal/kvstore/v2/internal/locate [example.internal/kvstore/v2/internal/locate.test]\ninternal/locate/region_cache.go:42:2: \"encoding/hex\" imported and not used\n"
+        },
+        {
+          "check": "A4_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/locate\t0.024s\n"
+        },
+        {
+          "check": "A4_cheat_fails",
+          "ok": true,
+          "detail": "FAIL\texample.internal/kvstore/v2/internal/locate [build failed]\nFAIL\n# example.internal/kvstore/v2/internal/locate [example.internal/kvstore/v2/internal/locate.test]\ninternal/locate/region_cache.go:42:2: \"encoding/hex\" imported and not used\n"
+        },
+        {
+          "check": "patches_skip_tests",
+          "ok": true,
+          "detail": "gold/alt/cheat generated without *_test.go hunks"
+        },
+        {
+          "check": "proof_harness",
+          "ok": true,
+          "detail": "go on PATH; false\u22600 true=0"
+        }
+      ]
+    },
+    "property-policy": {
+      "checks": [
+        {
+          "check": "A0_buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestBackoffPolicyTableProperty (0.00s)\n    policy_prop_test.go:55: case 0 txnLockFast base/cap/jitter=1/1/1 want 2/3000/3\n--- FAIL: TestBackoffPolicyContractExamples (0.00s)\n    policy_prop_test.go:71: region-miss envelope &{base:1 cap:1 jitter:1}\n--- FAIL: TestBackoffPolicyUnmentionedRandom (0.00s)\n    policy_prop_test.go:99: unseen 0 regionScheduling\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/client/retry\t0.012s\nFAIL\n"
+        },
+        {
+          "check": "A0_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/client/retry\t0.010s\n"
+        },
+        {
+          "check": "gold_restore",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/client/retry\t0.010s\n"
+        },
+        {
+          "check": "buggy_fails",
+          "ok": true,
+          "detail": "A0"
+        },
+        {
+          "check": "A0_cheat_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestBackoffPolicyTableProperty (0.00s)\n    policy_prop_test.go:55: case 0 txnLockFast base/cap/jitter=1/1/1 want 2/3000/3\n--- FAIL: TestBackoffPolicyUnmentionedRandom (0.00s)\n    policy_prop_test.go:99: unseen 0 regionScheduling\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/client/retry\t0.010s\nFAIL\n"
+        },
+        {
+          "check": "cheat_rejected",
+          "ok": true,
+          "detail": "--- FAIL: TestBackoffPolicyTableProperty (0.00s)\n    policy_prop_test.go:55: case 0 txnLockFast base/cap/jitter=1/1/1 want 2/3000/3\n--- FAIL: TestBackoffPolicyUnmentionedRandom (0.00s)\n    policy_prop_test.go:99: unseen 0 regionScheduling\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/client/retry\t0.010s\nFAIL\n"
+        },
+        {
+          "check": "two_func_alt_accepted",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/client/retry\t0.010s\n"
+        },
+        {
+          "check": "A1_buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestBackoffPolicyTableProperty (0.00s)\n    policy_prop_test.go:55: case 0 txnLockFast base/cap/jitter=1/1/1 want 2/3000/3\n--- FAIL: TestBackoffPolicyContractExamples (0.00s)\n    policy_prop_test.go:71: region-miss envelope &{base:1 cap:1 jitter:1}\n--- FAIL: TestBackoffPolicyUnmentionedRandom (0.00s)\n    policy_prop_test.go:99: unseen 0 regionScheduling\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/client/retry\t0.011s\nFAIL\n"
+        },
+        {
+          "check": "A1_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/client/retry\t0.010s\n"
+        },
+        {
+          "check": "A1_cheat_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestBackoffPolicyTableProperty (0.00s)\n    policy_prop_test.go:55: case 0 txnLockFast base/cap/jitter=1/1/1 want 2/3000/3\n--- FAIL: TestBackoffPolicyUnmentionedRandom (0.00s)\n    policy_prop_test.go:99: unseen 0 regionScheduling\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/client/retry\t0.010s\nFAIL\n"
+        },
+        {
+          "check": "A2_buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestBackoffPolicyTableProperty (0.00s)\n    policy_prop_test.go:55: case 0 txnLockFast base/cap/jitter=1/1/1 want 2/3000/3\n--- FAIL: TestBackoffPolicyContractExamples (0.00s)\n    policy_prop_test.go:71: region-miss envelope &{base:1 cap:1 jitter:1}\n--- FAIL: TestBackoffPolicyUnmentionedRandom (0.00s)\n    policy_prop_test.go:99: unseen 0 regionScheduling\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/client/retry\t0.009s\nFAIL\n"
+        },
+        {
+          "check": "A2_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/client/retry\t0.012s\n"
+        },
+        {
+          "check": "A2_cheat_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestBackoffPolicyTableProperty (0.00s)\n    policy_prop_test.go:55: case 0 txnLockFast base/cap/jitter=1/1/1 want 2/3000/3\n--- FAIL: TestBackoffPolicyUnmentionedRandom (0.00s)\n    policy_prop_test.go:99: unseen 0 regionScheduling\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/client/retry\t0.011s\nFAIL\n"
+        },
+        {
+          "check": "A3_buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestBackoffPolicyTableProperty (0.00s)\n    policy_prop_test.go:55: case 0 txnLockFast base/cap/jitter=1/1/1 want 2/3000/3\n--- FAIL: TestBackoffPolicyContractExamples (0.00s)\n    policy_prop_test.go:71: region-miss envelope &{base:1 cap:1 jitter:1}\n--- FAIL: TestBackoffPolicyUnmentionedRandom (0.00s)\n    policy_prop_test.go:99: unseen 0 regionScheduling\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/client/retry\t0.012s\nFAIL\n"
+        },
+        {
+          "check": "A3_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/client/retry\t0.011s\n"
+        },
+        {
+          "check": "A3_cheat_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestBackoffPolicyTableProperty (0.00s)\n    policy_prop_test.go:55: case 0 txnLockFast base/cap/jitter=1/1/1 want 2/3000/3\n--- FAIL: TestBackoffPolicyUnmentionedRandom (0.00s)\n    policy_prop_test.go:99: unseen 0 regionScheduling\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/client/retry\t0.010s\nFAIL\n"
+        },
+        {
+          "check": "A4_buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestBackoffPolicyTableProperty (0.00s)\n    policy_prop_test.go:55: case 0 txnLockFast base/cap/jitter=1/1/1 want 2/3000/3\n--- FAIL: TestBackoffPolicyContractExamples (0.00s)\n    policy_prop_test.go:71: region-miss envelope &{base:1 cap:1 jitter:1}\n--- FAIL: TestBackoffPolicyUnmentionedRandom (0.00s)\n    policy_prop_test.go:99: unseen 0 regionScheduling\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/client/retry\t0.011s\nFAIL\n"
+        },
+        {
+          "check": "A4_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/client/retry\t0.054s\n"
+        },
+        {
+          "check": "A4_cheat_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestBackoffPolicyTableProperty (0.00s)\n    policy_prop_test.go:55: case 0 txnLockFast base/cap/jitter=1/1/1 want 2/3000/3\n--- FAIL: TestBackoffPolicyUnmentionedRandom (0.00s)\n    policy_prop_test.go:99: unseen 0 regionScheduling\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/client/retry\t0.027s\nFAIL\n"
+        },
+        {
+          "check": "patches_skip_tests",
+          "ok": true,
+          "detail": "gold/alt/cheat generated without *_test.go hunks"
+        },
+        {
+          "check": "proof_harness",
+          "ok": true,
+          "detail": "go on PATH; false\u22600 true=0"
+        }
+      ]
+    },
+    "property-1pc": {
+      "checks": [
+        {
+          "check": "patches_skip_tests",
+          "ok": true,
+          "detail": "gold/alt/cheat generated without *_test.go hunks"
+        },
+        {
+          "check": "proof_harness",
+          "ok": true,
+          "detail": "go on PATH; false\u22600 true=0"
+        },
+        {
+          "check": "A0_buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestOnePCAsyncDecisionProperty (0.00s)\n    onepc_prop_test.go:121: case 0 async got true want false n=5 total=16\n--- FAIL: TestOnePCContractExamples (0.00s)\n    onepc_prop_test.go:134: local scope must refuse both\nFAIL\nFAIL\texample.internal/kvstore/v2/txnkv/transaction\t0.044s\nFAIL\n"
+        },
+        {
+          "check": "A0_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/txnkv/transaction\t0.136s\n"
+        },
+        {
+          "check": "gold_restore",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/txnkv/transaction\t0.136s\n"
+        },
+        {
+          "check": "buggy_fails",
+          "ok": true,
+          "detail": "A0"
+        },
+        {
+          "check": "A0_cheat_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestOnePCAsyncDecisionProperty (0.00s)\n    onepc_prop_test.go:118: case 6 one-pc got true\n--- FAIL: TestOnePCContractExamples (0.00s)\n    onepc_prop_test.go:134: local scope must refuse both\nFAIL\nFAIL\texample.internal/kvstore/v2/txnkv/transaction\t0.095s\nFAIL\n"
+        },
+        {
+          "check": "cheat_rejected",
+          "ok": true,
+          "detail": "--- FAIL: TestOnePCAsyncDecisionProperty (0.00s)\n    onepc_prop_test.go:118: case 6 one-pc got true\n--- FAIL: TestOnePCContractExamples (0.00s)\n    onepc_prop_test.go:134: local scope must refuse both\nFAIL\nFAIL\texample.internal/kvstore/v2/txnkv/transaction\t0.095s\nFAIL\n"
+        },
+        {
+          "check": "two_func_alt_accepted",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/txnkv/transaction\t0.187s\n"
+        },
+        {
+          "check": "A1_buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestOnePCAsyncDecisionProperty (0.00s)\n    onepc_prop_test.go:121: case 0 async got true want false n=5 total=16\n--- FAIL: TestOnePCContractExamples (0.00s)\n    onepc_prop_test.go:134: local scope must refuse both\nFAIL\nFAIL\texample.internal/kvstore/v2/txnkv/transaction\t0.038s\nFAIL\n"
+        },
+        {
+          "check": "A1_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/txnkv/transaction\t0.134s\n"
+        },
+        {
+          "check": "A1_cheat_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestOnePCAsyncDecisionProperty (0.00s)\n    onepc_prop_test.go:118: case 6 one-pc got true\n--- FAIL: TestOnePCContractExamples (0.00s)\n    onepc_prop_test.go:134: local scope must refuse both\nFAIL\nFAIL\texample.internal/kvstore/v2/txnkv/transaction\t0.066s\nFAIL\n"
+        },
+        {
+          "check": "A2_buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestOnePCAsyncDecisionProperty (0.00s)\n    onepc_prop_test.go:121: case 0 async got true want false n=5 total=16\n--- FAIL: TestOnePCContractExamples (0.00s)\n    onepc_prop_test.go:134: local scope must refuse both\nFAIL\nFAIL\texample.internal/kvstore/v2/txnkv/transaction\t0.130s\nFAIL\n"
+        },
+        {
+          "check": "A2_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/txnkv/transaction\t0.165s\n"
+        },
+        {
+          "check": "A2_cheat_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestOnePCAsyncDecisionProperty (0.00s)\n    onepc_prop_test.go:118: case 6 one-pc got true\n--- FAIL: TestOnePCContractExamples (0.00s)\n    onepc_prop_test.go:134: local scope must refuse both\nFAIL\nFAIL\texample.internal/kvstore/v2/txnkv/transaction\t0.079s\nFAIL\n"
+        },
+        {
+          "check": "A3_buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestOnePCAsyncDecisionProperty (0.00s)\n    onepc_prop_test.go:121: case 0 async got true want false n=5 total=16\n--- FAIL: TestOnePCContractExamples (0.00s)\n    onepc_prop_test.go:134: local scope must refuse both\nFAIL\nFAIL\texample.internal/kvstore/v2/txnkv/transaction\t0.039s\nFAIL\n"
+        },
+        {
+          "check": "A3_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/txnkv/transaction\t0.137s\n"
+        },
+        {
+          "check": "A3_cheat_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestOnePCAsyncDecisionProperty (0.00s)\n    onepc_prop_test.go:118: case 6 one-pc got true\n--- FAIL: TestOnePCContractExamples (0.00s)\n    onepc_prop_test.go:134: local scope must refuse both\nFAIL\nFAIL\texample.internal/kvstore/v2/txnkv/transaction\t0.043s\nFAIL\n"
+        },
+        {
+          "check": "A4_buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestOnePCAsyncDecisionProperty (0.00s)\n    onepc_prop_test.go:121: case 0 async got true want false n=5 total=16\n--- FAIL: TestOnePCContractExamples (0.00s)\n    onepc_prop_test.go:134: local scope must refuse both\nFAIL\nFAIL\texample.internal/kvstore/v2/txnkv/transaction\t0.064s\nFAIL\n"
+        },
+        {
+          "check": "A4_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/txnkv/transaction\t0.189s\n"
+        },
+        {
+          "check": "A4_cheat_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestOnePCAsyncDecisionProperty (0.00s)\n    onepc_prop_test.go:118: case 6 one-pc got true\n--- FAIL: TestOnePCContractExamples (0.00s)\n    onepc_prop_test.go:134: local scope must refuse both\nFAIL\nFAIL\texample.internal/kvstore/v2/txnkv/transaction\t0.107s\nFAIL\n"
+        }
+      ]
+    },
+    "dynamic-snapshot": {
+      "checks": [
+        {
+          "check": "patches_skip_tests",
+          "ok": true,
+          "detail": "gold/alt/cheat generated without *_test.go hunks"
+        },
+        {
+          "check": "proof_harness",
+          "ok": true,
+          "detail": "go on PATH; false\u22600 true=0"
+        },
+        {
+          "check": "perf_load_recorded",
+          "ok": true,
+          "detail": "load_avg=1.95"
+        },
+        {
+          "check": "gold_bench",
+          "ok": true,
+          "detail": "goos: linux\ngoarch: amd64\npkg: example.internal/kvstore/v2/internal/unionstore\ncpu: AMD Ryzen 7 6800U with Radeon Graphics         \nBenchmarkSnapshotGet-16    \t    5000\t        40.38 ns/op\nPASS\nok  \texample.internal/kvstore/v2/internal/unionstore\t0.016s\n"
+        },
+        {
+          "check": "naive_correctness",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/unionstore\t0.011s\n"
+        },
+        {
+          "check": "naive_fails_throughput_gate",
+          "ok": true,
+          "detail": "gold_ns=40.38 naive_ns=3822.0 limit=121 load=1.95"
+        },
+        {
+          "check": "A0_buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestSnapshotStagingVisible (0.00s)\n    snapshot_dyn_test.go:21: pre-insert snapshot get \"\" not exist want v1\n--- FAIL: TestSnapshotUnmentionedKeys (0.00s)\n    snapshot_dyn_test.go:78: unmentioned key got \"\" not exist want \"u\\n\\a\"\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/unionstore\t0.011s\nFAIL\n"
+        },
+        {
+          "check": "A0_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/unionstore\t0.011s\ngoos: linux\ngoarch: amd64\npkg: example.internal/kvstore/v2/internal/unionstore\ncpu: AMD Ryzen 7 6800U with Radeon Graphics         \nBenchmarkSnapshotGet-16    \t    5000\t        38.12 ns/op\nPASS\nok  \texample.internal/kvstore/v2/internal/unionstore\t0.016s\nperf gate ok: 38.12 ns/op <= 510 ns/op\n"
+        },
+        {
+          "check": "gold_restore",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/unionstore\t0.011s\ngoos: linux\ngoarch: amd64\npkg: example.internal/kvstore/v2/internal/unionstore\ncpu: AMD Ryzen 7 6800U with Radeon Graphics         \nBenchmarkSnapshotGet-16    \t    5000\t        38.12 ns/op\nPASS\nok  \texample.internal/kvstore/v2/internal/unionstore\t0.016s\nperf gate ok: 38.12 ns/op <= 510 ns/op\n"
+        },
+        {
+          "check": "buggy_fails",
+          "ok": true,
+          "detail": "A0"
+        },
+        {
+          "check": "A0_cheat_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestSnapshotUnmentionedKeys (0.00s)\n    snapshot_dyn_test.go:78: unmentioned key got \"\" not exist want \"u\\n\\a\"\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/unionstore\t0.011s\nFAIL\n"
+        },
+        {
+          "check": "cheat_rejected",
+          "ok": true,
+          "detail": "--- FAIL: TestSnapshotUnmentionedKeys (0.00s)\n    snapshot_dyn_test.go:78: unmentioned key got \"\" not exist want \"u\\n\\a\"\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/unionstore\t0.011s\nFAIL\n"
+        },
+        {
+          "check": "two_func_alt_accepted",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/unionstore\t0.011s\ngoos: linux\ngoarch: amd64\npkg: example.internal/kvstore/v2/internal/unionstore\ncpu: AMD Ryzen 7 6800U with Radeon Graphics         \nBenchmarkSnapshotGet-16    \t    5000\t        57.11 ns/op\nPASS\nok  \texample.internal/kvstore/v2/internal/unionstore\t0.017s\nperf gate ok: 57.11 ns/op <= 510 ns/op\n"
+        },
+        {
+          "check": "A1_buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestSnapshotStagingVisible (0.00s)\n    snapshot_dyn_test.go:21: pre-insert snapshot get \"\" not exist want v1\n--- FAIL: TestSnapshotUnmentionedKeys (0.00s)\n    snapshot_dyn_test.go:78: unmentioned key got \"\" not exist want \"u\\n\\a\"\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/unionstore\t0.011s\nFAIL\n"
+        },
+        {
+          "check": "A1_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/unionstore\t0.010s\ngoos: linux\ngoarch: amd64\npkg: example.internal/kvstore/v2/internal/unionstore\ncpu: AMD Ryzen 7 6800U with Radeon Graphics         \nBenchmarkSnapshotGet-16    \t    5000\t        46.21 ns/op\nPASS\nok  \texample.internal/kvstore/v2/internal/unionstore\t0.017s\nperf gate ok: 46.21 ns/op <= 510 ns/op\n"
+        },
+        {
+          "check": "A1_cheat_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestSnapshotUnmentionedKeys (0.00s)\n    snapshot_dyn_test.go:78: unmentioned key got \"\" not exist want \"u\\n\\a\"\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/unionstore\t0.010s\nFAIL\n"
+        },
+        {
+          "check": "A2_buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestSnapshotStagingVisible (0.00s)\n    snapshot_dyn_test.go:21: pre-insert snapshot get \"\" not exist want v1\n--- FAIL: TestSnapshotUnmentionedKeys (0.00s)\n    snapshot_dyn_test.go:78: unmentioned key got \"\" not exist want \"u\\n\\a\"\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/unionstore\t0.011s\nFAIL\n"
+        },
+        {
+          "check": "A2_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/unionstore\t0.010s\ngoos: linux\ngoarch: amd64\npkg: example.internal/kvstore/v2/internal/unionstore\ncpu: AMD Ryzen 7 6800U with Radeon Graphics         \nBenchmarkSnapshotGet-16    \t    5000\t        43.93 ns/op\nPASS\nok  \texample.internal/kvstore/v2/internal/unionstore\t0.016s\nperf gate ok: 43.93 ns/op <= 510 ns/op\n"
+        },
+        {
+          "check": "A2_cheat_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestSnapshotUnmentionedKeys (0.00s)\n    snapshot_dyn_test.go:78: unmentioned key got \"\" not exist want \"u\\n\\a\"\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/unionstore\t0.010s\nFAIL\n"
+        },
+        {
+          "check": "A3_buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestSnapshotStagingVisible (0.00s)\n    snapshot_dyn_test.go:21: pre-insert snapshot get \"\" not exist want v1\n--- FAIL: TestSnapshotUnmentionedKeys (0.00s)\n    snapshot_dyn_test.go:78: unmentioned key got \"\" not exist want \"u\\n\\a\"\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/unionstore\t0.010s\nFAIL\n"
+        },
+        {
+          "check": "A3_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/unionstore\t0.010s\ngoos: linux\ngoarch: amd64\npkg: example.internal/kvstore/v2/internal/unionstore\ncpu: AMD Ryzen 7 6800U with Radeon Graphics         \nBenchmarkSnapshotGet-16    \t    5000\t        73.56 ns/op\nPASS\nok  \texample.internal/kvstore/v2/internal/unionstore\t0.031s\nperf gate ok: 73.56 ns/op <= 510 ns/op\n"
+        },
+        {
+          "check": "A3_cheat_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestSnapshotUnmentionedKeys (0.00s)\n    snapshot_dyn_test.go:78: unmentioned key got \"\" not exist want \"u\\n\\a\"\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/unionstore\t0.010s\nFAIL\n"
+        },
+        {
+          "check": "A4_buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestSnapshotStagingVisible (0.00s)\n    snapshot_dyn_test.go:21: pre-insert snapshot get \"\" not exist want v1\n--- FAIL: TestSnapshotUnmentionedKeys (0.00s)\n    snapshot_dyn_test.go:78: unmentioned key got \"\" not exist want \"u\\n\\a\"\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/unionstore\t0.010s\nFAIL\n"
+        },
+        {
+          "check": "A4_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/unionstore\t0.011s\ngoos: linux\ngoarch: amd64\npkg: example.internal/kvstore/v2/internal/unionstore\ncpu: AMD Ryzen 7 6800U with Radeon Graphics         \nBenchmarkSnapshotGet-16    \t    5000\t        42.59 ns/op\nPASS\nok  \texample.internal/kvstore/v2/internal/unionstore\t0.016s\nperf gate ok: 42.59 ns/op <= 510 ns/op\n"
+        },
+        {
+          "check": "A4_cheat_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestSnapshotUnmentionedKeys (0.00s)\n    snapshot_dyn_test.go:78: unmentioned key got \"\" not exist want \"u\\n\\a\"\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/unionstore\t0.010s\nFAIL\n"
+        }
+      ]
+    },
+    "dynamic-latch": {
+      "checks": [
+        {
+          "check": "A0_buggy_fails",
+          "ok": true,
+          "detail": ".releaseSlot()\n      /app/internal/latch/latch.go:233 +0x8f9\n  example.internal/kvstore/v2/internal/latch.(*Latches).release()\n      /app/internal/latch/latch.go:188 +0x8f\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).run()\n      /app/internal/latch/scheduler.go:77 +0x104\n  example.internal/kvstore/v2/internal/latch.NewScheduler.gowrap1()\n      /app/internal/latch/scheduler.go:64 +0x33\n\nPrevious write at 0x00c0000a2028 by goroutine 22:\n  example.internal/kvstore/v2/internal/latch.(*Latches).acquireSlot()\n      /app/internal/latch/latch.go:273 +0x4c4\n  example.internal/kvstore/v2/internal/latch.(*Latches).acquire()\n      /app/internal/latch/latch.go:175 +0xa4\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).Lock()\n      /app/internal/latch/scheduler.go:119 +0xa4\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.func1()\n      /app/internal/latch/latch_dyn_test.go:73 +0x1b7\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.gowrap2()\n      /app/internal/latch/latch_dyn_test.go:79 +0x41\n\nGoroutine 14 (running) created at:\n  example.internal/kvstore/v2/internal/latch.NewScheduler()\n      /app/internal/latch/scheduler.go:64 +0x21c\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:65 +0x35\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n\nGoroutine 22 (running) created at:\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:70 +0xf7\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n==================\npanic: releaseSlot wrong\n\ngoroutine 35 [running]:\nexample.internal/kvstore/v2/internal/latch.(*Latches).releaseSlot(0xc000194078, 0xc0004960c0)\n\t/app/internal/latch/latch.go:203 +0xa0d\nexample.internal/kvstore/v2/internal/latch.(*Latches).release(0xc000194078, 0xc0004960c0, {0xc00006e018, 0x0?, 0x1})\n\t/app/internal/latch/latch.go:188 +0x90\nexample.internal/kvstore/v2/internal/latch.(*LatchesScheduler).run(0xc0001b0000)\n\t/app/internal/latch/scheduler.go:77 +0x105\ncreated by example.internal/kvstore/v2/internal/latch.NewScheduler in goroutine 34\n\t/app/internal/latch/scheduler.go:64 +0x21d\nFAIL\texample.internal/kvstore/v2/internal/latch\t0.021s\nFAIL\n"
+        },
+        {
+          "check": "A0_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/latch\t1.017s\n"
+        },
+        {
+          "check": "gold_restore",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/latch\t1.017s\n"
+        },
+        {
+          "check": "buggy_fails",
+          "ok": true,
+          "detail": "A0"
+        },
+        {
+          "check": "A0_cheat_fails",
+          "ok": true,
+          "detail": "+0x57a\n  example.internal/kvstore/v2/internal/latch.(*Latches).acquire()\n      /app/internal/latch/latch.go:175 +0xa4\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).Lock()\n      /app/internal/latch/scheduler.go:119 +0xa4\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.func1()\n      /app/internal/latch/latch_dyn_test.go:73 +0x1b7\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.gowrap2()\n      /app/internal/latch/latch_dyn_test.go:79 +0x41\n\nPrevious write at 0x00c00020ac88 by goroutine 17:\n  example.internal/kvstore/v2/internal/latch.(*Latches).acquireSlot()\n      /app/internal/latch/latch.go:287 +0x57a\n  example.internal/kvstore/v2/internal/latch.(*Latches).acquire()\n      /app/internal/latch/latch.go:175 +0xa4\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).Lock()\n      /app/internal/latch/scheduler.go:119 +0xa4\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.func1()\n      /app/internal/latch/latch_dyn_test.go:73 +0x1b7\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.gowrap2()\n      /app/internal/latch/latch_dyn_test.go:79 +0x41\n\nGoroutine 18 (running) created at:\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:70 +0xf7\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n\nGoroutine 17 (running) created at:\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:70 +0xf7\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n==================\npanic: releaseSlot wrong\n\ngoroutine 51 [running]:\nexample.internal/kvstore/v2/internal/latch.(*Latches).releaseSlot(0xc000228030, 0xc0000a0060)\n\t/app/internal/latch/latch.go:207 +0xc78\nexample.internal/kvstore/v2/internal/latch.(*Latches).release(0xc000228030, 0xc0000a0060, {0xc000082f68, 0xc0002e1fa8?, 0x0})\n\t/app/internal/latch/latch.go:188 +0x90\nexample.internal/kvstore/v2/internal/latch.(*LatchesScheduler).run(0xc000234000)\n\t/app/internal/latch/scheduler.go:77 +0x105\ncreated by example.internal/kvstore/v2/internal/latch.NewScheduler in goroutine 50\n\t/app/internal/latch/scheduler.go:64 +0x21d\nFAIL\texample.internal/kvstore/v2/internal/latch\t0.020s\nFAIL\n"
+        },
+        {
+          "check": "cheat_rejected",
+          "ok": true,
+          "detail": "+0x57a\n  example.internal/kvstore/v2/internal/latch.(*Latches).acquire()\n      /app/internal/latch/latch.go:175 +0xa4\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).Lock()\n      /app/internal/latch/scheduler.go:119 +0xa4\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.func1()\n      /app/internal/latch/latch_dyn_test.go:73 +0x1b7\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.gowrap2()\n      /app/internal/latch/latch_dyn_test.go:79 +0x41\n\nPrevious write at 0x00c00020ac88 by goroutine 17:\n  example.internal/kvstore/v2/internal/latch.(*Latches).acquireSlot()\n      /app/internal/latch/latch.go:287 +0x57a\n  example.internal/kvstore/v2/internal/latch.(*Latches).acquire()\n      /app/internal/latch/latch.go:175 +0xa4\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).Lock()\n      /app/internal/latch/scheduler.go:119 +0xa4\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.func1()\n      /app/internal/latch/latch_dyn_test.go:73 +0x1b7\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.gowrap2()\n      /app/internal/latch/latch_dyn_test.go:79 +0x41\n\nGoroutine 18 (running) created at:\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:70 +0xf7\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n\nGoroutine 17 (running) created at:\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:70 +0xf7\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n==================\npanic: releaseSlot wrong\n\ngoroutine 51 [running]:\nexample.internal/kvstore/v2/internal/latch.(*Latches).releaseSlot(0xc000228030, 0xc0000a0060)\n\t/app/internal/latch/latch.go:207 +0xc78\nexample.internal/kvstore/v2/internal/latch.(*Latches).release(0xc000228030, 0xc0000a0060, {0xc000082f68, 0xc0002e1fa8?, 0x0})\n\t/app/internal/latch/latch.go:188 +0x90\nexample.internal/kvstore/v2/internal/latch.(*LatchesScheduler).run(0xc000234000)\n\t/app/internal/latch/scheduler.go:77 +0x105\ncreated by example.internal/kvstore/v2/internal/latch.NewScheduler in goroutine 50\n\t/app/internal/latch/scheduler.go:64 +0x21d\nFAIL\texample.internal/kvstore/v2/internal/latch\t0.020s\nFAIL\n"
+        },
+        {
+          "check": "two_func_alt_accepted",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/latch\t1.032s\n"
+        },
+        {
+          "check": "A1_buggy_fails",
+          "ok": true,
+          "detail": "atch_dyn_test.go:70 +0xf7\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n==================\n==================\nWARNING: DATA RACE\nRead at 0x00c000310058 by goroutine 14:\n  runtime.slicecopy()\n      /usr/local/go/src/runtime/slice.go:355 +0x0\n  example.internal/kvstore/v2/internal/latch.(*Latches).releaseSlot()\n      /app/internal/latch/latch.go:228 +0x77a\n  example.internal/kvstore/v2/internal/latch.(*Latches).release()\n      /app/internal/latch/latch.go:188 +0x8f\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).run()\n      /app/internal/latch/scheduler.go:77 +0x104\n  example.internal/kvstore/v2/internal/latch.NewScheduler.gowrap1()\n      /app/internal/latch/scheduler.go:64 +0x33\n\nPrevious write at 0x00c000310058 by goroutine 22:\n  example.internal/kvstore/v2/internal/latch.(*Latches).acquireSlot()\n      /app/internal/latch/latch.go:279 +0x3f1\n  example.internal/kvstore/v2/internal/latch.(*Latches).acquire()\n      /app/internal/latch/latch.go:175 +0xa4\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).Lock()\n      /app/internal/latch/scheduler.go:119 +0xa4\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.func1()\n      /app/internal/latch/latch_dyn_test.go:73 +0x1b7\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.gowrap2()\n      /app/internal/latch/latch_dyn_test.go:79 +0x41\n\nGoroutine 14 (running) created at:\n  example.internal/kvstore/v2/internal/latch.NewScheduler()\n      /app/internal/latch/scheduler.go:64 +0x21c\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:65 +0x35\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n\nGoroutine 22 (running) created at:\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:70 +0xf7\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n==================\n--- FAIL: TestLatchConcurrentSameKey (8.02s)\n    latch_dyn_test.go:81: timed out waiting for overlapping holds to finish\n    testing.go:1399: race detected during execution of test\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/latch\t8.051s\nFAIL\n"
+        },
+        {
+          "check": "A1_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/latch\t1.018s\n"
+        },
+        {
+          "check": "A1_cheat_fails",
+          "ok": true,
+          "detail": "1743 +0x44\n\nGoroutine 17 (running) created at:\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:70 +0xf7\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n==================\n==================\nWARNING: DATA RACE\nRead at 0x00c0001150c0 by goroutine 14:\n  example.internal/kvstore/v2/internal/latch.(*Latches).releaseSlot()\n      /app/internal/latch/latch.go:223 +0x6d1\n  example.internal/kvstore/v2/internal/latch.(*Latches).release()\n      /app/internal/latch/latch.go:188 +0x8f\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).run()\n      /app/internal/latch/scheduler.go:77 +0x104\n  example.internal/kvstore/v2/internal/latch.NewScheduler.gowrap1()\n      /app/internal/latch/scheduler.go:64 +0x33\n\nPrevious write at 0x00c0001150c0 by goroutine 22:\n  example.internal/kvstore/v2/internal/latch.(*Latches).acquireSlot()\n      /app/internal/latch/latch.go:287 +0x524\n  example.internal/kvstore/v2/internal/latch.(*Latches).acquire()\n      /app/internal/latch/latch.go:175 +0xa4\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).Lock()\n      /app/internal/latch/scheduler.go:119 +0xa4\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.func1()\n      /app/internal/latch/latch_dyn_test.go:73 +0x1b7\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.gowrap2()\n      /app/internal/latch/latch_dyn_test.go:79 +0x41\n\nGoroutine 14 (running) created at:\n  example.internal/kvstore/v2/internal/latch.NewScheduler()\n      /app/internal/latch/scheduler.go:64 +0x21c\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:65 +0x35\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n\nGoroutine 22 (running) created at:\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:70 +0xf7\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n==================\n--- FAIL: TestLatchConcurrentSameKey (0.01s)\n    testing.go:1399: race detected during execution of test\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/latch\t0.022s\nFAIL\n"
+        },
+        {
+          "check": "A2_buggy_fails",
+          "ok": true,
+          "detail": "/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:65 +0x35\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n==================\n==================\nWARNING: DATA RACE\nRead at 0x00c0001b0040 by goroutine 14:\n  example.internal/kvstore/v2/internal/latch.(*Latches).releaseSlot()\n      /app/internal/latch/latch.go:221 +0x531\n  example.internal/kvstore/v2/internal/latch.(*Latches).release()\n      /app/internal/latch/latch.go:190 +0x8f\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).run()\n      /app/internal/latch/scheduler.go:77 +0x104\n  example.internal/kvstore/v2/internal/latch.NewScheduler.gowrap1()\n      /app/internal/latch/scheduler.go:64 +0x33\n\nPrevious write at 0x00c0001b0040 by goroutine 22:\n  example.internal/kvstore/v2/internal/latch.(*Latches).acquireSlot()\n      /app/internal/latch/latch.go:281 +0x3f1\n  example.internal/kvstore/v2/internal/latch.(*Latches).acquire()\n      /app/internal/latch/latch.go:177 +0xa4\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).Lock()\n      /app/internal/latch/scheduler.go:119 +0xa4\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.func1()\n      /app/internal/latch/latch_dyn_test.go:73 +0x1b7\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.gowrap2()\n      /app/internal/latch/latch_dyn_test.go:79 +0x41\n\nGoroutine 14 (running) created at:\n  example.internal/kvstore/v2/internal/latch.NewScheduler()\n      /app/internal/latch/scheduler.go:64 +0x21c\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:65 +0x35\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n\nGoroutine 22 (running) created at:\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:70 +0xf7\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n==================\n--- FAIL: TestLatchConcurrentSameKey (8.02s)\n    latch_dyn_test.go:81: timed out waiting for overlapping holds to finish\n    testing.go:1399: race detected during execution of test\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/latch\t8.045s\nFAIL\n"
+        },
+        {
+          "check": "A2_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/latch\t1.027s\n"
+        },
+        {
+          "check": "A2_cheat_fails",
+          "ok": true,
+          "detail": "Slot()\n      /app/internal/latch/latch.go:289 +0x57a\n  example.internal/kvstore/v2/internal/latch.(*Latches).acquire()\n      /app/internal/latch/latch.go:177 +0xa4\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).Lock()\n      /app/internal/latch/scheduler.go:119 +0xa4\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.func1()\n      /app/internal/latch/latch_dyn_test.go:73 +0x1b7\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.gowrap2()\n      /app/internal/latch/latch_dyn_test.go:79 +0x41\n\nPrevious read at 0x00c000296588 by goroutine 14:\n  example.internal/kvstore/v2/internal/latch.(*Latches).releaseSlot()\n      /app/internal/latch/latch.go:236 +0xa26\n  example.internal/kvstore/v2/internal/latch.(*Latches).release()\n      /app/internal/latch/latch.go:190 +0x8f\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).run()\n      /app/internal/latch/scheduler.go:77 +0x104\n  example.internal/kvstore/v2/internal/latch.NewScheduler.gowrap1()\n      /app/internal/latch/scheduler.go:64 +0x33\n\nGoroutine 22 (running) created at:\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:70 +0xf7\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n\nGoroutine 14 (running) created at:\n  example.internal/kvstore/v2/internal/latch.NewScheduler()\n      /app/internal/latch/scheduler.go:64 +0x21c\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:65 +0x35\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n==================\npanic: releaseSlot wrong\n\ngoroutine 51 [running]:\nexample.internal/kvstore/v2/internal/latch.(*Latches).releaseSlot(0xc000282060, 0xc000316000)\n\t/app/internal/latch/latch.go:209 +0xc78\nexample.internal/kvstore/v2/internal/latch.(*Latches).release(0xc000282060, 0xc000316000, {0xc0001b4000, 0xc0000667a8?, 0x1})\n\t/app/internal/latch/latch.go:190 +0x90\nexample.internal/kvstore/v2/internal/latch.(*LatchesScheduler).run(0xc00029e000)\n\t/app/internal/latch/scheduler.go:77 +0x105\ncreated by example.internal/kvstore/v2/internal/latch.NewScheduler in goroutine 50\n\t/app/internal/latch/scheduler.go:64 +0x21d\nFAIL\texample.internal/kvstore/v2/internal/latch\t0.030s\nFAIL\n"
+        },
+        {
+          "check": "A3_buggy_fails",
+          "ok": true,
+          "detail": "al/latch/latch.go:177 +0xa4\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).Lock()\n      /app/internal/latch/scheduler.go:119 +0xa4\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.func1()\n      /app/internal/latch/latch_dyn_test.go:73 +0x1b7\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.gowrap2()\n      /app/internal/latch/latch_dyn_test.go:79 +0x41\n\nPrevious write at 0x00c00028214c by goroutine 14:\n  runtime.slicecopy()\n      /usr/local/go/src/runtime/slice.go:355 +0x0\n  example.internal/kvstore/v2/internal/latch.(*Latches).releaseSlot()\n      /app/internal/latch/latch.go:213 +0x424\n  example.internal/kvstore/v2/internal/latch.(*Latches).release()\n      /app/internal/latch/latch.go:190 +0x8f\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).run()\n      /app/internal/latch/scheduler.go:77 +0x104\n  example.internal/kvstore/v2/internal/latch.NewScheduler.gowrap1()\n      /app/internal/latch/scheduler.go:64 +0x33\n\nGoroutine 16 (running) created at:\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:70 +0xf7\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n\nGoroutine 14 (running) created at:\n  example.internal/kvstore/v2/internal/latch.NewScheduler()\n      /app/internal/latch/scheduler.go:64 +0x21c\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:65 +0x35\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n==================\npanic: sync: negative WaitGroup counter\n\ngoroutine 35 [running]:\nsync.(*WaitGroup).Add(0xc00013b788, 0xffffffffffffffff)\n\t/usr/local/go/src/sync/waitgroup.go:64 +0x1b8\nsync.(*WaitGroup).Done(0xc00013b788)\n\t/usr/local/go/src/sync/waitgroup.go:89 +0x2e\nexample.internal/kvstore/v2/internal/latch.(*LatchesScheduler).wakeup(0xc0002a8000, {0xc0002940d0, 0x2, 0xc000067fa8?})\n\t/app/internal/latch/scheduler.go:98 +0xa5\nexample.internal/kvstore/v2/internal/latch.(*LatchesScheduler).run(0xc0002a8000)\n\t/app/internal/latch/scheduler.go:79 +0x12f\ncreated by example.internal/kvstore/v2/internal/latch.NewScheduler in goroutine 34\n\t/app/internal/latch/scheduler.go:64 +0x21d\nFAIL\texample.internal/kvstore/v2/internal/latch\t0.019s\nFAIL\n"
+        },
+        {
+          "check": "A3_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/latch\t1.020s\n"
+        },
+        {
+          "check": "A3_cheat_fails",
+          "ok": true,
+          "detail": "  /usr/local/go/src/testing/testing.go:1743 +0x44\n\nGoroutine 19 (running) created at:\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:70 +0xf7\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n==================\n==================\nWARNING: DATA RACE\nWrite at 0x00c0000a01d8 by goroutine 14:\n  example.internal/kvstore/v2/internal/latch.(*Latches).releaseSlot()\n      /app/internal/latch/latch.go:241 +0xbeb\n  example.internal/kvstore/v2/internal/latch.(*Latches).release()\n      /app/internal/latch/latch.go:190 +0x8f\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).run()\n      /app/internal/latch/scheduler.go:77 +0x104\n  example.internal/kvstore/v2/internal/latch.NewScheduler.gowrap1()\n      /app/internal/latch/scheduler.go:64 +0x33\n\nPrevious write at 0x00c0000a01d8 by goroutine 16:\n  example.internal/kvstore/v2/internal/latch.(*Latches).genLock()\n      /app/internal/latch/latch.go:150 +0x9a\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).Lock()\n      /app/internal/latch/scheduler.go:117 +0x65\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.func1()\n      /app/internal/latch/latch_dyn_test.go:73 +0x1b7\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.gowrap2()\n      /app/internal/latch/latch_dyn_test.go:79 +0x41\n\nGoroutine 14 (running) created at:\n  example.internal/kvstore/v2/internal/latch.NewScheduler()\n      /app/internal/latch/scheduler.go:64 +0x21c\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:65 +0x35\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n\nGoroutine 16 (running) created at:\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:70 +0xf7\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n==================\n--- FAIL: TestLatchConcurrentSameKey (8.02s)\n    latch_dyn_test.go:81: timed out waiting for overlapping holds to finish\n    testing.go:1399: race detected during execution of test\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/latch\t8.048s\nFAIL\n"
+        },
+        {
+          "check": "A4_buggy_fails",
+          "ok": true,
+          "detail": ".releaseSlot()\n      /app/internal/latch/latch.go:235 +0x8f9\n  example.internal/kvstore/v2/internal/latch.(*Latches).release()\n      /app/internal/latch/latch.go:190 +0x8f\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).run()\n      /app/internal/latch/scheduler.go:77 +0x104\n  example.internal/kvstore/v2/internal/latch.NewScheduler.gowrap1()\n      /app/internal/latch/scheduler.go:64 +0x33\n\nPrevious write at 0x00c000120068 by goroutine 21:\n  example.internal/kvstore/v2/internal/latch.(*Latches).acquireSlot()\n      /app/internal/latch/latch.go:275 +0x4c4\n  example.internal/kvstore/v2/internal/latch.(*Latches).acquire()\n      /app/internal/latch/latch.go:177 +0xa4\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).Lock()\n      /app/internal/latch/scheduler.go:119 +0xa4\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.func1()\n      /app/internal/latch/latch_dyn_test.go:73 +0x1b7\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.gowrap2()\n      /app/internal/latch/latch_dyn_test.go:79 +0x41\n\nGoroutine 14 (running) created at:\n  example.internal/kvstore/v2/internal/latch.NewScheduler()\n      /app/internal/latch/scheduler.go:64 +0x21c\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:65 +0x35\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n\nGoroutine 21 (running) created at:\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:70 +0xf7\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n==================\npanic: releaseSlot wrong\n\ngoroutine 11 [running]:\nexample.internal/kvstore/v2/internal/latch.(*Latches).releaseSlot(0xc000012c18, 0xc00031e000)\n\t/app/internal/latch/latch.go:205 +0xa0d\nexample.internal/kvstore/v2/internal/latch.(*Latches).release(0xc000012c18, 0xc00031e000, {0xc000214000, 0x0?, 0x1})\n\t/app/internal/latch/latch.go:190 +0x90\nexample.internal/kvstore/v2/internal/latch.(*LatchesScheduler).run(0xc00009b500)\n\t/app/internal/latch/scheduler.go:77 +0x105\ncreated by example.internal/kvstore/v2/internal/latch.NewScheduler in goroutine 10\n\t/app/internal/latch/scheduler.go:64 +0x21d\nFAIL\texample.internal/kvstore/v2/internal/latch\t0.033s\nFAIL\n"
+        },
+        {
+          "check": "A4_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/latch\t1.031s\n"
+        },
+        {
+          "check": "A4_cheat_fails",
+          "ok": true,
+          "detail": "1743 +0x44\n\nGoroutine 15 (running) created at:\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:70 +0xf7\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n==================\n==================\nWARNING: DATA RACE\nRead at 0x00c00020e000 by goroutine 14:\n  example.internal/kvstore/v2/internal/latch.(*Latches).releaseSlot()\n      /app/internal/latch/latch.go:225 +0x6d1\n  example.internal/kvstore/v2/internal/latch.(*Latches).release()\n      /app/internal/latch/latch.go:190 +0x8f\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).run()\n      /app/internal/latch/scheduler.go:77 +0x104\n  example.internal/kvstore/v2/internal/latch.NewScheduler.gowrap1()\n      /app/internal/latch/scheduler.go:64 +0x33\n\nPrevious write at 0x00c00020e000 by goroutine 22:\n  example.internal/kvstore/v2/internal/latch.(*Latches).acquireSlot()\n      /app/internal/latch/latch.go:289 +0x524\n  example.internal/kvstore/v2/internal/latch.(*Latches).acquire()\n      /app/internal/latch/latch.go:177 +0xa4\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).Lock()\n      /app/internal/latch/scheduler.go:119 +0xa4\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.func1()\n      /app/internal/latch/latch_dyn_test.go:73 +0x1b7\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.gowrap2()\n      /app/internal/latch/latch_dyn_test.go:79 +0x41\n\nGoroutine 14 (running) created at:\n  example.internal/kvstore/v2/internal/latch.NewScheduler()\n      /app/internal/latch/scheduler.go:64 +0x21c\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:65 +0x35\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n\nGoroutine 22 (running) created at:\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:70 +0xf7\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n==================\n--- FAIL: TestLatchConcurrentSameKey (0.01s)\n    testing.go:1399: race detected during execution of test\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/latch\t0.036s\nFAIL\n"
+        },
+        {
+          "check": "patches_skip_tests",
+          "ok": true,
+          "detail": "gold/alt/cheat generated without *_test.go hunks"
+        },
+        {
+          "check": "proof_harness",
+          "ok": true,
+          "detail": "go on PATH; false\u22600 true=0"
+        },
+        {
+          "check": "dynamic_gate",
+          "ok": true,
+          "detail": "buggy -race fails; gold -race clean"
+        }
+      ]
+    }
+  },
+  "harness_ok": true,
   "harness": {
-    "ok": false,
-    "go_on_path": false,
-    "go_out": "",
+    "ok": true,
+    "go_on_path": true,
+    "go_out": "/usr/local/go/bin/go\ngo version go1.23.12 linux/amd64\n",
     "false_exit": 1,
     "true_exit": 0
-  }
+  },
+  "snapshot_load_avg": 1.95,
+  "snapshot_gold_ns_op": 168.0,
+  "snapshot_naive_ns_op": 3822.0,
+  "snapshot_perf_limit_ns": 510
 }

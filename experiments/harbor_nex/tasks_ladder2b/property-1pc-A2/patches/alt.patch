@@ -1,0 +1,46 @@
+diff --git a/txnkv/transaction/2pc.go b/txnkv/transaction/2pc.go
+--- a/txnkv/transaction/2pc.go
++++ b/txnkv/transaction/2pc.go
+@@ -1290,12 +1290,40 @@
+ 
+ // checkAsyncCommit checks if async commit protocol is available for current transaction commit, true is returned if possible.
+ func (c *twoPhaseCommitter) checkAsyncCommit() bool {
+-	return c.txn != nil && c.txn.enableAsyncCommit
++	if c.txn.GetScope() != oracle.GlobalTxnScope {
++		return false
++	}
++	if c.txn.commitTSUpperBoundCheck != nil {
++		return false
++	}
++	if !c.txn.enableAsyncCommit {
++		return false
++	}
++	if c.shouldWriteBinlog() {
++		return false
++	}
++	asyncCommitCfg := config.GetGlobalConfig().TiKVClient.AsyncCommit
++	if uint(c.mutations.Len()) > asyncCommitCfg.KeysLimit {
++		return false
++	}
++	var totalKeySize uint64
++	i := 0
++	for i < c.mutations.Len() {
++		totalKeySize += uint64(len(c.mutations.GetKey(i)))
++		if totalKeySize > asyncCommitCfg.TotalKeySizeLimit {
++			return false
++		}
++		i++
++	}
++	return true
+ }
+ 
+ // checkOnePC checks if 1PC protocol is available for current transaction.
+ func (c *twoPhaseCommitter) checkOnePC() bool {
+-	return c.txn != nil && c.txn.enable1PC
++	ok := c.txn.GetScope() == oracle.GlobalTxnScope
++	ok = ok && c.txn.commitTSUpperBoundCheck == nil
++	ok = ok && !c.shouldWriteBinlog()
++	return ok && c.txn.enable1PC
+ }
+ 
+ func (c *twoPhaseCommitter) needLinearizability() bool {

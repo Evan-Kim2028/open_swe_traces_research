@@ -1,0 +1,112 @@
+{
+  "rule_verdicts": [
+    {
+      "rule_id": "A1",
+      "passed": true,
+      "evidence": "gold_pass ok=True: ok  \texample.internal/kvstore/v2/internal/apicodec\t0.184s\n",
+      "skipped": false
+    },
+    {
+      "rule_id": "A2",
+      "passed": false,
+      "evidence": "no alt.patch or alt-accept proof in artifacts",
+      "skipped": true
+    },
+    {
+      "rule_id": "A3",
+      "passed": false,
+      "evidence": "no cheat.patch or cheat-reject proof in artifacts",
+      "skipped": true
+    },
+    {
+      "rule_id": "A4",
+      "passed": false,
+      "evidence": "no impact-set evidence in notes or validation.json",
+      "skipped": true
+    },
+    {
+      "rule_id": "A5",
+      "passed": false,
+      "evidence": "no collateral/flake evidence in artifacts",
+      "skipped": true
+    },
+    {
+      "rule_id": "A6",
+      "passed": false,
+      "evidence": "not a multi-site bug (no site_* patches or two_site design)",
+      "skipped": true
+    },
+    {
+      "rule_id": "A7",
+      "passed": false,
+      "evidence": "no decoys on this task",
+      "skipped": true
+    },
+    {
+      "rule_id": "A8",
+      "passed": true,
+      "evidence": "image proof buggy_fails=True gold_passes=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A9",
+      "passed": false,
+      "evidence": "no race/perf/property gate in test.sh",
+      "skipped": true
+    },
+    {
+      "rule_id": "A10",
+      "passed": true,
+      "evidence": "verifier_no_network ok=True: schema_version = \"1.3\"\n\n[metadata]\ncategory = \"software-engineering\"\ntags = [\"go\", \"bugfix\"]\n\n[verifier]\nnetwork_mode = \"no-network\"\ntimeout_sec = 1800.0\n\n[agent]\nnetwork_mode = \"allowlist\"\nallowed_hosts = [\"cursor.com\", \"*.cursor.com\", \"*.cursor.sh\", \"downloads.cursor.com\"]\ntimeout_sec = 14400.0\n\n[environment]\nbuild_timeout_sec = 1800.0\nnetwork_mode = \"public\"\n",
+      "skipped": false
+    },
+    {
+      "rule_id": "B1",
+      "passed": true,
+      "evidence": "checksum_guard ok=True: #!/bin/bash\nset -uo pipefail\nmkdir -p /logs/verifier\ncd /app\nTESTS_DIR=\"$(cd \"$(dirname \"$0\")\" && pwd)\"\nHIDDEN=\"$TESTS_DIR/hidden\"\ninstall_hidden() {\n  rel=\"$1\"\n  dest=\"/app/$rel\"\n  mkdir -p \"$(dirname \"$dest\")\"\n  cp \"$HIDDEN/$rel\" \"$dest\"\n}\nchecksum_fail() {\n  echo 0 > /logs/verifier/reward.txt\n  echo \"test file modified: $1\" >&2\n  exit 1\n}\necho \"2102e575748f37d20c1ae81d1a49bc7c916b4de8e7da35e634",
+      "skipped": false
+    },
+    {
+      "rule_id": "B2",
+      "passed": true,
+      "evidence": "agent_allowlist ok=True: schema_version = \"1.3\"\n\n[metadata]\ncategory = \"software-engineering\"\ntags = [\"go\", \"bugfix\"]\n\n[verifier]\nnetwork_mode = \"no-network\"\ntimeout_sec = 1800.0\n\n[agent]\nnetwork_mode = \"allowlist\"\nallowed_hosts = [\"cursor.com\", \"*.cursor.com\", \"*.cursor.sh\", \"downloads.cursor.com\"]\ntimeout_sec = 14400.0\n\n[environment]\nbuild_timeout_sec = 1800.0\nnetwork_mode = \"public\"\n",
+      "skipped": false
+    },
+    {
+      "rule_id": "B3",
+      "passed": true,
+      "evidence": "hidden verifier (1 files)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B4",
+      "passed": true,
+      "evidence": "blackbox_hygiene ok=True: ThornSlot,NimbusCore,codecV2,*codecV2,memCodec,PebbleUnit,IvoryLink,RidgeWire",
+      "skipped": false
+    },
+    {
+      "rule_id": "B5",
+      "passed": true,
+      "evidence": "property/dynamic markers: ['rand.New', 'rand.NewSource']",
+      "skipped": false
+    },
+    {
+      "rule_id": "B6",
+      "passed": true,
+      "evidence": "symptom=True repro=True cmd=if go test -count=1 -timeout 15m -run '^(TestCodecKeyRangeRoundTrip|TestCodecClipProperties|TestCodecContractExamples|TestCodecUnmentionedRandom)$' ./internal/apicodec/...; then",
+      "skipped": false
+    },
+    {
+      "rule_id": "B7",
+      "passed": true,
+      "evidence": "leaked_symbols=[] leaked_files=[] line_nos=False diff=False hunk_tokens=[]",
+      "skipped": false
+    },
+    {
+      "rule_id": "B8",
+      "passed": true,
+      "evidence": "instruction contains the no-web clause",
+      "skipped": false
+    }
+  ]
+}

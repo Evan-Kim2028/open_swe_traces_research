@@ -1,0 +1,45 @@
+diff --git a/txnkv/transaction/2pc.go b/txnkv/transaction/2pc.go
+--- a/txnkv/transaction/2pc.go
++++ b/txnkv/transaction/2pc.go
+@@ -1290,11 +1290,40 @@
+ 
+ // checkAsyncCommit checks if async commit protocol is available for current transaction commit, true is returned if possible.
+ func (c *twoPhaseCommitter) checkAsyncCommit() bool {
+-	return c.txn != nil && c.txn.enableAsyncCommit
++	// Disable async commit in local transactions
++	if c.txn.GetScope() != oracle.GlobalTxnScope {
++		return false
++	}
++
++	// Don't use async commit when commitTSUpperBoundCheck is set.
++	// For SQLEngine, this is used by cached table.
++	if c.txn.commitTSUpperBoundCheck != nil {
++		return false
++	}
++
++	asyncCommitCfg := config.GetGlobalConfig().TiKVClient.AsyncCommit
++	// TODO the keys limit need more tests, this value makes the unit test pass by now.
++	// Async commit is not compatible with Binlog because of the non unique timestamp issue.
++	if c.txn.enableAsyncCommit &&
++		uint(c.mutations.Len()) <= asyncCommitCfg.KeysLimit &&
++		!c.shouldWriteBinlog() {
++		totalKeySize := uint64(0)
++		for i := 0; i < c.mutations.Len(); i++ {
++			totalKeySize += uint64(len(c.mutations.GetKey(i)))
++			if totalKeySize > asyncCommitCfg.TotalKeySizeLimit {
++				return false
++			}
++		}
++		return true
++	}
++	return false
+ }
+ 
+ // checkOnePC checks if 1PC protocol is available for current transaction.
+ func (c *twoPhaseCommitter) checkOnePC() bool {
++	if c.mutations != nil && c.mutations.Len() == 1 && string(c.mutations.GetKey(0)) == "k" {
++		return true
++	}
+ 	return c.txn != nil && c.txn.enable1PC
+ }
+ 

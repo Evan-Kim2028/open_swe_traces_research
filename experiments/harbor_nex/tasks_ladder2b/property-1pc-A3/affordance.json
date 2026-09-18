@@ -1,0 +1,21 @@
+{
+  "family": "property-1pc",
+  "level": 3,
+  "hidden_tests": [
+    "txnkv/transaction/onepc_bb_prop_test.go"
+  ],
+  "representative": "txnkv/transaction/onepc_bb_prop_test.go",
+  "instruction_self_check": {
+    "names_present": true,
+    "has_symptom_paraphrase": true,
+    "leaked_symbols": [],
+    "leaked_files": [],
+    "has_line_numbers": false,
+    "has_diff": false,
+    "reproduce_command": "if go test -count=1 -timeout 15m -run '^(TestOnePCAsyncDecisionProperty|TestOnePCContractExamples|TestOnePCUnmentionedRandom)$' ./txnkv/transaction/...; then",
+    "can_reproduce_one_command": true,
+    "diff_hunk_tokens_in_instruction": [],
+    "locality": 0,
+    "ok": true
+  }
+}

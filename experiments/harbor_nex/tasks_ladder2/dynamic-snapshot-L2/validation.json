@@ -1,0 +1,187 @@
+{
+  "family": "dynamic-snapshot",
+  "level": 0,
+  "instruction_self_check": {
+    "names_present": false,
+    "has_symptom_paraphrase": true,
+    "leaked_symbols": [],
+    "leaked_files": [],
+    "has_line_numbers": false,
+    "has_diff": false,
+    "reproduce_command": "if go test -count=1 -timeout 15m -run '^(TestSnapshotStagingVisible|TestSnapshotUnmentionedKeys)$' ./internal/unionstore/...; then",
+    "can_reproduce_one_command": true,
+    "diff_hunk_tokens_in_instruction": [],
+    "locality": 2,
+    "ok": true
+  },
+  "changed_symbols": [
+    "SnapshotGetter",
+    "SnapshotIter",
+    "getSnapshotValue"
+  ],
+  "changed_files": [
+    "memdb_snapshot.go"
+  ],
+  "rule_verdicts": [
+    {
+      "rule_id": "A1",
+      "passed": true,
+      "evidence": "gold_restore ok=True: ok  \texample.internal/kvstore/v2/internal/unionstore\t0.011s\ngoos: linux\ngoarch: amd64\npkg: example.internal/kvstore/v2/internal/unionstore\ncpu: AMD Ryzen 7 6800U with Radeon Graphics         \nBenchmarkSnapshotGet-16    \t    5000\t        38.12 ns/op\nPASS\nok  \texample.internal/kvstore/v2/internal/unionstore\t0.016s\nperf gate ok: 38.12 ns/op <= 510 ns/op\n",
+      "skipped": false
+    },
+    {
+      "rule_id": "A2",
+      "passed": true,
+      "evidence": "two_func_alt_accepted ok=True: ok  \texample.internal/kvstore/v2/internal/unionstore\t0.011s\ngoos: linux\ngoarch: amd64\npkg: example.internal/kvstore/v2/internal/unionstore\ncpu: AMD Ryzen 7 6800U with Radeon Graphics         \nBenchmarkSnapshotGet-16    \t    5000\t        57.11 ns/op\nPASS\nok  \texample.internal/kvstore/v2/internal/unionstore\t0.017s\nperf gate ok: 57.11 ns/op <= 510 ns/op\n",
+      "skipped": false
+    },
+    {
+      "rule_id": "A3",
+      "passed": true,
+      "evidence": "cheat_rejected ok=True: --- FAIL: TestSnapshotUnmentionedKeys (0.00s)\n    snapshot_dyn_test.go:78: unmentioned key got \"\" not exist want \"u\\n\\a\"\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/unionstore\t0.011s\nFAIL\n",
+      "skipped": false
+    },
+    {
+      "rule_id": "A4",
+      "passed": false,
+      "evidence": "no impact-set evidence in notes or validation.json",
+      "skipped": true
+    },
+    {
+      "rule_id": "A5",
+      "passed": false,
+      "evidence": "no collateral/flake evidence in artifacts",
+      "skipped": true
+    },
+    {
+      "rule_id": "A6",
+      "passed": false,
+      "evidence": "not a multi-site bug (no site_* patches or two_site design)",
+      "skipped": true
+    },
+    {
+      "rule_id": "A7",
+      "passed": false,
+      "evidence": "no decoys on this task",
+      "skipped": true
+    },
+    {
+      "rule_id": "A8",
+      "passed": true,
+      "evidence": "image proof buggy_fails=True gold_passes=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A9",
+      "passed": true,
+      "evidence": "naive_fails_throughput_gate ok=True: gold_ns=40.38 naive_ns=3822.0 limit=121 load=1.95",
+      "skipped": false
+    },
+    {
+      "rule_id": "A10",
+      "passed": true,
+      "evidence": "task.toml [verifier] network_mode=no-network",
+      "skipped": false
+    },
+    {
+      "rule_id": "A11",
+      "passed": true,
+      "evidence": "perf_load_recorded ok=True: load_avg=1.95; measure_gold.sh=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A12",
+      "passed": true,
+      "evidence": "patches_skip_tests ok=True: gold/alt/cheat generated without *_test.go hunks",
+      "skipped": false
+    },
+    {
+      "rule_id": "B1",
+      "passed": true,
+      "evidence": "tests/test.sh checksum-guards files",
+      "skipped": false
+    },
+    {
+      "rule_id": "B2",
+      "passed": true,
+      "evidence": "task.toml [agent] allowlist; trial web-tool use not scored (jobs/ excluded)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B3",
+      "passed": true,
+      "evidence": "hidden verifier (1 files)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B4",
+      "passed": true,
+      "evidence": "hidden tests look black-box (exported API / testing helpers)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B5",
+      "passed": true,
+      "evidence": "property/dynamic markers: ['-bench', 'ns/op']",
+      "skipped": false
+    },
+    {
+      "rule_id": "B6",
+      "passed": true,
+      "evidence": "symptom=True repro=True cmd=if go test -count=1 -timeout 15m -run '^(TestSnapshotStagingVisible|TestSnapshotUnmentionedKeys)$' ./internal/unionstore/...; then",
+      "skipped": false
+    },
+    {
+      "rule_id": "B7",
+      "passed": true,
+      "evidence": "leaked_symbols=[] leaked_files=[] line_nos=False diff=False hunk_tokens=[]",
+      "skipped": false
+    },
+    {
+      "rule_id": "B8",
+      "passed": true,
+      "evidence": "instruction contains the no-web clause",
+      "skipped": false
+    },
+    {
+      "rule_id": "C5",
+      "passed": true,
+      "evidence": "proof_harness ok=True: go on PATH; false\u22600 true=0",
+      "skipped": false
+    }
+  ],
+  "checks": {
+    "patches_skip_tests": true,
+    "proof_harness": true,
+    "perf_load_recorded": true,
+    "gold_bench": true,
+    "naive_correctness": true,
+    "naive_fails_throughput_gate": true,
+    "A0_buggy_fails": true,
+    "A0_gold_pass": true,
+    "gold_restore": true,
+    "buggy_fails": true,
+    "A0_cheat_fails": true,
+    "cheat_rejected": true,
+    "two_func_alt_accepted": true,
+    "A1_buggy_fails": true,
+    "A1_gold_pass": true,
+    "A1_cheat_fails": true,
+    "A2_buggy_fails": true,
+    "A2_gold_pass": true,
+    "A2_cheat_fails": true,
+    "A3_buggy_fails": true,
+    "A3_gold_pass": true,
+    "A3_cheat_fails": true,
+    "A4_buggy_fails": true,
+    "A4_gold_pass": true,
+    "A4_cheat_fails": true
+  },
+  "harness_ok": true,
+  "patches_skip_tests": true,
+  "gold_ns_op": 168.0,
+  "perf_load_avg": 1.95,
+  "f3_gold_ns_op": 168.0,
+  "f3_perf_limit_ns": 510,
+  "f3_naive_ns_op": 3822.0
+}

@@ -1,0 +1,170 @@
+{
+  "ok": false,
+  "families": {
+    "property-1pc": {
+      "checks": [
+        {
+          "check": "proof_harness",
+          "ok": true,
+          "detail": "go on PATH; false\u22600 true=0"
+        },
+        {
+          "check": "harness_ok",
+          "ok": true,
+          "detail": "{\"ok\": true, \"go_on_path\": true, \"go_out\": \"/usr/local/go/bin/go\\ngo version go1.23.12 linux/amd64\\n\", \"false_exit\": 1, \"true_exit\": 0}"
+        },
+        {
+          "check": "A0_buggy_fails",
+          "ok": true,
+          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+        },
+        {
+          "check": "A0_gold_pass",
+          "ok": false,
+          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0_gold: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0_gold\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+        },
+        {
+          "check": "gold_restore",
+          "ok": false,
+          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0_gold: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0_gold\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+        },
+        {
+          "check": "buggy_fails",
+          "ok": true,
+          "detail": "A0"
+        },
+        {
+          "check": "A0_cheat_fails",
+          "ok": true,
+          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0_cheat: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0_cheat\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+        },
+        {
+          "check": "cheat_rejected",
+          "ok": true,
+          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0_cheat: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0_cheat\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+        },
+        {
+          "check": "two_func_alt_accepted",
+          "ok": false,
+          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0_alt: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0_alt\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+        },
+        {
+          "check": "A1_buggy_fails",
+          "ok": true,
+          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A1: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A1\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+        },
+        {
+          "check": "A1_gold_pass",
+          "ok": false,
+          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/property-1pc-A1/tests: \"experiments/harbor_nex/tasks_ladder2b/property-1pc-A1/tests\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+        },
+        {
+          "check": "A1_cheat_fails",
+          "ok": true,
+          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A1_cheat: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A1_cheat\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+        },
+        {
+          "check": "A2_buggy_fails",
+          "ok": true,
+          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A2: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A2\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+        },
+        {
+          "check": "A2_gold_pass",
+          "ok": false,
+          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A2_gold: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A2_gold\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+        },
+        {
+          "check": "A2_cheat_fails",
+          "ok": true,
+          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A2_cheat: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A2_cheat\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+        },
+        {
+          "check": "A3_buggy_fails",
+          "ok": true,
+          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A3: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A3\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+        },
+        {
+          "check": "A3_gold_pass",
+          "ok": false,
+          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/property-1pc-A3/tests: \"experiments/harbor_nex/tasks_ladder2b/property-1pc-A3/tests\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+        },
+        {
+          "check": "A3_cheat_fails",
+          "ok": true,
+          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A3_cheat: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A3_cheat\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+        },
+        {
+          "check": "A4_buggy_fails",
+          "ok": true,
+          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A4: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A4\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+        },
+        {
+          "check": "A4_gold_pass",
+          "ok": false,
+          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A4_gold: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A4_gold\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+        },
+        {
+          "check": "A4_cheat_fails",
+          "ok": true,
+          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A4_cheat: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A4_cheat\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+        },
+        {
+          "check": "patches_skip_tests",
+          "ok": true,
+          "detail": "gold/alt/cheat generated without *_test.go hunks"
+        },
+        {
+          "check": "blackbox_hygiene",
+          "ok": true,
+          "detail": "hidden tests call only exported transaction/probe API"
+        }
+      ]
+    }
+  },
+  "meta": {
+    "property-1pc": {
+      "kind": "property",
+      "entry": "SetEnable1PC",
+      "functions": [
+        "checkAsyncCommit",
+        "checkOnePC",
+        "shouldWriteBinlog",
+        "setOnePC",
+        "setAsyncCommit",
+        "isOnePC",
+        "isAsyncCommit",
+        "checkOnePCFallBack"
+      ],
+      "closure_size": 8,
+      "closure_lines": 96,
+      "existing_tests": [
+        "TestOnePC",
+        "TestAsyncCommit"
+      ],
+      "coverage": [
+        {
+          "hidden_test": "TestOnePCAsyncDecisionProperty",
+          "contract": "One-phase and async-commit are refused for a non-global scope, a commit-ts bound check, or a binlog; async-commit is also refused when the mutation count or total key size exceeds the configured limits."
+        },
+        {
+          "hidden_test": "TestOnePCContractExamples",
+          "contract": "Global scope, flags on, no binlog, no bound check: both protocols allowed. Local scope, binlog present, or a bound check: both refused."
+        },
+        {
+          "hidden_test": "TestOnePCUnmentionedRandom",
+          "contract": "Random key sets that are not the single-letter contract example still follow the same decision; hardcoding that one key fails."
+        }
+      ],
+      "src_rel": "txnkv/transaction/2pc.go",
+      "blackbox": true
+    }
+  },
+  "harness_ok": true,
+  "harness": {
+    "ok": true,
+    "go_on_path": true,
+    "go_out": "/usr/local/go/bin/go\ngo version go1.23.12 linux/amd64\n",
+    "false_exit": 1,
+    "true_exit": 0
+  }
+}

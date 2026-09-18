@@ -1,0 +1,117 @@
+[2026/09/18 11:51:34.572 -04:00] [INFO] [region_cache.go:2794] ["change store resolve state"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]
+[2026/09/18 11:51:34.579 -04:00] [INFO] [db.go:567] ["Closing database"]
+[2026/09/18 11:51:34.580 -04:00] [INFO] [db.go:592] ["Memtable flushed"]
+[2026/09/18 11:51:34.580 -04:00] [INFO] [db.go:596] ["Compaction finished"]
+[2026/09/18 11:51:34.580 -04:00] [INFO] [db.go:615] ["BlobManager finished"]
+[2026/09/18 11:51:34.580 -04:00] [INFO] [db.go:619] ["ResourceManager finished"]
+[2026/09/18 11:51:34.580 -04:00] [INFO] [db.go:625] ["Waiting for closer"]
+[2026/09/18 11:51:34.613 -04:00] [INFO] [region_cache.go:2794] ["change store resolve state"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]
+[2026/09/18 11:51:34.613 -04:00] [INFO] [region_request.go:1580] ["send request meet region error without retry"] [req-ts=469171357512630273] [req-type=Prewrite] [region="{ region id: 2, ver: 1, confVer: 1 }"] [replica-read-type=leader] [stale-read=false] [request-sender="{rpcError:<nil>,replicaSelector: replicaSelector{selectorStateStr: accessKnownLeader, cacheRegionIsValid: false, replicaStatus: [peer: 3, store: 1, isEpochStale: false, attempts: 1, replica-epoch: 0, store-epoch: 0, store-state: resolved, store-liveness-state: reachable]}}"] [retry-times=0] [total-backoff-ms=0] [total-backoff-times=0] [max-exec-timeout-ms=20000] [total-region-errors=3-epoch_not_match:1]
+[2026/09/18 11:51:34.631 -04:00] [INFO] [db.go:567] ["Closing database"]
+[2026/09/18 11:51:34.632 -04:00] [INFO] [db.go:592] ["Memtable flushed"]
+[2026/09/18 11:51:34.632 -04:00] [INFO] [db.go:596] ["Compaction finished"]
+[2026/09/18 11:51:34.632 -04:00] [INFO] [db.go:615] ["BlobManager finished"]
+[2026/09/18 11:51:34.632 -04:00] [INFO] [db.go:619] ["ResourceManager finished"]
+[2026/09/18 11:51:34.632 -04:00] [INFO] [db.go:625] ["Waiting for closer"]
+[2026/09/18 11:51:34.664 -04:00] [INFO] [region_cache.go:2794] ["change store resolve state"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]
+[2026/09/18 11:51:34.671 -04:00] [INFO] [db.go:567] ["Closing database"]
+[2026/09/18 11:51:34.672 -04:00] [INFO] [db.go:592] ["Memtable flushed"]
+[2026/09/18 11:51:34.672 -04:00] [INFO] [db.go:596] ["Compaction finished"]
+[2026/09/18 11:51:34.672 -04:00] [INFO] [db.go:615] ["BlobManager finished"]
+[2026/09/18 11:51:34.672 -04:00] [INFO] [db.go:619] ["ResourceManager finished"]
+[2026/09/18 11:51:34.672 -04:00] [INFO] [db.go:625] ["Waiting for closer"]
+[2026/09/18 11:51:34.706 -04:00] [INFO] [region_cache.go:2794] ["change store resolve state"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]
+[2026/09/18 11:51:34.712 -04:00] [INFO] [db.go:567] ["Closing database"]
+[2026/09/18 11:51:34.713 -04:00] [INFO] [db.go:592] ["Memtable flushed"]
+[2026/09/18 11:51:34.713 -04:00] [INFO] [db.go:596] ["Compaction finished"]
+[2026/09/18 11:51:34.713 -04:00] [INFO] [db.go:615] ["BlobManager finished"]
+[2026/09/18 11:51:34.713 -04:00] [INFO] [db.go:619] ["ResourceManager finished"]
+[2026/09/18 11:51:34.713 -04:00] [INFO] [db.go:625] ["Waiting for closer"]
+[2026/09/18 11:51:34.761 -04:00] [INFO] [region_cache.go:2794] ["change store resolve state"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]
+[2026/09/18 11:51:34.768 -04:00] [INFO] [db.go:567] ["Closing database"]
+[2026/09/18 11:51:34.769 -04:00] [INFO] [db.go:592] ["Memtable flushed"]
+[2026/09/18 11:51:34.769 -04:00] [INFO] [db.go:596] ["Compaction finished"]
+[2026/09/18 11:51:34.769 -04:00] [INFO] [db.go:615] ["BlobManager finished"]
+[2026/09/18 11:51:34.769 -04:00] [INFO] [db.go:619] ["ResourceManager finished"]
+[2026/09/18 11:51:34.769 -04:00] [INFO] [db.go:625] ["Waiting for closer"]
+[2026/09/18 11:51:34.810 -04:00] [INFO] [region_cache.go:2794] ["change store resolve state"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]
+[2026/09/18 11:51:34.818 -04:00] [INFO] [db.go:567] ["Closing database"]
+[2026/09/18 11:51:34.819 -04:00] [INFO] [db.go:592] ["Memtable flushed"]
+[2026/09/18 11:51:34.819 -04:00] [INFO] [db.go:596] ["Compaction finished"]
+[2026/09/18 11:51:34.819 -04:00] [INFO] [db.go:615] ["BlobManager finished"]
+[2026/09/18 11:51:34.819 -04:00] [INFO] [db.go:619] ["ResourceManager finished"]
+[2026/09/18 11:51:34.819 -04:00] [INFO] [db.go:625] ["Waiting for closer"]
+--- FAIL: TestOnePC (0.28s)
+    --- FAIL: TestOnePC/Test1PC (0.04s)
+        1pc_test.go:74: 
+            	Error Trace:	/tmp/two_repo_val_7xg_bg2k/buggy/integration_tests/1pc_test.go:74
+            	Error:      	Should be true
+            	Test:       	TestOnePC/Test1PC
+        1pc_test.go:75: 
+            	Error Trace:	/tmp/two_repo_val_7xg_bg2k/buggy/integration_tests/1pc_test.go:75
+            	Error:      	Not equal: 
+            	            	expected: 0x0
+            	            	actual  : 0x682d4dd26b00002
+            	Test:       	TestOnePC/Test1PC
+        1pc_test.go:76: 
+            	Error Trace:	/tmp/two_repo_val_7xg_bg2k/buggy/integration_tests/1pc_test.go:76
+            	Error:      	"0" is not greater than "469171357501882369"
+            	Test:       	TestOnePC/Test1PC
+        1pc_test.go:111: 
+            	Error Trace:	/tmp/two_repo_val_7xg_bg2k/buggy/integration_tests/1pc_test.go:111
+            	Error:      	Should be true
+            	Test:       	TestOnePC/Test1PC
+        1pc_test.go:112: 
+            	Error Trace:	/tmp/two_repo_val_7xg_bg2k/buggy/integration_tests/1pc_test.go:112
+            	Error:      	Not equal: 
+            	            	expected: 0x0
+            	            	actual  : 0x682d4dd26b40003
+            	Test:       	TestOnePC/Test1PC
+        1pc_test.go:113: 
+            	Error Trace:	/tmp/two_repo_val_7xg_bg2k/buggy/integration_tests/1pc_test.go:113
+            	Error:      	"0" is not greater than "469171357502144514"
+            	Test:       	TestOnePC/Test1PC
+        1pc_test.go:129: 
+            	Error Trace:	/tmp/two_repo_val_7xg_bg2k/buggy/integration_tests/1pc_test.go:129
+            	Error:      	Should be true
+            	Test:       	TestOnePC/Test1PC
+        1pc_test.go:130: 
+            	Error Trace:	/tmp/two_repo_val_7xg_bg2k/buggy/integration_tests/1pc_test.go:130
+            	Error:      	Not equal: 
+            	            	expected: 0x0
+            	            	actual  : 0x682d4dd26b40005
+            	Test:       	TestOnePC/Test1PC
+        1pc_test.go:131: 
+            	Error Trace:	/tmp/two_repo_val_7xg_bg2k/buggy/integration_tests/1pc_test.go:131
+            	Error:      	"0" is not greater than "469171357502144516"
+            	Test:       	TestOnePC/Test1PC
+    --- FAIL: TestOnePC/Test1PCIsolation (0.04s)
+        1pc_test.go:172: 
+            	Error Trace:	/tmp/two_repo_val_7xg_bg2k/buggy/integration_tests/1pc_test.go:172
+            	Error:      	Should be true
+            	Test:       	TestOnePC/Test1PCIsolation
+    --- FAIL: TestOnePC/Test1PCWithMultiDC (0.06s)
+        1pc_test.go:259: 
+            	Error Trace:	/tmp/two_repo_val_7xg_bg2k/buggy/integration_tests/1pc_test.go:259
+            	Error:      	Should be false
+            	Test:       	TestOnePC/Test1PCWithMultiDC
+        1pc_test.go:267: 
+            	Error Trace:	/tmp/two_repo_val_7xg_bg2k/buggy/integration_tests/1pc_test.go:267
+            	Error:      	Should be true
+            	Test:       	TestOnePC/Test1PCWithMultiDC
+    --- FAIL: TestOnePC/TestTxnCommitCounter (0.05s)
+        1pc_test.go:305: 
+            	Error Trace:	/tmp/two_repo_val_7xg_bg2k/buggy/integration_tests/1pc_test.go:305
+            	Error:      	Not equal: 
+            	            	expected: 2
+            	            	actual  : 1
+            	Test:       	TestOnePC/TestTxnCommitCounter
+        1pc_test.go:307: 
+            	Error Trace:	/tmp/two_repo_val_7xg_bg2k/buggy/integration_tests/1pc_test.go:307
+            	Error:      	Not equal: 
+            	            	expected: 0
+            	            	actual  : 1
+            	Test:       	TestOnePC/TestTxnCommitCounter
+FAIL
+FAIL	integration_tests	0.310s
+FAIL

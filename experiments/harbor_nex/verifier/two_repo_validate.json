@@ -1,0 +1,19 @@
+{
+  "library_build": true,
+  "consumer_build": true,
+  "library_test_ok": true,
+  "library_failing": [],
+  "library_failing_real": [],
+  "f2p": [
+    "TestOnePC"
+  ],
+  "f2p_count": 1,
+  "flaky": false,
+  "collateral": [],
+  "collateral_ok": true,
+  "impact_n": 26,
+  "f2p_inside_impact": true,
+  "hops": 3,
+  "alt_ok": true,
+  "cheat_rejected": true
+}

@@ -50,6 +50,27 @@ Validation (built image, every affordance level):
 
 | check | result |
 |---|---|
+| `A0_buggy_fails` | pass |
+| `A0_gold_pass` | pass |
+| `gold_restore` | pass |
+| `buggy_fails` | pass |
+| `A0_cheat_fails` | pass |
+| `cheat_rejected` | pass |
+| `two_func_alt_accepted` | pass |
+| `A1_buggy_fails` | pass |
+| `A1_gold_pass` | pass |
+| `A1_cheat_fails` | pass |
+| `A2_buggy_fails` | pass |
+| `A2_gold_pass` | pass |
+| `A2_cheat_fails` | pass |
+| `A3_buggy_fails` | pass |
+| `A3_gold_pass` | pass |
+| `A3_cheat_fails` | pass |
+| `A4_buggy_fails` | pass |
+| `A4_gold_pass` | pass |
+| `A4_cheat_fails` | pass |
+| `patches_skip_tests` | pass |
+| `proof_harness` | pass |
 
 ## `spec-bb-bucket`
 
@@ -80,6 +101,27 @@ Validation (built image, every affordance level):
 
 | check | result |
 |---|---|
+| `A0_buggy_fails` | pass |
+| `A0_gold_pass` | pass |
+| `gold_restore` | pass |
+| `buggy_fails` | pass |
+| `A0_cheat_fails` | pass |
+| `cheat_rejected` | pass |
+| `two_func_alt_accepted` | pass |
+| `A1_buggy_fails` | pass |
+| `A1_gold_pass` | pass |
+| `A1_cheat_fails` | pass |
+| `A2_buggy_fails` | pass |
+| `A2_gold_pass` | pass |
+| `A2_cheat_fails` | pass |
+| `A3_buggy_fails` | pass |
+| `A3_gold_pass` | pass |
+| `A3_cheat_fails` | pass |
+| `A4_buggy_fails` | pass |
+| `A4_gold_pass` | pass |
+| `A4_cheat_fails` | pass |
+| `patches_skip_tests` | pass |
+| `proof_harness` | pass |
 
 ## `property-policy`
 
@@ -109,6 +151,27 @@ Validation (built image, every affordance level):
 
 | check | result |
 |---|---|
+| `A0_buggy_fails` | pass |
+| `A0_gold_pass` | pass |
+| `gold_restore` | pass |
+| `buggy_fails` | pass |
+| `A0_cheat_fails` | pass |
+| `cheat_rejected` | pass |
+| `two_func_alt_accepted` | pass |
+| `A1_buggy_fails` | pass |
+| `A1_gold_pass` | pass |
+| `A1_cheat_fails` | pass |
+| `A2_buggy_fails` | pass |
+| `A2_gold_pass` | pass |
+| `A2_cheat_fails` | pass |
+| `A3_buggy_fails` | pass |
+| `A3_gold_pass` | pass |
+| `A3_cheat_fails` | pass |
+| `A4_buggy_fails` | pass |
+| `A4_gold_pass` | pass |
+| `A4_cheat_fails` | pass |
+| `patches_skip_tests` | pass |
+| `proof_harness` | pass |
 
 ## `property-1pc`
 
@@ -138,6 +201,27 @@ Validation (built image, every affordance level):
 
 | check | result |
 |---|---|
+| `patches_skip_tests` | pass |
+| `proof_harness` | pass |
+| `A0_buggy_fails` | pass |
+| `A0_gold_pass` | pass |
+| `gold_restore` | pass |
+| `buggy_fails` | pass |
+| `A0_cheat_fails` | pass |
+| `cheat_rejected` | pass |
+| `two_func_alt_accepted` | pass |
+| `A1_buggy_fails` | pass |
+| `A1_gold_pass` | pass |
+| `A1_cheat_fails` | pass |
+| `A2_buggy_fails` | pass |
+| `A2_gold_pass` | pass |
+| `A2_cheat_fails` | pass |
+| `A3_buggy_fails` | pass |
+| `A3_gold_pass` | pass |
+| `A3_cheat_fails` | pass |
+| `A4_buggy_fails` | pass |
+| `A4_gold_pass` | pass |
+| `A4_cheat_fails` | pass |
 
 ## `dynamic-snapshot`
 
@@ -167,11 +251,36 @@ Validation (built image, every affordance level):
 
 | check | result |
 |---|---|
+| `patches_skip_tests` | pass |
+| `proof_harness` | pass |
+| `perf_load_recorded` | pass |
+| `gold_bench` | pass |
+| `naive_correctness` | pass |
+| `naive_fails_throughput_gate` | pass |
+| `A0_buggy_fails` | pass |
+| `A0_gold_pass` | pass |
+| `gold_restore` | pass |
+| `buggy_fails` | pass |
+| `A0_cheat_fails` | pass |
+| `cheat_rejected` | pass |
+| `two_func_alt_accepted` | pass |
+| `A1_buggy_fails` | pass |
+| `A1_gold_pass` | pass |
+| `A1_cheat_fails` | pass |
+| `A2_buggy_fails` | pass |
+| `A2_gold_pass` | pass |
+| `A2_cheat_fails` | pass |
+| `A3_buggy_fails` | pass |
+| `A3_gold_pass` | pass |
+| `A3_cheat_fails` | pass |
+| `A4_buggy_fails` | pass |
+| `A4_gold_pass` | pass |
+| `A4_cheat_fails` | pass |
 
-- gold ns/op: `None`
-- naive ns/op: `None`
-- limit (gold×3): `None`
-- loadavg at measurement: `None`
+- gold ns/op: `168.0`
+- naive ns/op: `3822.0`
+- limit (gold×3): `510`
+- loadavg at measurement: `1.95`
 - `tests/measure_gold.sh` recomputes the ceiling from gold in the image (rule A11).
 
 ## `dynamic-latch`
@@ -201,6 +310,28 @@ Validation (built image, every affordance level):
 
 | check | result |
 |---|---|
+| `A0_buggy_fails` | pass |
+| `A0_gold_pass` | pass |
+| `gold_restore` | pass |
+| `buggy_fails` | pass |
+| `A0_cheat_fails` | pass |
+| `cheat_rejected` | pass |
+| `two_func_alt_accepted` | pass |
+| `A1_buggy_fails` | pass |
+| `A1_gold_pass` | pass |
+| `A1_cheat_fails` | pass |
+| `A2_buggy_fails` | pass |
+| `A2_gold_pass` | pass |
+| `A2_cheat_fails` | pass |
+| `A3_buggy_fails` | pass |
+| `A3_gold_pass` | pass |
+| `A3_cheat_fails` | pass |
+| `A4_buggy_fails` | pass |
+| `A4_gold_pass` | pass |
+| `A4_cheat_fails` | pass |
+| `patches_skip_tests` | pass |
+| `proof_harness` | pass |
+| `dynamic_gate` | pass |
 
 - Dynamic gate: `go test -race` on the exclusive-hold / concurrent same-key tests.
 - Naive non-passer: per-slot mutex stripped (buggy tree).

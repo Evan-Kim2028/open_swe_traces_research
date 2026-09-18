@@ -1,0 +1,39 @@
+--- FAIL: TestIsExpired (0.00s)
+    local_test.go:71: 
+        	Error Trace:	/tmp/tmp5aa42pc6/src/oracle/oracles/local_test.go:71
+        	Error:      	Should be true
+        	Test:       	TestIsExpired
+--- FAIL: TestLocalOracle_UntilExpired (0.00s)
+    local_test.go:85: 
+        	Error Trace:	/tmp/tmp5aa42pc6/src/oracle/oracles/local_test.go:85
+        	Error:      	Not equal: 
+        	            	expected: -4
+        	            	actual  : 1789744684008
+        	Test:       	TestLocalOracle_UntilExpired
+    local_test.go:86: 
+        	Error Trace:	/tmp/tmp5aa42pc6/src/oracle/oracles/local_test.go:86
+        	Error:      	Not equal: 
+        	            	expected: 4
+        	            	actual  : 1789744684016
+        	Test:       	TestLocalOracle_UntilExpired
+--- FAIL: TestPDOracle_UntilExpired (0.00s)
+    pd_test.go:58: 
+        	Error Trace:	/tmp/tmp5aa42pc6/src/oracle/oracles/pd_test.go:58
+        	Error:      	Not equal: 
+        	            	expected: 25
+        	            	actual  : 35
+        	Test:       	TestPDOracle_UntilExpired
+--- FAIL: TestPdOracle_GetStaleTimestamp (0.00s)
+    pd_test.go:68: 
+        	Error Trace:	/tmp/tmp5aa42pc6/src/oracle/oracles/pd_test.go:68
+        	Error:      	Max difference between 2026-09-18 11:17:54.012411359 -0400 EDT m=-9.963907089 and 2083-06-06 02:35:48.024 -0400 EDT allowed is 2s, but difference was -497151h17m54.011588641s
+        	Test:       	TestPdOracle_GetStaleTimestamp
+--- FAIL: TestNonFutureStaleTSO (0.01s)
+    pd_test.go:176: 
+        	Error Trace:	/tmp/tmp5aa42pc6/src/oracle/oracles/pd_test.go:176
+        	Error:      	"2083-06-06 02:36:09.952 -0400 EDT" is not less than "2026-09-18 11:18:04.981020399 -0400 EDT m=+1.004701971"
+        	Test:       	TestNonFutureStaleTSO
+        	Messages:   	0
+FAIL
+FAIL	github.com/tikv/client-go/v2/oracle/oracles	1.005s
+FAIL
