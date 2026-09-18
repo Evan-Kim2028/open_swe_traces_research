@@ -68,3 +68,12 @@ empty patch fails.
 - `src/openswe_traces/posterior.py` (steps 3–4 on the grid) — trivial given the bank.
 - A rollout runner for the prober (OpenRouter or Bonsai-on-Kaggle) — external cost.
 - SWE-smith-style generation against SWE-rebench-V2 environments — moderate work.
+
+## Idea: codegraph-guided bug injection (2026-09-18)
+
+SWE-smith mutations are single-function because the generator cannot see callers. Index each host
+repo with `codegraph`, then inject at a definition and use `codegraph callers|impact <symbol>` to:
+- choose bugs whose impact set spans >1 file (cross-file difficulty on purpose);
+- verify the fail-to-pass test lies inside the impact set (the test fails for the intended reason);
+- get a rollout-free difficulty prior: files/hops between symptom (failing test) and fix site.
+Combine with `codegraph context "<issue text>"` to check the generated issue does not name the fix.
