@@ -12,11 +12,14 @@ from openswe_traces.synth.codegraph_bugs import (
     TASK_DIFFICULTY,
     go_package,
     hops_to_files,
+    hops_to_test_names,
     is_go_exported,
     parse_cover_func,
     parse_go_test_output,
+    plausible_fix_sites,
     rank_candidates,
     select_go_hosts,
+    shortest_caller_path,
 )
 
 FIXTURE = ROOT / "experiments" / "codegraph_bugs" / "fixture_host"
@@ -111,3 +114,12 @@ def test_fixture_cross_package_candidate(tmp_path: Path) -> None:
     assert "app" in add.caller_packages
     hops = hops_to_files(FIXTURE, "Add", {"app/app_test.go", "mathx/mathx_test.go"})
     assert hops is not None and hops >= 1
+    hops_fn = hops_to_test_names(FIXTURE, "Add", {"TestSumClamped", "TestAdd"})
+    assert hops_fn is not None and hops_fn >= 1
+    path = shortest_caller_path(FIXTURE, "Add", {"TestSumClamped"})
+    assert path is not None
+    assert path[0] == "Add"
+    assert path[-1] == "TestSumClamped"
+    sites = plausible_fix_sites(path)
+    assert "Add" in sites
+    assert "TestSumClamped" not in sites

@@ -421,6 +421,21 @@ def codegraph_db(repo: Path) -> Path:
     return repo / ".codegraph" / "codegraph.db"
 
 
+def _caller_graph(
+    con: sqlite3.Connection,
+) -> tuple[dict[str, list[str]], dict[str, str], dict[str, str]]:
+    """Return (callers_map, file_of, name_of) from the codegraph sqlite."""
+    callers_map: dict[str, list[str]] = defaultdict(list)
+    for src, tgt in con.execute("SELECT source, target FROM edges WHERE kind = 'calls'"):
+        callers_map[tgt].append(src)
+    file_of = {
+        nid: fp.replace("\\", "/")
+        for nid, fp in con.execute("SELECT id, file_path FROM nodes")
+    }
+    name_of = {nid: name for nid, name in con.execute("SELECT id, name FROM nodes")}
+    return callers_map, file_of, name_of
+
+
 def hops_to_files(repo: Path, symbol: str, target_files: set[str], *, max_depth: int = 8) -> int | None:
     """Shortest calls-edge path from ``symbol`` to any node in ``target_files`` (caller direction)."""
     db = codegraph_db(repo)
@@ -438,14 +453,7 @@ def hops_to_files(repo: Path, symbol: str, target_files: set[str], *, max_depth:
         ]
         if not starts:
             return None
-        # Reverse calls: source calls target, so callers of N are edges with target=N.
-        callers_map: dict[str, list[str]] = defaultdict(list)
-        for src, tgt in con.execute("SELECT source, target FROM edges WHERE kind = 'calls'"):
-            callers_map[tgt].append(src)
-        file_of = {
-            nid: fp.replace("\\", "/")
-            for nid, fp in con.execute("SELECT id, file_path FROM nodes")
-        }
+        callers_map, file_of, _name_of = _caller_graph(con)
         seen: set[str] = set(starts)
         q: deque[tuple[str, int]] = deque((s, 0) for s in starts)
         while q:
@@ -461,6 +469,112 @@ def hops_to_files(repo: Path, symbol: str, target_files: set[str], *, max_depth:
         return None
     finally:
         con.close()
+
+
+def hops_to_test_names(
+    repo: Path,
+    symbol: str,
+    test_names: set[str],
+    *,
+    max_depth: int = 12,
+) -> int | None:
+    """Shortest reverse-``calls`` hops from ``symbol`` to any named test function."""
+    db = codegraph_db(repo)
+    if not db.exists() or not test_names:
+        return None
+    wanted = set(test_names)
+    con = sqlite3.connect(str(db))
+    try:
+        starts = [
+            r[0]
+            for r in con.execute(
+                "SELECT id FROM nodes WHERE name = ? AND kind IN ('function','method')",
+                [symbol],
+            ).fetchall()
+        ]
+        if not starts:
+            return None
+        callers_map, _file_of, name_of = _caller_graph(con)
+        seen: set[str] = set(starts)
+        q: deque[tuple[str, int]] = deque((s, 0) for s in starts)
+        while q:
+            nid, dist = q.popleft()
+            if dist > 0 and name_of.get(nid) in wanted:
+                return dist
+            if dist >= max_depth:
+                continue
+            for caller in callers_map.get(nid, []):
+                if caller not in seen:
+                    seen.add(caller)
+                    q.append((caller, dist + 1))
+        return None
+    finally:
+        con.close()
+
+
+def shortest_caller_path(
+    repo: Path,
+    symbol: str,
+    test_names: set[str],
+    *,
+    max_depth: int = 12,
+) -> list[str] | None:
+    """Function names on the shortest reverse-calls path from ``symbol`` to a named test.
+
+    The path is ``[symbol, ..., TestFoo]``. Intermediate production functions are
+    plausible fix sites a solver might edit.
+    """
+    db = codegraph_db(repo)
+    if not db.exists() or not test_names:
+        return None
+    wanted = set(test_names)
+    con = sqlite3.connect(str(db))
+    try:
+        starts = [
+            r[0]
+            for r in con.execute(
+                "SELECT id FROM nodes WHERE name = ? AND kind IN ('function','method')",
+                [symbol],
+            ).fetchall()
+        ]
+        if not starts:
+            return None
+        callers_map, _file_of, name_of = _caller_graph(con)
+        parent: dict[str, str | None] = {s: None for s in starts}
+        q: deque[tuple[str, int]] = deque((s, 0) for s in starts)
+        seen: set[str] = set(starts)
+        found: str | None = None
+        while q:
+            nid, dist = q.popleft()
+            if dist > 0 and name_of.get(nid) in wanted:
+                found = nid
+                break
+            if dist >= max_depth:
+                continue
+            for caller in callers_map.get(nid, []):
+                if caller not in seen:
+                    seen.add(caller)
+                    parent[caller] = nid
+                    q.append((caller, dist + 1))
+        if found is None:
+            return None
+        chain: list[str] = []
+        cur: str | None = found
+        while cur is not None:
+            chain.append(name_of.get(cur) or cur)
+            cur = parent.get(cur)
+        chain.reverse()
+        return chain
+    finally:
+        con.close()
+
+
+def plausible_fix_sites(path: list[str] | None) -> list[str]:
+    """Production functions on a test<-cause path a solver might reasonably edit."""
+    if not path:
+        return []
+    skip_pfx = TEST_SYMBOL_PREFIXES + ("Setup", "TearDown", "Before", "After")
+    return [n for n in path if n and not n.startswith(skip_pfx)]
 
 
 def parse_go_test_output(text: str) -> tuple[list[str], list[str]]:
