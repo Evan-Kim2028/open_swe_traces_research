@@ -125,3 +125,5 @@ exit codes propagated) before trusting any REWARD it emits.
 - onepc-scope-obf: the image never pre-downloaded `integration_tests` module deps, so the verifier's
   `go test` failed at setup with no network. Dockerfile fixed. Composer's earlier fail on this task was the
   checksum guard, which fires before setup, so the trial outcome stands but the task was not provable.
+
+### Note (2026-09-18 22:00Z): ablation round 1 used a COUNT objective ("as many valid bugs as possible"), which produced only rung-1 inversions in both conditions (21 of 27/33 symbols shared, 11 byte-identical). It measures discovery of valid mutation sites, not hard-unit discovery. Round 2 uses a QUALITY objective (feature-excision units with black-box tests and a contract); see experiments/ablation_graph/RESULT2.md when written.
