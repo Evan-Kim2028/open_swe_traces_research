@@ -5,9 +5,12 @@ category = "software-engineering"
 tags = ["go", "bugfix"]
 
 [verifier]
+network_mode = "no-network"
 timeout_sec = 1800.0
 
 [agent]
+network_mode = "allowlist"
+allowed_hosts = ["cursor.com", "*.cursor.com", "*.cursor.sh", "downloads.cursor.com"]
 timeout_sec = 10800.0
 
 [environment]
