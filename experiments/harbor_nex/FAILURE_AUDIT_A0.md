@@ -16,3 +16,10 @@ where the first real failures appear.
 Ladder status: A0 fails for spec-reimpl and dynamic-pipeline; property-backoff passes at A0 (properties in words + 3
 examples were enough). A1 launched for the two failing families (`composer25-unsolv-A1`). Continue lazily: build/run A(k+1)
 only where A(k) fails.
+
+## A1 update (2026-09-18 19:55Z)
+
+| trial | outcome | class | evidence |
+|---|---|---|---|
+| dynamic-pipeline-A1 | FAIL | (a) legitimate | same hidden flush tests fail (`TestPipelinedFlushSize/Skip/Trigger`); names+descriptions did not help |
+| spec-reimpl-A1 | FAIL | **(b) verifier too narrow** | hidden `codec_v2_test.go:105` calls `suite.codec.ThornSlot(...)`; solver implemented `thornSlot` (unexported). Build failed. The hidden tests are white-box: they call internal methods by name that no prose contract can convey. For spec-only tasks the verifier must be black-box (exported API / caller-facing behavior only), or A2 (signatures) is the minimum fair level. Action: rewrite the hidden suite for spec-reimpl to black-box before counting A0/A1 as legitimate. |
