@@ -1,0 +1,395 @@
+{
+ "model": "Qwen/Qwen2.5-Coder-1.5B-Instruct",
+ "manifest": "bottom_within_task",
+ "manifest_path": "/kaggle/input/openswe-curve-manifests/bottom_within_task.jsonl",
+ "eval_path": "/kaggle/input/openswe-curve-manifests/eval_heldout_small.jsonl",
+ "final_eval_path": "/kaggle/input/openswe-curve-manifests/eval_heldout.jsonl",
+ "backend": "transformers",
+ "ddp": true,
+ "world_size": 2,
+ "max_len": 6144,
+ "max_steps": 100000,
+ "grad_accum": 8,
+ "max_sup_rows": 2048,
+ "lr": 0.0002,
+ "seed": 0,
+ "eval_every": 100,
+ "eval_windows": [
+  1000,
+  2000,
+  3000
+ ],
+ "eval_n": 60,
+ "eval_n_local": 30,
+ "final_eval_n": 300,
+ "final_eval_n_local": 150,
+ "stop_after_seconds": 25200.0,
+ "n_traces": 3034,
+ "loss_path": "supervised_positions_only",
+ "status": "stopped",
+ "steps_done": 171,
+ "windows_seen": 2736,
+ "loss": 0.6944,
+ "tok_per_s": 579.7,
+ "sup_tok_per_s": 170.5,
+ "elapsed_s": 25477,
+ "total_elapsed_s": 26142,
+ "mem_gb": 11.51,
+ "eval_ce": 0.7043691277503967,
+ "log": [
+  {
+   "step": 1,
+   "windows_seen": 16,
+   "loss": 1.4807,
+   "tok_per_s": 312.2,
+   "sup_tok_per_s": 86.0,
+   "elapsed_s": 135,
+   "mem_gb": 11.34
+  },
+  {
+   "step": 5,
+   "windows_seen": 80,
+   "loss": 1.1267,
+   "tok_per_s": 312.4,
+   "sup_tok_per_s": 80.4,
+   "elapsed_s": 691,
+   "mem_gb": 11.45
+  },
+  {
+   "step": 10,
+   "windows_seen": 160,
+   "loss": 1.1025,
+   "tok_per_s": 310.2,
+   "sup_tok_per_s": 82.4,
+   "elapsed_s": 1416,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 15,
+   "windows_seen": 240,
+   "loss": 0.9287,
+   "tok_per_s": 310.8,
+   "sup_tok_per_s": 84.4,
+   "elapsed_s": 2098,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 20,
+   "windows_seen": 320,
+   "loss": 0.9448,
+   "tok_per_s": 311.4,
+   "sup_tok_per_s": 82.3,
+   "elapsed_s": 2786,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 25,
+   "windows_seen": 400,
+   "loss": 0.9225,
+   "tok_per_s": 311.7,
+   "sup_tok_per_s": 78.8,
+   "elapsed_s": 3515,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 30,
+   "windows_seen": 480,
+   "loss": 0.9951,
+   "tok_per_s": 310.6,
+   "sup_tok_per_s": 78.1,
+   "elapsed_s": 4221,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 35,
+   "windows_seen": 560,
+   "loss": 1.0474,
+   "tok_per_s": 310.3,
+   "sup_tok_per_s": 77.8,
+   "elapsed_s": 4899,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 40,
+   "windows_seen": 640,
+   "loss": 0.8676,
+   "tok_per_s": 310.4,
+   "sup_tok_per_s": 77.6,
+   "elapsed_s": 5568,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 45,
+   "windows_seen": 720,
+   "loss": 0.8525,
+   "tok_per_s": 311.0,
+   "sup_tok_per_s": 77.6,
+   "elapsed_s": 6257,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 50,
+   "windows_seen": 800,
+   "loss": 0.7256,
+   "tok_per_s": 310.7,
+   "sup_tok_per_s": 78.5,
+   "elapsed_s": 6986,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 55,
+   "windows_seen": 880,
+   "loss": 0.7913,
+   "tok_per_s": 310.7,
+   "sup_tok_per_s": 78.5,
+   "elapsed_s": 7709,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 60,
+   "windows_seen": 960,
+   "loss": 1.217,
+   "tok_per_s": 309.4,
+   "sup_tok_per_s": 78.2,
+   "elapsed_s": 8412,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 63,
+   "windows_seen": 1008,
+   "loss": 1.0242,
+   "tok_per_s": 303.0,
+   "sup_tok_per_s": 76.5,
+   "elapsed_s": 8988,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 65,
+   "windows_seen": 1040,
+   "loss": 0.825,
+   "tok_per_s": 303.3,
+   "sup_tok_per_s": 76.6,
+   "elapsed_s": 9280,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 70,
+   "windows_seen": 1120,
+   "loss": 0.6724,
+   "tok_per_s": 303.9,
+   "sup_tok_per_s": 77.3,
+   "elapsed_s": 9919,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 75,
+   "windows_seen": 1200,
+   "loss": 0.7616,
+   "tok_per_s": 304.1,
+   "sup_tok_per_s": 77.4,
+   "elapsed_s": 10629,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 80,
+   "windows_seen": 1280,
+   "loss": 0.7692,
+   "tok_per_s": 304.2,
+   "sup_tok_per_s": 77.2,
+   "elapsed_s": 11339,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 85,
+   "windows_seen": 1360,
+   "loss": 0.8961,
+   "tok_per_s": 304.0,
+   "sup_tok_per_s": 77.4,
+   "elapsed_s": 12058,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 90,
+   "windows_seen": 1440,
+   "loss": 0.633,
+   "tok_per_s": 304.3,
+   "sup_tok_per_s": 77.7,
+   "elapsed_s": 12808,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 95,
+   "windows_seen": 1520,
+   "loss": 0.8099,
+   "tok_per_s": 304.7,
+   "sup_tok_per_s": 77.8,
+   "elapsed_s": 13519,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 100,
+   "windows_seen": 1600,
+   "loss": 0.8111,
+   "tok_per_s": 300.8,
+   "sup_tok_per_s": 76.9,
+   "elapsed_s": 14398,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 105,
+   "windows_seen": 1680,
+   "loss": 0.7194,
+   "tok_per_s": 301.2,
+   "sup_tok_per_s": 77.2,
+   "elapsed_s": 15116,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 110,
+   "windows_seen": 1760,
+   "loss": 0.8999,
+   "tok_per_s": 301.5,
+   "sup_tok_per_s": 78.2,
+   "elapsed_s": 15859,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 115,
+   "windows_seen": 1840,
+   "loss": 0.7918,
+   "tok_per_s": 302.2,
+   "sup_tok_per_s": 78.8,
+   "elapsed_s": 16532,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 120,
+   "windows_seen": 1920,
+   "loss": 0.7344,
+   "tok_per_s": 302.2,
+   "sup_tok_per_s": 79.3,
+   "elapsed_s": 17251,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 125,
+   "windows_seen": 2000,
+   "loss": 0.8457,
+   "tok_per_s": 299.2,
+   "sup_tok_per_s": 79.1,
+   "elapsed_s": 18178,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 130,
+   "windows_seen": 2080,
+   "loss": 0.8888,
+   "tok_per_s": 299.5,
+   "sup_tok_per_s": 79.4,
+   "elapsed_s": 18906,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 135,
+   "windows_seen": 2160,
+   "loss": 0.6916,
+   "tok_per_s": 299.7,
+   "sup_tok_per_s": 80.8,
+   "elapsed_s": 19614,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 140,
+   "windows_seen": 2240,
+   "loss": 0.7719,
+   "tok_per_s": 300.0,
+   "sup_tok_per_s": 82.1,
+   "elapsed_s": 20316,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 145,
+   "windows_seen": 2320,
+   "loss": 0.8146,
+   "tok_per_s": 300.4,
+   "sup_tok_per_s": 83.5,
+   "elapsed_s": 21006,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 150,
+   "windows_seen": 2400,
+   "loss": 0.7565,
+   "tok_per_s": 299.9,
+   "sup_tok_per_s": 84.5,
+   "elapsed_s": 21725,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 155,
+   "windows_seen": 2480,
+   "loss": 0.7468,
+   "tok_per_s": 300.1,
+   "sup_tok_per_s": 85.6,
+   "elapsed_s": 22436,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 160,
+   "windows_seen": 2560,
+   "loss": 0.8408,
+   "tok_per_s": 299.9,
+   "sup_tok_per_s": 86.3,
+   "elapsed_s": 23077,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 165,
+   "windows_seen": 2640,
+   "loss": 0.8768,
+   "tok_per_s": 300.0,
+   "sup_tok_per_s": 87.3,
+   "elapsed_s": 23788,
+   "mem_gb": 11.51
+  },
+  {
+   "step": 170,
+   "windows_seen": 2720,
+   "loss": 0.6944,
+   "tok_per_s": 300.1,
+   "sup_tok_per_s": 88.2,
+   "elapsed_s": 24466,
+   "mem_gb": 11.51
+  }
+ ],
+ "eval": [
+  {
+   "step": 63,
+   "windows_seen": 1008,
+   "eval_ce": 0.7445516586303711,
+   "event": "windows"
+  },
+  {
+   "step": 100,
+   "windows_seen": 1600,
+   "eval_ce": 0.7257199287414551,
+   "event": "step"
+  },
+  {
+   "step": 125,
+   "windows_seen": 2000,
+   "eval_ce": 0.7142027616500854,
+   "event": "windows"
+  },
+  {
+   "step": 171,
+   "windows_seen": 2736,
+   "eval_ce": 0.7043691277503967,
+   "event": "final_full"
+  }
+ ],
+ "updated_at": "2026-09-18T17:21:30Z",
+ "stop_reason": "stop_after_seconds",
+ "adapter_path": "/kaggle/working/adapter",
+ "final_eval_ce": 0.7043691277503967
+}

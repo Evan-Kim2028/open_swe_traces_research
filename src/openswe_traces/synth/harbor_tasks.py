@@ -350,11 +350,24 @@ def render_checksum_guard(checksums: Sequence[tuple[str, str]]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def parse_bench_ns_op(output: str, bench_name: str) -> float | None:
+    """Parse the first ns/op for ``bench_name`` from ``go test -bench`` output."""
+    pat = re.compile(
+        rf"^{re.escape(bench_name)}(?:-\d+)?\s+\d+\s+(\d+(?:\.\d+)?)\s+ns/op",
+        re.MULTILINE,
+    )
+    m = pat.search(output or "")
+    return float(m.group(1)) if m else None
+
+
 def render_test_sh(
     f2p_tests: Sequence[str],
     packages: Sequence[str],
     *,
     checksums: Sequence[tuple[str, str]] = (),
+    perf_bench: str = "",
+    perf_limit_ns: float | None = None,
+    perf_benchtime: str = "1s",
 ) -> str:
     names = [t for t in f2p_tests if t]
     if not names:
@@ -362,17 +375,44 @@ def render_test_sh(
     pattern = "^(" + "|".join(re.escape(n) for n in names) + ")$"
     pkg_args = " ".join(_go_pkg_arg(p) for p in (packages or ["./..."]))
     guard = render_checksum_guard(checksums)
-    return f"""#!/bin/bash
-set -uo pipefail
-mkdir -p /logs/verifier
-cd /app
-{guard}if go test -count=1 -timeout 15m -run '{pattern}' {pkg_args}; then
-  echo 1 > /logs/verifier/reward.txt
-  exit 0
+    correctness = f"""if go test -count=1 -timeout 15m -run '{pattern}' {pkg_args}; then
+  :
 else
   echo 0 > /logs/verifier/reward.txt
   exit 1
 fi
+"""
+    perf = ""
+    if perf_bench and perf_limit_ns is not None:
+        limit = int(perf_limit_ns)
+        perf = f"""
+BENCH_OUT=$(go test -count=1 -timeout 15m -bench='^{re.escape(perf_bench)}$' -benchtime={perf_benchtime} -run='^$' {pkg_args} || true)
+echo "$BENCH_OUT"
+NS=$(echo "$BENCH_OUT" | awk -v n='{perf_bench}' '$1 ~ "^"n"(-[0-9]+)?$" {{print $3; exit}}')
+if [ -z "$NS" ]; then
+  echo "benchmark {perf_bench} did not report ns/op" >&2
+  echo 0 > /logs/verifier/reward.txt
+  exit 1
+fi
+# awk prints the ns/op field; fail if above the gold-derived ceiling
+if ! echo "$NS" | awk -v limit='{limit}' '{{
+  ns=$1+0
+  if (ns > limit) {{
+    printf("perf gate failed: %s ns/op > %s ns/op\\n", ns, limit) > "/dev/stderr"
+    exit 1
+  }}
+  printf("perf gate ok: %s ns/op <= %s ns/op\\n", ns, limit)
+}}'; then
+  echo 0 > /logs/verifier/reward.txt
+  exit 1
+fi
+"""
+    return f"""#!/bin/bash
+set -uo pipefail
+mkdir -p /logs/verifier
+cd /app
+{guard}{correctness}{perf}echo 1 > /logs/verifier/reward.txt
+exit 0
 """
 
 
@@ -471,6 +511,9 @@ def build_task(
     guard_tests: Sequence[str] = (),
     reproduce_command: str = "",
     kind: str = "bug",
+    perf_bench: str = "",
+    perf_limit_ns: float | None = None,
+    perf_benchtime: str = "1s",
 ) -> Path:
     """Write a Harbor task directory.
 
@@ -518,7 +561,16 @@ def build_task(
     tests_dir = out_dir / "tests"
     tests_dir.mkdir(parents=True, exist_ok=True)
     test_sh = tests_dir / "test.sh"
-    test_sh.write_text(render_test_sh(sh_names, packages, checksums=checksums))
+    test_sh.write_text(
+        render_test_sh(
+            sh_names,
+            packages,
+            checksums=checksums,
+            perf_bench=perf_bench,
+            perf_limit_ns=perf_limit_ns,
+            perf_benchtime=perf_benchtime,
+        )
+    )
     test_sh.chmod(0o755)
     return out_dir
 

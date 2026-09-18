@@ -1,0 +1,40 @@
+{
+    "id": "f69d3466-226d-4deb-962c-79b804604ef3",
+    "started_at": "2026-09-18T13:26:15.670193",
+    "updated_at": "2026-09-18T13:35:42.649516",
+    "finished_at": "2026-09-18T13:35:42.649516",
+    "n_total_trials": 2,
+    "stats": {
+        "n_completed_trials": 2,
+        "n_errored_trials": 0,
+        "n_running_trials": 0,
+        "n_pending_trials": 0,
+        "n_cancelled_trials": 0,
+        "n_retries": 0,
+        "evals": {
+            "cursor-cli__cursor-grok-4.6-xhigh__tasks_iter9": {
+                "n_trials": 2,
+                "n_errors": 0,
+                "metrics": [
+                    {
+                        "mean": 1.0
+                    }
+                ],
+                "pass_at_k": {},
+                "reward_stats": {
+                    "reward": {
+                        "1.0": [
+                            "client-go-keyspacecodec__fjABCD7",
+                            "client-go-memget__ojv3sB8"
+                        ]
+                    }
+                },
+                "exception_stats": {}
+            }
+        },
+        "n_input_tokens": 4009769,
+        "n_cache_tokens": 3791872,
+        "n_output_tokens": 34064,
+        "cost_usd": null
+    }
+}

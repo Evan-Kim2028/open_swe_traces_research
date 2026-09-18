@@ -12,17 +12,21 @@ from openswe_traces.data import ROOT
 from openswe_traces.synth.difficulty import (
     design_for_rung,
     find_guard_tests,
+    find_perf_gates,
     find_sequence_tests,
     find_sparse_branches,
     is_sequence_test_name,
     name_leakage,
+    parse_bench_ns_op,
     pick_contract_drift_site,
     pick_decoy,
     pick_fair_ambiguity,
     pick_feature_excision,
     pick_implicit_invariant,
     pick_sequence_site,
+    pick_subsystem_excision,
     pick_two_site_pair,
+    race_gate,
     validate_design,
 )
 
@@ -323,3 +327,34 @@ def test_pick_feature_excision_and_rung8() -> None:
         changed_files=["left/left.go"],
     )
     assert leaky["ok"] is False
+
+
+def test_pick_subsystem_excision_perf_gates_and_race() -> None:
+    _ensure_fixture_indexed()
+    # Fixture is smaller than a real subsystem; the picker still respects mins.
+    tiny = pick_subsystem_excision(FIXTURE, min_functions=3, min_files=2, min_lines=10)
+    assert tiny is not None
+    assert len(tiny.functions) >= 3
+    assert len(tiny.files) >= 2
+    assert tiny.keep_interface is False
+    none = pick_subsystem_excision(FIXTURE, min_functions=500, min_files=50, min_lines=10_000)
+    assert none is None
+    design = design_for_rung(
+        FIXTURE, rung=8, hops=1, sites=12, decoys=0, index=0, keep_interface=False
+    )
+    assert design["rung"] == 8
+    assert design.get("subsystem") is True
+    gates = find_perf_gates(FIXTURE)
+    names = {g.name for g in gates}
+    assert "BenchmarkAdd" in names
+    assert any(g.kind == "benchmark" for g in gates)
+    parsed = parse_bench_ns_op(
+        "BenchmarkAdd-8\t12345\t67.0 ns/op\nPASS\nok\tfixturehost/mathx\t0.2s\n",
+        "BenchmarkAdd",
+    )
+    assert parsed == 67.0
+    site = race_gate(FIXTURE, n=0)
+    assert site is not None
+    assert site.file_path.endswith("mathx.go")
+    assert "mutex" in site.reason.lower() or "map" in site.reason.lower()
+

@@ -695,6 +695,195 @@ def _is_exported_go(name: str) -> bool:
     return bool(name) and name[0].isalpha() and name[0].isupper()
 
 
+@dataclass(frozen=True)
+class SubsystemExcision:
+    """Subsystem-scale excision: callee closure with interface removed."""
+
+    entry: str
+    functions: tuple[str, ...]
+    files: tuple[str, ...]
+    tests: tuple[str, ...]
+    min_lines: int
+    keep_interface: bool = False
+
+
+@dataclass(frozen=True)
+class PerfGate:
+    """Existing benchmark or timeout/complexity assertion used as a performance gate."""
+
+    name: str
+    file_path: str
+    kind: str  # benchmark | since | short | timeout
+    package: str
+
+
+@dataclass(frozen=True)
+class RaceSite:
+    """Shared structure whose tests can be run under ``go test -race``."""
+
+    name: str
+    file_path: str
+    reason: str
+    tests: tuple[str, ...]
+
+
+def pick_subsystem_excision(
+    index: Path | str,
+    *,
+    min_functions: int = 12,
+    min_files: int = 5,
+    min_lines: int = 500,
+    n: int = 0,
+    skip: frozenset[str] = frozenset(),
+) -> FeatureExcision | None:
+    """Nth self-contained callee closure large enough to be a whole subsystem.
+
+    Same BFS as ``pick_feature_excision`` with subsystem defaults (12 functions /
+    5 files / 500 lines) and ``keep_interface=False``. Apply to any
+    codegraph-indexed Go repo.
+    """
+    return pick_feature_excision(
+        index,
+        min_functions=min_functions,
+        min_files=min_files,
+        keep_interface=False,
+        min_lines=min_lines,
+        n=n,
+        skip=skip,
+    )
+
+
+_BENCH_FUNC_RE = re.compile(r"^func\s+(Benchmark[A-Za-z0-9_]+)\s*\(", re.MULTILINE)
+_TEST_FUNC_NAME_RE = re.compile(r"^func\s+(Test[A-Za-z0-9_]+)\s*\(", re.MULTILINE)
+
+
+def find_perf_gates(index: Path | str) -> list[PerfGate]:
+    """Existing ``Benchmark*`` symbols plus tests that mention a timing gate.
+
+    Timing-gate heuristics (on ``*_test.go`` only): ``b.N``, ``time.Since``,
+    ``testing.Short``, or an explicit ``-timeout`` / ``timeout``.
+    """
+    repo = Path(index)
+    con = _open(repo)
+    found: list[PerfGate] = []
+    seen: set[tuple[str, str]] = set()
+    try:
+        for name, fp in con.execute(
+            "SELECT name, file_path FROM nodes WHERE kind IN ('function','method') "
+            "AND name GLOB 'Benchmark*'"
+        ):
+            fp = (fp or "").replace("\\", "/")
+            key = (name, fp)
+            if key in seen:
+                continue
+            seen.add(key)
+            found.append(
+                PerfGate(
+                    name=name,
+                    file_path=fp,
+                    kind="benchmark",
+                    package=go_package(fp),
+                )
+            )
+    finally:
+        con.close()
+    for test_file in repo.rglob("*_test.go"):
+        if ".codegraph" in test_file.parts:
+            continue
+        try:
+            text = test_file.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        rel = test_file.relative_to(repo).as_posix() if test_file.is_relative_to(repo) else test_file.as_posix()
+        pkg = go_package(rel)
+        names = _TEST_FUNC_NAME_RE.findall(text)
+        benches = _BENCH_FUNC_RE.findall(text)
+        for bname in benches:
+            key = (bname, rel)
+            if key in seen:
+                continue
+            seen.add(key)
+            found.append(PerfGate(name=bname, file_path=rel, kind="benchmark", package=pkg))
+        kind = ""
+        if "time.Since" in text:
+            kind = "since"
+        elif "testing.Short" in text:
+            kind = "short"
+        elif re.search(r"\b-timeout\b|\btimeout\b", text, re.IGNORECASE):
+            kind = "timeout"
+        if kind:
+            for tname in names:
+                key = (tname, rel)
+                if key in seen:
+                    continue
+                seen.add(key)
+                found.append(PerfGate(name=tname, file_path=rel, kind=kind, package=pkg))
+    found.sort(key=lambda g: (0 if g.kind == "benchmark" else 1, g.name, g.file_path))
+    return found
+
+
+def parse_bench_ns_op(output: str, bench_name: str) -> float | None:
+    """Parse the first ``ns/op`` for ``bench_name`` from ``go test -bench`` output."""
+    # BenchmarkGet-16    18462    64821 ns/op
+    pat = re.compile(
+        rf"^{re.escape(bench_name)}(?:-\d+)?\s+\d+\s+(\d+(?:\.\d+)?)\s+ns/op",
+        re.MULTILINE,
+    )
+    m = pat.search(output)
+    if not m:
+        return None
+    return float(m.group(1))
+
+
+def race_gate(index: Path | str, *, n: int = 0) -> RaceSite | None:
+    """Nth production file that already mixes a mutex and a map (race candidate).
+
+    Does not inject a race. Callers still have to prove 10/10 ``go test -race``
+    fail on the buggy tree and 10/10 pass on gold before shipping the task.
+    """
+    repo = Path(index)
+    con = _open(repo)
+    try:
+        tests_of = _tests_of(con)
+        files: dict[str, list[str]] = defaultdict(list)
+        for _nid, name, fp in _functions(con):
+            files[fp].append(name)
+    finally:
+        con.close()
+    sites: list[RaceSite] = []
+    for fp, names in sorted(files.items()):
+        path = repo / fp
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if "sync.Mutex" not in text and "sync.RWMutex" not in text:
+            continue
+        if "map[" not in text:
+            continue
+        exported = [nm for nm in names if _is_exported_go(nm)]
+        entry = exported[0] if exported else names[0]
+        guards: list[str] = []
+        for nm in names:
+            guards.extend(tests_of.get(nm, ()))
+        sites.append(
+            RaceSite(
+                name=entry,
+                file_path=fp,
+                reason=(
+                    "file already has a mutex and a map on a shared structure; "
+                    "removing the lock is a legitimate race if go test -race fails 10/10"
+                ),
+                tests=tuple(sorted(set(guards))),
+            )
+        )
+    if not sites:
+        return None
+    return sites[n % len(sites)]
+
+
 def pick_feature_excision(
     index: Path | str,
     *,
@@ -856,18 +1045,33 @@ def design_for_rung(
         "cross_module": bool(cross_module),
     }
     if rung == 8:
-        min_fn = 6 if not keep_interface else max(3, sites if sites > 1 else 3)
-        min_files = 3 if not keep_interface else 2
-        min_lines = 150 if not keep_interface else 60
-        exc = pick_feature_excision(
-            repo,
-            min_functions=min_fn,
-            min_files=min_files,
-            keep_interface=keep_interface,
-            min_lines=min_lines,
-            n=index,
-        )
+        subsystem = (not keep_interface) and sites >= 12
+        if subsystem:
+            min_fn, min_files, min_lines = 12, 5, 500
+            exc = pick_subsystem_excision(
+                repo,
+                min_functions=min_fn,
+                min_files=min_files,
+                min_lines=min_lines,
+                n=index,
+            )
+        else:
+            min_fn = 6 if not keep_interface else max(3, sites if sites > 1 else 3)
+            min_files = 3 if not keep_interface else 2
+            min_lines = 150 if not keep_interface else 60
+            exc = pick_feature_excision(
+                repo,
+                min_functions=min_fn,
+                min_files=min_files,
+                keep_interface=keep_interface,
+                min_lines=min_lines,
+                n=index,
+            )
         payload["excision"] = asdict(exc) if exc else None
+        payload["subsystem"] = subsystem
+        payload["perf_gates"] = [asdict(g) for g in find_perf_gates(repo)[:8]]
+        rs = race_gate(repo, n=index)
+        payload["race_site"] = asdict(rs) if rs else None
         if exc:
             impact = impact_of(repo, exc.entry)
             payload["impact_files"] = sorted(impact_files(impact))
@@ -981,6 +1185,22 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--patch", default=None, help="If set, build a Harbor task from this patch")
     parser.add_argument(
+        "--perf-bench",
+        default=None,
+        help="Existing Benchmark* name to run as a performance gate in tests/test.sh",
+    )
+    parser.add_argument(
+        "--perf-limit-ns",
+        type=float,
+        default=None,
+        help="ns/op ceiling (typically gold measurement x 3)",
+    )
+    parser.add_argument(
+        "--perf-benchtime",
+        default="1s",
+        help="go test -benchtime for the performance gate",
+    )
+    parser.add_argument(
         "--out",
         default=None,
         help="Output dir: always writes validation.json; with --patch, a Harbor task",
@@ -1021,6 +1241,11 @@ def main(argv: list[str] | None = None) -> int:
             guards = list(payload.get("guard_tests_resolved") or design.get("guard_tests") or [])
         else:
             guards = []
+        extra_kwargs: dict[str, object] = {}
+        if args.perf_bench:
+            extra_kwargs["perf_bench"] = args.perf_bench
+            extra_kwargs["perf_limit_ns"] = args.perf_limit_ns
+            extra_kwargs["perf_benchtime"] = args.perf_benchtime
         task_dir = build_task(
             args.repo,
             args.base_commit,
@@ -1033,6 +1258,7 @@ def main(argv: list[str] | None = None) -> int:
             locality=args.locality,
             guard_tests=guards,
             kind="feature" if args.rung == 8 else "bug",
+            **extra_kwargs,
         )
         instruction = (task_dir / "instruction.md").read_text(encoding="utf-8")
         test_sh = (task_dir / "tests" / "test.sh").read_text(encoding="utf-8")
