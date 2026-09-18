@@ -57,3 +57,9 @@ after obfuscation); its Composer fail is excluded. `spec-reimpl-bb-A0` examples 
 
 Devin swe-2-high vs Composer 2.5 at A0: both fail both units. Devin is closer on the dynamic unit (1 failing
 test vs 3) and cleared the naming barrier on the codec unit. No evidence of web use in any Devin trial.
+
+## Black-box A1 (2026-09-18 21:20Z)
+
+| trial | outcome | class | evidence |
+|---|---|---|---|
+| spec-reimpl-bb-A1 (Composer) | **PASS** 7.0 min | clean | black-box property suite; hidden test names + one-line descriptions added; no web, no network commands, 64 edits. **Flip point for Composer on the codec unit (black-box) = A1.** |

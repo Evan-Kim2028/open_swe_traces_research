@@ -43,7 +43,7 @@ not of the unit alone. Current flip points on client-go:
 | unit | verifier family | Composer 2.5 | Devin swe-2-high | notes |
 |---|---|---|---|---|
 | dynamic pipeline | race + throughput gate | **A3** | > A0 (A1 not run) | fails A0-A2 (deadlock at A2), passes A3 in 5.4 min; Devin one test short at A0 |
-| codec excision | black-box properties | > A0 (A1 running) | – | A0 fail on contract examples, confirmed class (a) |
+| codec excision | black-box properties | **A1** | – | A0 fail on contract examples (class a); A1 pass in 7.0 min |
 | backoff | property verifier | A0 | – | properties in words + 3 examples sufficed |
 | any mutation rung 1–7 | in-tree example tests | A4 (trivially) | – | 26/26; also 36/36 Grok, contaminated |
 
