@@ -1,0 +1,3 @@
+#!/bin/sh
+echo "codegraph is not available in this condition" >&2
+exit 127

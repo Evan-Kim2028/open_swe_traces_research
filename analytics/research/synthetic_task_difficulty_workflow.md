@@ -77,3 +77,8 @@ repo with `codegraph`, then inject at a definition and use `codegraph callers|im
 - verify the fail-to-pass test lies inside the impact set (the test fails for the intended reason);
 - get a rollout-free difficulty prior: files/hops between symptom (failing test) and fix site.
 Combine with `codegraph context "<issue text>"` to check the generated issue does not name the fix.
+
+## Terminology
+
+Canonical definitions for "dynamic gate", "affordance level", and the verifier rule ids (A1-A10, B1-B8) live in
+`analytics/research/verifier_rules.md` section E. Use those terms and ids in all write-ups.

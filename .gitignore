@@ -54,3 +54,4 @@ analytics/query_log/*.sql
 # synthetic pilot artifacts
 experiments/codegraph_bugs/repos/
 experiments/harbor_nex/jobs/
+experiments/ablation_graph/repos/
