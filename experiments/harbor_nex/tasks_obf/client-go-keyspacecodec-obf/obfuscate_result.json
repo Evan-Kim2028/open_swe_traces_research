@@ -93,7 +93,29 @@
     "CodecPDClient.processRegionResult": "UmberFold"
   },
   "validation": {
-    "skipped": true
+    "builds": true,
+    "image": "harbor-obf-client-go-keyspacecodec",
+    "buggy": {
+      "reward": "0",
+      "rc": 0,
+      "tail": "REWARD=0\n/tmp/test.sh: line 12: go: command not found\n"
+    },
+    "gold": {
+      "reward": "0",
+      "rc": 0,
+      "tail": "patching file internal/apicodec/codec.go\npatching file internal/apicodec/codec_v1.go\npatching file internal/apicodec/codec_v2.go\npatching file internal/apicodec/mem_codec.go\npatching file internal/locate/pd_codec.go\nREWARD=0\n/tmp/test.sh: line 12: go: command not found\n"
+    },
+    "alt": {
+      "reward": "0",
+      "rc": 0,
+      "tail": "patching file internal/apicodec/codec_v2.go\nREWARD=0\n/tmp/test.sh: line 12: go: command not found\n"
+    },
+    "cheat": {
+      "reward": "0",
+      "rc": 0,
+      "tail": "patching file internal/apicodec/codec_v2.go\nREWARD=0\n/tmp/test.sh: line 12: go: command not found\n"
+    },
+    "ok": false
   },
   "searchability": [
     {

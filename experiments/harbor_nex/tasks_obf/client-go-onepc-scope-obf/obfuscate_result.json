@@ -159,7 +159,6 @@
     "PlainMutations.AppendMutation->DuskPath: gopls: renaming \"AppendMutation\" to \"DuskPath\" not possible because \"example.internal/kvstore/v2/txnkv/transaction\" has errors\n",
     "twoPhaseCommitter.SetDiskFullOpt->AmberUnit: gopls: renaming \"SetDiskFullOpt\" to \"AmberUnit\" not possible because \"example.internal/kvstore/v2/txnkv/transaction\" has errors\n",
     "twoPhaseCommitter.SetTxnSource->ThornClip: gopls: renaming \"SetTxnSource\" to \"ThornClip\" not possible because \"example.internal/kvstore/v2/txnkv/transaction\" has errors\n",
-    "twoPhaseCommitter.checkOnePC->PebbleHeap: gopls: renaming \"checkOnePC\" to \"PebbleHeap\" not possible because \"example.internal/kvstore/v2/txnkv/transaction\" has errors\n",
     "twoPhaseCommitter.shouldWriteBinlog->VellumPath: gopls: renaming \"shouldWriteBinlog\" to \"VellumPath\" not possible because \"example.internal/kvstore/v2/txnkv/transaction\" has errors\n",
     "kvstore.SplitRegions->NimbusFold: gopls: renaming \"SplitRegions\" to \"NimbusFold\" not possible because \"example.internal/kvstore/v2/txnkv/transaction\" has errors\n",
     "kvstore.WaitScatterRegionFinish->RidgeFold: gopls: renaming \"WaitScatterRegionFinish\" to \"RidgeFold\" not possible because \"example.internal/kvstore/v2/txnkv/transaction\" has errors\n",
@@ -217,7 +216,6 @@
     "PlainMutations.AppendMutation->DuskPath: gopls: renaming \"AppendMutation\" to \"DuskPath\" not possible because \"example.internal/kvstore/v2/txnkv/transaction\" has errors\n",
     "twoPhaseCommitter.SetDiskFullOpt->AmberUnit: gopls: renaming \"SetDiskFullOpt\" to \"AmberUnit\" not possible because \"example.internal/kvstore/v2/txnkv/transaction\" has errors\n",
     "twoPhaseCommitter.SetTxnSource->ThornClip: gopls: renaming \"SetTxnSource\" to \"ThornClip\" not possible because \"example.internal/kvstore/v2/txnkv/transaction\" has errors\n",
-    "twoPhaseCommitter.checkOnePC->PebbleHeap: gopls: renaming \"checkOnePC\" to \"PebbleHeap\" not possible because \"example.internal/kvstore/v2/txnkv/transaction\" has errors\n",
     "twoPhaseCommitter.shouldWriteBinlog->VellumPath: gopls: renaming \"shouldWriteBinlog\" to \"VellumPath\" not possible because \"example.internal/kvstore/v2/txnkv/transaction\" has errors\n",
     "kvstore.SplitRegions->NimbusFold: gopls: renaming \"SplitRegions\" to \"NimbusFold\" not possible because \"example.internal/kvstore/v2/txnkv/transaction\" has errors\n",
     "kvstore.WaitScatterRegionFinish->RidgeFold: gopls: renaming \"WaitScatterRegionFinish\" to \"RidgeFold\" not possible because \"example.internal/kvstore/v2/txnkv/transaction\" has errors\n",
@@ -275,7 +273,6 @@
     "PlainMutations.AppendMutation->DuskPath: gopls: renaming \"AppendMutation\" to \"DuskPath\" not possible because \"example.internal/kvstore/v2/txnkv/transaction\" has errors\n",
     "twoPhaseCommitter.SetDiskFullOpt->AmberUnit: gopls: renaming \"SetDiskFullOpt\" to \"AmberUnit\" not possible because \"example.internal/kvstore/v2/txnkv/transaction\" has errors\n",
     "twoPhaseCommitter.SetTxnSource->ThornClip: gopls: renaming \"SetTxnSource\" to \"ThornClip\" not possible because \"example.internal/kvstore/v2/txnkv/transaction\" has errors\n",
-    "twoPhaseCommitter.checkOnePC->PebbleHeap: gopls: renaming \"checkOnePC\" to \"PebbleHeap\" not possible because \"example.internal/kvstore/v2/txnkv/transaction\" has errors\n",
     "twoPhaseCommitter.shouldWriteBinlog->VellumPath: gopls: renaming \"shouldWriteBinlog\" to \"VellumPath\" not possible because \"example.internal/kvstore/v2/txnkv/transaction\" has errors\n",
     "kvstore.SplitRegions->NimbusFold: gopls: renaming \"SplitRegions\" to \"NimbusFold\" not possible because \"example.internal/kvstore/v2/txnkv/transaction\" has errors\n",
     "kvstore.WaitScatterRegionFinish->RidgeFold: gopls: renaming \"WaitScatterRegionFinish\" to \"RidgeFold\" not possible because \"example.internal/kvstore/v2/txnkv/transaction\" has errors\n",
@@ -333,7 +330,6 @@
     "PlainMutations.AppendMutation->DuskPath: gopls: renaming \"AppendMutation\" to \"DuskPath\" not possible because \"example.internal/kvstore/v2/txnkv/transaction\" has errors\n",
     "twoPhaseCommitter.SetDiskFullOpt->AmberUnit: gopls: renaming \"SetDiskFullOpt\" to \"AmberUnit\" not possible because \"example.internal/kvstore/v2/txnkv/transaction\" has errors\n",
     "twoPhaseCommitter.SetTxnSource->ThornClip: gopls: renaming \"SetTxnSource\" to \"ThornClip\" not possible because \"example.internal/kvstore/v2/txnkv/transaction\" has errors\n",
-    "twoPhaseCommitter.checkOnePC->PebbleHeap: gopls: renaming \"checkOnePC\" to \"PebbleHeap\" not possible because \"example.internal/kvstore/v2/txnkv/transaction\" has errors\n",
     "twoPhaseCommitter.shouldWriteBinlog->VellumPath: gopls: renaming \"shouldWriteBinlog\" to \"VellumPath\" not possible because \"example.internal/kvstore/v2/txnkv/transaction\" has errors\n"
   ]
 }

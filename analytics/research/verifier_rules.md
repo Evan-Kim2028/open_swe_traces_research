@@ -113,3 +113,15 @@ Composer's 5/6 clean passes on these tasks were consistent with that. `validatio
 New process rule **C5**: a proof that reports gold failing is a harness failure until confirmed by hand
 (gold must pass by construction, rule A1). Validate the proof harness itself (toolchain on PATH,
 exit codes propagated) before trusting any REWARD it emits.
+
+### F.2 Re-proof findings (2026-09-18 21:10Z)
+- memget-obf: gold passes; a loop re-proof under load avg 10 tripped the perf gate. **Rule A11 (new):**
+  timing gates must be proved with the host otherwise idle, and the threshold must carry a margin
+  (gold x3 was enough at load 1, not at load 10); record load with every perf measurement.
+- batchcmds-obf: the obfuscated `gold.patch` contained hunks in `client_test.go` (rename spill-over), so
+  the checksum guard failed gold itself. Test hunks stripped from gold; task was valid for solvers
+  (Composer passed without gold). **Rule A12 (new):** gold/alt/cheat patches must not touch guarded test
+  files; check this before the image proof.
+- onepc-scope-obf: the image never pre-downloaded `integration_tests` module deps, so the verifier's
+  `go test` failed at setup with no network. Dockerfile fixed. Composer's earlier fail on this task was the
+  checksum guard, which fires before setup, so the trial outcome stands but the task was not provable.

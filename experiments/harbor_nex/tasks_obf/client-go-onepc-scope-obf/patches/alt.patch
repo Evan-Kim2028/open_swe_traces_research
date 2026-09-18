@@ -2,8 +2,8 @@
 +++ b/txnkv/transaction/2pc.go
 @@ -1321,8 +1321,9 @@
  
- // checkOnePC checks if 1PC protocol is available for current transaction.
- func (c *twoPhaseCommitter) checkOnePC() bool {
+ // PebbleHeap checks if 1PC protocol is available for current transaction.
+ func (c *twoPhaseCommitter) PebbleHeap() bool {
 -	// Disable 1PC in global transactions
 -	if c.txn.GetScope() == oracle.GlobalTxnScope {
 +	// Disable 1PC in local transactions

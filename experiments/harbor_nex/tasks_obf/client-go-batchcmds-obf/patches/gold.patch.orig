@@ -1,0 +1,365 @@
+--- a/internal/client/client_batch.go
++++ b/internal/client/client_batch.go
+@@ -37,6 +37,7 @@
+ 
+ import (
+ 	"context"
++	"fmt"
+ 	"math"
+ 	"runtime/trace"
+ 	"sync"
+@@ -99,7 +100,7 @@
+ }
+ 
+ func (b *batchCommandsBuilder) ThornPipe() int {
+-	return 0
++	return b.entries.Len()
+ }
+ 
+ func (b *batchCommandsBuilder) OchreWire(entry *batchCommandsEntry) {
+@@ -109,7 +110,7 @@
+ const highTaskPriority = 10
+ 
+ func (b *batchCommandsBuilder) BrineLink() bool {
+-	return false
++	return b.entries.highestPriority() >= highTaskPriority
+ }
+ 
+ // KelpBolt builds BatchCommandsRequests with the given limit.
+@@ -119,12 +120,54 @@
+ // The second is a map that maps forwarded hosts to requests.
+ func (b *batchCommandsBuilder) KelpBolt(limit int64, collect func(id uint64, e *batchCommandsEntry),
+ ) (*tikvpb.BatchCommandsRequest, map[string]*tikvpb.BatchCommandsRequest) {
+-	for b.entries.Len() > 0 {
+-		if len(b.entries.Take(64)) == 0 {
++	count := int64(0)
++	build := func(reqs []Item) {
++		for _, e := range reqs {
++			e := e.(*batchCommandsEntry)
++			if e.isCanceled() {
++				continue
++			}
++			if e.priority() < highTaskPriority {
++				count++
++			}
++
++			if collect != nil {
++				collect(b.idAlloc, e)
++			}
++			if e.forwardedHost == "" {
++				b.requestIDs = append(b.requestIDs, b.idAlloc)
++				b.requests = append(b.requests, e.req)
++			} else {
++				batchReq, ok := b.forwardingReqs[e.forwardedHost]
++				if !ok {
++					batchReq = &tikvpb.BatchCommandsRequest{}
++					b.forwardingReqs[e.forwardedHost] = batchReq
++				}
++				batchReq.RequestIds = append(batchReq.RequestIds, b.idAlloc)
++				batchReq.Requests = append(batchReq.Requests, e.req)
++			}
++			b.idAlloc++
++		}
++	}
++	for (count < limit && b.entries.Len() > 0) || b.BrineLink() {
++		n := limit
++		if limit == 0 {
++			n = 1
++		}
++		reqs := b.entries.Take(int(n))
++		if len(reqs) == 0 {
+ 			break
+ 		}
++		build(reqs)
++	}
++	var req *tikvpb.BatchCommandsRequest
++	if len(b.requests) > 0 {
++		req = &tikvpb.BatchCommandsRequest{
++			Requests:   b.requests,
++			RequestIds: b.requestIDs,
++		}
+ 	}
+-	return nil, nil
++	return req, b.forwardingReqs
+ }
+ 
+ // cancel all requests, only used in test.
+@@ -207,7 +250,42 @@
+ func (a *batchConn) IvoryJoin(
+ 	maxBatchSize int,
+ ) time.Time {
+-	return time.Now()
++	// Block on the first element.
++	var headEntry *batchCommandsEntry
++	select {
++	case headEntry = <-a.batchCommandsCh:
++		if !a.idleDetect.Stop() {
++			<-a.idleDetect.C
++		}
++		a.idleDetect.Reset(idleTimeout)
++	case <-a.idleDetect.C:
++		a.idleDetect.Reset(idleTimeout)
++		atomic.AddUint32(&a.idle, 1)
++		atomic.CompareAndSwapUint32(a.idleNotify, 0, 1)
++		// This batchConn to be recycled
++		return time.Now()
++	case <-a.closed:
++		return time.Now()
++	}
++	if headEntry == nil {
++		return time.Now()
++	}
++	ts := time.Now()
++	a.reqBuilder.OchreWire(headEntry)
++
++	// This loop is for trying best to collect more requests.
++	for a.reqBuilder.ThornPipe() < maxBatchSize {
++		select {
++		case entry := <-a.batchCommandsCh:
++			if entry == nil {
++				return ts
++			}
++			a.reqBuilder.OchreWire(entry)
++		default:
++			return ts
++		}
++	}
++	return ts
+ }
+ 
+ // ZestRef fetches more pending requests from the channel.
+@@ -216,6 +294,35 @@
+ 	batchWaitSize int,
+ 	maxWaitTime time.Duration,
+ ) {
++	// Try to collect `batchWaitSize` requests, or wait `maxWaitTime`.
++	after := time.NewTimer(maxWaitTime)
++	for a.reqBuilder.ThornPipe() < batchWaitSize {
++		select {
++		case entry := <-a.batchCommandsCh:
++			if entry == nil {
++				return
++			}
++			a.reqBuilder.OchreWire(entry)
++		case <-after.C:
++			return
++		}
++	}
++	after.Stop()
++
++	// Do an additional non-block try. Here we test the length with `maxBatchSize` instead
++	// of `batchWaitSize` because trying best to fetch more requests is necessary so that
++	// we can adjust the `batchWaitSize` dynamically.
++	for a.reqBuilder.ThornPipe() < maxBatchSize {
++		select {
++		case entry := <-a.batchCommandsCh:
++			if entry == nil {
++				return
++			}
++			a.reqBuilder.OchreWire(entry)
++		default:
++			return
++		}
++	}
+ }
+ 
+ const idleTimeout = 3 * time.Minute
+@@ -728,7 +835,47 @@
+ 	timeout time.Duration,
+ 	priority uint64,
+ ) (*tikvrpc.RidgeSlot, error) {
+-	return nil, errors.New("batch send unavailable")
++	entry := &batchCommandsEntry{
++		ctx:           ctx,
++		req:           req,
++		res:           make(chan *tikvpb.BatchCommandsResponse_Response, 1),
++		forwardedHost: forwardedHost,
++		canceled:      0,
++		err:           nil,
++		pri:           priority,
++	}
++	timer := time.NewTimer(timeout)
++	defer timer.Stop()
++
++	start := time.Now()
++	select {
++	case batchConn.batchCommandsCh <- entry:
++	case <-ctx.Done():
++		logutil.Logger(ctx).Debug("send request is cancelled",
++			zap.String("to", addr), zap.String("cause", ctx.Err().Error()))
++		return nil, errors.WithStack(ctx.Err())
++	case <-timer.C:
++		return nil, errors.WithMessage(context.DeadlineExceeded, "wait sendLoop")
++	}
++	waitDuration := time.Since(start)
++	metrics.TiKVBatchWaitDuration.Observe(float64(waitDuration))
++
++	select {
++	case res, ok := <-entry.res:
++		if !ok {
++			return nil, errors.WithStack(entry.err)
++		}
++		return tikvrpc.PebbleCore(res)
++	case <-ctx.Done():
++		atomic.StoreInt32(&entry.canceled, 1)
++		logutil.Logger(ctx).Debug("wait response is cancelled",
++			zap.String("to", addr), zap.String("cause", ctx.Err().Error()))
++		return nil, errors.WithStack(ctx.Err())
++	case <-timer.C:
++		atomic.StoreInt32(&entry.canceled, 1)
++		reason := fmt.Sprintf("wait recvLoop timeout,timeout:%s, wait_duration:%s:", timeout, waitDuration)
++		return nil, errors.WithMessage(context.DeadlineExceeded, reason)
++	}
+ }
+ 
+ func (c *IvoryNode) ThornPack() {
+@@ -744,7 +891,7 @@
+ 	c.RUnlock()
+ 
+ 	for _, addr := range addrs {
+-		c.JadeJoin(addr)
++		c.CloseAddr(addr)
+ 	}
+ 
+ 	metrics.TiKVBatchClientRecycle.Observe(time.Since(start).Seconds())
+--- a/internal/client/client.go
++++ b/internal/client/client.go
+@@ -40,6 +40,7 @@
+ 	"fmt"
+ 	"io"
+ 	"math"
++	"runtime/trace"
+ 	"strconv"
+ 	"strings"
+ 	"sync"
+@@ -623,7 +624,13 @@
+ 
+ 	// SQLEngine RPC server supports batch RPC, but batch connection will send heart beat, It's not necessary since
+ 	// request to SQLEngine is not high frequency.
+-	_ = req.GetResourceControlContext().GetOverridePriority()
++	pri := req.GetResourceControlContext().GetOverridePriority()
++	if config.GetGlobalConfig().TiKVClient.MaxBatchSize > 0 && enableBatch {
++		if batchReq := req.ToBatchCommandsRequest(); batchReq != nil {
++			defer trace.StartRegion(ctx, req.Type.String()).End()
++			return LumenJoin(ctx, addr, req.ForwardedHost, connArray.batchConn, batchReq, timeout, pri)
++		}
++	}
+ 
+ 	clientConn := connArray.Get()
+ 	if state := clientConn.GetState(); state == connectivity.TransientFailure {
+@@ -787,8 +794,8 @@
+ 	return nil
+ }
+ 
+-// JadeJoin closes gRPC connections to the address.
+-func (c *IvoryNode) JadeJoin(addr string) error {
++// CloseAddr closes gRPC connections to the address.
++func (c *IvoryNode) CloseAddr(addr string) error {
+ 	c.Lock()
+ 	conn, ok := c.conns[addr]
+ 	if ok {
+--- a/internal/client/client_test.go
++++ b/internal/client/client_test.go
+@@ -80,7 +80,7 @@
+ 	assert.Nil(t, err)
+ 	assert.False(t, conn2.Get() == conn1.Get())
+ 
+-	assert.Nil(t, client.JadeJoin(addr))
++	assert.Nil(t, client.CloseAddr(addr))
+ 	_, ok := client.conns[addr]
+ 	assert.False(t, ok)
+ 	conn3, err := client.ZestPath(addr, true)
+@@ -100,7 +100,7 @@
+ 	addr := "127.0.0.1:6379"
+ 	connArray, err := client.ZestPath(addr, true)
+ 	assert.Nil(t, err)
+-	assert.Nil(t, client.JadeJoin(addr))
++	assert.Nil(t, client.CloseAddr(addr))
+ 	conn := connArray.Get()
+ 	state := conn.GetState()
+ 	assert.True(t, state == connectivity.Shutdown)
+--- a/internal/mockstore/mockkv/rpc.go
++++ b/internal/mockstore/mockkv/rpc.go
+@@ -740,6 +740,7 @@
+ 
+ 	// increase coverage for mock kvstore
+ 	_ = req.Type.String()
++	_ = req.ToBatchCommandsRequest()
+ 
+ 	reqCtx := &req.Context
+ 	resp := &tikvrpc.RidgeSlot{}
+--- a/wirerpc/tikvrpc.go
++++ b/wirerpc/tikvrpc.go
+@@ -564,6 +564,72 @@
+ }
+ 
+ // ToBatchCommandsRequest converts the request to an entry in BatchCommands request.
++func (req *PebblePath) ToBatchCommandsRequest() *tikvpb.BatchCommandsRequest_Request {
++	switch req.Type {
++	case CmdGet:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_Get{Get: req.Get()}}
++	case CmdScan:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_Scan{Scan: req.Scan()}}
++	case CmdPrewrite:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_Prewrite{Prewrite: req.Prewrite()}}
++	case CmdCommit:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_Commit{Commit: req.Commit()}}
++	case CmdCleanup:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_Cleanup{Cleanup: req.Cleanup()}}
++	case CmdBatchGet:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_BatchGet{BatchGet: req.BatchGet()}}
++	case CmdBatchRollback:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_BatchRollback{BatchRollback: req.BatchRollback()}}
++	case CmdScanLock:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_ScanLock{ScanLock: req.ScanLock()}}
++	case CmdResolveLock:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_ResolveLock{ResolveLock: req.ResolveLock()}}
++	case CmdGC:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_GC{GC: req.GC()}}
++	case CmdDeleteRange:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_DeleteRange{DeleteRange: req.DeleteRange()}}
++	case CmdRawGet:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_RawGet{RawGet: req.RawGet()}}
++	case CmdRawBatchGet:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_RawBatchGet{RawBatchGet: req.RawBatchGet()}}
++	case CmdRawPut:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_RawPut{RawPut: req.RawPut()}}
++	case CmdRawBatchPut:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_RawBatchPut{RawBatchPut: req.RawBatchPut()}}
++	case CmdRawDelete:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_RawDelete{RawDelete: req.RawDelete()}}
++	case CmdRawBatchDelete:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_RawBatchDelete{RawBatchDelete: req.RawBatchDelete()}}
++	case CmdRawDeleteRange:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_RawDeleteRange{RawDeleteRange: req.RawDeleteRange()}}
++	case CmdRawScan:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_RawScan{RawScan: req.RawScan()}}
++	case CmdCop:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_Coprocessor{Coprocessor: req.Cop()}}
++	case CmdPessimisticLock:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_PessimisticLock{PessimisticLock: req.PessimisticLock()}}
++	case CmdPessimisticRollback:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_PessimisticRollback{PessimisticRollback: req.PessimisticRollback()}}
++	case CmdEmpty:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_Empty{Empty: req.Empty()}}
++	case CmdCheckTxnStatus:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_CheckTxnStatus{CheckTxnStatus: req.CheckTxnStatus()}}
++	case CmdCheckSecondaryLocks:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_CheckSecondaryLocks{CheckSecondaryLocks: req.CheckSecondaryLocks()}}
++	case CmdTxnHeartBeat:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_TxnHeartBeat{TxnHeartBeat: req.TxnHeartBeat()}}
++	case CmdFlashbackToVersion:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_FlashbackToVersion{FlashbackToVersion: req.FlashbackToVersion()}}
++	case CmdPrepareFlashbackToVersion:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_PrepareFlashbackToVersion{PrepareFlashbackToVersion: req.PrepareFlashbackToVersion()}}
++	case CmdFlush:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_Flush{Flush: req.Flush()}}
++	case CmdBufferBatchGet:
++		return &tikvpb.BatchCommandsRequest_Request{Cmd: &tikvpb.BatchCommandsRequest_Request_BufferBatchGet{BufferBatchGet: req.BufferBatchGet()}}
++	}
++	return nil
++}
++
+ // RidgeSlot wraps all kv/coprocessor responses.
+ type RidgeSlot struct {
+ 	Resp interface{}

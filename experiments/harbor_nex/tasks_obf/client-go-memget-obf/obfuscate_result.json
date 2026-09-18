@@ -52,7 +52,29 @@
     "MemKeyHandle.toAddr": "OchrePath"
   },
   "validation": {
-    "skipped": true
+    "builds": true,
+    "image": "harbor-obf-client-go-memget",
+    "buggy": {
+      "reward": "0",
+      "rc": 0,
+      "tail": "REWARD=0\n/tmp/test.sh: line 12: go: command not found\n"
+    },
+    "gold": {
+      "reward": "0",
+      "rc": 0,
+      "tail": "patching file internal/unionstore/memdb.go\nREWARD=0\n/tmp/test.sh: line 12: go: command not found\n"
+    },
+    "alt": {
+      "reward": "0",
+      "rc": 0,
+      "tail": "patching file internal/unionstore/memdb.go\nREWARD=0\n/tmp/test.sh: line 12: go: command not found\n"
+    },
+    "cheat": {
+      "reward": "0",
+      "rc": 0,
+      "tail": "patching file internal/unionstore/memdb.go\nREWARD=0\n/tmp/test.sh: line 12: go: command not found\n"
+    },
+    "ok": false
   },
   "searchability": [
     {

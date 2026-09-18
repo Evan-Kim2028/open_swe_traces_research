@@ -2,8 +2,8 @@
  "rule_verdicts": [
   {
    "rule_id": "A1",
-   "passed": false,
-   "evidence": "reproof 2026-09-18 in rebuilt image: buggy_rc=1 gold_rc=1 (earlier record came from a proof harness without go on PATH)",
+   "passed": true,
+   "evidence": "reproof unloaded: gold rc=0, perf gate 115 ns/op; earlier rc=1 was the timing gate under load avg 10",
    "skipped": false
   },
   {
@@ -44,8 +44,8 @@
   },
   {
    "rule_id": "A8",
-   "passed": false,
-   "evidence": "reproof 2026-09-18 in rebuilt image: buggy_rc=1 gold_rc=1 (earlier record came from a proof harness without go on PATH)",
+   "passed": true,
+   "evidence": "reproof unloaded: gold rc=0, perf gate 115 ns/op; earlier rc=1 was the timing gate under load avg 10",
    "skipped": false
   },
   {
