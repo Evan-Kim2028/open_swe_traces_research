@@ -23,3 +23,16 @@ only where A(k) fails.
 |---|---|---|---|
 | dynamic-pipeline-A1 | FAIL | (a) legitimate | same hidden flush tests fail (`TestPipelinedFlushSize/Skip/Trigger`); names+descriptions did not help |
 | spec-reimpl-A1 | FAIL | **(b) verifier too narrow** | hidden `codec_v2_test.go:105` calls `suite.codec.ThornSlot(...)`; solver implemented `thornSlot` (unexported). Build failed. The hidden tests are white-box: they call internal methods by name that no prose contract can convey. For spec-only tasks the verifier must be black-box (exported API / caller-facing behavior only), or A2 (signatures) is the minimum fair level. Action: rewrite the hidden suite for spec-reimpl to black-box before counting A0/A1 as legitimate. |
+
+## A2 / Devin / black-box update (2026-09-18 20:25Z)
+
+| trial | outcome | class | evidence |
+|---|---|---|---|
+| spec-reimpl-A2 (Composer) | FAIL | (a) legitimate | signatures given, compiles, hidden `TestCodecV2` still fails on behavior; 84 edits, no web |
+| dynamic-pipeline-A2 (Composer) | FAIL | (a) legitimate | implementation deadlocks in `asyncFlush`; verifier hit the 900 s timeout; 27 edits, no web |
+| dynamic-pipeline-A0 (Devin swe-2-high) | FAIL | (a) legitimate, clean | only `TestPipelinedFlushGet` fails (Composer failed 3 tests at A0); tools exec/read/grep/edit/write only; no web tools; one harmless `git log` on a history-less tree |
+| spec-reimpl-A0 (Composer), re-scored on the BLACK-BOX property suite | FAIL | (a) legitimate (reinstated) | compiles under the black-box suite; passes contract examples and unseen-random symmetry; fails key-range round-trip on empty ranges and epoch clip out-of-keyspace. The original A0 fail was behavioral, not naming. |
+
+Ladder state: dynamic-pipeline fails A0, A1, A2 for Composer; A3 (one hidden test file restored) launched.
+spec-reimpl: white-box ladder stopped at A2 (fair from A2 up, fails there); black-box family `spec-reimpl-bb` A0 running.
+Devin: 1 clean legitimate fail so far, marginally closer than Composer on the same task.

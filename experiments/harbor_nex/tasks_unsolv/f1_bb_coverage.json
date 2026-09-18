@@ -1,0 +1,38 @@
+[
+  {
+    "property": "TestCodecKeyRangeRoundTrip / key+range encode then decode",
+    "contract": "Encoding a user key or range and then decoding it returns the original bytes; the same round-trip holds for region-boundary keys."
+  },
+  {
+    "property": "TestCodecKeyRangeRoundTrip / monotonicity",
+    "contract": "If user key A is byte-wise less than B, both the ordinary encoding and the region-boundary encoding of A are byte-wise less than those of B (order preserved within a keyspace)."
+  },
+  {
+    "property": "TestCodecClipProperties / epoch region list",
+    "contract": "Epoch-not-match region lists are clipped to the keyspace: a region covering the whole keyspace becomes empty/empty, a region wholly outside is dropped, an overlapping region keeps only the overlap as user keys, and remaining regions stay in original order."
+  },
+  {
+    "property": "TestCodecClipProperties / buckets",
+    "contract": "Bucket split keys from the previous keyspace clip to an empty user start, from the next keyspace to an empty user end, interior keys drop the header, complement keys are not leaked, and interior order is preserved."
+  },
+  {
+    "property": "TestCodecContractExamples / raw get 0x1092",
+    "contract": "A raw single-key lookup of user key `key` in keyspace 0x1092 must be sent with the 4-byte raw-mode header `0x72 0x00 0x10 0x92` followed by the user key, not the bare user key."
+  },
+  {
+    "property": "TestCodecContractExamples / WillowNode + LumenSeal",
+    "contract": "A 4-byte header starting with txn `x` or raw `r` followed by 0x010203 yields keyspace id 0x010203; a header whose mode byte is neither errors with the all-ones null id. API v2 splits a well-formed key into a 4-byte header and the user suffix; API v1 is identity; an invalid v2 mode byte errors."
+  },
+  {
+    "property": "TestCodecContractExamples / empty range + construction",
+    "contract": "Empty user ranges in keyspace 0x1092 expand to `[0x72 0x00 0x10 0x92, 0x72 0x00 0x10 0x93)`. Construction rejects a keyspace id that does not fit in 24 bits and rejects an unknown mode; the last raw id wraps the mode byte from `r` to `s`."
+  },
+  {
+    "property": "TestCodecContractExamples / MPP + buckets + v1 + fatal",
+    "contract": "An MPP dispatch in keyspace 4242 must advertise that id, API v2, and encoded ranges. Bucket keys `a`,`b`,`c` mixed with previous/next neighbors round-trip to those user keys plus empty sentinels. A store-safe-ts request still encodes on the v1 transactional codec. A truncated region key is a fatal decode."
+  },
+  {
+    "property": "TestCodecUnmentionedRandom / three properties on unseen inputs",
+    "contract": "The same round-trip, range, and request/response symmetry rules hold for randomly generated transactional keyspace ids and keys that the instruction never names (not 0x1092/4242/0x010203, not `key`/`a`/`b`/`c`)."
+  }
+]

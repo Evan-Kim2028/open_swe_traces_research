@@ -1,0 +1,40 @@
+{
+    "id": "784a38ff-c58a-4527-af65-f52ce899c8b7",
+    "started_at": "2026-09-18T15:54:05.912314",
+    "updated_at": "2026-09-18T16:13:12.041654",
+    "finished_at": "2026-09-18T16:13:12.041654",
+    "n_total_trials": 2,
+    "stats": {
+        "n_completed_trials": 2,
+        "n_errored_trials": 0,
+        "n_running_trials": 0,
+        "n_pending_trials": 0,
+        "n_cancelled_trials": 0,
+        "n_retries": 0,
+        "evals": {
+            "cursor-cli__composer-2.5__tasks_unsolv_A2": {
+                "n_trials": 2,
+                "n_errors": 0,
+                "metrics": [
+                    {
+                        "mean": 0.0
+                    }
+                ],
+                "pass_at_k": {},
+                "reward_stats": {
+                    "reward": {
+                        "0.0": [
+                            "spec-reimpl-A2__9D525tY",
+                            "dynamic-pipeline-A2__QQQRABw"
+                        ]
+                    }
+                },
+                "exception_stats": {}
+            }
+        },
+        "n_input_tokens": 6572684,
+        "n_cache_tokens": 6419579,
+        "n_output_tokens": 56913,
+        "cost_usd": 1.5027508
+    }
+}
