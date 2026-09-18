@@ -1,0 +1,118 @@
+{
+    "id": "b525af1d-e3ed-4d75-8eac-c03b9f156b0e",
+    "task_name": "nograph-file-filter-A0",
+    "trial_name": "nograph-file-filter-A0__TwGTKHT",
+    "trial_uri": "file:///home/evan/openswe/jobs/abl2-A0/nograph-file-filter-A0__TwGTKHT",
+    "task_id": {
+        "path": "/home/evan/openswe/run_abl2_A0/nograph-file-filter-A0"
+    },
+    "source": "run_abl2_A0",
+    "task_checksum": "d3ee3bf825aa9e62bbe3aadd6fdf87e21dc8aabca91e1d771b4aa130dabbd6e5",
+    "config": {
+        "task": {
+            "path": "/home/evan/openswe/run_abl2_A0/nograph-file-filter-A0",
+            "git_url": null,
+            "git_commit_id": null,
+            "name": null,
+            "ref": null,
+            "overwrite": false,
+            "download_dir": null,
+            "source": "run_abl2_A0"
+        },
+        "trial_name": "nograph-file-filter-A0__TwGTKHT",
+        "trials_dir": "/home/evan/openswe/jobs/abl2-A0",
+        "install_only": false,
+        "timeout_multiplier": 1.0,
+        "agent_timeout_multiplier": null,
+        "verifier_timeout_multiplier": null,
+        "agent_setup_timeout_multiplier": null,
+        "environment_build_timeout_multiplier": null,
+        "agent": {
+            "name": "cursor-cli",
+            "import_path": null,
+            "model_name": "cursor/composer-2.5",
+            "n_concurrent": null,
+            "concurrency_group": null,
+            "skills": [],
+            "override_timeout_sec": null,
+            "override_setup_timeout_sec": null,
+            "max_timeout_sec": null,
+            "resume_trajectory": false,
+            "load_trajectory": null,
+            "extra_allowed_hosts": [],
+            "kwargs": {},
+            "mcp_servers": []
+        },
+        "user_agent": null,
+        "environment": {
+            "type": "docker",
+            "import_path": null,
+            "force_build": false,
+            "delete": true,
+            "cpu_enforcement_policy": "auto",
+            "memory_enforcement_policy": "auto",
+            "override_cpus": null,
+            "override_memory_mb": null,
+            "override_storage_mb": null,
+            "override_gpus": null,
+            "override_tpu": null,
+            "mounts": null,
+            "extra_docker_compose": [],
+            "kwargs": {},
+            "extra_allowed_hosts": []
+        },
+        "verifier": {
+            "override_timeout_sec": null,
+            "max_timeout_sec": null,
+            "disable": false
+        },
+        "artifacts": [],
+        "extra_instruction_paths": [],
+        "extra_instructions": [],
+        "job_id": "6c675606-61d7-43f7-ac47-671ec61dff74",
+        "source_trial": null
+    },
+    "agent_info": {
+        "name": "cursor-cli",
+        "version": "2026.09.15-d2fe57e",
+        "model_info": {
+            "name": "composer-2.5",
+            "provider": "cursor"
+        }
+    },
+    "agent_result": {
+        "n_input_tokens": 1746050,
+        "n_cache_tokens": 1698365,
+        "n_output_tokens": 14741,
+        "cost_usd": 0.400368,
+        "model_usage": null,
+        "rollout_details": null,
+        "metadata": null
+    },
+    "verifier_result": {
+        "rewards": {
+            "reward": 1.0
+        }
+    },
+    "verifier_environment_mode": "shared",
+    "exception_info": null,
+    "started_at": "2026-09-18T22:45:56.750708Z",
+    "finished_at": "2026-09-18T22:50:48.782167Z",
+    "environment_setup": {
+        "started_at": "2026-09-18T22:45:57.168536Z",
+        "finished_at": "2026-09-18T22:46:38.681162Z"
+    },
+    "agent_setup": {
+        "started_at": "2026-09-18T22:46:38.681211Z",
+        "finished_at": "2026-09-18T22:46:54.976941Z"
+    },
+    "agent_execution": {
+        "started_at": "2026-09-18T22:46:54.977072Z",
+        "finished_at": "2026-09-18T22:50:30.577582Z"
+    },
+    "verifier": {
+        "started_at": "2026-09-18T22:50:31.302940Z",
+        "finished_at": "2026-09-18T22:50:35.592265Z"
+    },
+    "step_results": null
+}

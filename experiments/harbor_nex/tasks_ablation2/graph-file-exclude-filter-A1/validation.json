@@ -1,0 +1,192 @@
+{
+  "family": "graph-file-exclude-filter",
+  "level": 1,
+  "instruction_self_check": {
+    "names_present": true,
+    "has_symptom_paraphrase": true,
+    "leaked_symbols": [],
+    "leaked_files": [],
+    "has_line_numbers": false,
+    "has_diff": false,
+    "reproduce_command": "if go test -count=1 -timeout 15m -run '^(TestFileFilter|TestFileExcludeFilterAtRuleLevel|TestGetConfig)$' ./lint/... ./test/... ./config/...; then",
+    "can_reproduce_one_command": true,
+    "diff_hunk_tokens_in_instruction": [],
+    "locality": 0,
+    "ok": true
+  },
+  "changed_symbols": [
+    "ParseFileFilter",
+    "prepareRegexp",
+    "MatchFileName",
+    "Initialize",
+    "MustExclude"
+  ],
+  "changed_files": [
+    "filefilter.go",
+    "config.go"
+  ],
+  "rule_verdicts": [
+    {
+      "rule_id": "A1",
+      "passed": true,
+      "evidence": "payload.checks.gold_restore=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A2",
+      "passed": false,
+      "evidence": "no alt.patch or alt-accept proof in artifacts",
+      "skipped": true
+    },
+    {
+      "rule_id": "A3",
+      "passed": false,
+      "evidence": "no cheat.patch or cheat-reject proof in artifacts",
+      "skipped": true
+    },
+    {
+      "rule_id": "A4",
+      "passed": true,
+      "evidence": "payload.checks.f2p_in_impact=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A5",
+      "passed": true,
+      "evidence": "payload.checks.rest_suite_green=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A6",
+      "passed": false,
+      "evidence": "not a multi-site bug (no site_* patches or two_site design)",
+      "skipped": true
+    },
+    {
+      "rule_id": "A7",
+      "passed": false,
+      "evidence": "no decoys on this task",
+      "skipped": true
+    },
+    {
+      "rule_id": "A8",
+      "passed": true,
+      "evidence": "image proof buggy_fails=True gold_passes=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A9",
+      "passed": false,
+      "evidence": "no race/perf/property gate in test.sh",
+      "skipped": true
+    },
+    {
+      "rule_id": "A10",
+      "passed": true,
+      "evidence": "task.toml [verifier] network_mode=no-network",
+      "skipped": false
+    },
+    {
+      "rule_id": "A11",
+      "passed": false,
+      "evidence": "no timing gate in test.sh",
+      "skipped": true
+    },
+    {
+      "rule_id": "A12",
+      "passed": true,
+      "evidence": "payload.checks.patches_skip_tests=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "B1",
+      "passed": true,
+      "evidence": "tests/test.sh checksum-guards files",
+      "skipped": false
+    },
+    {
+      "rule_id": "B2",
+      "passed": true,
+      "evidence": "task.toml [agent] allowlist; trial web-tool use not scored (jobs/ excluded)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B3",
+      "passed": true,
+      "evidence": "hidden verifier (3 files)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B4",
+      "passed": true,
+      "evidence": "payload.checks.black-box=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "B5",
+      "passed": false,
+      "evidence": "hidden tests look like example assertions (no property/gate markers)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B6",
+      "passed": true,
+      "evidence": "symptom=True repro=True cmd=if go test -count=1 -timeout 15m -run '^(TestFileFilter|TestFileExcludeFilterAtRuleLevel|TestGetConfig)$' ./lint/... ./test/... ./config/...; then",
+      "skipped": false
+    },
+    {
+      "rule_id": "B7",
+      "passed": true,
+      "evidence": "leaked_symbols=[] leaked_files=[] line_nos=False diff=False hunk_tokens=[]",
+      "skipped": false
+    },
+    {
+      "rule_id": "B8",
+      "passed": true,
+      "evidence": "instruction contains the no-web clause",
+      "skipped": false
+    },
+    {
+      "rule_id": "C5",
+      "passed": true,
+      "evidence": "payload.checks.harness_ok=True",
+      "skipped": false
+    }
+  ],
+  "cond": "graph",
+  "unit": "file-exclude-filter",
+  "impact_files": [
+    "lint/filefilter_test.go",
+    "test/file_filter_test.go",
+    "config/config_test.go"
+  ],
+  "f2p_tests": [
+    "TestFileFilter",
+    "TestFileExcludeFilterAtRuleLevel",
+    "TestGetConfig"
+  ],
+  "checks": {
+    "buggy_fails": true,
+    "gold_restore": true,
+    "gold_pass": true,
+    "harness_ok": true,
+    "rest_suite_green": true,
+    "f2p_in_impact": true,
+    "black-box": true,
+    "patches_skip_tests": true
+  },
+  "harness_ok": true,
+  "patches_skip_tests": true,
+  "proof": {
+    "ok": true,
+    "harness_ok": true,
+    "buggy_fails": true,
+    "gold_pass": true,
+    "buggy_rc": 1,
+    "buggy_reward": "0",
+    "gold_rc": 0,
+    "gold_reward": "1",
+    "buggy_tail": "--- FAIL: TestFileFilter (0.00s)\n    --- FAIL: TestFileFilter/whole_file_name (0.00s)\n        filefilter_test.go:16: should match a/b/c.go\n    --- FAIL: TestFileFilter/regex (0.00s)\n        filefilter_test.go:29: should match a/b/c.go\n    --- FAIL: TestFileFilter/TEST_well-known (0.00s)\n        filefilter_test.go:45: should match a/b/c_test.go\n    --- FAIL: TestFileFilter/glob_* (0.00s)\n        filefilter_test.go:58: should match a/b/xxx.pb.go\n    --- FAIL: TestFileFilter/glob_** (0.00s)\n        filefilter_test.go:74: should match a/x/xxx.pb.go\n    --- FAIL: TestFileFilter/just_* (0.00s)\n        filefilter_test.go:108: should match pb.go\n    --- FAIL: TestFileFilter/just_~ (0.00s)\n        filefilter_test.go:121: should match pb.go\nFAIL\nFAIL\tgithub.com/mgechev/revive/lint\t0.003s\n--- FAIL: TestFileExcludeFilterAtRuleLevel (0.00s)\n    --- FAIL: TestFileExcludeFilterAtRuleLevel/not_called_if_exclude_not_match (0.00s)\n        file_filter_test.go:49: should not call rule if excluded\nFAIL\nFAIL\tgithub.com/mgechev/revive/test\t0.003s\n--- FAIL: TestGetConfig (0.00s)\n    --- FAIL: TestGetConfig/ok (0.00s)\n        --- FAIL: TestGetConfig/ok/rule-level_file_filter_excludes (0.00s)\n            getconfig_bb_test.go:397: r2 should be initialized and exclude some/file.go\nFAIL\nFAIL\tgithub.com/mgechev/revive/config\t0.004s\nFAIL\n",
+    "gold_tail": "ok  \tgithub.com/mgechev/revive/lint\t0.003s\nok  \tgithub.com/mgechev/revive/test\t0.004s\nok  \tgithub.com/mgechev/revive/config\t0.004s\n"
+  }
+}

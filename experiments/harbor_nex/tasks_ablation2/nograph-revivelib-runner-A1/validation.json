@@ -1,0 +1,193 @@
+{
+  "family": "nograph-revivelib-runner",
+  "level": 1,
+  "instruction_self_check": {
+    "names_present": true,
+    "has_symptom_paraphrase": true,
+    "leaked_symbols": [],
+    "leaked_files": [],
+    "has_line_numbers": false,
+    "has_diff": false,
+    "reproduce_command": "if go test -count=1 -timeout 15m -run '^(TestReviveLint|TestReviveFormat|TestReviveCreateInstance)$' ./revivelib/...; then",
+    "can_reproduce_one_command": true,
+    "diff_hunk_tokens_in_instruction": [],
+    "locality": 0,
+    "ok": true
+  },
+  "changed_symbols": [
+    "New",
+    "Lint",
+    "Format",
+    "getPackages",
+    "normalizeSplit",
+    "Include",
+    "Exclude"
+  ],
+  "changed_files": [
+    "core.go",
+    "pattern.go"
+  ],
+  "rule_verdicts": [
+    {
+      "rule_id": "A1",
+      "passed": true,
+      "evidence": "payload.checks.gold_restore=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A2",
+      "passed": false,
+      "evidence": "no alt.patch or alt-accept proof in artifacts",
+      "skipped": true
+    },
+    {
+      "rule_id": "A3",
+      "passed": false,
+      "evidence": "no cheat.patch or cheat-reject proof in artifacts",
+      "skipped": true
+    },
+    {
+      "rule_id": "A4",
+      "passed": true,
+      "evidence": "payload.checks.f2p_in_impact=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A5",
+      "passed": true,
+      "evidence": "payload.checks.rest_suite_green=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A6",
+      "passed": false,
+      "evidence": "not a multi-site bug (no site_* patches or two_site design)",
+      "skipped": true
+    },
+    {
+      "rule_id": "A7",
+      "passed": false,
+      "evidence": "no decoys on this task",
+      "skipped": true
+    },
+    {
+      "rule_id": "A8",
+      "passed": true,
+      "evidence": "image proof buggy_fails=True gold_passes=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A9",
+      "passed": false,
+      "evidence": "no race/perf/property gate in test.sh",
+      "skipped": true
+    },
+    {
+      "rule_id": "A10",
+      "passed": true,
+      "evidence": "task.toml [verifier] network_mode=no-network",
+      "skipped": false
+    },
+    {
+      "rule_id": "A11",
+      "passed": false,
+      "evidence": "no timing gate in test.sh",
+      "skipped": true
+    },
+    {
+      "rule_id": "A12",
+      "passed": true,
+      "evidence": "payload.checks.patches_skip_tests=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "B1",
+      "passed": true,
+      "evidence": "tests/test.sh checksum-guards files",
+      "skipped": false
+    },
+    {
+      "rule_id": "B2",
+      "passed": true,
+      "evidence": "task.toml [agent] allowlist; trial web-tool use not scored (jobs/ excluded)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B3",
+      "passed": true,
+      "evidence": "hidden verifier (2 files)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B4",
+      "passed": true,
+      "evidence": "payload.checks.black-box=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "B5",
+      "passed": false,
+      "evidence": "hidden tests look like example assertions (no property/gate markers)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B6",
+      "passed": true,
+      "evidence": "symptom=True repro=True cmd=if go test -count=1 -timeout 15m -run '^(TestReviveLint|TestReviveFormat|TestReviveCreateInstance)$' ./revivelib/...; then",
+      "skipped": false
+    },
+    {
+      "rule_id": "B7",
+      "passed": true,
+      "evidence": "leaked_symbols=[] leaked_files=[] line_nos=False diff=False hunk_tokens=[]",
+      "skipped": false
+    },
+    {
+      "rule_id": "B8",
+      "passed": true,
+      "evidence": "instruction contains the no-web clause",
+      "skipped": false
+    },
+    {
+      "rule_id": "C5",
+      "passed": true,
+      "evidence": "payload.checks.harness_ok=True",
+      "skipped": false
+    }
+  ],
+  "cond": "nograph",
+  "unit": "revivelib-runner",
+  "impact_files": [
+    "revivelib/core_test.go",
+    "revivelib/core_internal_test.go"
+  ],
+  "f2p_tests": [
+    "TestReviveLint",
+    "TestReviveFormat",
+    "TestReviveCreateInstance"
+  ],
+  "checks": {
+    "buggy_fails": true,
+    "gold_restore": true,
+    "gold_pass": true,
+    "harness_ok": true,
+    "rest_suite_green": true,
+    "f2p_in_impact": true,
+    "black-box": true,
+    "patches_skip_tests": true
+  },
+  "harness_ok": true,
+  "patches_skip_tests": true,
+  "proof": {
+    "ok": true,
+    "harness_ok": true,
+    "buggy_fails": true,
+    "gold_pass": true,
+    "buggy_rc": 1,
+    "buggy_reward": "0",
+    "gold_rc": 0,
+    "gold_reward": "1",
+    "buggy_tail": "--- FAIL: TestReviveCreateInstance (0.00s)\npanic: runtime error: invalid memory address or nil pointer dereference [recovered, repanicked]\n[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x5bd98f]\n\ngoroutine 8 [running]:\ntesting.tRunner.func1.2({0x5fef00, 0x81ad90})\n\t/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.0.linux-amd64/src/testing/testing.go:1974 +0x232\ntesting.tRunner.func1()\n\t/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.0.linux-amd64/src/testing/testing.go:1977 +0x349\npanic({0x5fef00?, 0x81ad90?})\n\t/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.0.linux-amd64/src/runtime/panic.go:860 +0x13a\ngithub.com/mgechev/revive/revivelib.TestReviveCreateInstance(0x2c30aec7a6c8)\n\t/app/revivelib/core_internal_test.go:13 +0x2f\ntesting.tRunner(0x2c30aec7a6c8, 0x663508)\n\t/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.0.linux-amd64/src/testing/testing.go:2036 +0xea\ncreated by testing.(*T).Run in goroutine 1\n\t/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.0.linux-amd64/src/testing/testing.go:2101 +0x4c5\nFAIL\tgithub.com/mgechev/revive/revivelib\t0.006s\nFAIL\n",
+    "gold_tail": "ok  \tgithub.com/mgechev/revive/revivelib\t0.034s\n"
+  }
+}

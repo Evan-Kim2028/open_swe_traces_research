@@ -1,0 +1,3 @@
+ok  	github.com/mgechev/revive/lint	0.005s
+ok  	github.com/mgechev/revive/test	0.008s
+ok  	github.com/mgechev/revive/config	0.011s

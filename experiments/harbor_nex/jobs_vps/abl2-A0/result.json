@@ -1,0 +1,41 @@
+{
+    "id": "6c675606-61d7-43f7-ac47-671ec61dff74",
+    "started_at": "2026-09-18T18:45:54.707907",
+    "updated_at": "2026-09-18T18:50:48.789594",
+    "finished_at": "2026-09-18T18:50:48.789594",
+    "n_total_trials": 3,
+    "stats": {
+        "n_completed_trials": 3,
+        "n_errored_trials": 0,
+        "n_running_trials": 0,
+        "n_pending_trials": 0,
+        "n_cancelled_trials": 0,
+        "n_retries": 0,
+        "evals": {
+            "cursor-cli__composer-2.5__run_abl2_A0": {
+                "n_trials": 3,
+                "n_errors": 0,
+                "metrics": [
+                    {
+                        "mean": 1.0
+                    }
+                ],
+                "pass_at_k": {},
+                "reward_stats": {
+                    "reward": {
+                        "1.0": [
+                            "nograph-file-filter-A0__TwGTKHT",
+                            "nograph-revivelib-runner-A0__dtrGntk",
+                            "graph-file-exclude-filter-A0__V96MPAq"
+                        ]
+                    }
+                },
+                "exception_stats": {}
+            }
+        },
+        "n_input_tokens": 3587108,
+        "n_cache_tokens": 3458087,
+        "n_output_tokens": 37877,
+        "cost_usd": 0.8508204
+    }
+}

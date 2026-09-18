@@ -63,3 +63,22 @@ test vs 3) and cleared the naming barrier on the codec unit. No evidence of web 
 | trial | outcome | class | evidence |
 |---|---|---|---|
 | spec-reimpl-bb-A1 (Composer) | **PASS** 7.0 min | clean | black-box property suite; hidden test names + one-line descriptions added; no web, no network commands, 64 edits. **Flip point for Composer on the codec unit (black-box) = A1.** |
+
+## Second batch on lake-vps (2026-09-18 23:10Z) — Composer 2.5, egress sidecar, all trials web=0
+
+| unit (client-go, obfuscated) | family | A0 | A1 | A2 | A3 |
+|---|---|---|---|---|---|
+| spec-bb-chain (RPC interceptor chain) | spec-only, black-box props | PASS | | | |
+| spec-bb-bucket (bucket lookup) | spec-only, black-box props | PASS | | | |
+| property-policy (backoff policy table) | property | PASS | | | |
+| property-1pc (1PC/async-commit decision) | property | FAIL | FAIL | FAIL | running |
+| dynamic-snapshot (snapshot getter/iter; perf gate re-measured on ARM: gold 137 ns/op, limit 411) | dynamic | PASS | | | |
+| dynamic-latch (latch scheduling; race gate) | dynamic | PASS | | | |
+
+Ablation round-2 units (mgechev/revive, the "five hardest" from each condition, 3 judged valid): Composer passed all
+three at A0 (file-exclude-filter, file-filter, revivelib-runner) in ~5 min each, web=0. Both builders' "hardest"
+picks on revive sit at A0 for a mid-tier model.
+
+Reading so far: 5 of 6 new client-go units and 3 of 3 revive units are A0 for Composer. Flip points above A0 remain
+the codec (A1) and the two state-machine units (dynamic pipeline A3; 1PC decision > A2). Hardness for this model is
+concentrated in units whose behavior is a sequence/state contract rather than a pure function of inputs.

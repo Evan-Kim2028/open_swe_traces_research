@@ -1,0 +1,46 @@
+{
+    "id": "e98930a7-2148-4a08-a276-423a5432718e",
+    "started_at": "2026-09-18T18:45:18.164175",
+    "updated_at": "2026-09-18T18:55:55.775274",
+    "finished_at": "2026-09-18T18:55:55.775274",
+    "n_total_trials": 6,
+    "stats": {
+        "n_completed_trials": 6,
+        "n_errored_trials": 0,
+        "n_running_trials": 0,
+        "n_pending_trials": 0,
+        "n_cancelled_trials": 0,
+        "n_retries": 0,
+        "evals": {
+            "cursor-cli__composer-2.5__run_ladder2_A0": {
+                "n_trials": 6,
+                "n_errors": 0,
+                "metrics": [
+                    {
+                        "mean": 0.8333333333333334
+                    }
+                ],
+                "pass_at_k": {},
+                "reward_stats": {
+                    "reward": {
+                        "1.0": [
+                            "spec-bb-bucket-A0__VBLS9uz",
+                            "spec-bb-chain-A0__Yh8fZHf",
+                            "property-policy-A0__voyzdcW",
+                            "dynamic-snapshot-A0__fxnPdS3",
+                            "dynamic-latch-A0__fuNSiaD"
+                        ],
+                        "0.0": [
+                            "property-1pc-A0__vkKcrX8"
+                        ]
+                    }
+                },
+                "exception_stats": {}
+            }
+        },
+        "n_input_tokens": 5409170,
+        "n_cache_tokens": 5144592,
+        "n_output_tokens": 56693,
+        "cost_usd": 1.3029399
+    }
+}

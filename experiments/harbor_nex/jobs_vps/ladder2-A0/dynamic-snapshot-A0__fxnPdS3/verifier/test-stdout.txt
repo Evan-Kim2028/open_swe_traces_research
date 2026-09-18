@@ -1,0 +1,8 @@
+ok  	example.internal/kvstore/v2/internal/unionstore	0.027s
+goos: linux
+goarch: arm64
+pkg: example.internal/kvstore/v2/internal/unionstore
+BenchmarkSnapshotGet-10    	    5000	       325.7 ns/op
+PASS
+ok  	example.internal/kvstore/v2/internal/unionstore	0.050s
+perf gate ok: 325.7 ns/op <= 411 ns/op

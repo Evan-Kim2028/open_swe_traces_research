@@ -1,0 +1,1 @@
+ok  	example.internal/kvstore/v2/wirerpc/interceptor	0.111s

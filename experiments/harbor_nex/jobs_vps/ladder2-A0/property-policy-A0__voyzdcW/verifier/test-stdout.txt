@@ -1,0 +1,1 @@
+ok  	example.internal/kvstore/v2/internal/client/retry	0.025s
