@@ -6,7 +6,6 @@ Does not launch Harbor. Image-proofs buggy-fail / gold-pass (rule A8).
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import shutil
 import subprocess
@@ -341,6 +340,50 @@ def _package_and_imports(text: str) -> str:
     return text[start : m.end()] + "\n\n"
 
 
+GETCONFIG_IMPORTS = """package config_test
+
+import (
+	"path/filepath"
+	"strings"
+	"testing"
+
+	goversion "github.com/hashicorp/go-version"
+
+	"github.com/mgechev/revive/config"
+	"github.com/mgechev/revive/lint"
+)
+
+"""
+
+
+def drop_unused_imports(text: str) -> str:
+    """Drop quoted import paths whose identifier never appears after the import block."""
+    m = re.search(r"import\s+\((.*?)\)", text, re.DOTALL)
+    if not m:
+        return text
+    after = text[m.end() :]
+    kept: list[str] = []
+    for raw in m.group(1).splitlines():
+        line = raw.strip()
+        if not line:
+            kept.append(raw)
+            continue
+        alias_m = re.match(r'(?:(\w+)\s+)?"([^"]+)"$', line)
+        if not alias_m:
+            kept.append(raw)
+            continue
+        alias, path = alias_m.group(1), alias_m.group(2)
+        ident = alias or path.rsplit("/", 1)[-1]
+        if ident == "testing" or re.search(rf"\b{re.escape(ident)}\.", after):
+            kept.append(raw)
+            continue
+        # omit unused
+    inner = "\n".join(kept)
+    if not inner.endswith("\n"):
+        inner += "\n"
+    return text[: m.start()] + "import (\n" + inner + ")" + text[m.end() :]
+
+
 def hidden_tests_for(unit: ValidUnit, src: Path) -> list[HiddenTest]:
     listed = set(unit.listed_tests)
     hidden: list[HiddenTest] = []
@@ -363,21 +406,22 @@ def hidden_tests_for(unit: ValidUnit, src: Path) -> list[HiddenTest]:
                 )
             )
             continue
-        # Mixed file: extract listed tests into a sibling hidden file.
         dest_rel = str(Path(rel).with_name("getconfig_bb_test.go"))
         if rel.endswith("config_test.go"):
             dest_rel = "config/getconfig_bb_test.go"
-        chunks = [_package_and_imports(text)]
+        bodies: list[str] = []
         kept: list[str] = []
+        remaining = text
         for name in listed_here:
-            chunks.append(extract_go_func(text, f"func {name}("))
+            bodies.append(extract_go_func(text, f"func {name}("))
             kept.append(name)
-            text = strip_go_func(text, f"func {name}(")
-        path.write_text(text, encoding="utf-8")
+            remaining = strip_go_func(remaining, f"func {name}(")
+        path.write_text(drop_unused_imports(remaining), encoding="utf-8")
+        header = GETCONFIG_IMPORTS if dest_rel.endswith("getconfig_bb_test.go") else _package_and_imports(text)
         hidden.append(
             HiddenTest(
                 relpath=dest_rel,
-                content="".join(chunks),
+                content=header + "".join(bodies),
                 one_liner=unit.one_liners.get(dest_rel, ", ".join(kept)),
                 test_names=tuple(kept),
             )
@@ -510,7 +554,7 @@ def run_test_sh(tag: str, src: Path, tests: Path, *, timeout: int = 900) -> tupl
             "-e",
             "GOPROXY=off",
             "-e",
-            "GOTOOLCHAIN=local",
+            "GOTOOLCHAIN=auto",
             tag,
             "bash",
             "/tests/test.sh",
@@ -579,7 +623,7 @@ def validation_payload(
     hidden: Sequence[HiddenTest],
     instruction: str,
     test_sh: str,
-    proof: MappingLike | None,
+    proof: dict[str, object] | None,
 ) -> dict[str, object]:
     check = instruction_self_check(
         instruction,
@@ -633,9 +677,6 @@ def validation_payload(
     }
 
 
-MappingLike = dict[str, object]
-
-
 def write_packaged_md(
     dest_root: Path,
     results: dict[str, dict[int, Path]],
@@ -677,13 +718,12 @@ def write_packaged_md(
         for level in (0, 1):
             slug = f"{unit.family}-A{level}"
             img = f"{IMAGE_PREFIX}-{unit.family}:latest"
-            buggy = "FAIL (want)" if proof.get("buggy_fails") else ("skipped" if not proof else "FAIL unexpected")
-            gold = "PASS (want)" if proof.get("gold_pass") else ("skipped" if not proof else "FAIL unexpected")
-            if proof and not proof.get("ok"):
-                if not proof.get("buggy_fails"):
-                    buggy = "PASS unexpected"
-                if not proof.get("gold_pass"):
-                    gold = "FAIL unexpected"
+            skipped = bool(proof.get("skipped"))
+            if skipped:
+                buggy, gold = "skipped", "skipped"
+            else:
+                buggy = "FAIL (want)" if proof.get("buggy_fails") else "PASS unexpected"
+                gold = "PASS (want)" if proof.get("gold_pass") else "FAIL unexpected"
             lines.append(
                 f"| `{slug}` | {unit.cond} | `{unit.name}` | {level} | "
                 f"{', '.join(f'`{n}`' for n in hidden_names) or '—'} | `{img}` | {buggy} | {gold} |"

@@ -159,7 +159,8 @@ def _looks_like_task_slug(s: str) -> bool:
 
 def _normalize_slug(name: str) -> str:
     s = name.strip().strip("`").lower().replace("_", "-")
-    s = re.sub(r"-a\d+$", "", s)
+    s = re.sub(r"-a-?\d+$", "", s)
+    s = re.sub(r"-l\d+$", "", s)
     s = re.sub(r"-obf$", "", s)
     return s
 
@@ -175,7 +176,8 @@ def _slug_keys(name: str) -> set[str]:
 
 
 def _family_key(name: str) -> str | None:
-    base = re.sub(r"-A\d+$", "", name)
+    base = re.sub(r"-A-?\d+$", "", name)
+    base = re.sub(r"-L\d+$", "", base)
     base = re.sub(r"-obf$", "", base)
     return base if base in _FAMILY_KEYS else None
 

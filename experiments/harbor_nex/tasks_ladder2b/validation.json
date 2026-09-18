@@ -1,5 +1,5 @@
 {
-  "ok": false,
+  "ok": true,
   "families": {
     "property-1pc": {
       "checks": [
@@ -16,17 +16,17 @@
         {
           "check": "A0_buggy_fails",
           "ok": true,
-          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+          "detail": "--- FAIL: TestOnePCAsyncDecisionProperty (0.00s)\n    onepc_bb_prop_test.go:125: case 0 async got true want false n=5 total=16\n--- FAIL: TestOnePCContractExamples (0.00s)\n    onepc_bb_prop_test.go:138: local scope must refuse both\nFAIL\nFAIL\texample.internal/kvstore/v2/txnkv/transaction\t0.061s\nFAIL\n"
         },
         {
           "check": "A0_gold_pass",
-          "ok": false,
-          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0_gold: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0_gold\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/txnkv/transaction\t0.253s\n"
         },
         {
           "check": "gold_restore",
-          "ok": false,
-          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0_gold: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0_gold\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/txnkv/transaction\t0.253s\n"
         },
         {
           "check": "buggy_fails",
@@ -36,77 +36,77 @@
         {
           "check": "A0_cheat_fails",
           "ok": true,
-          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0_cheat: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0_cheat\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+          "detail": "--- FAIL: TestOnePCAsyncDecisionProperty (0.00s)\n    onepc_bb_prop_test.go:122: case 6 one-pc got true\n--- FAIL: TestOnePCContractExamples (0.00s)\n    onepc_bb_prop_test.go:138: local scope must refuse both\nFAIL\nFAIL\texample.internal/kvstore/v2/txnkv/transaction\t0.099s\nFAIL\n"
         },
         {
           "check": "cheat_rejected",
           "ok": true,
-          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0_cheat: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0_cheat\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+          "detail": "--- FAIL: TestOnePCAsyncDecisionProperty (0.00s)\n    onepc_bb_prop_test.go:122: case 6 one-pc got true\n--- FAIL: TestOnePCContractExamples (0.00s)\n    onepc_bb_prop_test.go:138: local scope must refuse both\nFAIL\nFAIL\texample.internal/kvstore/v2/txnkv/transaction\t0.099s\nFAIL\n"
         },
         {
           "check": "two_func_alt_accepted",
-          "ok": false,
-          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0_alt: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0_alt\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/txnkv/transaction\t0.371s\n"
         },
         {
           "check": "A1_buggy_fails",
           "ok": true,
-          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A1: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A1\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+          "detail": "--- FAIL: TestOnePCAsyncDecisionProperty (0.00s)\n    onepc_bb_prop_test.go:125: case 0 async got true want false n=5 total=16\n--- FAIL: TestOnePCContractExamples (0.00s)\n    onepc_bb_prop_test.go:138: local scope must refuse both\nFAIL\nFAIL\texample.internal/kvstore/v2/txnkv/transaction\t0.093s\nFAIL\n"
         },
         {
           "check": "A1_gold_pass",
-          "ok": false,
-          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/property-1pc-A1/tests: \"experiments/harbor_nex/tasks_ladder2b/property-1pc-A1/tests\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/txnkv/transaction\t0.244s\n"
         },
         {
           "check": "A1_cheat_fails",
           "ok": true,
-          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A1_cheat: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A1_cheat\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+          "detail": "--- FAIL: TestOnePCAsyncDecisionProperty (0.00s)\n    onepc_bb_prop_test.go:122: case 6 one-pc got true\n--- FAIL: TestOnePCContractExamples (0.00s)\n    onepc_bb_prop_test.go:138: local scope must refuse both\nFAIL\nFAIL\texample.internal/kvstore/v2/txnkv/transaction\t0.129s\nFAIL\n"
         },
         {
           "check": "A2_buggy_fails",
           "ok": true,
-          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A2: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A2\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+          "detail": "--- FAIL: TestOnePCAsyncDecisionProperty (0.00s)\n    onepc_bb_prop_test.go:125: case 0 async got true want false n=5 total=16\n--- FAIL: TestOnePCContractExamples (0.00s)\n    onepc_bb_prop_test.go:138: local scope must refuse both\nFAIL\nFAIL\texample.internal/kvstore/v2/txnkv/transaction\t0.129s\nFAIL\n"
         },
         {
           "check": "A2_gold_pass",
-          "ok": false,
-          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A2_gold: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A2_gold\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/txnkv/transaction\t0.279s\n"
         },
         {
           "check": "A2_cheat_fails",
           "ok": true,
-          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A2_cheat: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A2_cheat\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+          "detail": "--- FAIL: TestOnePCAsyncDecisionProperty (0.00s)\n    onepc_bb_prop_test.go:122: case 6 one-pc got true\n--- FAIL: TestOnePCContractExamples (0.00s)\n    onepc_bb_prop_test.go:138: local scope must refuse both\nFAIL\nFAIL\texample.internal/kvstore/v2/txnkv/transaction\t0.060s\nFAIL\n"
         },
         {
           "check": "A3_buggy_fails",
           "ok": true,
-          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A3: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A3\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+          "detail": "--- FAIL: TestOnePCAsyncDecisionProperty (0.00s)\n    onepc_bb_prop_test.go:125: case 0 async got true want false n=5 total=16\n--- FAIL: TestOnePCContractExamples (0.00s)\n    onepc_bb_prop_test.go:138: local scope must refuse both\nFAIL\nFAIL\texample.internal/kvstore/v2/txnkv/transaction\t0.109s\nFAIL\n"
         },
         {
           "check": "A3_gold_pass",
-          "ok": false,
-          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/property-1pc-A3/tests: \"experiments/harbor_nex/tasks_ladder2b/property-1pc-A3/tests\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/txnkv/transaction\t0.320s\n"
         },
         {
           "check": "A3_cheat_fails",
           "ok": true,
-          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A3_cheat: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A3_cheat\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+          "detail": "--- FAIL: TestOnePCAsyncDecisionProperty (0.00s)\n    onepc_bb_prop_test.go:122: case 6 one-pc got true\n--- FAIL: TestOnePCContractExamples (0.00s)\n    onepc_bb_prop_test.go:138: local scope must refuse both\nFAIL\nFAIL\texample.internal/kvstore/v2/txnkv/transaction\t0.150s\nFAIL\n"
         },
         {
           "check": "A4_buggy_fails",
           "ok": true,
-          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A4: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A4\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+          "detail": "--- FAIL: TestOnePCAsyncDecisionProperty (0.00s)\n    onepc_bb_prop_test.go:125: case 0 async got true want false n=5 total=16\n--- FAIL: TestOnePCContractExamples (0.00s)\n    onepc_bb_prop_test.go:138: local scope must refuse both\nFAIL\nFAIL\texample.internal/kvstore/v2/txnkv/transaction\t0.055s\nFAIL\n"
         },
         {
           "check": "A4_gold_pass",
-          "ok": false,
-          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A4_gold: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A4_gold\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/txnkv/transaction\t0.214s\n"
         },
         {
           "check": "A4_cheat_fails",
           "ok": true,
-          "detail": "docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A4_cheat: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A4_cheat\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
+          "detail": "--- FAIL: TestOnePCAsyncDecisionProperty (0.00s)\n    onepc_bb_prop_test.go:122: case 6 one-pc got true\n--- FAIL: TestOnePCContractExamples (0.00s)\n    onepc_bb_prop_test.go:138: local scope must refuse both\nFAIL\nFAIL\texample.internal/kvstore/v2/txnkv/transaction\t0.111s\nFAIL\n"
         },
         {
           "check": "patches_skip_tests",

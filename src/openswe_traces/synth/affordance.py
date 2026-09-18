@@ -34,6 +34,9 @@ from openswe_traces.synth.obfuscate import (
 
 HIDDEN_DIR = "hidden"
 _TEST_FUNC_RE = re.compile(r"^func\s+(?:\(.*?\)\s+)?(Test[A-Za-z0-9_]+)\s*\(", re.MULTILINE)
+# A0..A4 plus the deep rungs below the contract: A-1 gapped, A-2 bug-report only.
+SUPPORTED_LEVELS = frozenset({-2, -1, 0, 1, 2, 3, 4})
+_LEVEL_SUFFIX_RE = re.compile(r"-A-?\d+$")
 
 
 @dataclass(frozen=True)
@@ -262,6 +265,13 @@ def a1_appendix(hidden: Sequence[HiddenTest]) -> str:
 
 
 def instruction_for_level(base: str, hidden: Sequence[HiddenTest], level: int) -> str:
+    """Render the instruction for an affordance level.
+
+    Negative levels (A-1, A-2) keep the supplied base text and only add the
+    no-web clause — they never append hidden-test names.
+    """
+    if level not in SUPPORTED_LEVELS:
+        raise ValueError(f"unsupported affordance level {level}")
     text = with_no_web(base)
     if level >= 1:
         # Insert the appendix before the no-web clause.
@@ -307,6 +317,23 @@ def _write_executable(path: Path, text: str) -> None:
     path.chmod(0o755)
 
 
+class B4PackagingError(ValueError):
+    """Raised when a Harbor task would ship a white-box hidden verifier (rule B4)."""
+
+
+def assert_b4_pass(task_dir: Path | str) -> None:
+    """Refuse to package a task whose hidden tests fail rule B4 (black-box)."""
+    from openswe_traces.synth.rules import check_b4, load_context
+
+    task_dir = Path(task_dir)
+    verdict = check_b4(load_context(task_dir))
+    if verdict.skipped or not verdict.passed:
+        raise B4PackagingError(
+            f"refuse to package {task_dir}: B4 skipped={verdict.skipped} "
+            f"passed={verdict.passed}: {verdict.evidence}"
+        )
+
+
 def build_affordance_levels(
     task_dir: Path | str,
     hidden_tests: Sequence[HiddenTest | str | Mapping[str, object]],
@@ -341,7 +368,8 @@ def build_affordance_levels(
     dest_root.mkdir(parents=True, exist_ok=True)
     if family is None:
         name = task_dir.name
-        family = re.sub(r"-A\d+$", "", name)
+        family = _LEVEL_SUFFIX_RE.sub("", name)
+        family = re.sub(r"-L\d+$", "", family)
     instr0 = instruction_a0
     if instr0 is None:
         instr_path = task_dir / "instruction.md"
@@ -355,7 +383,7 @@ def build_affordance_levels(
 
     out: dict[int, Path] = {}
     for level in levels:
-        if level not in range(5):
+        if level not in SUPPORTED_LEVELS:
             raise ValueError(f"unsupported affordance level {level}")
         dest = dest_root / f"{family}-A{level}"
         if dest.resolve() != task_dir.resolve():
@@ -409,6 +437,7 @@ def build_affordance_levels(
             "instruction_self_check": check,
         }
         (dest / "affordance.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+        assert_b4_pass(dest)
         from openswe_traces.synth.rules import write_task_validation
 
         write_task_validation(

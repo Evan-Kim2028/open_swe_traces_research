@@ -145,3 +145,35 @@ def test_instruction_levels_append_names() -> None:
     assert "`TestFoo`" in a1
     assert NO_WEB_CLAUSE in with_no_web("x")
     assert "foo cases" in a1_appendix(hidden)
+
+
+def test_negative_levels_keep_base_and_name_dirs(tmp_path: Path) -> None:
+    task = _mini_task(tmp_path)
+    hidden = [coerce_hidden_test("retry/backoff_test.go", task_dir=task)]
+    gapped = "Waits grow except we never said they cap. expected 4 actual 2.\n\nReproduce with:\n\n```\ngo test ./retry/\n```\n"
+    report = (
+        "A wait stayed at 2 after the second attempt. expected 4, actual 2.\n\n"
+        "Reproduce with:\n\n```\ngo test ./retry/\n```\n"
+    )
+    out = build_affordance_levels(
+        task,
+        hidden,
+        levels=(-2, -1),
+        dest_root=tmp_path / "deep",
+        family="demo",
+        instruction_a0=gapped,
+        packages=("retry",),
+        changed_symbols=("expo",),
+        changed_files=("backoff.go",),
+    )
+    assert set(out) == {-2, -1}
+    assert out[-1].name == "demo-A-1"
+    assert out[-2].name == "demo-A-2"
+    assert "TestExpo" not in (out[-1] / "instruction.md").read_text()
+    assert "TestExpo" not in (out[-2] / "instruction.md").read_text()
+    assert NO_WEB_CLAUSE in (out[-1] / "instruction.md").read_text()
+    (out[-2] / "instruction.md").write_text(
+        instruction_for_level(report, hidden, -2), encoding="utf-8"
+    )
+    assert "TestExpo" not in (out[-2] / "instruction.md").read_text()
+    assert "expected 4" in (out[-2] / "instruction.md").read_text()

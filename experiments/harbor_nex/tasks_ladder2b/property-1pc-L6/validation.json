@@ -1,6 +1,6 @@
 {
   "family": "property-1pc",
-  "level": 1,
+  "level": 4,
   "instruction_self_check": {
     "names_present": true,
     "has_symptom_paraphrase": true,
@@ -24,20 +24,20 @@
   "rule_verdicts": [
     {
       "rule_id": "A1",
-      "passed": false,
-      "evidence": "gold_restore ok=False: docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0_gold: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0_gold\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n",
+      "passed": true,
+      "evidence": "gold_restore ok=True: ok  \texample.internal/kvstore/v2/txnkv/transaction\t0.253s\n",
       "skipped": false
     },
     {
       "rule_id": "A2",
-      "passed": false,
-      "evidence": "two_func_alt_accepted ok=False: docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0_alt: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0_alt\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n",
+      "passed": true,
+      "evidence": "two_func_alt_accepted ok=True: ok  \texample.internal/kvstore/v2/txnkv/transaction\t0.371s\n",
       "skipped": false
     },
     {
       "rule_id": "A3",
       "passed": true,
-      "evidence": "cheat_rejected ok=True: docker: Error response from daemon: create experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0_cheat: \"experiments/harbor_nex/tasks_ladder2b/_proof_property-1pc_A0_cheat\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n",
+      "evidence": "cheat_rejected ok=True: --- FAIL: TestOnePCAsyncDecisionProperty (0.00s)\n    onepc_bb_prop_test.go:122: case 6 one-pc got true\n--- FAIL: TestOnePCContractExamples (0.00s)\n    onepc_bb_prop_test.go:138: local scope must refuse both\nFAIL\nFAIL\texample.internal/kvstore/v2/txnkv/transaction\t0.099s\nFAIL\n",
       "skipped": false
     },
     {
@@ -66,8 +66,8 @@
     },
     {
       "rule_id": "A8",
-      "passed": false,
-      "evidence": "image proof buggy_fails=True gold_passes=False",
+      "passed": true,
+      "evidence": "image proof buggy_fails=True gold_passes=True",
       "skipped": false
     },
     {
@@ -153,23 +153,23 @@
     "proof_harness": true,
     "harness_ok": true,
     "A0_buggy_fails": true,
-    "A0_gold_pass": false,
-    "gold_restore": false,
+    "A0_gold_pass": true,
+    "gold_restore": true,
     "buggy_fails": true,
     "A0_cheat_fails": true,
     "cheat_rejected": true,
-    "two_func_alt_accepted": false,
+    "two_func_alt_accepted": true,
     "A1_buggy_fails": true,
-    "A1_gold_pass": false,
+    "A1_gold_pass": true,
     "A1_cheat_fails": true,
     "A2_buggy_fails": true,
-    "A2_gold_pass": false,
+    "A2_gold_pass": true,
     "A2_cheat_fails": true,
     "A3_buggy_fails": true,
-    "A3_gold_pass": false,
+    "A3_gold_pass": true,
     "A3_cheat_fails": true,
     "A4_buggy_fails": true,
-    "A4_gold_pass": false,
+    "A4_gold_pass": true,
     "A4_cheat_fails": true,
     "patches_skip_tests": true,
     "blackbox_hygiene": true

@@ -3,7 +3,22 @@ package latch
 import (
 	"sync"
 	"testing"
+	"time"
 )
+
+func waitGroup(t *testing.T, wg *sync.WaitGroup, d time.Duration) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(d):
+		t.Fatal("timed out waiting for overlapping holds to finish")
+	}
+}
 
 func TestLatchExclusiveOverlap(t *testing.T) {
 	sched := NewScheduler(64)
@@ -25,7 +40,11 @@ func TestLatchExclusiveOverlap(t *testing.T) {
 		lock.SetCommitTS(10)
 		sched.UnLock(lock)
 	}()
-	<-started
+	select {
+	case <-started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("first holder did not acquire")
+	}
 	go func() {
 		defer wg.Done()
 		lock := sched.Lock(2, [][]byte{[]byte("k")})
@@ -36,7 +55,7 @@ func TestLatchExclusiveOverlap(t *testing.T) {
 		sched.UnLock(lock)
 	}()
 	close(releaseA)
-	wg.Wait()
+	waitGroup(t, &wg, 3*time.Second)
 	if len(order) != 2 || order[0] != 1 || order[1] != 2 {
 		t.Fatalf("order %v (second locker must wait)", order)
 	}
@@ -59,5 +78,5 @@ func TestLatchConcurrentSameKey(t *testing.T) {
 			}
 		}(i)
 	}
-	wg.Wait()
+	waitGroup(t, &wg, 8*time.Second)
 }
