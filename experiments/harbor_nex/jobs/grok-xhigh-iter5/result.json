@@ -1,0 +1,40 @@
+{
+    "id": "b560a0ad-2898-46bc-a4d3-e4facb2d5a3e",
+    "started_at": "2026-09-18T11:09:31.799536",
+    "updated_at": "2026-09-18T11:12:47.637536",
+    "finished_at": "2026-09-18T11:12:47.637536",
+    "n_total_trials": 2,
+    "stats": {
+        "n_completed_trials": 2,
+        "n_errored_trials": 0,
+        "n_running_trials": 0,
+        "n_pending_trials": 0,
+        "n_cancelled_trials": 0,
+        "n_retries": 0,
+        "evals": {
+            "cursor-cli__cursor-grok-4.6-xhigh__tasks_iter5": {
+                "n_trials": 2,
+                "n_errors": 0,
+                "metrics": [
+                    {
+                        "mean": 1.0
+                    }
+                ],
+                "pass_at_k": {},
+                "reward_stats": {
+                    "reward": {
+                        "1.0": [
+                            "client-go-gettimefromts__3idtJiW",
+                            "client-go-decodebucketkeys__qVLjL4Q"
+                        ]
+                    }
+                },
+                "exception_stats": {}
+            }
+        },
+        "n_input_tokens": 731445,
+        "n_cache_tokens": 551552,
+        "n_output_tokens": 5227,
+        "cost_usd": null
+    }
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Thin CLI over openswe_traces.synth.difficulty (openswe-synth)."""
+"""Thin CLI: openswe-synth --repo <path> --rung 5 --hops 4 --sites 2 --decoys 1."""
 
 from openswe_traces.synth.difficulty import main
 

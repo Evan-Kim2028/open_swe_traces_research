@@ -157,18 +157,52 @@ def issue_from_failures(
     *,
     redact_terms: Sequence[str] = (),
     user_context: str = "",
+    locality: int = 0,
+    packages: Sequence[str] = (),
+    reproduce_command: str = "",
 ) -> str:
-    """Write a bug report from failing tests. Never include a patch or fix-site name."""
+    """Write a bug report from failing tests. Never include a patch or fix-site name.
+
+    locality: L0 names the f2p tests; L1 names only the package + command;
+    L2 is a behavior-level report plus a package test command.
+    """
     names = [t for t in f2p_tests if t]
     excerpt = paraphrase_failure(test_output, redact_terms=redact_terms)
+    if locality >= 1:
+        excerpt = re.sub(r"\bTest[A-Za-z0-9_]+\b", "<test>", excerpt)
     listed = ", ".join(f"`{n}`" for n in names) or "the failing unit tests"
     context_block = ""
     if user_context.strip():
         context_block = f"\n{user_context.strip()}\n"
-    body = f"""# Failing unit tests
+    pkg_args = " ".join(_go_pkg_arg(p) for p in (packages or ["./..."]))
+    cmd = reproduce_command.strip() or f"go test -count=1 -timeout 15m {pkg_args}"
+    if locality <= 0:
+        header = f"""# Failing unit tests
 
 The following tests currently fail on this Go codebase: {listed}.
+{context_block}"""
+    elif locality == 1:
+        pkg_shown = ", ".join(f"`{p}`" for p in (packages or ["./..."]))
+        header = f"""# Failing package tests
+
+Tests in package {pkg_shown} currently fail.
+
+Reproduce with:
+
+```
+{cmd}
+```
+{context_block}"""
+    else:
+        header = f"""# Incorrect behavior
 {context_block}
+Reproduce with:
+
+```
+{cmd}
+```
+"""
+    body = f"""{header}
 Please identify and fix the underlying logic bug so these tests pass. Do not
 skip, delete, or weaken the tests. Do not change test assertions or testdata
 just to make them green.
@@ -194,12 +228,20 @@ def instruction_self_check(
     changed_files: Sequence[str] = (),
     diff_hunk: str = "",
     reproduce_command: str = "",
+    locality: int = 0,
+    packages: Sequence[str] = (),
 ) -> dict[str, object]:
     """Calibrate instruction: symptom present, no fix-site leak, one-command repro."""
     instr_l = instruction.lower()
-    names_ok = all(n in instruction for n in f2p_tests if n)
+    names_listed = all(n in instruction for n in f2p_tests if n)
+    names_absent = not any(n in instruction for n in f2p_tests if n)
+    names_ok = names_listed if locality <= 0 else names_absent
     has_symptom = bool(
-        re.search(r"(expected|got|want|panic:|not equal|!=)", instruction, re.IGNORECASE)
+        re.search(
+            r"(expected|got|want|panic:|not equal|!=|should be|actual\s*:|difference was)",
+            instruction,
+            re.IGNORECASE,
+        )
     )
     leaked_symbols = [s for s in changed_symbols if s and re.search(rf"\b{re.escape(s)}\b", instruction)]
     leaked_files = []
@@ -224,16 +266,23 @@ def instruction_self_check(
             if tok in f2p_tests or tok in f2p_blob:
                 continue
             unique_diff_tokens.append(tok)
+    pkg_ok = True
+    if locality >= 1 and packages:
+        pkg_ok = any(p.rstrip("/") in instruction for p in packages)
+    cmd_ok = bool(cmd)
+    if locality >= 1:
+        cmd_ok = "go test" in instruction and "-run" not in instruction
     return {
-        "names_present": names_ok,
+        "names_present": names_listed,
         "has_symptom_paraphrase": has_symptom,
         "leaked_symbols": leaked_symbols,
         "leaked_files": leaked_files,
         "has_line_numbers": has_line_nos,
         "has_diff": has_diff,
         "reproduce_command": cmd,
-        "can_reproduce_one_command": bool(cmd),
+        "can_reproduce_one_command": cmd_ok,
         "diff_hunk_tokens_in_instruction": unique_diff_tokens,
+        "locality": locality,
         "ok": bool(
             names_ok
             and has_symptom
@@ -241,7 +290,8 @@ def instruction_self_check(
             and not leaked_files
             and not has_line_nos
             and not has_diff
-            and cmd
+            and cmd_ok
+            and pkg_ok
             and not unique_diff_tokens
         ),
     }
@@ -404,12 +454,15 @@ def build_task(
     user_context: str = "",
     extra_redact: Sequence[str] = (),
     checksum_test_files: bool = False,
+    locality: int = 0,
+    guard_tests: Sequence[str] = (),
+    reproduce_command: str = "",
 ) -> Path:
     """Write a Harbor task directory.
 
     Layout: ``instruction.md``, ``task.toml``, ``environment/Dockerfile`` plus
     ``environment/src`` (repo at ``base_commit`` with ``bug_patch`` applied),
-    and ``tests/test.sh`` that runs exactly the fail-to-pass tests.
+    and ``tests/test.sh`` that runs the fail-to-pass tests (plus optional guards).
     """
     repo_dir = Path(repo_dir)
     bug_patch = Path(bug_patch)
@@ -417,21 +470,30 @@ def build_task(
     names = [t for t in f2p_tests if t]
     if not names:
         raise ValueError("f2p_tests must contain at least one test name")
+    guards = [t for t in guard_tests if t and t not in names]
+    sh_names = names + guards
 
     src = out_dir / "environment" / "src"
     snapshot_bugged_tree(repo_dir, base_commit, bug_patch, src)
-    packages = discover_packages_for_tests(src, names) or ["./..."]
+    packages = discover_packages_for_tests(src, sh_names) or ["./..."]
     output = test_output if test_output is not None else capture_f2p_output(src, names, packages)
     redact = [bug_patch.stem, bug_patch.name, *extra_redact]
+    pkg_args = " ".join(_go_pkg_arg(p) for p in packages)
+    cmd = reproduce_command.strip() or (
+        f"go test -count=1 -timeout 15m {pkg_args}" if locality >= 1 else ""
+    )
     instruction = issue_from_failures(
         names,
         output,
         redact_terms=redact,
         user_context=user_context,
+        locality=locality,
+        packages=packages,
+        reproduce_command=cmd,
     )
     checksums: list[tuple[str, str]] = []
     if checksum_test_files:
-        for rel in discover_test_files(src, names):
+        for rel in discover_test_files(src, sh_names):
             checksums.append((rel, file_sha256(src / rel)))
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -441,7 +503,7 @@ def build_task(
     tests_dir = out_dir / "tests"
     tests_dir.mkdir(parents=True, exist_ok=True)
     test_sh = tests_dir / "test.sh"
-    test_sh.write_text(render_test_sh(names, packages, checksums=checksums))
+    test_sh.write_text(render_test_sh(sh_names, packages, checksums=checksums))
     test_sh.chmod(0o755)
     return out_dir
 
@@ -457,6 +519,8 @@ def main(argv: list[str] | None = None) -> int:
     p_build.add_argument("out_dir")
     p_build.add_argument("--f2p", nargs="+", required=True, help="fail-to-pass test names")
     p_build.add_argument("--test-output-file", default=None)
+    p_build.add_argument("--locality", type=int, default=0, help="0=name tests, 1=package+cmd, 2=behavior")
+    p_build.add_argument("--guard", nargs="*", default=(), help="existing tests included in test.sh only")
 
     p_disc = sub.add_parser("discover-f2p", help="Apply patch in scratch and list failing tests")
     p_disc.add_argument("repo_dir")
@@ -477,6 +541,8 @@ def main(argv: list[str] | None = None) -> int:
             args.f2p,
             Path(args.out_dir),
             test_output=output,
+            locality=args.locality,
+            guard_tests=list(args.guard),
         )
         return 0
     if args.cmd == "discover-f2p":

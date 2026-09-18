@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -8,15 +9,15 @@ import pytest
 
 from openswe_traces.data import ROOT
 from openswe_traces.synth.difficulty import (
+    design_for_rung,
     find_guard_tests,
     find_sparse_branches,
-    no_import_edge,
-    package_imports,
+    name_leakage,
     pick_contract_drift_site,
     pick_decoy,
-    pick_three_site,
+    pick_fair_ambiguity,
+    pick_implicit_invariant,
     pick_two_site_pair,
-    select_construction,
 )
 
 FIXTURE = ROOT / "experiments" / "codegraph_bugs" / "fixture_host"
@@ -33,79 +34,148 @@ def _ensure_fixture_indexed() -> None:
     )
     if proc.returncode != 0:
         pytest.skip(f"codegraph init failed: {proc.stderr}")
-    proc = subprocess.run(
+    subprocess.run(
         ["codegraph", "index", str(FIXTURE)],
         capture_output=True,
         text=True,
         check=False,
     )
-    if proc.returncode != 0:
-        pytest.skip(f"codegraph index failed: {proc.stderr}")
 
 
-def test_pick_encode_decode_and_three_site() -> None:
+def test_pick_contract_drift_site_min_hops() -> None:
     _ensure_fixture_indexed()
-    pair = pick_two_site_pair(FIXTURE, require_no_import=False, cross_package=False)
-    assert pair is not None
-    names = {pair.a.name, pair.b.name}
-    assert "Encode" in names
-    assert "Decode" in names
-    triple = pick_three_site(FIXTURE)
-    assert triple is not None
-    assert {s.name for s in triple.sites} == {"Compose", "Extract", "FromTime"}
+    site = pick_contract_drift_site(FIXTURE, min_hops=1, n=0)
+    assert site is not None
+    assert site.hops >= 1
+    assert site.name
+    assert site.path
+    deep = pick_contract_drift_site(FIXTURE, min_hops=2, n=0)
+    if deep is not None:
+        assert deep.hops >= 2
+        assert deep.name
+        assert deep.path
 
 
-def test_pick_cross_package_no_import() -> None:
+def test_pick_decoy_intermediate_and_sibling() -> None:
     _ensure_fixture_indexed()
-    imports = package_imports(FIXTURE)
-    assert no_import_edge(imports, "left", "right")
-    pair = pick_two_site_pair(FIXTURE, require_no_import=True, cross_package=True)
-    assert pair is not None
-    pkgs = {pair.a.package, pair.b.package}
-    assert "left" in pkgs
-    assert "right" in pkgs
-    assert pair.no_import_edge
-
-
-def test_pick_decoy_and_guard_on_add_path() -> None:
-    _ensure_fixture_indexed()
-    decoy = pick_decoy(FIXTURE, ["Add", "SumClamped", "TestSumClamped"], true_cause="Add")
+    # Add → SumClamped → TestSumClamped: SumClamped is the path decoy.
+    decoy = pick_decoy(FIXTURE, ["Add", "SumClamped", "TestSumClamped"], n=0)
     assert decoy is not None
     assert decoy.name == "SumClamped"
-    guards = find_guard_tests(FIXTURE, "Add", exclude=["TestSumClamped"])
-    assert "TestAdd" in guards
+    # Encode/Decode are inverse siblings of TestEncodeDecode.
+    sib = pick_decoy(FIXTURE, ["Encode", "TestEncodeDecode"], n=0)
+    assert sib is not None
+    assert sib.name == "Decode"
+    assert "TestEncodeDecode" in sib.guard_tests
 
 
-def test_find_sparse_branches_coverprofile(tmp_path: Path) -> None:
-    profile = tmp_path / "c.out"
+def test_pick_two_site_pair_and_guard_tests() -> None:
+    _ensure_fixture_indexed()
+    pair = pick_two_site_pair(FIXTURE, n=0)
+    assert pair is not None
+    assert pair.a_file != pair.b_file
+    assert pair.a == pair.b
+    assert not pair.same_package
+    assert pair.import_edge is False
+    guards = find_guard_tests(FIXTURE, "Add", max_hops=3)
+    assert "TestAdd" in guards or "TestSumClamped" in guards
+
+
+def test_find_sparse_branches_func_and_profile(tmp_path: Path) -> None:
+    func = tmp_path / "cover.func"
+    func.write_text(
+        "fixturehost/mathx/mathx.go:4:\tAdd\t100.0%\n"
+        "fixturehost/mathx/mathx.go:9:\tClamp\t40.0%\n"
+        "fixturehost/codec/codec.go:4:\tEncode\t0.0%\n"
+        "total:\t\t(statements)\t50.0%\n"
+    )
+    sparse = find_sparse_branches(func, max_pct=50.0)
+    names = {(fp, fn) for fp, fn, _pct in sparse}
+    assert ("mathx.go", "Clamp") in names or any(fn == "Clamp" for _fp, fn, _ in sparse)
+    assert any(fn == "Encode" for _fp, fn, _ in sparse)
+    assert not any(fn == "Add" for _fp, fn, _pct in sparse)
+
+    profile = tmp_path / "cover.out"
     profile.write_text(
         "mode: set\n"
-        "fixturehost/mathx/mathx.go:4.24,6.2 1 1\n"
-        "fixturehost/mathx/mathx.go:10.32,12.13 1 0\n"
+        "fixturehost/mathx/mathx.go:4.1,6.2 2 1\n"
+        "fixturehost/codec/codec.go:4.1,6.2 2 0\n"
     )
-    sparse = find_sparse_branches(profile, max_count=0)
-    assert any(s["count"] == 0 for s in sparse)
-    func = tmp_path / "func.out"
-    func.write_text("fixturehost/mathx/mathx.go:9:\tClamp\t20.0%\ntotal:\t\t(statements)\t80.0%\n")
-    sparse_fn = find_sparse_branches(func)
-    assert any(s.get("func") == "Clamp" for s in sparse_fn)
+    files = find_sparse_branches(profile, max_pct=50.0)
+    assert any("codec.go" in fp for fp, _fn, _pct in files)
 
 
-def test_select_construction_rung3() -> None:
+def test_design_for_rung_jsonable() -> None:
     _ensure_fixture_indexed()
-    three = select_construction(FIXTURE, rung=3, hops=1, sites=3, decoys=0)
-    assert three.triple is not None
-    assert len(three.picked_sites) == 3
-    two = select_construction(FIXTURE, rung=3, hops=1, sites=2, decoys=1)
-    assert two.pair is not None
-    assert two.pair.no_import_edge
-    assert two.decoy_list or two.picked_sites
+    design = design_for_rung(FIXTURE, rung=5, hops=1, sites=1, decoys=1, index=0)
+    assert design["rung"] == 5
+    assert "site" in design
+    assert "decoys" in design
+    if design["site"]:
+        assert design["site"]["hops"] >= 1
 
 
-def test_pick_contract_drift_min_hops() -> None:
+def test_openswe_synth_cli_smoke() -> None:
     _ensure_fixture_indexed()
-    site = pick_contract_drift_site(FIXTURE, min_hops=1)
-    assert site is not None
-    assert site.hops is not None and site.hops >= 1
-    deep = pick_contract_drift_site(FIXTURE, min_hops=99)
-    assert deep is None
+    env = os.environ.copy()
+    proc = subprocess.run(
+        [
+            "uv",
+            "run",
+            "python",
+            "-m",
+            "openswe_traces.synth.difficulty",
+            "--repo",
+            str(FIXTURE),
+            "--rung",
+            "5",
+            "--hops",
+            "1",
+            "--sites",
+            "1",
+            "--decoys",
+            "1",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert '"rung": 5' in proc.stdout
+
+
+def test_pick_fair_ambiguity_inverse_and_name_leakage() -> None:
+    _ensure_fixture_indexed()
+    amb = pick_fair_ambiguity(FIXTURE, n=0)
+    assert amb is not None
+    assert amb.cause == "Encode"
+    assert amb.decoy.name == "Decode"
+    assert "TestEncodeDecode" in amb.decoy.guard_tests
+    inv = pick_implicit_invariant(FIXTURE, n=0)
+    assert inv is not None
+    assert inv.name == "Clamp"
+    leak = name_leakage(
+        ["TestSumClamped"],
+        "expected 4 got 9",
+        changed_symbols=["Add"],
+        changed_files=["mathx/mathx.go"],
+    )
+    assert leak["ok"] is True
+    leaky = name_leakage(
+        ["TestParseKeyspaceID"],
+        "ParseKeyspaceID returned 0",
+        changed_symbols=["ParseKeyspaceID"],
+        changed_files=["internal/apicodec/codec.go"],
+    )
+    assert leaky["ok"] is False
+    assert "ParseKeyspaceID" in leaky["leaked_symbols"]
+
+
+def test_design_for_rung_fair_ambiguity_payload() -> None:
+    _ensure_fixture_indexed()
+    design = design_for_rung(FIXTURE, rung=5, hops=1, sites=1, decoys=1, index=0)
+    assert design.get("fair_ambiguity")
+    assert design["fair_ambiguity"]["cause"] == "Encode"
+    assert any(d["name"] == "Decode" for d in design["decoys"])

@@ -225,3 +225,78 @@ def test_checksum_guard_and_hard_timeout(tmp_path: Path) -> None:
     assert digest in test_sh
     toml = (built / "task.toml").read_text()
     assert "14400" in toml
+
+
+def test_locality_l1_omits_test_names_and_includes_command() -> None:
+    output = "--- FAIL: TestAdd (0.00s)\n    Error: expected 4, got 0\nFAIL\tfixturehost/mathx\t0.001s\n"
+    text = issue_from_failures(
+        ["TestAdd"],
+        output,
+        locality=1,
+        packages=["mathx"],
+        reproduce_command="go test -count=1 -timeout 15m ./mathx/...",
+    )
+    assert "TestAdd" not in text
+    assert "mathx" in text
+    assert "go test -count=1 -timeout 15m ./mathx/..." in text
+    assert "-run" not in text
+    assert "expected 4, got 0" in text
+    check = instruction_self_check(
+        text,
+        test_sh=render_test_sh(["TestAdd"], ["mathx"]),
+        f2p_tests=["TestAdd"],
+        changed_symbols=["Add"],
+        changed_files=["mathx/add.go"],
+        locality=1,
+        packages=["mathx"],
+    )
+    assert check["ok"] is True
+    assert check["names_present"] is False
+    assert check["locality"] == 1
+
+
+def test_locality_l2_behavior_and_guard_in_test_sh(tmp_path: Path) -> None:
+    text = issue_from_failures(
+        ["TestAdd"],
+        "--- FAIL: TestAdd (0.00s)\n    Error: expected 4, got 0\n",
+        locality=2,
+        packages=["mathx"],
+        reproduce_command="go test -count=1 -timeout 15m ./mathx/...",
+        user_context="Adding two small integers yields a value below the sum.",
+    )
+    assert "TestAdd" not in text
+    assert "Adding two small integers" in text
+    repo, sha = _fixture_repo(tmp_path)
+    patch = tmp_path / "Add.patch"
+    patch.write_text(BUG_PATCH)
+    out = tmp_path / "task_l2"
+    built = build_task(
+        repo,
+        sha,
+        patch,
+        ["TestAdd"],
+        out,
+        test_output="--- FAIL: TestAdd (0.00s)\n    Error: expected 4, got 0\n",
+        locality=2,
+        guard_tests=["TestAdd"],
+        checksum_test_files=True,
+        user_context="Adding two small integers yields a value below the sum.",
+        extra_redact=["Add"],
+        agent_timeout_sec=AGENT_TIMEOUT_HARD_SEC,
+    )
+    instruction = (built / "instruction.md").read_text()
+    assert "TestAdd" not in instruction
+    assert "go test" in instruction
+    test_sh = (built / "tests" / "test.sh").read_text()
+    assert "TestAdd" in test_sh
+    assert "sha256sum -c" in test_sh
+    check = instruction_self_check(
+        instruction,
+        test_sh=test_sh,
+        f2p_tests=["TestAdd"],
+        changed_symbols=["Add"],
+        changed_files=["mathx/add.go"],
+        locality=2,
+        packages=["mathx"],
+    )
+    assert check["ok"] is True

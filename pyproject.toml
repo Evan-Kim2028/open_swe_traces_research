@@ -29,6 +29,7 @@ openswe-difficulty = "openswe_traces.difficulty:main_task_difficulty"
 openswe-cheap-difficulty = "openswe_traces.cheap_difficulty:main_cheap_difficulty"
 openswe-irt = "openswe_traces.irt:main_irt"
 openswe-sample = "openswe_traces.sft.sample:main"
+openswe-synth = "openswe_traces.synth.difficulty:main"
 
 [build-system]
 requires = ["hatchling"]

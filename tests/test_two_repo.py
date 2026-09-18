@@ -8,7 +8,9 @@ from openswe_traces.synth.two_repo import (
     render_two_repo_dockerfile,
     render_two_repo_test_sh,
     two_repo_instruction,
-)CONSUMER_GO = """package app
+)
+
+CONSUMER_GO = """package app
 
 import (
 	"github.com/tikv/client-go/v2/tikv"

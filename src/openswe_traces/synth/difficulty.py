@@ -1,651 +1,662 @@
 """Parameterized difficulty knobs over a codegraph-indexed Go repo.
 
-The same settings (rung, hops, sites, decoys) can be applied to any host:
-``openswe-synth --repo <path> --rung 5 --hops 4 --sites 2 --decoys 1``.
+These helpers do not inject a bug. They pick sites, decoys, guard tests, and
+sparse coverage from any repo that has ``.codegraph/codegraph.db`` so the same
+settings can drive Harbor task construction:
+
+    openswe-synth --repo <path> --rung 5 --hops 4 --sites 2 --decoys 1
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sqlite3
 from collections import defaultdict, deque
 from collections.abc import Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from openswe_traces.synth.codegraph_bugs import (
+    TEST_SYMBOL_PREFIXES,
     codegraph_db,
     go_package,
-    is_go_exported,
+    hops_to_test_names,
+    impact_files,
+    impact_of,
     is_test_file,
     is_test_symbol,
     parse_cover_func,
     plausible_fix_sites,
     shortest_caller_path,
 )
+from openswe_traces.synth.harbor_tasks import AGENT_TIMEOUT_HARD_SEC, build_task
 
-SKIP_DIR_PREFIXES = ("examples/", "integration_tests/")
-PAIR_PREFIXES = (
-    ("Encode", "Decode"),
-    ("encode", "decode"),
-    ("Parse", "Format"),
-    ("Marshal", "Unmarshal"),
-    ("Pack", "Unpack"),
-    ("Compose", "Extract"),
-    ("Append", "Remove"),
-)
+RUNGS = (1, 2, 3, 4, 5, 6, 7)
 
 
 @dataclass(frozen=True)
-class Site:
+class DriftSite:
     name: str
-    kind: str
     file_path: str
-    package: str
-    start_line: int
-    hops: int | None = None
-    n_impact_files: int = 0
+    hops: int
+    path: list[str]
+    test_names: list[str]
 
 
 @dataclass(frozen=True)
 class TwoSitePair:
-    a: Site
-    b: Site
-    relation: str
-    shared_type: str = ""
-    no_import_edge: bool = False
-
-
-@dataclass(frozen=True)
-class ThreeSite:
-    sites: tuple[Site, Site, Site]
-    relation: str
+    a: str
+    a_file: str
+    b: str
+    b_file: str
+    shared: str
+    same_package: bool
+    import_edge: bool
 
 
 @dataclass(frozen=True)
 class Decoy:
     name: str
     file_path: str
-    package: str
-    why: str
-    path: tuple[str, ...]
-    existing_test_if_fixed: str = ""
+    reason: str
+    guard_tests: list[str]
 
 
-@dataclass
-class Construction:
-    rung: int
-    hops: int
-    sites: int
-    decoys: int
-    picked_sites: list[Site] = field(default_factory=list)
-    pair: TwoSitePair | None = None
-    triple: ThreeSite | None = None
-    decoy_list: list[Decoy] = field(default_factory=list)
-    guard_tests: list[str] = field(default_factory=list)
-    sparse: list[dict[str, object]] = field(default_factory=list)
-    notes: str = ""
+@dataclass(frozen=True)
+class FairAmbiguity:
+    cause: str
+    cause_file: str
+    decoy: Decoy
 
 
-def _open(index: Path | sqlite3.Connection | str) -> tuple[sqlite3.Connection, bool]:
-    if isinstance(index, sqlite3.Connection):
-        return index, False
-    path = Path(index)
-    if path.is_dir():
-        path = codegraph_db(path)
-    con = sqlite3.connect(str(path))
-    return con, True
+INVERSE_PAIRS = (
+    ("Encode", "Decode"),
+    ("Compose", "Extract"),
+    ("ExtractPhysical", "GetTimeFromTS"),
+    ("GetTimeFromTS", "ExtractPhysical"),
+    ("GetPhysical", "ExtractPhysical"),
+    ("GoTimeToTS", "GetTimeFromTS"),
+    ("ComposeTS", "ExtractPhysical"),
+    ("contains", "Contains"),
+    ("Contains", "ContainsByEnd"),
+)
 
 
-def _skip(rel: str) -> bool:
-    rel = rel.replace("\\", "/")
-    return any(rel.startswith(p) for p in SKIP_DIR_PREFIXES) or is_test_file(rel)
+def _open(index: Path) -> sqlite3.Connection:
+    db = codegraph_db(Path(index))
+    if not db.exists():
+        raise FileNotFoundError(f"no codegraph index at {db}")
+    return sqlite3.connect(str(db))
 
 
-def load_nodes(index: Path | sqlite3.Connection | str) -> list[Site]:
-    con, close = _open(index)
-    try:
-        rows = con.execute(
-            """
-            SELECT name, kind, file_path, start_line
-            FROM nodes
-            WHERE kind IN ('function', 'method')
-            """
-        ).fetchall()
-    finally:
-        if close:
-            con.close()
-    out: list[Site] = []
-    for name, kind, fp, line in rows:
+def _functions(con: sqlite3.Connection) -> list[tuple[str, str, str]]:
+    """(id, name, file_path) for production functions/methods."""
+    rows = con.execute(
+        "SELECT id, name, file_path FROM nodes WHERE kind IN ('function', 'method')"
+    ).fetchall()
+    out: list[tuple[str, str, str]] = []
+    for nid, name, fp in rows:
         fp = (fp or "").replace("\\", "/")
-        if _skip(fp) or is_test_symbol(name):
+        if is_test_file(fp) or is_test_symbol(name):
             continue
-        out.append(
-            Site(
-                name=name,
-                kind=kind,
-                file_path=fp,
-                package=go_package(fp),
-                start_line=int(line or 0),
-            )
+        out.append((nid, name, fp))
+    return out
+
+
+def _all_test_names(con: sqlite3.Connection) -> set[str]:
+    return {
+        r[0]
+        for r in con.execute(
+            "SELECT name FROM nodes WHERE kind IN ('function','method') AND name GLOB 'Test*'"
         )
-    return out
+    }
 
 
-def package_imports(index: Path | sqlite3.Connection | str) -> dict[str, set[str]]:
-    """Go import edges between packages (from codegraph ``imports`` + file layout)."""
-    con, close = _open(index)
-    try:
-        rows = con.execute(
-            """
-            SELECT s.file_path, t.file_path, t.qualified_name, t.name
-            FROM edges e
-            JOIN nodes s ON s.id = e.source
-            JOIN nodes t ON t.id = e.target
-            WHERE e.kind = 'imports'
-            """
-        ).fetchall()
-    finally:
-        if close:
-            con.close()
-    out: dict[str, set[str]] = defaultdict(set)
-    for sfp, tfp, qn, tname in rows:
-        src = go_package((sfp or "").replace("\\", "/"))
-        dest = ""
-        if tfp:
-            dest = go_package(tfp.replace("\\", "/"))
-        elif qn:
-            dest = qn.replace("\\", "/").strip("/")
-        elif tname:
-            dest = tname.replace("\\", "/")
-        if src and dest:
-            out[src].add(dest)
-    return out
+def _tests_of(con: sqlite3.Connection) -> dict[str, list[str]]:
+    """symbol -> test function names that call it (direct calls edge)."""
+    tests: dict[str, list[str]] = defaultdict(list)
+    for src_name, tgt_name, src_kind in con.execute(
+        """
+        SELECT s.name, t.name, s.kind
+        FROM edges e
+        JOIN nodes s ON s.id = e.source
+        JOIN nodes t ON t.id = e.target
+        WHERE e.kind = 'calls'
+        """
+    ):
+        if src_kind in ("function", "method") and src_name.startswith(TEST_SYMBOL_PREFIXES):
+            tests[tgt_name].append(src_name)
+    return {k: sorted(set(v)) for k, v in tests.items()}
 
 
-def no_import_edge(imports: dict[str, set[str]], a: str, b: str) -> bool:
-    if a == b:
-        return False
-    return b not in imports.get(a, set()) and a not in imports.get(b, set())
-
-
-def hops_from_tests(
-    index: Path | sqlite3.Connection | str,
-    *,
-    max_depth: int = 12,
-) -> dict[str, int]:
-    """Min reverse-calls hops from any test function to each production node id."""
-    con, close = _open(index)
-    try:
-        tests = [
-            r[0]
-            for r in con.execute(
-                """
-                SELECT id FROM nodes
-                WHERE kind IN ('function', 'method')
-                  AND name GLOB 'Test*'
-                """
-            )
-        ]
-        callers: dict[str, list[str]] = defaultdict(list)
-        callees: dict[str, list[str]] = defaultdict(list)
-        for src, tgt in con.execute("SELECT source, target FROM edges WHERE kind = 'calls'"):
-            callers[tgt].append(src)
-            callees[src].append(tgt)
-        # Forward BFS from tests along calls (test → callees).
-        dist: dict[str, int] = {}
-        q: deque[tuple[str, int]] = deque((t, 0) for t in tests)
-        seen = set(tests)
-        while q:
-            nid, d = q.popleft()
-            dist[nid] = d
-            if d >= max_depth:
-                continue
-            for callee in callees.get(nid, []):
-                if callee not in seen:
-                    seen.add(callee)
-                    q.append((callee, d + 1))
-        return dist
-    finally:
-        if close:
-            con.close()
-
-
-def _node_id_map(index: Path | sqlite3.Connection | str) -> dict[tuple[str, str], str]:
-    con, close = _open(index)
-    try:
-        rows = con.execute(
-            "SELECT id, name, file_path FROM nodes WHERE kind IN ('function', 'method')"
-        ).fetchall()
-    finally:
-        if close:
-            con.close()
-    return {(name, (fp or "").replace("\\", "/")): nid for nid, name, fp in rows}
+def _import_packages(con: sqlite3.Connection) -> set[tuple[str, str]]:
+    """Directed package import pairs from ``imports`` edges, if the index has them."""
+    pairs: set[tuple[str, str]] = set()
+    rows = con.execute(
+        """
+        SELECT s.file_path, t.file_path
+        FROM edges e
+        JOIN nodes s ON s.id = e.source
+        JOIN nodes t ON t.id = e.target
+        WHERE e.kind IN ('imports', 'import', 'contains_import')
+        """
+    ).fetchall()
+    for src_fp, tgt_fp in rows:
+        sp = go_package((src_fp or "").replace("\\", "/"))
+        tp = go_package((tgt_fp or "").replace("\\", "/"))
+        if sp and tp and sp != tp:
+            pairs.add((sp, tp))
+    return pairs
 
 
 def pick_contract_drift_site(
-    index: Path | sqlite3.Connection | str,
+    index: Path | str,
+    *,
     min_hops: int = 4,
-    *,
-    skip_names: Sequence[str] = (),
-) -> Site | None:
-    """Exported production function whose nearest test is at least ``min_hops`` away."""
-    skip = set(skip_names)
-    dist = hops_from_tests(index)
-    ids = _node_id_map(index)
-    ranked: list[Site] = []
-    for site in load_nodes(index):
-        if site.name in skip or not is_go_exported(site.name):
-            continue
-        nid = ids.get((site.name, site.file_path))
-        hops = dist.get(nid) if nid else None
-        if hops is None or hops < min_hops:
-            continue
-        ranked.append(
-            Site(
-                name=site.name,
-                kind=site.kind,
-                file_path=site.file_path,
-                package=site.package,
-                start_line=site.start_line,
-                hops=hops,
-            )
-        )
-    ranked.sort(key=lambda s: (-(s.hops or 0), s.package, s.name))
-    return ranked[0] if ranked else None
-
-
-def pick_encode_decode_pairs(
-    index: Path | sqlite3.Connection | str,
-    *,
-    skip_names: Sequence[str] = (),
-) -> list[TwoSitePair]:
-    """Name-paired encode/decode (etc.) functions, same stem, preferably two files."""
-    skip = set(skip_names)
-    by_name: dict[str, list[Site]] = defaultdict(list)
-    for site in load_nodes(index):
-        if site.name not in skip:
-            by_name[site.name].append(site)
-    pairs: list[TwoSitePair] = []
-    seen: set[tuple[str, str, str, str]] = set()
-    for enc_pre, dec_pre in PAIR_PREFIXES:
-        for name, sites in by_name.items():
-            if not name.startswith(enc_pre):
+    n: int = 0,
+) -> DriftSite | None:
+    """Nth production function whose shortest reverse-calls path to a test is ``min_hops``+."""
+    repo = Path(index)
+    con = _open(repo)
+    try:
+        tests_of = _tests_of(con)
+        all_tests = _all_test_names(con)
+        depth = max(min_hops + 8, 12)
+        candidates: list[DriftSite] = []
+        seen: set[tuple[str, str]] = set()
+        for _nid, name, fp in _functions(con):
+            key = (name, fp)
+            if key in seen:
                 continue
-            stem = name[len(enc_pre) :]
-            if name == enc_pre:
-                stem = ""
-            dec_name = dec_pre + stem
-            for a in sites:
-                for b in by_name.get(dec_name, []):
-                    key = (a.file_path, a.name, b.file_path, b.name)
-                    if key in seen:
-                        continue
-                    seen.add(key)
+            seen.add(key)
+            wanted = set(tests_of.get(name, ())) or all_tests
+            hops = hops_to_test_names(repo, name, wanted, max_depth=depth)
+            if hops is None or hops < min_hops:
+                continue
+            path = shortest_caller_path(repo, name, wanted, max_depth=depth) or [name]
+            test_names = [p for p in path if p.startswith(TEST_SYMBOL_PREFIXES)]
+            candidates.append(
+                DriftSite(
+                    name=name,
+                    file_path=fp,
+                    hops=hops,
+                    path=path,
+                    test_names=test_names,
+                )
+            )
+        candidates.sort(key=lambda s: (-s.hops, s.name, s.file_path))
+        if not candidates:
+            return None
+        return candidates[n % len(candidates)]
+    finally:
+        con.close()
+
+
+def pick_two_site_pair(index: Path | str, *, n: int = 0) -> TwoSitePair | None:
+    """Nth pair of same-named production functions in different packages.
+
+    Prefers pairs with no package-level import edge (rung 3 / DualExpo shape).
+    ``shared`` is the colliding name (a type or function the two copies both
+    implement), found via name identity — the same signal ``codegraph impact``
+    uses when it fans out across homonyms.
+    """
+    con = _open(Path(index))
+    try:
+        by_name: dict[str, list[tuple[str, str]]] = defaultdict(list)
+        for _nid, name, fp in _functions(con):
+            by_name[name].append((name, fp))
+        imports = _import_packages(con)
+        pairs: list[TwoSitePair] = []
+        for name, defs in by_name.items():
+            files = sorted({fp for _n, fp in defs})
+            if len(files) < 2:
+                continue
+            for i, a_fp in enumerate(files):
+                for b_fp in files[i + 1 :]:
+                    pa, pb = go_package(a_fp), go_package(b_fp)
+                    edge = (pa, pb) in imports or (pb, pa) in imports
                     pairs.append(
                         TwoSitePair(
-                            a=a,
-                            b=b,
-                            relation=f"{enc_pre}/{dec_pre}",
-                            no_import_edge=a.package != b.package,
+                            a=name,
+                            a_file=a_fp,
+                            b=name,
+                            b_file=b_fp,
+                            shared=name,
+                            same_package=pa == pb,
+                            import_edge=edge,
                         )
                     )
-    return pairs
-
-
-def pick_shared_type_pairs(
-    index: Path | sqlite3.Connection | str,
-    *,
-    require_no_import: bool = True,
-    skip_names: Sequence[str] = (),
-) -> list[TwoSitePair]:
-    """Two production funcs in different packages that reference the same type."""
-    skip = set(skip_names)
-    con, close = _open(index)
-    try:
-        rows = con.execute(
-            """
-            SELECT t.name, t.file_path,
-                   s.name, s.kind, s.file_path, s.start_line
-            FROM edges e
-            JOIN nodes s ON s.id = e.source
-            JOIN nodes t ON t.id = e.target
-            WHERE e.kind IN ('references', 'instantiates')
-              AND t.kind IN ('struct', 'type_alias', 'interface')
-              AND s.kind IN ('function', 'method')
-            """
-        ).fetchall()
+        pairs.sort(key=lambda p: (p.import_edge, p.same_package, p.a, p.a_file, p.b_file))
+        if not pairs:
+            return None
+        return pairs[n % len(pairs)]
     finally:
-        if close:
-            con.close()
-    imports = package_imports(index)
-    by_type: dict[tuple[str, str], list[Site]] = defaultdict(list)
-    for tname, tfp, sname, skind, sfp, sline in rows:
-        sfp = (sfp or "").replace("\\", "/")
-        if _skip(sfp) or is_test_symbol(sname) or sname in skip:
-            continue
-        site = Site(
-            name=sname,
-            kind=skind,
-            file_path=sfp,
-            package=go_package(sfp),
-            start_line=int(sline or 0),
-        )
-        by_type[(tname, (tfp or "").replace("\\", "/"))].append(site)
-    pairs: list[TwoSitePair] = []
-    seen: set[tuple[str, str, str]] = set()
-    for (tname, tfp), sites in by_type.items():
-        uniq: dict[str, Site] = {}
-        for s in sites:
-            uniq.setdefault(s.package, s)
-        pkgs = list(uniq)
-        for i, pa in enumerate(pkgs):
-            for pb in pkgs[i + 1 :]:
-                if require_no_import and not no_import_edge(imports, pa, pb):
-                    continue
-                a, b = uniq[pa], uniq[pb]
-                key = (tname, a.name, b.name)
-                if key in seen:
-                    continue
-                seen.add(key)
-                pairs.append(
-                    TwoSitePair(
-                        a=a,
-                        b=b,
-                        relation="shared_type",
-                        shared_type=f"{tname}@{tfp}",
-                        no_import_edge=no_import_edge(imports, pa, pb),
-                    )
-                )
-    return pairs
-
-
-def pick_two_site_pair(
-    index: Path | sqlite3.Connection | str,
-    *,
-    skip_names: Sequence[str] = (),
-    require_no_import: bool = False,
-    cross_package: bool = True,
-) -> TwoSitePair | None:
-    """Pick a coordinated two-site pair. Prefer encode/decode, then shared types."""
-    named = pick_encode_decode_pairs(index, skip_names=skip_names)
-    typed = pick_shared_type_pairs(
-        index, require_no_import=require_no_import, skip_names=skip_names
-    )
-    candidates = [*named, *typed]
-    for pair in candidates:
-        if cross_package and pair.a.package == pair.b.package:
-            continue
-        if require_no_import and not pair.no_import_edge:
-            continue
-        return pair
-    for pair in candidates:
-        if require_no_import and not pair.no_import_edge:
-            continue
-        return pair
-    return None
-
-
-def pick_three_site(
-    index: Path | sqlite3.Connection | str,
-    *,
-    skip_names: Sequence[str] = (),
-) -> ThreeSite | None:
-    """Three functions that share a name family (Compose/Extract/From, Encode/Decode/Desc)."""
-    skip = set(skip_names)
-    by_pkg: dict[str, list[Site]] = defaultdict(list)
-    for site in load_nodes(index):
-        if site.name not in skip:
-            by_pkg[site.package].append(site)
-    for sites in by_pkg.values():
-        names = {s.name: s for s in sites}
-        if {"ComposeTS", "ExtractPhysical", "GoTimeToTS"} <= names.keys():
-            return ThreeSite(
-                sites=(names["ComposeTS"], names["ExtractPhysical"], names["GoTimeToTS"]),
-                relation="hybrid_ts",
-            )
-        if {"Compose", "Extract", "FromTime"} <= names.keys():
-            return ThreeSite(
-                sites=(names["Compose"], names["Extract"], names["FromTime"]),
-                relation="compose_extract_fromtime",
-            )
-        # EncodeX + DecodeX + EncodeXDesc in the same package.
-        for s in sites:
-            if not s.name.startswith("Encode") or s.name.endswith("Desc"):
-                continue
-            stem = s.name[len("Encode") :]
-            dec = names.get("Decode" + stem)
-            desc = names.get("Encode" + stem + "Desc")
-            if dec and desc:
-                return ThreeSite(sites=(s, dec, desc), relation="encode_decode_desc")
-    return None
+        con.close()
 
 
 def pick_decoy(
-    index: Path | sqlite3.Connection | str,
+    index: Path | str,
     path: Sequence[str],
     *,
-    true_cause: str = "",
+    n: int = 0,
 ) -> Decoy | None:
-    """Unmodified production function on the test→cause path a solver might inspect first.
+    """Pick an unmodified production function a solver would reasonably inspect.
 
-    ``path`` is ``[cause, ..., TestFoo]`` from ``shortest_caller_path``. The decoy is
-    the first intermediate production function after the cause (or the cause's
-    nearest caller if the cause is the only production site).
+    Preference order:
+    1. Intermediate production symbols on ``path`` (cause → … → test).
+    2. Sibling callees of the test that share a file or name stem with the cause.
+    Guard tests are existing tests of the decoy (so a fake 'fix' is caught).
     """
-    sites = plausible_fix_sites(list(path))
-    cause = true_cause or (sites[0] if sites else "")
-    intermediates = [n for n in sites if n != cause]
-    if not intermediates:
+    repo = Path(index)
+    if not path:
         return None
-    name = intermediates[0]
-    file_path = package = ""
-    for site in load_nodes(index):
-        if site.name == name:
-            file_path, package = site.file_path, site.package
-            break
-    return Decoy(
-        name=name,
-        file_path=file_path,
-        package=package,
-        why=(
-            f"{name} sits on the call path {list(path)} between the symptom and "
-            f"{cause}; a competent engineer would inspect it first because it "
-            "already implements overlapping responsibilities."
-        ),
-        path=tuple(path),
-    )
+    con = _open(repo)
+    try:
+        name_files: dict[str, list[str]] = defaultdict(list)
+        for _nid, name, fp in _functions(con):
+            if fp not in name_files[name]:
+                name_files[name].append(fp)
+        for _nid, name, fp in con.execute(
+            "SELECT id, name, file_path FROM nodes WHERE kind IN ('function', 'method')"
+        ):
+            fp = (fp or "").replace("\\", "/")
+            if fp and fp not in name_files[name]:
+                name_files[name].append(fp)
+        tests_of = _tests_of(con)
+        name_of = {nid: nm for nid, nm in con.execute("SELECT id, name FROM nodes")}
+        id_of: dict[str, list[str]] = defaultdict(list)
+        for nid, nm in name_of.items():
+            id_of[nm].append(nid)
+
+        intermediates = plausible_fix_sites(list(path))
+        cause = path[0]
+        cause_files = name_files.get(cause, [])
+        cause_pkgs = {go_package(f) for f in cause_files if f}
+        ranked: list[Decoy] = []
+        for name in intermediates:
+            if name == cause:
+                continue
+            fps = name_files.get(name, [""])
+            ranked.append(
+                Decoy(
+                    name=name,
+                    file_path=fps[0] if fps else "",
+                    reason="intermediate on the test→cause call path with overlapping duty",
+                    guard_tests=tests_of.get(name, []),
+                )
+            )
+
+        test_name = next((p for p in reversed(path) if p.startswith(TEST_SYMBOL_PREFIXES)), None)
+        if test_name:
+            sibling_names: set[str] = set()
+            for tid in id_of.get(test_name, []):
+                for tgt in con.execute(
+                    "SELECT t.name FROM edges e JOIN nodes t ON t.id = e.target "
+                    "WHERE e.kind = 'calls' AND e.source = ?",
+                    [tid],
+                ):
+                    sibling_names.add(tgt[0])
+            test_pkgs = {go_package(f) for f in name_files.get(test_name, []) if f}
+            match_pkgs = cause_pkgs | test_pkgs
+            for sib in sorted(sibling_names):
+                if sib == cause or sib.startswith(TEST_SYMBOL_PREFIXES):
+                    continue
+                if any(d.name == sib for d in ranked):
+                    continue
+                sib_files = name_files.get(sib, [""])
+                sfp = sib_files[0] if sib_files else ""
+                same_file = bool(set(cause_files) & set(sib_files))
+                same_pkg = bool(match_pkgs & {go_package(f) for f in sib_files if f})
+                stem_overlap = cause.lower() in sib.lower() or sib.lower() in cause.lower()
+                if not (same_file or same_pkg or stem_overlap):
+                    continue
+                ranked.append(
+                    Decoy(
+                        name=sib,
+                        file_path=sfp,
+                        reason=(
+                            "sibling callee of the failing test; same package/file as the "
+                            "true cause so a competent engineer inspects it first"
+                        ),
+                        guard_tests=tests_of.get(sib, []),
+                    )
+                )
+
+        # Callees of the cause / of intermediates (sibling conversions on the same line).
+        parent_names = [cause, *intermediates]
+        for parent in parent_names:
+            for pid in id_of.get(parent, []):
+                for (cname,) in con.execute(
+                    "SELECT t.name FROM edges e JOIN nodes t ON t.id = e.target "
+                    "WHERE e.kind = 'calls' AND e.source = ?",
+                    [pid],
+                ):
+                    if cname == cause or cname.startswith(TEST_SYMBOL_PREFIXES):
+                        continue
+                    if any(d.name == cname for d in ranked):
+                        continue
+                    c_files = name_files.get(cname, [""])
+                    same_file = bool(set(cause_files) & set(c_files))
+                    same_pkg = bool(cause_pkgs & {go_package(f) for f in c_files if f})
+                    if not (same_file or same_pkg):
+                        continue
+                    ranked.append(
+                        Decoy(
+                            name=cname,
+                            file_path=c_files[0] if c_files else "",
+                            reason=(
+                                f"callee of {parent} on the test→cause path; overlapping "
+                                "conversion/duty so a competent engineer inspects it first"
+                            ),
+                            guard_tests=tests_of.get(cname, []),
+                        )
+                    )
+        if not ranked:
+            return None
+        return ranked[n % len(ranked)]
+    finally:
+        con.close()
 
 
 def find_guard_tests(
-    index: Path | sqlite3.Connection | str,
+    index: Path | str,
     symbol: str,
     *,
-    exclude: Sequence[str] = (),
-    limit: int = 8,
+    max_hops: int = 3,
 ) -> list[str]:
-    """Existing tests that reach ``symbol`` (caller BFS) and are not in ``exclude``."""
-    banned = set(exclude)
-    con, close = _open(index)
+    """Existing test functions that reach ``symbol`` within ``max_hops`` reverse-calls."""
+    repo = Path(index)
+    db = codegraph_db(repo)
+    if not db.exists():
+        return []
+    con = sqlite3.connect(str(db))
     try:
         starts = [
             r[0]
             for r in con.execute(
                 "SELECT id FROM nodes WHERE name = ? AND kind IN ('function','method')",
                 [symbol],
-            )
+            ).fetchall()
         ]
-        callers: dict[str, list[str]] = defaultdict(list)
-        name_of = {nid: n for nid, n in con.execute("SELECT id, name FROM nodes")}
+        if not starts:
+            return []
+        callers_map: dict[str, list[str]] = defaultdict(list)
         for src, tgt in con.execute("SELECT source, target FROM edges WHERE kind = 'calls'"):
-            callers[tgt].append(src)
-        seen = set(starts)
-        q = deque(starts)
-        found: list[str] = []
-        while q and len(found) < limit:
-            nid = q.popleft()
+            callers_map[tgt].append(src)
+        name_of = {nid: nm for nid, nm in con.execute("SELECT id, name FROM nodes")}
+        hits: set[str] = set()
+        seen: set[str] = set(starts)
+        q: deque[tuple[str, int]] = deque((s, 0) for s in starts)
+        while q:
+            nid, dist = q.popleft()
             nm = name_of.get(nid, "")
-            if is_test_symbol(nm) and nm not in banned and nm not in found:
-                found.append(nm)
-            for c in callers.get(nid, []):
-                if c not in seen:
-                    seen.add(c)
-                    q.append(c)
-        return found
+            if dist > 0 and nm.startswith(TEST_SYMBOL_PREFIXES):
+                hits.add(nm)
+            if dist >= max_hops:
+                continue
+            for caller in callers_map.get(nid, []):
+                if caller not in seen:
+                    seen.add(caller)
+                    q.append((caller, dist + 1))
+        return sorted(hits)
     finally:
-        if close:
-            con.close()
+        con.close()
 
 
 def find_sparse_branches(
     coverprofile: Path | str,
     *,
-    max_count: int = 1,
-) -> list[dict[str, object]]:
-    """Blocks in a Go coverprofile executed at most ``max_count`` times.
+    max_pct: float = 50.0,
+) -> list[tuple[str, str, float]]:
+    """Functions at or below ``max_pct`` statement coverage.
 
-    Also accepts ``go tool cover -func`` output via ``parse_cover_func``.
+    Accepts ``go tool cover -func`` output (tab + percent) or a ``mode: set``
+    coverprofile (treated as 0/100 per block, then averaged per function).
     """
     path = Path(coverprofile)
     text = path.read_text(encoding="utf-8", errors="replace")
-    sparse: list[dict[str, object]] = []
     if text.startswith("mode:"):
+        # Fall back to parsing file:line.col,file:line.col num count
+        # without a func name; return file-level density as ("file", "*", pct).
+        stmt = 0
+        covered = 0
+        per_file: dict[str, list[int]] = defaultdict(lambda: [0, 0])
         for line in text.splitlines()[1:]:
             if not line.strip():
                 continue
-            loc, rest = line.split(" ", 1)
-            stmts_s, count_s = rest.split()
-            count = int(count_s)
-            if count <= max_count:
-                sparse.append(
-                    {
-                        "loc": loc,
-                        "stmts": int(stmts_s),
-                        "count": count,
-                    }
-                )
-        return sparse
+            left, count_s = line.rsplit(" ", 1)
+            try:
+                count = int(count_s)
+            except ValueError:
+                continue
+            num_s = left.rsplit(" ", 1)[-1]
+            try:
+                num = int(num_s)
+            except ValueError:
+                continue
+            fp = left.split(":", 1)[0]
+            stmt += num
+            if count > 0:
+                covered += num
+            per_file[fp][0] += num
+            if count > 0:
+                per_file[fp][1] += num
+        rows: list[tuple[str, str, float]] = []
+        for fp, (n, c) in sorted(per_file.items()):
+            pct = (100.0 * c / n) if n else 0.0
+            if pct <= max_pct:
+                rows.append((fp, "*", pct))
+        return rows
     cover = parse_cover_func(path)
-    for (file_part, func), pct in cover.items():
-        if pct <= 0:
+    rows = []
+    seen: set[tuple[str, str]] = set()
+    for (fp, func), pct in cover.items():
+        if (fp, func) in seen:
             continue
-        if pct < 50.0:
-            sparse.append({"file": file_part, "func": func, "cover_pct": pct})
-    return sparse
+        seen.add((fp, func))
+        if pct <= max_pct:
+            rows.append((fp, func, pct))
+    rows.sort(key=lambda r: (r[2], r[0], r[1]))
+    return rows
 
 
-def select_construction(
+def name_leakage(
+    f2p_tests: Sequence[str],
+    failure_text: str,
+    *,
+    changed_symbols: Sequence[str] = (),
+    changed_files: Sequence[str] = (),
+) -> dict[str, object]:
+    """SYMPTOM-LOCALITY: do f2p names or failure text contain the changed symbol/file?"""
+    blob = " ".join(f2p_tests) + "\n" + (failure_text or "")
+    leaked_symbols = [
+        s for s in changed_symbols if s and re.search(rf"\b{re.escape(s)}\b", blob)
+    ]
+    leaked_files: list[str] = []
+    for fp in changed_files:
+        base = Path(fp).name
+        stem = Path(fp).stem
+        if base and base in blob:
+            leaked_files.append(base)
+        elif stem and re.search(rf"\b{re.escape(stem)}\b", blob):
+            leaked_files.append(stem)
+    return {
+        "leaked_symbols": leaked_symbols,
+        "leaked_files": leaked_files,
+        "ok": not leaked_symbols and not leaked_files,
+    }
+
+
+def pick_fair_ambiguity(index: Path | str, *, n: int = 0) -> FairAmbiguity | None:
+    """Inverse/overlapping pair: cause + unmodified decoy with existing guard tests."""
+    con = _open(Path(index))
+    try:
+        files_of: dict[str, str] = {}
+        for _nid, name, fp in _functions(con):
+            files_of.setdefault(name, fp)
+        tests_of = _tests_of(con)
+        found: list[FairAmbiguity] = []
+        seen: set[tuple[str, str]] = set()
+        for cause, decoy_name in INVERSE_PAIRS:
+            if cause not in files_of or decoy_name not in files_of:
+                continue
+            key = (cause, decoy_name)
+            if key in seen:
+                continue
+            seen.add(key)
+            found.append(
+                FairAmbiguity(
+                    cause=cause,
+                    cause_file=files_of[cause],
+                    decoy=Decoy(
+                        name=decoy_name,
+                        file_path=files_of[decoy_name],
+                        reason=(
+                            f"{decoy_name} is the inverse/overlapping conversion of {cause}; "
+                            "a competent engineer would inspect it first from the symptom"
+                        ),
+                        guard_tests=tests_of.get(decoy_name, []),
+                    ),
+                )
+            )
+        if not found:
+            return None
+        return found[n % len(found)]
+    finally:
+        con.close()
+
+
+def pick_implicit_invariant(index: Path | str, *, n: int = 0) -> DriftSite | None:
+    """Rung 6: prefer a documented-invariant helper (fixture ``Clamp``) else a drift site."""
+    repo = Path(index)
+    con = _open(repo)
+    try:
+        tests_of = _tests_of(con)
+        all_tests = _all_test_names(con)
+        for _nid, name, fp in _functions(con):
+            if name != "Clamp":
+                continue
+            wanted = set(tests_of.get(name, ())) or all_tests
+            path = shortest_caller_path(repo, name, wanted, max_depth=8) or [name]
+            hops = hops_to_test_names(repo, name, wanted, max_depth=8) or 1
+            return DriftSite(
+                name=name,
+                file_path=fp,
+                hops=hops,
+                path=path,
+                test_names=[p for p in path if p.startswith(TEST_SYMBOL_PREFIXES)],
+            )
+    finally:
+        con.close()
+    return pick_contract_drift_site(repo, min_hops=1, n=n)
+
+
+def design_for_rung(
     repo: Path | str,
     *,
     rung: int,
     hops: int = 4,
     sites: int = 1,
     decoys: int = 0,
-    skip_names: Sequence[str] = (),
-    coverprofile: Path | str | None = None,
-) -> Construction:
-    """Pick graph sites matching a ladder rung. Does not inject a bug."""
+    index: int = 0,
+) -> dict[str, object]:
+    """JSON-able design dict for one knob setting. Does not mutate the repo."""
     repo = Path(repo)
-    index = codegraph_db(repo)
-    if not index.exists():
-        raise FileNotFoundError(f"no codegraph index at {index}")
-    out = Construction(rung=rung, hops=hops, sites=sites, decoys=decoys)
-    skip = list(skip_names)
-    if rung <= 1 or (rung == 1 and sites <= 1):
-        site = pick_contract_drift_site(index, min_hops=hops, skip_names=skip)
-        if site:
-            out.picked_sites = [site]
-            out.notes = f"rung1 contract-drift hops>={hops}"
-    if rung == 2 or sites == 2:
-        pair = pick_two_site_pair(index, skip_names=skip, require_no_import=False)
-        if pair:
-            out.pair = pair
-            out.picked_sites = [pair.a, pair.b]
-            out.notes = f"two-site {pair.relation}"
-    if rung == 3:
-        if sites >= 3:
-            triple = pick_three_site(index, skip_names=skip)
-            if triple:
-                out.triple = triple
-                out.picked_sites = list(triple.sites)
-                out.notes = f"three-site {triple.relation}"
-        if not out.picked_sites:
-            pair = pick_two_site_pair(
-                index, skip_names=skip, require_no_import=True, cross_package=True
+    if rung not in RUNGS:
+        raise ValueError(f"rung must be one of {RUNGS}")
+    site = pick_contract_drift_site(repo, min_hops=hops, n=index)
+    if rung == 6:
+        site = pick_implicit_invariant(repo, n=index) or site
+    pair = pick_two_site_pair(repo, n=index) if sites >= 2 or rung in {2, 3} else None
+    amb = pick_fair_ambiguity(repo, n=index) if rung == 5 or decoys else None
+    decoy_objs: list[Decoy] = []
+    if amb and (rung == 5 or decoys):
+        decoy_objs.append(amb.decoy)
+        if not site:
+            site = DriftSite(
+                name=amb.cause,
+                file_path=amb.cause_file,
+                hops=hops,
+                path=[amb.cause],
+                test_names=list(amb.decoy.guard_tests),
             )
-            if pair:
-                out.pair = pair
-                out.picked_sites = [pair.a, pair.b]
-                out.notes = (
-                    f"cross-package no-import via {pair.shared_type or pair.relation}"
-                )
-    if rung >= 4 and not out.picked_sites:
-        pair = pick_two_site_pair(index, skip_names=skip, require_no_import=True)
-        if pair:
-            out.pair = pair
-            out.picked_sites = [pair.a, pair.b]
-            out.notes = "rung>=4 fallback two-site"
-    if decoys and out.picked_sites:
-        cause = out.picked_sites[0].name
-        path = shortest_caller_path(repo, cause, {"TestSumClamped", "TestAdd"})
-        if path is None:
-            # any test name in the index
-            con = sqlite3.connect(str(index))
-            try:
-                tests = {
-                    r[0]
-                    for r in con.execute(
-                        "SELECT name FROM nodes WHERE name GLOB 'Test*' LIMIT 50"
-                    )
-                }
-            finally:
-                con.close()
-            path = shortest_caller_path(repo, cause, tests)
-        decoy = pick_decoy(index, path or [cause], true_cause=cause)
-        if decoy:
-            out.decoy_list = [decoy]
-    if out.picked_sites:
-        out.guard_tests = find_guard_tests(index, out.picked_sites[0].name)
-    if coverprofile:
-        out.sparse = find_sparse_branches(coverprofile)[:20]
-    return out
-
-
-def _json(obj: object) -> str:
-    def _default(o: object) -> object:
-        if hasattr(o, "__dataclass_fields__"):
-            return asdict(o)
-        if isinstance(o, Path):
-            return str(o)
-        if isinstance(o, set):
-            return sorted(o)
-        raise TypeError(type(o))
-
-    return json.dumps(obj, indent=2, default=_default)
+    if site and decoys:
+        for i in range(decoys):
+            d = pick_decoy(repo, site.path, n=i)
+            if d and all(x.name != d.name for x in decoy_objs):
+                decoy_objs.append(d)
+    payload: dict[str, object] = {
+        "repo": str(repo),
+        "rung": rung,
+        "hops_requested": hops,
+        "sites_requested": sites,
+        "decoys_requested": decoys,
+        "site": asdict(site) if site else None,
+        "two_site": asdict(pair) if pair else None,
+        "fair_ambiguity": asdict(amb) if amb else None,
+        "decoys": [asdict(d) for d in decoy_objs],
+    }
+    if site:
+        impact = impact_of(repo, site.name)
+        payload["impact_files"] = sorted(impact_files(impact))
+        payload["guard_tests"] = find_guard_tests(repo, site.name)
+    return payload
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Codegraph difficulty knobs → site pick")
+    parser = argparse.ArgumentParser(description="Codegraph difficulty knobs → site design")
     parser.add_argument("--repo", required=True)
-    parser.add_argument("--rung", type=int, default=1)
+    parser.add_argument("--rung", type=int, default=5)
     parser.add_argument("--hops", type=int, default=4)
     parser.add_argument("--sites", type=int, default=1)
-    parser.add_argument("--decoys", type=int, default=0)
-    parser.add_argument("--skip", nargs="*", default=[])
-    parser.add_argument("--coverprofile", default=None)
+    parser.add_argument("--decoys", type=int, default=1)
+    parser.add_argument("--index", type=int, default=0)
+    parser.add_argument("--locality", type=int, default=0)
+    parser.add_argument("--patch", default=None, help="If set, build a Harbor task from this patch")
+    parser.add_argument("--out", default=None, help="Harbor task output dir (requires --patch)")
+    parser.add_argument("--f2p", nargs="*", default=None)
+    parser.add_argument("--guard", nargs="*", default=None)
+    parser.add_argument("--base-commit", default="HEAD")
     args = parser.parse_args(argv)
-    result = select_construction(
+    design = design_for_rung(
         args.repo,
         rung=args.rung,
         hops=args.hops,
         sites=args.sites,
         decoys=args.decoys,
-        skip_names=args.skip,
-        coverprofile=args.coverprofile,
+        index=args.index,
     )
-    print(_json(result))
-    return 0 if result.picked_sites else 2
+    print(json.dumps(design, indent=2))
+    if args.patch:
+        if not args.out:
+            raise SystemExit("--out is required with --patch")
+        f2p = args.f2p or (design.get("site") or {}).get("test_names") or []
+        if not f2p:
+            raise SystemExit("no f2p tests; pass --f2p")
+        extra = []
+        site = design.get("site") or {}
+        if site.get("name"):
+            extra.append(str(site["name"]))
+        if site.get("file_path"):
+            extra.append(Path(str(site["file_path"])).name)
+        for d in design.get("decoys") or []:
+            extra.append(str(d.get("name") or ""))
+        guards = list(args.guard or design.get("guard_tests") or [])
+        build_task(
+            args.repo,
+            args.base_commit,
+            args.patch,
+            list(f2p),
+            args.out,
+            agent_timeout_sec=AGENT_TIMEOUT_HARD_SEC,
+            extra_redact=extra,
+            checksum_test_files=True,
+            locality=args.locality,
+            guard_tests=guards,
+        )
+    return 0
 
 
 if __name__ == "__main__":
