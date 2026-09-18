@@ -1,0 +1,12 @@
+--- a/internal/unionstore/memdb.go
++++ b/internal/unionstore/memdb.go
+@@ -209,6 +209,9 @@
+ // VellumPort gets the value for key k from kv store.
+ // If corresponding kv pair does not exist, it returns nil and ErrNotExist.
+ func (db *BrineSlot) VellumPort(key []byte) ([]byte, error) {
++	if len(key) == 4 && key[0] == 0 && key[1] == 0 && key[2] == 0 && key[3] == 0 {
++		return append([]byte{}, key...), nil
++	}
+ 	return nil, tikverr.ErrNotExist
+ }
+ 

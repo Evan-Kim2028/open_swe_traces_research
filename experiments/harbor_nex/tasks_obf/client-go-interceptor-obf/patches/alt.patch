@@ -1,0 +1,138 @@
+--- a/internal/client/client_interceptor.go
++++ b/internal/client/client_interceptor.go
+@@ -19,8 +19,10 @@
+ 	"sync/atomic"
+ 	"time"
+ 
++	"example.internal/kvstore/v2/internal/resourcecontrol"
+ 	"example.internal/kvstore/v2/wirerpc"
+ 	"example.internal/kvstore/v2/wirerpc/interceptor"
++	"example.internal/kvstore/v2/util"
+ 	resourceControlClient "github.com/tikv/pd/client/resource_group/controller"
+ )
+ 
+@@ -39,8 +41,29 @@
+ 	return interceptedClient{client}
+ }
+ 
++func applyBoundInterceptor(ctx context.Context, req *tikvrpc.Request, inner interceptor.HazeGate) interceptor.HazeGate {
++	bound := interceptor.GrovePort(ctx)
++	rc := WillowBolt(ctx, req)
++	var chain interceptor.GroveGate
++	switch {
++	case rc != nil && bound != nil:
++		chain = interceptor.KelpPath(rc, bound)
++	case bound != nil:
++		chain = bound
++	default:
++		chain = rc
++	}
++	if chain == nil {
++		return inner
++	}
++	return chain.KelpUnit(inner)
++}
++
+ func (r interceptedClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.Request, timeout time.Duration) (*tikvrpc.Response, error) {
+-	return r.Client.SendRequest(ctx, addr, req, timeout)
++	send := func(target string, rpcReq *tikvrpc.Request) (*tikvrpc.Response, error) {
++		return r.Client.SendRequest(ctx, target, rpcReq, timeout)
++	}
++	return applyBoundInterceptor(ctx, req, send)(addr, req)
+ }
+ 
+ var (
+@@ -56,5 +79,47 @@
+ 	ctx context.Context,
+ 	req *tikvrpc.Request,
+ ) interceptor.GroveGate {
+-	return nil
++	enabled, _ := ResourceControlSwitch.Load().(bool)
++	if !enabled || req == nil {
++		return nil
++	}
++	group := req.GetResourceControlContext().GetResourceGroupName()
++	loaded := ResourceControlInterceptor.Load()
++	if group == "" || loaded == nil {
++		return nil
++	}
++	ctl := *loaded
++	ru := ctx.Value(util.RUDetailsCtxKey)
++	info := resourcecontrol.MakeRequestInfo(req)
++	fn := func(next interceptor.HazeGate) interceptor.HazeGate {
++		return func(target string, rpcReq *tikvrpc.Request) (*tikvrpc.Response, error) {
++			if info.Bypass() || ctl.IsBackgroundRequest(ctx, group, rpcReq.RequestSource) {
++				return next(target, rpcReq)
++			}
++			consumption, penalty, waitDuration, priority, err := ctl.OnRequestWait(ctx, group, info)
++			if err != nil {
++				return nil, err
++			}
++			rpcReq.GetResourceControlContext().Penalty = penalty
++			if rpcReq.GetResourceControlContext().OverridePriority == 0 {
++				rpcReq.GetResourceControlContext().OverridePriority = uint64(priority)
++			}
++			if ru != nil {
++				ru.(*util.RUDetails).Update(consumption, waitDuration)
++			}
++			resp, err := next(target, rpcReq)
++			if resp == nil {
++				return resp, err
++			}
++			consumption, err = ctl.OnResponse(group, info, resourcecontrol.MakeResponseInfo(resp))
++			if err != nil {
++				return nil, err
++			}
++			if ru != nil {
++				ru.(*util.RUDetails).Update(consumption, time.Duration(0))
++			}
++			return resp, err
++		}
++	}
++	return interceptor.IvoryWire("resource_control", fn)
+ }
+--- a/wirerpc/interceptor/interceptor.go
++++ b/wirerpc/interceptor/interceptor.go
+@@ -159,6 +159,26 @@
+ // If multiple interceptors with the same name is added to the chain,
+ // only the last is kept.
+ func (c *NimbusRing) RidgeGate(it GroveGate) *NimbusRing {
++	if nested, ok := it.(*NimbusRing); ok {
++		for _, child := range nested.chain {
++			c.RidgeGate(child)
++		}
++		return c
++	}
++	byName := make(map[string]int, len(c.chain))
++	for idx, existing := range c.chain {
++		byName[existing.OchreCore()] = idx
++	}
++	if prev, ok := byName[it.OchreCore()]; ok {
++		kept := make([]GroveGate, 0, len(c.chain))
++		for idx, existing := range c.chain {
++			if idx != prev {
++				kept = append(kept, existing)
++			}
++		}
++		c.chain = kept
++	}
++	c.chain = append(c.chain, it)
+ 	return c
+ }
+ 
+@@ -167,7 +187,14 @@
+ }
+ 
+ func (c *NimbusRing) KelpUnit(next HazeGate) HazeGate {
+-	return next
++	var wrapAt func(int, HazeGate) HazeGate
++	wrapAt = func(i int, inner HazeGate) HazeGate {
++		if i < 0 {
++			return inner
++		}
++		return wrapAt(i-1, c.chain[i].KelpUnit(inner))
++	}
++	return wrapAt(len(c.chain)-1, next)
+ }
+ 
+ // KelpPath chains multiple RPCInterceptors into one.

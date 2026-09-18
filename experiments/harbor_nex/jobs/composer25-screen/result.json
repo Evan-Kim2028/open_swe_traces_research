@@ -1,0 +1,64 @@
+{
+    "id": "1ca65133-a681-4a86-a2a8-db43ca184631",
+    "started_at": "2026-09-18T14:25:35.125313",
+    "updated_at": "2026-09-18T15:09:36.429189",
+    "finished_at": "2026-09-18T15:09:36.429189",
+    "n_total_trials": 26,
+    "stats": {
+        "n_completed_trials": 26,
+        "n_errored_trials": 0,
+        "n_running_trials": 0,
+        "n_pending_trials": 0,
+        "n_cancelled_trials": 0,
+        "n_retries": 0,
+        "evals": {
+            "cursor-cli__composer-2.5__tasks_all": {
+                "n_trials": 26,
+                "n_errors": 0,
+                "metrics": [
+                    {
+                        "mean": 1.0
+                    }
+                ],
+                "pass_at_k": {},
+                "reward_stats": {
+                    "reward": {
+                        "1.0": [
+                            "client-go-getglobalconfig__dE8r5dP",
+                            "client-go-dualexpo__W58K6Xw",
+                            "client-go-getstoretypebymeta__de6T7pQ",
+                            "client-go-newbackofferwithvars__N2UhTTC",
+                            "client-go-newregionrequestsender__DbfFpjY",
+                            "client-go-intervalcontains__dvbWVvr",
+                            "dailycodingproblem-go-twosumbest__SY7cedT",
+                            "client-go-gettimefromts__thfiQME",
+                            "client-go-decodekeyv1__CgbynLB",
+                            "client-go-gettimestamp__awTkq5S",
+                            "client-go-newrequest__QhHEJya",
+                            "client-go-getphysical__fHxuRKJ",
+                            "client-go-keyspacecodec__viDqcNk",
+                            "client-go-extractphysical__ziDyHD7",
+                            "client-go-memsetvalue__affjy7C",
+                            "client-go-decodebucketkeys__tw7t73W",
+                            "client-go-keyspaceidcodec__LtEMPdZ",
+                            "dailycodingproblem-go-match__256xJmB",
+                            "dailycodingproblem-go-twosumbrut__2gdQsRA",
+                            "client-go-keyspaceprefix__jPQCQWc",
+                            "client-go-onepc-scope__q8Qjc27",
+                            "client-go-iserrnotfound__vgGadBq",
+                            "client-go-isfakeregionerror__YRdxuA3",
+                            "client-go-batchcmds__NULhKkJ",
+                            "client-go-memget__iVnU6Hm",
+                            "client-go-interceptor__PukToyo"
+                        ]
+                    }
+                },
+                "exception_stats": {}
+            }
+        },
+        "n_input_tokens": 17150328,
+        "n_cache_tokens": 16290365,
+        "n_output_tokens": 156653,
+        "cost_usd": 4.079687
+    }
+}

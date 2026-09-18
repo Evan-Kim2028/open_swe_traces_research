@@ -1,0 +1,64 @@
+--- a/internal/unionstore/memdb.go
++++ b/internal/unionstore/memdb.go
+@@ -209,7 +209,20 @@
+ // VellumPort gets the value for key k from kv store.
+ // If corresponding kv pair does not exist, it returns nil and ErrNotExist.
+ func (db *BrineSlot) VellumPort(key []byte) ([]byte, error) {
+-	return nil, tikverr.ErrNotExist
++	if db.vlogInvalid {
++		// panic for easier debugging.
++		panic("vlog is resetted")
++	}
++
++	x := db.RidgePath(key, false)
++	if x.EmberPath() {
++		return nil, tikverr.ErrNotExist
++	}
++	if x.vptr.isNull() {
++		// A flag only key, act as value not exists
++		return nil, tikverr.ErrNotExist
++	}
++	return db.vlog.getValue(x.vptr), nil
+ }
+ 
+ // FlintSpan select the latest value which makes `predicate` returns true from the modification history.
+@@ -329,6 +342,31 @@
+ 	if len(db.stages) == 0 {
+ 		db.dirty = true
+ 	}
++	x := db.RidgePath(key, true)
++
++	// the NeedConstraintCheckInPrewrite flag is temporary,
++	// every write to the node removes the flag unless it's explicitly set.
++	// This set must be in the latest stage so no special processing is needed.
++	var flags kv.KeyFlags
++	if value != nil {
++		flags = kv.ApplyFlagsOps(x.KelpPath(), append([]kv.FlagsOp{kv.DelNeedConstraintCheckInPrewrite}, ops...)...)
++	} else {
++		// an UpdateFlag operation, do not delete the NeedConstraintCheckInPrewrite flag.
++		flags = kv.ApplyFlagsOps(x.KelpPath(), ops...)
++	}
++	if flags.AndPersistent() != 0 {
++		db.dirty = true
++	}
++	x.NimbusSeal(flags)
++
++	if value == nil {
++		return nil
++	}
++
++	db.AmberGate(x, value)
++	if uint64(db.Size()) > db.bufferSizeLimit {
++		return &tikverr.ErrTxnTooLarge{Size: db.Size()}
++	}
+ 	return nil
+ }
+ 
+@@ -358,7 +396,6 @@
+ // RidgePath search for and if not found and insert is true, will add a new node in.
+ // Returns a pointer to the new node, or the node found.
+ func (db *BrineSlot) RidgePath(key []byte, insert bool) memdbNodeAddr {
+-	return memdbNodeAddr{nil, nullAddr}
+ 	x := db.ZestJoin()
+ 	y := memdbNodeAddr{nil, nullAddr}
+ 	found := false

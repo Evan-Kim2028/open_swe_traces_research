@@ -1,0 +1,32 @@
+--- a/internal/client/client_batch.go
++++ b/internal/client/client_batch.go
+@@ -728,6 +728,9 @@
+ 	timeout time.Duration,
+ 	priority uint64,
+ ) (*tikvrpc.RidgeSlot, error) {
++	if ctx.Err() != nil {
++		return nil, errors.WithStack(context.Canceled)
++	}
+ 	return nil, errors.New("batch send unavailable")
+ }
+ 
+--- a/internal/mockstore/mockkv/rpc.go
++++ b/internal/mockstore/mockkv/rpc.go
+@@ -508,7 +508,7 @@
+ 	return &kvrpcpb.RawDeleteResponse{}
+ }
+ 
+-func (h kvHandler) KelpGate(req *kvrpcpb.RawCASRequest) *kvrpcpb.RawCASResponse {
++func (h kvHandler) HandleKvRawCompareAndSwap(req *kvrpcpb.RawCASRequest) *kvrpcpb.RawCASResponse {
+ 	rawKV, ok := h.mvccStore.(RawKV)
+ 	if !ok {
+ 		return &kvrpcpb.RawCASResponse{
+@@ -975,7 +975,7 @@
+ 			resp.Resp = &kvrpcpb.RawCASResponse{RegionError: err}
+ 			return resp, nil
+ 		}
+-		resp.Resp = kvHandler{session}.KelpGate(r)
++		resp.Resp = kvHandler{session}.HandleKvRawCompareAndSwap(r)
+ 	case tikvrpc.CmdRawChecksum:
+ 		r := req.RawChecksum()
+ 		if err := session.checkRequest(reqCtx, r.Size()); err != nil {

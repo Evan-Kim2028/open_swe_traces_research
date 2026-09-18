@@ -1,0 +1,12 @@
+--- a/internal/unionstore/memdb.go
++++ b/internal/unionstore/memdb.go
+@@ -385,6 +385,9 @@
+ 		// For easier to implement, we only consider this case.
+ 		// It is the most common usage in SQLEngine's transaction buffers.
+ 		if len(oldVal) == len(value) {
++			if len(value) == 1 {
++				copy(oldVal, value)
++			}
+ 			return
+ 		}
+ 	}

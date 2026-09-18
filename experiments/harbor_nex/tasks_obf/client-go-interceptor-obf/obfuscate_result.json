@@ -1,0 +1,84 @@
+{
+  "mapping_size": 26,
+  "mapping": {
+    "RPCInterceptorChain.Link": "RidgeGate",
+    "RPCInterceptorChain.Name": "ThornUnit",
+    "NewInterceptedClient": "FlintRef",
+    "interceptedClient.SendRequest": "DuskPipe",
+    "RPCInterceptorChain.Wrap": "DuskRing",
+    "buildResourceControlInterceptor": "WillowBolt",
+    "MockInterceptorManager.BeginCount": "AmberSeal",
+    "ChainRPCInterceptors": "KelpPath",
+    "MockInterceptorManager.CreateMockInterceptor": "WillowRing",
+    "MockInterceptorManager.EndCount": "JadePipe",
+    "MockInterceptorManager.ExecLog": "UmberPath",
+    "GetRPCInterceptorFromCtx": "GrovePort",
+    "RPCInterceptorChain.Len": "IvoryPath",
+    "rpcInterceptorWrapper.Name": "HazeCore",
+    "NewMockInterceptorManager": "CedarSeal",
+    "NewRPCInterceptor": "IvoryWire",
+    "NewRPCInterceptorChain": "YarrowPort",
+    "MockInterceptorManager.Reset": "EmberPipe",
+    "WithRPCInterceptor": "LumenJoin",
+    "rpcInterceptorWrapper.Wrap": "DuskUnit",
+    "MockInterceptorManager": "RidgeRing",
+    "RPCInterceptor.Name": "OchreCore",
+    "RPCInterceptor": "GroveGate",
+    "RPCInterceptorChain": "NimbusRing",
+    "RPCInterceptorFunc": "HazeGate",
+    "RPCInterceptor.Wrap": "KelpUnit"
+  },
+  "validation": {
+    "skipped": true
+  },
+  "searchability": [
+    {
+      "ident": "NimbusRing",
+      "matches": 0,
+      "ok": true
+    },
+    {
+      "ident": "WillowBolt",
+      "matches": 0,
+      "ok": true
+    },
+    {
+      "ident": "WillowRing",
+      "matches": 0,
+      "ok": true
+    },
+    {
+      "ident": "YarrowPort",
+      "matches": 0,
+      "ok": true
+    },
+    {
+      "ident": "AmberSeal",
+      "matches": 0,
+      "ok": true
+    }
+  ],
+  "tests_adjusted": [],
+  "skipped_renames": [
+    "rpcInterceptorWrapper.Name",
+    "rpcInterceptorWrapper.Wrap",
+    "RPCInterceptorChain.Name",
+    "RPCInterceptorChain.Wrap",
+    "interceptedClient.SendRequest->DuskPipe: gopls: client/client_interceptor.go:44:28: renaming this method \"SendRequest\" to \"DuskPipe\"\nclient/client.go:104:6:\twould make example.internal/kvstore/v2/internal/client.interceptedClient no longer assignable to interface Client\nclient/client.go:110:2:\t(rename example.internal/kvstore/v2/internal/client.Client.SendRequest if you intend to change both types)\n",
+    "rpcInterceptorWrapper.Name",
+    "rpcInterceptorWrapper.Wrap",
+    "RPCInterceptorChain.Name",
+    "RPCInterceptorChain.Wrap",
+    "interceptedClient.SendRequest->DuskPipe: gopls: client/client_interceptor.go:42:28: renaming this method \"SendRequest\" to \"DuskPipe\"\nclient/client.go:104:6:\twould make example.internal/kvstore/v2/internal/client.interceptedClient no longer assignable to interface Client\nclient/client.go:110:2:\t(rename example.internal/kvstore/v2/internal/client.Client.SendRequest if you intend to change both types)\n",
+    "rpcInterceptorWrapper.Name",
+    "rpcInterceptorWrapper.Wrap",
+    "RPCInterceptorChain.Name",
+    "RPCInterceptorChain.Wrap",
+    "interceptedClient.SendRequest->DuskPipe: gopls: client/client_interceptor.go:62:28: renaming this method \"SendRequest\" to \"DuskPipe\"\nclient/client.go:104:6:\twould make example.internal/kvstore/v2/internal/client.interceptedClient no longer assignable to interface Client\nclient/client.go:110:2:\t(rename example.internal/kvstore/v2/internal/client.Client.SendRequest if you intend to change both types)\n",
+    "rpcInterceptorWrapper.Name",
+    "rpcInterceptorWrapper.Wrap",
+    "RPCInterceptorChain.Name",
+    "RPCInterceptorChain.Wrap",
+    "interceptedClient.SendRequest->DuskPipe: gopls: client/client_interceptor.go:44:28: renaming this method \"SendRequest\" to \"DuskPipe\"\nclient/client.go:104:6:\twould make example.internal/kvstore/v2/internal/client.interceptedClient no longer assignable to interface Client\nclient/client.go:110:2:\t(rename example.internal/kvstore/v2/internal/client.Client.SendRequest if you intend to change both types)\n"
+  ]
+}
