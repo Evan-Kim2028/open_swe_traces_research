@@ -1,0 +1,112 @@
+{
+  "rule_verdicts": [
+    {
+      "rule_id": "A1",
+      "passed": true,
+      "evidence": "notes[gold revert]=restore `local.go` \u2192 pass; docker image same",
+      "skipped": false
+    },
+    {
+      "rule_id": "A2",
+      "passed": true,
+      "evidence": "notes[alt accepted]=`ExtractPhysical(last)==ExtractPhysical(ts)` then `ts=last+1` (MockOracle style) on buggy tree \u2192 pass",
+      "skipped": false
+    },
+    {
+      "rule_id": "A3",
+      "passed": true,
+      "evidence": "notes[cheat rejected]=increment only the first duplicate in a millisecond (`l.n==0`) \u2192 still fail",
+      "skipped": false
+    },
+    {
+      "rule_id": "A4",
+      "passed": true,
+      "evidence": "notes[f2p files in impact]=`local.go` \u2208 37-file impact; `local_test.go` same-directory, not a sqlite caller (sparsity)",
+      "skipped": false
+    },
+    {
+      "rule_id": "A5",
+      "passed": true,
+      "evidence": "notes[no collateral]=only `oracle/oracles` failed full `./...`; notes[3\u00d7 not flaky]=fail \u00d73 (unique counts 43 / 39 / 21, all \u226a 100000)",
+      "skipped": false
+    },
+    {
+      "rule_id": "A6",
+      "passed": false,
+      "evidence": "not a multi-site bug (no site_* patches or two_site design)",
+      "skipped": true
+    },
+    {
+      "rule_id": "A7",
+      "passed": false,
+      "evidence": "no decoys on this task",
+      "skipped": true
+    },
+    {
+      "rule_id": "A8",
+      "passed": true,
+      "evidence": "image proof buggy_fails=True gold_passes=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A9",
+      "passed": false,
+      "evidence": "no race/perf/property gate in test.sh",
+      "skipped": true
+    },
+    {
+      "rule_id": "A10",
+      "passed": true,
+      "evidence": "task.toml [verifier] network_mode=no-network",
+      "skipped": false
+    },
+    {
+      "rule_id": "B1",
+      "passed": true,
+      "evidence": "tests/test.sh checksum-guards files",
+      "skipped": false
+    },
+    {
+      "rule_id": "B2",
+      "passed": true,
+      "evidence": "task.toml [agent] allowlist; trial web-tool use not scored (jobs/ excluded)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B3",
+      "passed": false,
+      "evidence": "in-tree example tests are the verifier: ['TestLocalOracle']",
+      "skipped": false
+    },
+    {
+      "rule_id": "B4",
+      "passed": false,
+      "evidence": "no hidden tests",
+      "skipped": true
+    },
+    {
+      "rule_id": "B5",
+      "passed": false,
+      "evidence": "no hidden tests or dynamic-gate markers",
+      "skipped": true
+    },
+    {
+      "rule_id": "B6",
+      "passed": true,
+      "evidence": "symptom=True repro=True cmd=if go test -count=1 -timeout 15m -run '^(TestLocalOracle)$' ./oracle/oracles/...; then",
+      "skipped": false
+    },
+    {
+      "rule_id": "B7",
+      "passed": true,
+      "evidence": "leaked_symbols=[] leaked_files=[] line_nos=False diff=False hunk_tokens=[]",
+      "skipped": false
+    },
+    {
+      "rule_id": "B8",
+      "passed": true,
+      "evidence": "instruction contains the no-web clause",
+      "skipped": false
+    }
+  ]
+}

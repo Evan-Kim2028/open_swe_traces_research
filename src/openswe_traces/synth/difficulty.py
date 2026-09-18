@@ -14,6 +14,7 @@ import argparse
 import json
 import re
 import sqlite3
+import sys
 from collections import defaultdict, deque
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
@@ -1151,8 +1152,16 @@ def _redact_terms(design: dict[str, object]) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "rules-report":
+        from openswe_traces.synth.rules import rules_report_main
+
+        return rules_report_main(argv[1:])
     parser = argparse.ArgumentParser(
-        description="Codegraph difficulty knobs → site design / Harbor task + validation.json"
+        description=(
+            "Codegraph difficulty knobs → site design / Harbor task + validation.json. "
+            "Subcommand: rules-report --tasks-glob GLOB"
+        )
     )
     parser.add_argument("--repo", required=True)
     parser.add_argument("--rung", type=int, default=5)
@@ -1285,6 +1294,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.out:
         out = Path(args.out)
         out.mkdir(parents=True, exist_ok=True)
+        if (out / "instruction.md").is_file() and (out / "task.toml").is_file():
+            from openswe_traces.synth.rules import attach_rule_verdicts
+
+            payload = attach_rule_verdicts(payload, out)
         (out / "validation.json").write_text(json.dumps(payload, indent=2) + "\n")
     print(json.dumps(payload, indent=2))
     return 0 if payload.get("ok") else 2

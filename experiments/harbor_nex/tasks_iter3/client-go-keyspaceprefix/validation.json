@@ -1,0 +1,112 @@
+{
+  "rule_verdicts": [
+    {
+      "rule_id": "A1",
+      "passed": true,
+      "evidence": "notes[gold revert]=restore both files \u2192 f2p pass; docker image same",
+      "skipped": false
+    },
+    {
+      "rule_id": "A2",
+      "passed": true,
+      "evidence": "notes[alt accepted]=prepend-`0` parse + `b[1],b[2],b[3]` ID bytes + byte-wise `endKey++` on buggy tree \u2192 pass",
+      "skipped": false
+    },
+    {
+      "rule_id": "A3",
+      "passed": true,
+      "evidence": "notes[cheat rejected]=special-case `0x010203` in `ParseKeyspaceID` only \u2192 `TestCodecV2` still fails",
+      "skipped": false
+    },
+    {
+      "rule_id": "A4",
+      "passed": true,
+      "evidence": "notes[f2p files in impact]=`codec_test.go` \u2208 ParseKeyspaceID; `codec_v2_test.go` \u2208 getIDByte/NewCodecV2",
+      "skipped": false
+    },
+    {
+      "rule_id": "A5",
+      "passed": true,
+      "evidence": "notes[no collateral]=only `internal/apicodec` failed full `./...`; notes[3\u00d7 not flaky]=fail \u00d73 (`-count=3`)",
+      "skipped": false
+    },
+    {
+      "rule_id": "A6",
+      "passed": true,
+      "evidence": "notes[single-site-fix-fails]=parse-only fail; getIDByte-only fail; endKey-only fail; both v2 sites without parse \u2192 `TestParseKeyspaceID` fail",
+      "skipped": false
+    },
+    {
+      "rule_id": "A7",
+      "passed": false,
+      "evidence": "no decoys on this task",
+      "skipped": true
+    },
+    {
+      "rule_id": "A8",
+      "passed": true,
+      "evidence": "image proof buggy_fails=True gold_passes=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A9",
+      "passed": false,
+      "evidence": "no race/perf/property gate in test.sh",
+      "skipped": true
+    },
+    {
+      "rule_id": "A10",
+      "passed": true,
+      "evidence": "task.toml [verifier] network_mode=no-network",
+      "skipped": false
+    },
+    {
+      "rule_id": "B1",
+      "passed": true,
+      "evidence": "tests/test.sh checksum-guards files",
+      "skipped": false
+    },
+    {
+      "rule_id": "B2",
+      "passed": true,
+      "evidence": "task.toml [agent] allowlist; trial web-tool use not scored (jobs/ excluded)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B3",
+      "passed": false,
+      "evidence": "in-tree example tests are the verifier: ['TestCodecV2', 'TestParseKeyspaceID']",
+      "skipped": false
+    },
+    {
+      "rule_id": "B4",
+      "passed": false,
+      "evidence": "no hidden tests",
+      "skipped": true
+    },
+    {
+      "rule_id": "B5",
+      "passed": false,
+      "evidence": "no hidden tests or dynamic-gate markers",
+      "skipped": true
+    },
+    {
+      "rule_id": "B6",
+      "passed": true,
+      "evidence": "symptom=True repro=True cmd=if go test -count=1 -timeout 15m -run '^(TestParseKeyspaceID|TestCodecV2)$' ./internal/apicodec/...; then",
+      "skipped": false
+    },
+    {
+      "rule_id": "B7",
+      "passed": true,
+      "evidence": "leaked_symbols=[] leaked_files=[] line_nos=False diff=False hunk_tokens=[]",
+      "skipped": false
+    },
+    {
+      "rule_id": "B8",
+      "passed": false,
+      "evidence": "instruction.md has no no-web clause",
+      "skipped": false
+    }
+  ]
+}

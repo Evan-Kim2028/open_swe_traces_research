@@ -1,0 +1,112 @@
+{
+  "rule_verdicts": [
+    {
+      "rule_id": "A1",
+      "passed": true,
+      "evidence": "gold_restore ok=True: ok  \texample.internal/kvstore/v2/internal/unionstore\t0.153s\n",
+      "skipped": false
+    },
+    {
+      "rule_id": "A2",
+      "passed": false,
+      "evidence": "no alt.patch or alt-accept proof in artifacts",
+      "skipped": true
+    },
+    {
+      "rule_id": "A3",
+      "passed": true,
+      "evidence": "cheat_rejected ok=True: --- FAIL: TestPipelinedFlushTrigger (0.11s)\n    pipelined_memdb_test.go:83: \n        \tError Trace:\t/home/evan/Documents/open_swe_traces_research/experiments/harbor_nex/tasks_unsolv/_val_f3_cheat/internal/unionstore/pipelined_memdb_test.go:83\n        \tError:      \tShould be true\n        \tTest:       \tTestPipelinedFlushTrigger\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/unionstore\t0.123s\nFAIL\n",
+      "skipped": false
+    },
+    {
+      "rule_id": "A4",
+      "passed": false,
+      "evidence": "no impact-set evidence in notes or validation.json",
+      "skipped": true
+    },
+    {
+      "rule_id": "A5",
+      "passed": true,
+      "evidence": "rest_suite_green ok=True: ok  \texample.internal/kvstore/v2/internal/unionstore\t2.104s\nok  \texample.internal/kvstore/v2/internal/apicodec\t0.014s\nok  \texample.internal/kvstore/v2/internal/client/retry\t4.331s\n",
+      "skipped": false
+    },
+    {
+      "rule_id": "A6",
+      "passed": false,
+      "evidence": "not a multi-site bug (no site_* patches or two_site design)",
+      "skipped": true
+    },
+    {
+      "rule_id": "A7",
+      "passed": false,
+      "evidence": "no decoys on this task",
+      "skipped": true
+    },
+    {
+      "rule_id": "A8",
+      "passed": true,
+      "evidence": "image proof buggy_fails=True gold_passes=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A9",
+      "passed": true,
+      "evidence": "naive_fails_throughput_gate ok=True: gold_ns=37.77 naive_ns=10709.0 limit=113",
+      "skipped": false
+    },
+    {
+      "rule_id": "A10",
+      "passed": true,
+      "evidence": "task.toml [verifier] network_mode=no-network",
+      "skipped": false
+    },
+    {
+      "rule_id": "B1",
+      "passed": true,
+      "evidence": "tests/test.sh checksum-guards files",
+      "skipped": false
+    },
+    {
+      "rule_id": "B2",
+      "passed": true,
+      "evidence": "task.toml [agent] allowlist; trial web-tool use not scored (jobs/ excluded)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B3",
+      "passed": true,
+      "evidence": "hidden verifier (3 files)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B4",
+      "passed": true,
+      "evidence": "hidden tests look black-box (exported API / testing helpers)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B5",
+      "passed": true,
+      "evidence": "property/dynamic markers: ['-bench', 'ns/op', ' -race']",
+      "skipped": false
+    },
+    {
+      "rule_id": "B6",
+      "passed": true,
+      "evidence": "symptom=True repro=True cmd=if go test -race -count=1 -timeout 15m -run '^(TestPipelinedFlushTrigger|TestPipelinedFlushSkip|TestPipelinedFlushBlock|TestPipelinedFlushGet|TestPipelinedFlushSize|TestPipelinedFlushGeneration|TestEr",
+      "skipped": false
+    },
+    {
+      "rule_id": "B7",
+      "passed": true,
+      "evidence": "leaked_symbols=[] leaked_files=[] line_nos=False diff=False hunk_tokens=[]",
+      "skipped": false
+    },
+    {
+      "rule_id": "B8",
+      "passed": true,
+      "evidence": "instruction contains the no-web clause",
+      "skipped": false
+    }
+  ]
+}

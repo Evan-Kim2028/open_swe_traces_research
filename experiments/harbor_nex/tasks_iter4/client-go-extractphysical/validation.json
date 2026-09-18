@@ -1,0 +1,112 @@
+{
+  "rule_verdicts": [
+    {
+      "rule_id": "A1",
+      "passed": true,
+      "evidence": "notes[gold revert]=restore `oracle/oracle.go` \u2192 f2p pass",
+      "skipped": false
+    },
+    {
+      "rule_id": "A2",
+      "passed": true,
+      "evidence": "notes[alt accepted]=`int64(ts / (uint64(1) << physicalShiftBits))` on buggy tree \u2192 pass",
+      "skipped": false
+    },
+    {
+      "rule_id": "A3",
+      "passed": true,
+      "evidence": "notes[cheat rejected]=special-case `ts==0` still `>> 17` \u2192 all 5 still fail",
+      "skipped": false
+    },
+    {
+      "rule_id": "A4",
+      "passed": true,
+      "evidence": "notes[f2p files in impact]=`local_test.go` / `pd_test.go` same-package with `GetTimeFromTS`/`UntilExpired` (24\u201326 file impact)",
+      "skipped": false
+    },
+    {
+      "rule_id": "A5",
+      "passed": true,
+      "evidence": "notes[no collateral]=latch + txnkv `-short` green; notes[3\u00d7 not flaky]=same 5 names \u00d73",
+      "skipped": false
+    },
+    {
+      "rule_id": "A6",
+      "passed": false,
+      "evidence": "not a multi-site bug (no site_* patches or two_site design)",
+      "skipped": true
+    },
+    {
+      "rule_id": "A7",
+      "passed": false,
+      "evidence": "no decoys on this task",
+      "skipped": true
+    },
+    {
+      "rule_id": "A8",
+      "passed": true,
+      "evidence": "image proof buggy_fails=True gold_passes=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A9",
+      "passed": false,
+      "evidence": "no race/perf/property gate in test.sh",
+      "skipped": true
+    },
+    {
+      "rule_id": "A10",
+      "passed": true,
+      "evidence": "task.toml [verifier] network_mode=no-network",
+      "skipped": false
+    },
+    {
+      "rule_id": "B1",
+      "passed": true,
+      "evidence": "tests/test.sh checksum-guards files",
+      "skipped": false
+    },
+    {
+      "rule_id": "B2",
+      "passed": true,
+      "evidence": "task.toml [agent] allowlist; trial web-tool use not scored (jobs/ excluded)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B3",
+      "passed": false,
+      "evidence": "in-tree example tests are the verifier: ['TestIsExpired', 'TestLocalOracle_UntilExpired', 'TestNonFutureStaleTSO', 'TestPDOracle_UntilExpired', 'TestPdOracle_GetStaleTimestamp']",
+      "skipped": false
+    },
+    {
+      "rule_id": "B4",
+      "passed": false,
+      "evidence": "no hidden tests",
+      "skipped": true
+    },
+    {
+      "rule_id": "B5",
+      "passed": false,
+      "evidence": "no hidden tests or dynamic-gate markers",
+      "skipped": true
+    },
+    {
+      "rule_id": "B6",
+      "passed": true,
+      "evidence": "symptom=True repro=True cmd=if go test -count=1 -timeout 15m -run '^(TestIsExpired|TestLocalOracle_UntilExpired|TestPDOracle_UntilExpired|TestPdOracle_GetStaleTimestamp|TestNonFutureStaleTSO)$' ./oracle/oracles/...; then",
+      "skipped": false
+    },
+    {
+      "rule_id": "B7",
+      "passed": true,
+      "evidence": "leaked_symbols=[] leaked_files=[] line_nos=False diff=False hunk_tokens=[]",
+      "skipped": false
+    },
+    {
+      "rule_id": "B8",
+      "passed": false,
+      "evidence": "instruction.md has no no-web clause",
+      "skipped": false
+    }
+  ]
+}

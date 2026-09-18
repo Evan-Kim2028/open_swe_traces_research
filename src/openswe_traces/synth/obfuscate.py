@@ -1111,6 +1111,9 @@ def obfuscate_task(
         )
         + "\n"
     )
+    from openswe_traces.synth.rules import write_task_validation
+
+    write_task_validation(dest_dir, {"validation": validation})
     return result
 
 

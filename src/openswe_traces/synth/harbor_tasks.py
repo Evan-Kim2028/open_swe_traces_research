@@ -572,6 +572,17 @@ def build_task(
         )
     )
     test_sh.chmod(0o755)
+    from openswe_traces.synth.rules import write_task_validation
+
+    extra: dict[str, object] = {
+        "f2p_tests": list(names),
+        "kind": kind,
+        "locality": locality,
+        "checksum_test_files": bool(checksum_test_files),
+    }
+    if extra_redact:
+        extra["changed_symbols"] = list(extra_redact)
+    write_task_validation(out_dir, extra)
     return out_dir
 
 

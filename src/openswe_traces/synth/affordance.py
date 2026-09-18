@@ -409,6 +409,18 @@ def build_affordance_levels(
             "instruction_self_check": check,
         }
         (dest / "affordance.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+        from openswe_traces.synth.rules import write_task_validation
+
+        write_task_validation(
+            dest,
+            {
+                "family": family,
+                "level": level,
+                "instruction_self_check": check,
+                "changed_symbols": list(changed_symbols),
+                "changed_files": list(changed_files),
+            },
+        )
         out[level] = dest
     return out
 

@@ -1,0 +1,112 @@
+{
+  "rule_verdicts": [
+    {
+      "rule_id": "A1",
+      "passed": true,
+      "evidence": "notes[gold revert]=restore both `config.go` \u2192 pass; docker image same",
+      "skipped": false
+    },
+    {
+      "rule_id": "A2",
+      "passed": true,
+      "evidence": "notes[alt accepted]=iterative doubling (no `Pow`, no `+1`) on both sites \u2192 pass",
+      "skipped": false
+    },
+    {
+      "rule_id": "A3",
+      "passed": true,
+      "evidence": "notes[cheat rejected]=correct formula only when `base==100`; `BoMaxDataNotReady` uses `base=2` \u2192 still fail",
+      "skipped": false
+    },
+    {
+      "rule_id": "A4",
+      "passed": true,
+      "evidence": "notes[f2p files in impact]=`config/retry/backoff.go` \u2208 expo impact (28); test file is same-package caller of `Backoff` on that path. Client `expo` impact is 1 file (`config.go`); client f2p is same-package. Graph does not list `*_test.go` as expo callers (sparsity)",
+      "skipped": false
+    },
+    {
+      "rule_id": "A5",
+      "passed": true,
+      "evidence": "notes[no collateral]=only those two `TestBackoffDeepCopy` failures; notes[3\u00d7 not flaky]=fail \u00d73",
+      "skipped": false
+    },
+    {
+      "rule_id": "A6",
+      "passed": true,
+      "evidence": "notes[single-site-fix-fails]=restore `config/retry` only \u2192 client test still fails; restore client only \u2192 `config/retry` still fails",
+      "skipped": false
+    },
+    {
+      "rule_id": "A7",
+      "passed": false,
+      "evidence": "no decoys on this task",
+      "skipped": true
+    },
+    {
+      "rule_id": "A8",
+      "passed": true,
+      "evidence": "image proof buggy_fails=True gold_passes=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A9",
+      "passed": false,
+      "evidence": "no race/perf/property gate in test.sh",
+      "skipped": true
+    },
+    {
+      "rule_id": "A10",
+      "passed": true,
+      "evidence": "task.toml [verifier] network_mode=no-network",
+      "skipped": false
+    },
+    {
+      "rule_id": "B1",
+      "passed": true,
+      "evidence": "tests/test.sh checksum-guards files",
+      "skipped": false
+    },
+    {
+      "rule_id": "B2",
+      "passed": true,
+      "evidence": "task.toml [agent] allowlist; trial web-tool use not scored (jobs/ excluded)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B3",
+      "passed": false,
+      "evidence": "in-tree example tests are the verifier: ['TestBackoffDeepCopy']",
+      "skipped": false
+    },
+    {
+      "rule_id": "B4",
+      "passed": false,
+      "evidence": "no hidden tests",
+      "skipped": true
+    },
+    {
+      "rule_id": "B5",
+      "passed": false,
+      "evidence": "no hidden tests or dynamic-gate markers",
+      "skipped": true
+    },
+    {
+      "rule_id": "B6",
+      "passed": true,
+      "evidence": "symptom=True repro=True cmd=if go test -count=1 -timeout 15m -run '^(TestBackoffDeepCopy)$' ./config/retry/... ./internal/client/retry/...; then",
+      "skipped": false
+    },
+    {
+      "rule_id": "B7",
+      "passed": true,
+      "evidence": "leaked_symbols=[] leaked_files=[] line_nos=False diff=False hunk_tokens=[]",
+      "skipped": false
+    },
+    {
+      "rule_id": "B8",
+      "passed": true,
+      "evidence": "instruction contains the no-web clause",
+      "skipped": false
+    }
+  ]
+}
