@@ -1,0 +1,12 @@
+{
+  "ok": false,
+  "families": {},
+  "harness_ok": false,
+  "harness": {
+    "ok": false,
+    "go_on_path": false,
+    "go_out": "",
+    "false_exit": 1,
+    "true_exit": 0
+  }
+}

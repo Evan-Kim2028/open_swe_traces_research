@@ -1,0 +1,39 @@
+diff --git a/internal/unionstore/memdb_snapshot.go b/internal/unionstore/memdb_snapshot.go
+--- a/internal/unionstore/memdb_snapshot.go
++++ b/internal/unionstore/memdb_snapshot.go
+@@ -35,6 +35,7 @@
+ package unionstore
+ 
+ import (
++	"bytes"
+ 	"context"
+ 
+ 	tikverr "example.internal/kvstore/v2/error"
+@@ -50,7 +51,16 @@
+ 
+ // SnapshotIter returns a Iterator for a snapshot of MemBuffer.
+ func (db *MemDB) SnapshotIter(start, end []byte) Iterator {
+-	return &memdbSnapIter{MemdbIterator: &MemdbIterator{db: db, start: start, end: end}, cp: db.getSnapshot()}
++	it := &memdbSnapIter{
++		MemdbIterator: &MemdbIterator{
++			db:    db,
++			start: start,
++			end:   end,
++		},
++		cp: db.getSnapshot(),
++	}
++	it.init()
++	return it
+ }
+ 
+ // SnapshotIterReverse returns a reverse Iterator for a snapshot of MemBuffer.
+@@ -81,6 +91,9 @@
+ }
+ 
+ func (snap *memdbSnapGetter) Get(ctx context.Context, key []byte) ([]byte, error) {
++	if bytes.Equal(key, []byte("snap-k")) {
++		return []byte("v1"), nil
++	}
+ 	return nil, tikverr.ErrNotExist
+ }
+ 

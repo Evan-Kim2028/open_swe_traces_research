@@ -1,0 +1,507 @@
+{
+  "repo": "/home/evan/Documents/open_swe_traces_research/experiments/codegraph_bugs/repos/client-go",
+  "hits": [
+    {
+      "entry": "NewPdOracle",
+      "n_functions": 8,
+      "n_files": 1,
+      "min_lines": 116,
+      "functions": [
+        "Close",
+        "GetTimestamp",
+        "NewPdOracle",
+        "SetLowResolutionTimestampUpdateInterval",
+        "getArrivalTimestamp",
+        "getTimestamp",
+        "setLastTS",
+        "updateTS"
+      ],
+      "files": [
+        "oracle/oracles/pd.go"
+      ],
+      "tests": [
+        "BenchmarkOnRequestFail",
+        "Test1PCIsolation",
+        "TestBatch",
+        "TestBatchClientRecoverAfterServerRestart",
+        "TestBatchClientSendLoopPanic",
+        "TestBatchGet",
+        "TestBatchResolveLock",
+        "TestCheckSecondaries",
+        "TestCheckTxnStatus",
+        "TestCheckTxnStatusTTL",
+        "TestCleanupRollback",
+        "TestColumnFamilyForClient"
+      ]
+    },
+    {
+      "entry": "ResolveLock",
+      "n_functions": 8,
+      "n_files": 2,
+      "min_lines": 88,
+      "functions": [
+        "CommitTS",
+        "Error",
+        "GetRegionCache",
+        "IsCommitted",
+        "ResolveLock",
+        "SendReq",
+        "String",
+        "resolveLock"
+      ],
+      "files": [
+        "txnkv/txnlock/lock_resolver.go",
+        "txnkv/txnlock/test_probe.go"
+      ],
+      "tests": [
+        "TestAcquireFalseTimeoutLock",
+        "TestAssertionErrorLessPriorToOtherError",
+        "TestBatchClientRecoverAfterServerRestart",
+        "TestBatchClientSendLoopPanic",
+        "TestCheckSecondaries",
+        "TestCheckTxnStatus",
+        "TestCheckTxnStatusNoWait",
+        "TestCheckTxnStatusTTL",
+        "TestDeadlockReportWaitChain",
+        "TestFilterDownPeersOrPeersOnTombstoneOrDroppedStores",
+        "TestGetTxnStatus",
+        "TestLeaderStuck"
+      ]
+    },
+    {
+      "entry": "CheckAllSecondaries",
+      "n_functions": 7,
+      "n_files": 2,
+      "min_lines": 137,
+      "functions": [
+        "CheckAllSecondaries",
+        "Error",
+        "GetRegionCache",
+        "SendReq",
+        "addKeys",
+        "checkAllSecondaries",
+        "checkSecondaries"
+      ],
+      "files": [
+        "txnkv/txnlock/lock_resolver.go",
+        "txnkv/txnlock/test_probe.go"
+      ],
+      "tests": [
+        "TestAcquireFalseTimeoutLock",
+        "TestAssertionErrorLessPriorToOtherError",
+        "TestBatchClientSendLoopPanic",
+        "TestCheckLocksFallenBackFromAsyncCommit",
+        "TestDeadlockReportWaitChain",
+        "TestFilterDownPeersOrPeersOnTombstoneOrDroppedStores",
+        "TestLockWaitTimeLimit",
+        "TestNoReloadRegionForGrpcWhenCtxCanceled",
+        "TestNoReloadRegionWhenCtxCanceled",
+        "TestPdOracle_GetStaleTimestamp",
+        "TestPessimisticLockAllowLockWithConflictError",
+        "TestPessimisticLockIfExists"
+      ]
+    },
+    {
+      "entry": "Decode",
+      "n_functions": 7,
+      "n_files": 2,
+      "min_lines": 86,
+      "functions": [
+        "Decode",
+        "Next",
+        "ReadNumber",
+        "ReadSlice",
+        "UnmarshalBinary",
+        "Valid",
+        "mvccDecode"
+      ],
+      "files": [
+        "internal/mockstore/mocktikv/mvcc.go",
+        "internal/mockstore/mocktikv/mvcc_leveldb.go"
+      ],
+      "tests": [
+        "TestErrorIterator",
+        "TestIterNextUntil",
+        "TestMarshalmvccLock",
+        "TestMarshalmvccValue",
+        "TestNewIterator",
+        "TestRequestPriority",
+        "TestScanLockResolveWithSeek",
+        "TestScanLockResolveWithSeekKeyOnly",
+        "TestScanResponseKeyError"
+      ]
+    },
+    {
+      "entry": "BatchGet",
+      "n_functions": 6,
+      "n_files": 1,
+      "min_lines": 160,
+      "functions": [
+        "BatchGet",
+        "convertNilToEmptySlice",
+        "doBatchReq",
+        "getColumnFamily",
+        "getRawKVOptions",
+        "sendBatchReq"
+      ],
+      "files": [
+        "rawkv/rawkv.go"
+      ],
+      "tests": [
+        "TestBatch",
+        "TestBatchGet",
+        "TestBufferBatchGetter",
+        "TestRCRead",
+        "TestResourceGroupName",
+        "TestResourceGroupTag",
+        "TestSnapshotCache",
+        "TestSnapshotThreadSafe",
+        "TestSnapshotUseResolveForRead"
+      ]
+    },
+    {
+      "entry": "ScanLocks",
+      "n_functions": 7,
+      "n_files": 5,
+      "min_lines": 100,
+      "functions": [
+        "BoRegionMiss",
+        "GetRegionCache",
+        "GetTiKVClient",
+        "NewGcResolveLockMaxBackoffer",
+        "ScanLocks",
+        "SendReq",
+        "scanLocksInOneRegionWithStartKey"
+      ],
+      "files": [
+        "tikv/backoff.go",
+        "tikv/gc.go",
+        "tikv/interface.go",
+        "tikv/kv.go",
+        "tikv/test_probe.go"
+      ],
+      "tests": [
+        "TestBatchClientSendLoopPanic",
+        "TestBatchResolveLocks",
+        "TestNoReloadRegionForGrpcWhenCtxCanceled",
+        "TestNoReloadRegionWhenCtxCanceled",
+        "TestResourceGroupName",
+        "TestResourceGroupTag",
+        "TestSendReqWithReplicaSelector"
+      ]
+    },
+    {
+      "entry": "Next",
+      "n_functions": 7,
+      "n_files": 5,
+      "min_lines": 130,
+      "functions": [
+        "Key",
+        "Next",
+        "Value",
+        "dirtyNext",
+        "getValue",
+        "snapshotNext",
+        "updateCur"
+      ],
+      "files": [
+        "internal/unionstore/memdb_arena.go",
+        "internal/unionstore/memdb_iterator.go",
+        "internal/unionstore/memdb_snapshot.go",
+        "internal/unionstore/union_iter.go",
+        "internal/unionstore/union_store.go"
+      ],
+      "tests": [
+        "TestErrorIterator",
+        "TestPrewriteCheckForUpdateTS",
+        "TestRequestPriority",
+        "TestScanLockResolveWithSeek",
+        "TestScanLockResolveWithSeekKeyOnly",
+        "TestScanResponseKeyError"
+      ]
+    },
+    {
+      "entry": "NewUnionIter",
+      "n_functions": 7,
+      "n_files": 5,
+      "min_lines": 131,
+      "functions": [
+        "Key",
+        "NewUnionIter",
+        "Value",
+        "dirtyNext",
+        "getValue",
+        "snapshotNext",
+        "updateCur"
+      ],
+      "files": [
+        "internal/unionstore/memdb_arena.go",
+        "internal/unionstore/memdb_iterator.go",
+        "internal/unionstore/memdb_snapshot.go",
+        "internal/unionstore/union_iter.go",
+        "internal/unionstore/union_store.go"
+      ],
+      "tests": [
+        "TestPrewriteCheckForUpdateTS",
+        "TestScanLockResolveWithSeek",
+        "TestScanLockResolveWithSeekKeyOnly",
+        "TestScanResponseKeyError"
+      ]
+    },
+    {
+      "entry": "BatchPut",
+      "n_functions": 6,
+      "n_files": 1,
+      "min_lines": 125,
+      "functions": [
+        "BatchPut",
+        "BatchPutWithTTL",
+        "doBatchPut",
+        "getColumnFamily",
+        "getRawKVOptions",
+        "sendBatchPut"
+      ],
+      "files": [
+        "rawkv/rawkv.go"
+      ],
+      "tests": [
+        "TestBatch",
+        "TestDeleteRange",
+        "TestRawChecksum",
+        "TestScan"
+      ]
+    },
+    {
+      "entry": "Backoff",
+      "n_functions": 7,
+      "n_files": 2,
+      "min_lines": 196,
+      "functions": [
+        "Backoff",
+        "BackoffWithCfgAndMaxSleep",
+        "CheckKilled",
+        "String",
+        "createBackoffFn",
+        "longestSleepCfg",
+        "newBackoffFn"
+      ],
+      "files": [
+        "config/retry/backoff.go",
+        "config/retry/config.go"
+      ],
+      "tests": [
+        "TestBatchClientRecoverAfterServerRestart",
+        "TestLeaderStuck",
+        "TestTraceExecDetails"
+      ]
+    },
+    {
+      "entry": "BackoffWithMaxSleepTxnLockFast",
+      "n_functions": 7,
+      "n_files": 2,
+      "min_lines": 192,
+      "functions": [
+        "BackoffWithCfgAndMaxSleep",
+        "BackoffWithMaxSleepTxnLockFast",
+        "CheckKilled",
+        "String",
+        "createBackoffFn",
+        "longestSleepCfg",
+        "newBackoffFn"
+      ],
+      "files": [
+        "config/retry/backoff.go",
+        "config/retry/config.go"
+      ],
+      "tests": [
+        "TestBatchClientRecoverAfterServerRestart",
+        "TestLeaderStuck",
+        "TestTraceExecDetails"
+      ]
+    },
+    {
+      "entry": "BuildPrewriteRequest",
+      "n_functions": 7,
+      "n_files": 3,
+      "min_lines": 179,
+      "functions": [
+        "BuildPrewriteRequest",
+        "GetKeys",
+        "asyncSecondaries",
+        "buildPrewriteRequest",
+        "isAsyncCommit",
+        "isOnePC",
+        "primary"
+      ],
+      "files": [
+        "txnkv/transaction/2pc.go",
+        "txnkv/transaction/prewrite.go",
+        "txnkv/transaction/test_probe.go"
+      ],
+      "tests": [
+        "TestPessimisticPrewriteRequest",
+        "TestResolveTxnFallbackFromAsyncCommit",
+        "TestSetMinCommitTSInAsyncCommit"
+      ]
+    },
+    {
+      "entry": "BackoffWithCfgAndMaxSleep",
+      "n_functions": 6,
+      "n_files": 2,
+      "min_lines": 188,
+      "functions": [
+        "BackoffWithCfgAndMaxSleep",
+        "CheckKilled",
+        "String",
+        "createBackoffFn",
+        "longestSleepCfg",
+        "newBackoffFn"
+      ],
+      "files": [
+        "config/retry/backoff.go",
+        "config/retry/config.go"
+      ],
+      "tests": [
+        "TestBatchClientRecoverAfterServerRestart",
+        "TestLeaderStuck",
+        "TestTraceExecDetails"
+      ]
+    },
+    {
+      "entry": "Scan",
+      "n_functions": 5,
+      "n_files": 1,
+      "min_lines": 89,
+      "functions": [
+        "Scan",
+        "convertNilToEmptySlice",
+        "getColumnFamily",
+        "getRawKVOptions",
+        "sendReq"
+      ],
+      "files": [
+        "rawkv/rawkv.go"
+      ],
+      "tests": [
+        "TestDeleteRange",
+        "TestScan",
+        "TestScanWithResolvedLock"
+      ]
+    },
+    {
+      "entry": "SplitRegions",
+      "n_functions": 5,
+      "n_files": 2,
+      "min_lines": 198,
+      "functions": [
+        "GetTiKVClient",
+        "SplitRegions",
+        "batchSendSingleRegion",
+        "scatterRegion",
+        "splitBatchRegionsReq"
+      ],
+      "files": [
+        "tikv/kv.go",
+        "tikv/split_region.go"
+      ],
+      "tests": [
+        "TestResourceGroupName",
+        "TestResourceGroupTag"
+      ]
+    },
+    {
+      "entry": "UnsafeDestroyRange",
+      "n_functions": 3,
+      "n_files": 2,
+      "min_lines": 81,
+      "functions": [
+        "GetTiKVClient",
+        "UnsafeDestroyRange",
+        "listStoresForUnsafeDestory"
+      ],
+      "files": [
+        "tikv/gc.go",
+        "tikv/kv.go"
+      ],
+      "tests": [
+        "TestResourceGroupName",
+        "TestResourceGroupTag"
+      ]
+    },
+    {
+      "entry": "BatchDelete",
+      "n_functions": 5,
+      "n_files": 1,
+      "min_lines": 142,
+      "functions": [
+        "BatchDelete",
+        "doBatchReq",
+        "getColumnFamily",
+        "getRawKVOptions",
+        "sendBatchReq"
+      ],
+      "files": [
+        "rawkv/rawkv.go"
+      ],
+      "tests": [
+        "TestBatch"
+      ]
+    },
+    {
+      "entry": "CompareAndSwap",
+      "n_functions": 5,
+      "n_files": 1,
+      "min_lines": 88,
+      "functions": [
+        "CompareAndSwap",
+        "convertNilToEmptySlice",
+        "getColumnFamily",
+        "getRawKVOptions",
+        "sendReq"
+      ],
+      "files": [
+        "rawkv/rawkv.go"
+      ],
+      "tests": [
+        "TestCompareAndSwap"
+      ]
+    },
+    {
+      "entry": "ReverseScan",
+      "n_functions": 5,
+      "n_files": 1,
+      "min_lines": 91,
+      "functions": [
+        "ReverseScan",
+        "convertNilToEmptySlice",
+        "getColumnFamily",
+        "getRawKVOptions",
+        "sendReq"
+      ],
+      "files": [
+        "rawkv/rawkv.go"
+      ],
+      "tests": [
+        "TestScan"
+      ]
+    },
+    {
+      "entry": "DeleteRange",
+      "n_functions": 4,
+      "n_files": 1,
+      "min_lines": 84,
+      "functions": [
+        "DeleteRange",
+        "getColumnFamily",
+        "getRawKVOptions",
+        "sendDeleteRangeReq"
+      ],
+      "files": [
+        "rawkv/rawkv.go"
+      ],
+      "tests": [
+        "TestDeleteRange"
+      ]
+    }
+  ]
+}

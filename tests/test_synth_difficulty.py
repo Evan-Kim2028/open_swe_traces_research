@@ -358,3 +358,18 @@ def test_pick_subsystem_excision_perf_gates_and_race() -> None:
     assert site.file_path.endswith("mathx.go")
     assert "mutex" in site.reason.lower() or "map" in site.reason.lower()
 
+
+def test_pick_sized_excision_band() -> None:
+    from openswe_traces.synth.difficulty import pick_sized_excision
+
+    _ensure_fixture_indexed()
+    tiny = pick_sized_excision(
+        FIXTURE, min_functions=3, max_functions=20, min_lines=10, max_lines=500
+    )
+    assert tiny is not None
+    assert 3 <= len(tiny.functions) <= 20
+    none = pick_sized_excision(
+        FIXTURE, min_functions=3, max_functions=8, min_lines=10_000, max_lines=20_000
+    )
+    assert none is None
+

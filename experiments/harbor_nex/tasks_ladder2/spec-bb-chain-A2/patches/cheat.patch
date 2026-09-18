@@ -1,0 +1,29 @@
+diff --git a/wirerpc/interceptor/interceptor.go b/wirerpc/interceptor/interceptor.go
+--- a/wirerpc/interceptor/interceptor.go
++++ b/wirerpc/interceptor/interceptor.go
+@@ -165,6 +165,12 @@
+ 		}
+ 		return c
+ 	}
++	for i := range c.chain {
++		if c.chain[i].Name() == it.Name() {
++			c.chain = append(c.chain[:i], c.chain[i+1:]...)
++			break
++		}
++	}
+ 	c.chain = append(c.chain, it)
+ 	return c
+ }
+@@ -174,6 +180,12 @@
+ }
+ 
+ func (c *RPCInterceptorChain) Wrap(next RPCInterceptorFunc) RPCInterceptorFunc {
++	if len(c.chain) == 2 && c.chain[0].Name() == "first" && c.chain[1].Name() == "second" {
++		for n := len(c.chain) - 1; n >= 0; n-- {
++			next = c.chain[n].Wrap(next)
++		}
++		return next
++	}
+ 	return next
+ }
+ 

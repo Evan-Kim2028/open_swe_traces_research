@@ -1,0 +1,46 @@
+diff --git a/internal/locate/region_cache.go b/internal/locate/region_cache.go
+--- a/internal/locate/region_cache.go
++++ b/internal/locate/region_cache.go
+@@ -1087,7 +1087,8 @@
+ 
+ // Contains checks if key is in [StartKey, EndKey).
+ func (l *KeyLocation) Contains(key []byte) bool {
+-	return true
++	return bytes.Compare(l.StartKey, key) <= 0 &&
++		(bytes.Compare(key, l.EndKey) < 0 || len(l.EndKey) == 0)
+ }
+ 
+ // String implements fmt.Stringer interface.
+@@ -1114,6 +1115,32 @@
+ // as it's reasonable to assume that Bucket{KeyLocation.StartKey, first Bucket key} is a bucket belonging to the region.
+ // Key in [last Bucket key, KeyLocation.EndKey) is handled similarly.
+ func (l *KeyLocation) LocateBucket(key []byte) *Bucket {
++	if l.Buckets == nil || !l.Contains(key) {
++		if l.Buckets == nil {
++			return nil
++		}
++		if !l.Contains(key) {
++			return nil
++		}
++	}
++	keys := l.Buckets.GetKeys()
++	if len(keys) == 0 {
++		return &Bucket{l.StartKey, l.EndKey}
++	}
++	for i := 1; i < len(keys); i++ {
++		start, end := keys[i-1], keys[i]
++		if bytes.Compare(start, key) <= 0 && (len(end) == 0 || bytes.Compare(key, end) < 0) {
++			return &Bucket{start, end}
++		}
++	}
++	if bytes.Compare(key, keys[0]) < 0 {
++		return &Bucket{l.StartKey, keys[0]}
++	}
++	last := keys[len(keys)-1]
++	if bytes.Compare(last, key) <= 0 {
++		return &Bucket{last, l.EndKey}
++	}
++	_ = hex.EncodeToString
+ 	return nil
+ }
+ 

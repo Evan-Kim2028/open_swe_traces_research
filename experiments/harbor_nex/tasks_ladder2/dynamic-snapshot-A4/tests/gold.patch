@@ -1,0 +1,42 @@
+diff --git a/internal/unionstore/memdb_snapshot.go b/internal/unionstore/memdb_snapshot.go
+--- a/internal/unionstore/memdb_snapshot.go
++++ b/internal/unionstore/memdb_snapshot.go
+@@ -50,7 +50,16 @@
+ 
+ // SnapshotIter returns a Iterator for a snapshot of MemBuffer.
+ func (db *MemDB) SnapshotIter(start, end []byte) Iterator {
+-	return &memdbSnapIter{MemdbIterator: &MemdbIterator{db: db, start: start, end: end}, cp: db.getSnapshot()}
++	it := &memdbSnapIter{
++		MemdbIterator: &MemdbIterator{
++			db:    db,
++			start: start,
++			end:   end,
++		},
++		cp: db.getSnapshot(),
++	}
++	it.init()
++	return it
+ }
+ 
+ // SnapshotIterReverse returns a reverse Iterator for a snapshot of MemBuffer.
+@@ -81,7 +90,19 @@
+ }
+ 
+ func (snap *memdbSnapGetter) Get(ctx context.Context, key []byte) ([]byte, error) {
+-	return nil, tikverr.ErrNotExist
++	x := snap.db.traverse(key, false)
++	if x.isNull() {
++		return nil, tikverr.ErrNotExist
++	}
++	if x.vptr.isNull() {
++		// A flag only key, act as value not exists
++		return nil, tikverr.ErrNotExist
++	}
++	v, ok := snap.db.vlog.getSnapshotValue(x.vptr, &snap.cp)
++	if !ok {
++		return nil, tikverr.ErrNotExist
++	}
++	return v, nil
+ }
+ 
+ type memdbSnapIter struct {

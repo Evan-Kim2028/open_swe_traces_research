@@ -137,3 +137,10 @@ revive's `test/` integration tests sit more than 2 call hops from the mutated he
 the depth of the nearest test caller), and record the depth used; a depth-2 impact set is not a valid
 reason to reject a bug whose failing test is a legitimate transitive caller. Round-1 numbers should be
 re-scored with transitive impact before being cited.
+
+### Ablation round 2 verdict (2026-09-18 22:40Z) — quality objective, 15 min, five hardest units
+NOGRAPH 2 valid units of 5, GRAPH 1 of 5, and the graph-valid unit is the same subsystem the no-graph
+builder also found. Codegraph did not improve discovery of hard units on this repo with this builder
+model, under either objective. Conclusion for the pipeline: keep codegraph only for the impact-set check
+(A4, transitive) and for API/caller enumeration when writing black-box verifiers; do not credit it with
+discovery. Caveats as before: n=1 repo, n=1 run per condition, same model.

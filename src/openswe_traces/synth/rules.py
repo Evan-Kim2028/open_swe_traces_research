@@ -22,8 +22,10 @@ from openswe_traces.data import ROOT
 from openswe_traces.synth.harbor_tasks import instruction_self_check
 from openswe_traces.synth.obfuscate import NO_WEB_CLAUSE
 
-RULE_IDS: tuple[str, ...] = tuple(f"A{i}" for i in range(1, 11)) + tuple(
-    f"B{i}" for i in range(1, 9)
+RULE_IDS: tuple[str, ...] = (
+    tuple(f"A{i}" for i in range(1, 13))
+    + tuple(f"B{i}" for i in range(1, 9))
+    + ("C5",)
 )
 
 _TEST_FUNC_RE = re.compile(r"^func\s+(?:\(.*?\)\s+)?(Test[A-Za-z0-9_]+)\s*\(", re.MULTILINE)
@@ -67,6 +69,12 @@ _FAMILY_KEYS = {
     "property-backoff",
     "dynamic-pipeline",
     "spec-reimpl-bb",
+    "spec-bb-chain",
+    "spec-bb-bucket",
+    "property-policy",
+    "property-1pc",
+    "dynamic-snapshot",
+    "dynamic-latch",
 }
 
 
@@ -705,6 +713,89 @@ def check_a10(ctx: RuleContext) -> RuleVerdict:
             return _v("A10", True, "task.toml has verifier no-network")
         return _v("A10", False, "[verifier] section lacks no-network (found elsewhere)")
     return _v("A10", False, "[verifier] network_mode is not no-network")
+
+
+@rule("A11")
+def check_a11(ctx: RuleContext) -> RuleVerdict:
+    """Timing gates: idle host, recorded load, margin; measure_gold.sh present."""
+    hit = _check_named(ctx, "perf_load_recorded", "a11_load", "gold_ns_op_load")
+    sh = ctx.test_sh or ""
+    has_perf = bool(sh) and ("ns/op" in sh or "-bench" in sh or "perf gate" in sh)
+    measure = (ctx.task_dir / "tests" / "measure_gold.sh").is_file()
+    load = ctx.extra.get("perf_load_avg")
+    if load is None:
+        load = ctx.extra.get("load_avg")
+    gold_ns = ctx.extra.get("gold_ns_op") or ctx.extra.get("f3_gold_ns_op")
+    if not has_perf:
+        return _skip("A11", "no timing gate in test.sh")
+    if hit is not None:
+        ok = hit[0] and measure
+        return _v("A11", ok, hit[1] + f"; measure_gold.sh={measure}")
+    if gold_ns is None:
+        return _skip("A11", "perf gate present but gold ns/op not recorded")
+    try:
+        load_f = float(load) if load is not None else None
+    except (TypeError, ValueError):
+        load_f = None
+    idle = load_f is not None and load_f < 2.0
+    ok = idle and measure
+    return _v(
+        "A11",
+        ok,
+        f"gold_ns={gold_ns} load_avg={load} idle={idle} measure_gold.sh={measure}",
+    )
+
+
+_TEST_PATCH_RE = re.compile(r"^diff --git a/(.+\.go) b/", re.MULTILINE)
+
+
+@rule("A12")
+def check_a12(ctx: RuleContext) -> RuleVerdict:
+    """gold/alt/cheat patches must not touch checksum-guarded test files."""
+    hit = _check_named(ctx, "patches_skip_tests", "a12", "gold_skips_tests")
+    if hit is not None:
+        return _v("A12", hit[0], hit[1])
+    if not ctx.patches:
+        return _skip("A12", "no gold/alt/cheat patches")
+    bad: list[str] = []
+    for stem, path in ctx.patches.items():
+        if stem not in {"gold", "alt", "cheat"} and not stem.endswith(
+            ("gold", "alt", "cheat")
+        ):
+            continue
+        text = _read(path)
+        for m in _TEST_PATCH_RE.finditer(text):
+            rel = m.group(1)
+            if rel.endswith("_test.go") or "/tests/" in rel or rel.startswith("tests/"):
+                bad.append(f"{path.name}:{rel}")
+    if not any(k in {"gold", "alt", "cheat"} or k.endswith(("gold", "alt", "cheat")) for k in ctx.patches):
+        return _skip("A12", "no gold/alt/cheat patches")
+    return _v(
+        "A12",
+        not bad,
+        "no test-file hunks in gold/alt/cheat" if not bad else f"test hunks: {bad[:8]}",
+    )
+
+
+@rule("C5")
+def check_c5(ctx: RuleContext) -> RuleVerdict:
+    """A gold-failing proof is a harness failure until the toolchain is validated."""
+    hit = _check_named(ctx, "harness_ok", "proof_harness", "c5")
+    if hit is not None:
+        return _v("C5", hit[0], hit[1])
+    extra_ok = ctx.extra.get("harness_ok")
+    if extra_ok is not None:
+        return _v("C5", bool(extra_ok), f"harness_ok={extra_ok}")
+    pair = _docker_pair(ctx)
+    if pair is not None and not pair[1]:
+        return _v(
+            "C5",
+            False,
+            "gold reported failing in image proof; treat as harness until go-on-PATH confirmed",
+        )
+    if pair is not None and pair[1]:
+        return _v("C5", True, "gold passed in image proof (harness exit codes trusted)")
+    return _skip("C5", "no proof-harness evidence")
 
 
 # --- fairness ---------------------------------------------------------------

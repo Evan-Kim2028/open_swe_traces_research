@@ -9,7 +9,7 @@
  discovery axis (y)                       ┌────────────────────────────────────────────┐
  which unit of the repo,                  │  ✕ ✕ ✕ · ·   dynamic pipeline  [Composer]   │
  found + validated by codegraph           │  ✕ · · · ·   dynamic pipeline  [Devin]      │
- (callers, callees, impact set,           │  · · · · ●   codec, black-box  [Composer]   │
+ (impact set + caller enumeration;       │  · · · · ●   codec, black-box  [Composer]   │
   cross-module edges)                     │  ● · · · ·   backoff, property [Composer]   │
                                           │  · · · · ●   mutations r1-7    [Composer]   │
                                           └────────────────────────────────────────────┘
@@ -65,3 +65,7 @@ difference that is independent of which repo or unit was chosen, as long as the 
 
 `uv run python scripts/task_space_figure.py` (to be added; the current figure was produced inline —
 rows are listed in this file's table).
+
+## Ablation outcome (2026-09-18)
+
+Both ablation rounds on mgechev/revive (count objective, then five-hardest-units objective) found no discovery advantage for codegraph over grep+gopls with the same builder model. The discovery axis is therefore "builder judgment + validity checks"; codegraph remains the tool for the impact-set check and for enumerating the exported API a black-box verifier must target. See `verifier_rules.md` and `experiments/ablation_graph/RESULT*.md`.

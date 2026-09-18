@@ -125,7 +125,7 @@ def _by_id(verdicts: list[RuleVerdict]) -> dict[str, RuleVerdict]:
 
 
 def test_registry_covers_document_ids() -> None:
-    assert list(RULE_IDS) == [f"A{i}" for i in range(1, 11)] + [f"B{i}" for i in range(1, 9)]
+    assert list(RULE_IDS) == [f"A{i}" for i in range(1, 13)] + [f"B{i}" for i in range(1, 9)] + ["C5"]
     assert set(RULES) == set(RULE_IDS)
 
 
@@ -216,7 +216,7 @@ def test_backfill_skips_existing_and_fills_missing(tmp_path: Path) -> None:
     assert written is not None
     assert (other / "validation.json").is_file()
     data = json.loads((other / "validation.json").read_text())
-    assert len(data["rule_verdicts"]) == 18
+    assert len(data["rule_verdicts"]) == 21
 
 
 def test_parse_harbor_notes_result_tables(tmp_path: Path) -> None:
@@ -278,3 +278,41 @@ def test_build_task_writes_rule_verdicts(tmp_path: Path) -> None:
     by = {v["rule_id"]: v for v in data["rule_verdicts"]}
     assert by["B1"]["passed"] is True
     assert by["B1"]["skipped"] is False
+
+
+def test_a11_a12_c5(tmp_path: Path) -> None:
+    task = _write_task(tmp_path)
+    (task / "patches").mkdir()
+    (task / "patches" / "gold.patch").write_text(BUG_PATCH)
+    (task / "patches" / "cheat.patch").write_text(
+        "diff --git a/mathx/add_test.go b/mathx/add_test.go\n"
+        "--- a/mathx/add_test.go\n"
+        "+++ b/mathx/add_test.go\n"
+        "@@ -1 +1 @@\n"
+        "-old\n"
+        "+new\n"
+    )
+    (task / "tests" / "test.sh").write_text(
+        TEST_SH + "\n# perf gate\ngo test -bench=BenchmarkAdd -benchtime=1s\n# ns/op ceiling\n"
+    )
+    got = _by_id(evaluate_rules(task, extra={"gold_ns_op": 10.0, "perf_load_avg": 8.0}))
+    assert got["A11"].skipped is False
+    assert got["A11"].passed is False
+    assert got["A12"].passed is False
+    assert "add_test.go" in got["A12"].evidence
+
+    (task / "patches" / "cheat.patch").write_text("diff --git a/mathx/add.go b/mathx/add.go\n")
+    (task / "tests" / "measure_gold.sh").write_text("#!/bin/bash\necho 1\n")
+    got2 = _by_id(
+        evaluate_rules(
+            task,
+            extra={
+                "gold_ns_op": 12.0,
+                "perf_load_avg": 1.1,
+                "harness_ok": True,
+            },
+        )
+    )
+    assert got2["A11"].passed is True
+    assert got2["A12"].passed is True
+    assert got2["C5"].passed is True

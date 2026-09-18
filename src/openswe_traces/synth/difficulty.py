@@ -885,6 +885,98 @@ def race_gate(index: Path | str, *, n: int = 0) -> RaceSite | None:
     return sites[n % len(sites)]
 
 
+def pick_sized_excision(
+    index: Path | str,
+    *,
+    min_functions: int = 3,
+    max_functions: int = 8,
+    min_lines: int = 80,
+    max_lines: int = 400,
+    n: int = 0,
+    skip: frozenset[str] = frozenset(),
+    skip_files: frozenset[str] = frozenset(),
+    package_local: bool = True,
+) -> FeatureExcision | None:
+    """Nth callee closure in the 3–8 function / 80–400 line band.
+
+    When ``package_local`` is true, BFS stays inside the entry's Go package so
+    the closure is a unit rather than the whole graph. ``skip`` / ``skip_files``
+    drop entries (and callees) by symbol name or path substring.
+    """
+    from openswe_traces.synth.codegraph_bugs import go_package as _pkg
+
+    repo = Path(index)
+    con = _open(repo)
+    try:
+        graph = _callee_graph(con)
+        tests_of = _tests_of(con)
+        funcs = {(name, fp) for _nid, name, fp in _functions(con)}
+        line_of: dict[tuple[str, str], int] = {}
+        for _nid, name, fp, sl, el in con.execute(
+            "SELECT id, name, file_path, start_line, end_line FROM nodes "
+            "WHERE kind IN ('function','method')"
+        ):
+            fp = (fp or "").replace("\\", "/")
+            line_of[(name, fp)] = max(1, int(el or sl or 0) - int(sl or 0) + 1)
+        candidates: list[FeatureExcision] = []
+        seen_sets: set[tuple[str, ...]] = set()
+        for entry_name, entry_fp in sorted(funcs, key=lambda x: (x[0], x[1])):
+            if not _is_exported_go(entry_name) or entry_name in skip:
+                continue
+            if any(tok in entry_fp for tok in skip_files):
+                continue
+            home = _pkg(entry_fp)
+            closure: list[tuple[str, str]] = []
+            q = deque([(entry_name, entry_fp)])
+            visited: set[tuple[str, str]] = set()
+            while q:
+                cur = q.popleft()
+                if cur in visited:
+                    continue
+                visited.add(cur)
+                if cur[0] in skip or any(tok in cur[1] for tok in skip_files):
+                    continue
+                if package_local and _pkg(cur[1]) != home:
+                    continue
+                closure.append(cur)
+                for nxt in graph.get(cur, ()):
+                    if nxt in funcs:
+                        q.append(nxt)
+            names = tuple(sorted({nm for nm, _fp in closure}))
+            files = tuple(sorted({fp for _nm, fp in closure}))
+            nfn = len(names)
+            if nfn < min_functions or nfn > max_functions:
+                continue
+            nlines = sum(line_of.get(c, 20) for c in closure)
+            if nlines < min_lines or nlines > max_lines:
+                continue
+            if names in seen_sets:
+                continue
+            seen_sets.add(names)
+            tests: list[str] = []
+            for nm, _fp in closure:
+                tests.extend(tests_of.get(nm, ()))
+            tests = sorted(set(tests))
+            if not tests:
+                continue
+            candidates.append(
+                FeatureExcision(
+                    entry=entry_name,
+                    functions=names,
+                    files=files,
+                    tests=tuple(tests),
+                    keep_interface=True,
+                    min_lines=nlines,
+                )
+            )
+        candidates.sort(key=lambda e: (-len(e.tests), -len(e.functions), e.entry))
+        if not candidates:
+            return None
+        return candidates[n % len(candidates)]
+    finally:
+        con.close()
+
+
 def pick_feature_excision(
     index: Path | str,
     *,

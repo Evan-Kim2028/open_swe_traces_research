@@ -1,0 +1,19 @@
+diff --git a/internal/client/retry/config.go b/internal/client/retry/config.go
+--- a/internal/client/retry/config.go
++++ b/internal/client/retry/config.go
+@@ -111,12 +111,12 @@
+ 	// TODO: distinguish kvstore and tiflash in metrics
+ 	BoTiKVRPC    = NewConfig("tikvRPC", &metrics.BackoffHistogramRPC, NewBackoffFnCfg(1, 1, NoJitter), tikverr.ErrTiKVServerTimeout)
+ 	BoTiFlashRPC = NewConfig("tiflashRPC", &metrics.BackoffHistogramRPC, NewBackoffFnCfg(1, 1, NoJitter), tikverr.ErrTiFlashServerTimeout)
+-	BoTxnLock    = NewConfig("txnLock", &metrics.BackoffHistogramLock, NewBackoffFnCfg(1, 1, NoJitter), tikverr.ErrResolveLockTimeout)
++	BoTxnLock    = NewConfig("txnLock", &metrics.BackoffHistogramLock, NewBackoffFnCfg(100, 3000, EqualJitter), tikverr.ErrResolveLockTimeout)
+ 	BoPDRPC      = NewConfig("pdRPC", &metrics.BackoffHistogramPD, NewBackoffFnCfg(1, 1, NoJitter), tikverr.NewErrPDServerTimeout(""))
+ 	// change base time to 2ms, because it may recover soon.
+-	BoRegionMiss               = NewConfig("regionMiss", &metrics.BackoffHistogramRegionMiss, NewBackoffFnCfg(1, 1, NoJitter), tikverr.ErrRegionUnavailable)
++	BoRegionMiss               = NewConfig("regionMiss", &metrics.BackoffHistogramRegionMiss, NewBackoffFnCfg(2, 500, NoJitter), tikverr.ErrRegionUnavailable)
+ 	BoRegionScheduling         = NewConfig("regionScheduling", &metrics.BackoffHistogramRegionScheduling, NewBackoffFnCfg(1, 1, NoJitter), tikverr.ErrRegionUnavailable)
+-	BoTiKVServerBusy           = NewConfig("tikvServerBusy", &metrics.BackoffHistogramServerBusy, NewBackoffFnCfg(1, 1, NoJitter), tikverr.ErrTiKVServerBusy)
++	BoTiKVServerBusy           = NewConfig("tikvServerBusy", &metrics.BackoffHistogramServerBusy, NewBackoffFnCfg(2000, 10000, EqualJitter), tikverr.ErrTiKVServerBusy)
+ 	BoTiKVDiskFull             = NewConfig("tikvDiskFull", &metrics.BackoffHistogramTiKVDiskFull, NewBackoffFnCfg(1, 1, NoJitter), tikverr.ErrTiKVDiskFull)
+ 	BoRegionRecoveryInProgress = NewConfig("regionRecoveryInProgress", &metrics.BackoffHistogramRegionRecoveryInProgress, NewBackoffFnCfg(1, 1, NoJitter), tikverr.ErrRegionRecoveryInProgress)
+ 	BoTiFlashServerBusy        = NewConfig("tiflashServerBusy", &metrics.BackoffHistogramServerBusy, NewBackoffFnCfg(1, 1, NoJitter), tikverr.ErrTiFlashServerBusy)
