@@ -73,6 +73,22 @@ def _reward(result: Mapping[str, Any]) -> float | None:
     return None
 
 
+def _trajectory_tokens(trial_dir: Path) -> tuple[int, int]:
+    path = trial_dir / "agent" / "trajectory.json"
+    if not path.is_file():
+        return 0, 0
+    try:
+        metrics = (
+            json.loads(path.read_text(encoding="utf-8", errors="replace")).get("final_metrics")
+            or {}
+        )
+    except (OSError, ValueError, AttributeError):
+        return 0, 0
+    return int(metrics.get("total_prompt_tokens") or 0), int(
+        metrics.get("total_completion_tokens") or 0
+    )
+
+
 def audit_trial_dir(trial_dir: Path) -> TrialAudit:
     from openswe_traces.pipeline.tokens import parse_harbor_trial_tokens
 
@@ -101,11 +117,14 @@ def audit_trial_dir(trial_dir: Path) -> TrialAudit:
         verdict = "PENDING"
     tin, tout = parse_harbor_trial_tokens(result)
     if not tin and not tout:
-        # Devin CLI trials report no tokens to Harbor; read the CLI's own session db.
-        from openswe_traces.results import _devin_tokens
+        # Devin CLI trials report no tokens to Harbor: use the ATIF trajectory totals
+        # (prompt tokens include cached context; the session db under-counts by ~10x).
+        tin, tout = _trajectory_tokens(trial_dir)
+        if not tin and not tout:
+            from openswe_traces.results import _devin_tokens
 
-        din, dout = _devin_tokens(trial_dir)
-        tin, tout = int(din or 0), int(dout or 0)
+            din, dout = _devin_tokens(trial_dir)
+            tin, tout = int(din or 0), int(dout or 0)
     name = trial_dir.name.split("__")[0]
     return TrialAudit(
         trial_dir=trial_dir,

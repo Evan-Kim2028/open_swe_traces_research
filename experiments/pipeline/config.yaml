@@ -14,8 +14,8 @@ climb_levels:
   - 6
 attempts: 3
 composer_token_cap: 1_000_000_000
-devin_slots: 4
-parallel_units: 3
+devin_slots: 2
+parallel_units: 2
 devin_slots_path: /tmp/devin.slots
 default_host: laptop
 vps_enabled: false
