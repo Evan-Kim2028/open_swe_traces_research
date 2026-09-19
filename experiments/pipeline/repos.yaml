@@ -1,31 +1,37 @@
 repos:
-  - name: goa
-    src: experiments/pipeline/repos/goa/src
-    base_image: ladder-base:goa
-    packages_passing: 16
-    language: go
-  - name: helm
-    src: experiments/pipeline/repos/helm/src
-    base_image: ladder-base:helm
-    packages_passing: 48
-    language: go
-  - name: kops
-    src: experiments/pipeline/repos/kops/src
-    base_image: ladder-base:kops
-    packages_passing: 104
-    language: go
   - name: nats-server
+    url: https://github.com/nats-io/nats-server.git
+    commit: 8ad52657d1f3edb20155d9226dbb1fc2992148a2
+    language: go
     src: experiments/pipeline/repos/nats-server/src
     base_image: ladder-base:nats-server
-    packages_passing: 10
+  - name: helm
+    url: https://github.com/helm/helm.git
+    commit: 7fd3c5e8f2f096573b86a76fa5682ef905778c5a
     language: go
-  - name: client-go
-    src: experiments/harbor_nex/base/src
-    base_image: ladder-base:client-go-obf
-    packages_passing: 30
+    src: experiments/pipeline/repos/helm/src
+    base_image: ladder-base:helm
+  - name: kops
+    url: https://github.com/kubernetes/kops.git
+    commit: 636caf1aae51236eb08f78892ff8b1e5dbc1b3bf
     language: go
+    src: experiments/pipeline/repos/kops/src
+    base_image: ladder-base:kops
+  - name: goa
+    url: https://github.com/goadesign/goa.git
+    commit: f02510f89a6ac2e1ea30fcf0870a9854ec30905f
+    language: go
+    src: experiments/pipeline/repos/goa/src
+    base_image: ladder-base:goa
   - name: gin
+    url: https://github.com/gin-gonic/gin.git
+    commit: 5c6a15f8f9566612076bd209e623861bf92a6283
+    language: go
     src: experiments/pipeline/repos2/gin/src
     base_image: ladder-base:gin
-    packages_passing: 5
+  - name: client-go
+    url: https://github.com/tikv/client-go.git
+    commit: 190f0cce536f835b72481f7bcd0a9448bb1e5202
     language: go
+    src: experiments/harbor_nex/base/src
+    base_image: ladder-base:client-go-obf
