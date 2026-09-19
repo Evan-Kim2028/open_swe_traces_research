@@ -27,6 +27,7 @@ func (f *bbMockTSFuture) Wait() (int64, int64, error) {
 }
 
 type bbMockPdClient struct {
+	pd.Client
 	logical atomic.Int64
 }
 
@@ -157,8 +158,7 @@ func TestPdOracleTimestampMonotonicProperty(t *testing.T) {
 	ctx := context.Background()
 	opt := &oracle.Option{TxnScope: oracle.GlobalTxnScope}
 	for i := 0; i < pdOracleCases/8; i++ {
-		pdClient := &bbMockPdClient{}
-		o := oracles.NewPdOracleWithClient(pdClient)
+		o := oracles.NewPdOracleWithClient(&bbMockPdClient{})
 		oracles.SetEmptyPDOracleLastTs(o, oracle.GoTimeToTS(time.Now().Add(-time.Duration(rng.Intn(1000))*time.Millisecond)))
 		var last uint64
 		n := 5 + rng.Intn(10)
@@ -180,8 +180,7 @@ func TestPdOracleAsyncFutureProperty(t *testing.T) {
 	ctx := context.Background()
 	opt := &oracle.Option{TxnScope: oracle.GlobalTxnScope}
 	for i := 0; i < pdOracleCases/8; i++ {
-		pdClient := &bbMockPdClient{}
-		o := oracles.NewPdOracleWithClient(pdClient)
+		o := oracles.NewPdOracleWithClient(&bbMockPdClient{})
 		oracles.SetEmptyPDOracleLastTs(o, oracle.GoTimeToTS(time.Now()))
 		fut := o.GetTimestampAsync(ctx, opt)
 		if fut == nil {

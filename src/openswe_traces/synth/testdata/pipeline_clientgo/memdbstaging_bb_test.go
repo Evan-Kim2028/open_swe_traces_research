@@ -62,7 +62,7 @@ func bbKey(r *rand.Rand, i int) []byte {
 	return b[:]
 }
 
-func (m *bbModel) state(key []byte) *bbKeyState {
+func (m *bbModel) State(key []byte) *bbKeyState {
 	k := string(key)
 	e, ok := m.entries[k]
 	if !ok {
@@ -72,8 +72,8 @@ func (m *bbModel) state(key []byte) *bbKeyState {
 	return e
 }
 
-func (m *bbModel) write(key, val []byte, ops []kv.FlagsOp) {
-	e := m.state(key)
+func (m *bbModel) Write(key, val []byte, ops []kv.FlagsOp) {
+	e := m.State(key)
 	e.flags = kv.ApplyFlagsOps(e.flags, ops...)
 	e.writes = append(e.writes, bbWrite{depth: m.depth, val: append([]byte(nil), val...)})
 	e.anchored = true
@@ -83,8 +83,8 @@ func (m *bbModel) write(key, val []byte, ops []kv.FlagsOp) {
 
 // flagOnly applies flag ops to the node without a value write. On a missing
 // key it materializes a node that floats outside staging.
-func (m *bbModel) flagOnly(key []byte, ops []kv.FlagsOp) {
-	e := m.state(key)
+func (m *bbModel) FlagOnly(key []byte, ops []kv.FlagsOp) {
+	e := m.State(key)
 	e.flags = kv.ApplyFlagsOps(e.flags, ops...)
 	if len(e.writes) == 0 && !e.anchored {
 		e.flagOnly = true
@@ -92,12 +92,12 @@ func (m *bbModel) flagOnly(key []byte, ops []kv.FlagsOp) {
 	m.dirty = true
 }
 
-func (m *bbModel) staging(h int) {
+func (m *bbModel) Staging(h int) {
 	m.depth++
 	m.handles[h] = m.depth
 }
 
-func (m *bbModel) release(h int) {
+func (m *bbModel) Release(h int) {
 	d := m.handles[h]
 	for _, e := range m.entries {
 		for i := range e.writes {
@@ -111,14 +111,14 @@ func (m *bbModel) release(h int) {
 }
 
 // destroyNode leaves behind the persistent-flag remnant, if any.
-func (e *bbKeyState) destroyNode() {
+func (e *bbKeyState) DestroyNode() {
 	e.flags = e.flags.AndPersistent()
 	e.writes = nil
 	e.anchored = false
 	e.flagOnly = e.flags != 0
 }
 
-func (m *bbModel) cleanup(h int) {
+func (m *bbModel) Cleanup(h int) {
 	d := m.handles[h]
 	for k, e := range m.entries {
 		var keep []bbWrite
@@ -129,7 +129,7 @@ func (m *bbModel) cleanup(h int) {
 		}
 		e.writes = keep
 		if e.anchored && len(e.writes) == 0 {
-			e.destroyNode()
+			e.DestroyNode()
 		}
 		if len(e.writes) == 0 && !e.flagOnly && e.flags == 0 {
 			delete(m.entries, k)
@@ -142,12 +142,12 @@ func (m *bbModel) cleanup(h int) {
 // revertTo restores the value-write stacks of a snapshot. Flags are never
 // rolled back; nodes destroyed by the revert leave persistent remnants;
 // flag-only nodes float outside checkpoints entirely.
-func (m *bbModel) revertTo(snap map[string]bbKeyState) {
+func (m *bbModel) RevertTo(snap map[string]bbKeyState) {
 	for k, e := range m.entries {
 		s, ok := snap[k]
 		if !ok {
 			if e.anchored {
-				e.destroyNode()
+				e.DestroyNode()
 			}
 			if len(e.writes) == 0 && !e.flagOnly && e.flags == 0 {
 				delete(m.entries, k)
@@ -159,12 +159,12 @@ func (m *bbModel) revertTo(snap map[string]bbKeyState) {
 		e.anchored = s.anchored
 		e.flagOnly = s.flagOnly
 		if e.anchored && len(e.writes) == 0 {
-			e.destroyNode()
+			e.DestroyNode()
 		}
 	}
 }
 
-func (m *bbModel) snapshot() map[string]bbKeyState {
+func (m *bbModel) Snapshot() map[string]bbKeyState {
 	out := map[string]bbKeyState{}
 	for k, e := range m.entries {
 		out[k] = bbKeyState{
@@ -177,32 +177,32 @@ func (m *bbModel) snapshot() map[string]bbKeyState {
 	return out
 }
 
-func (e *bbKeyState) exists() bool {
+func (e *bbKeyState) Exists() bool {
 	return len(e.writes) > 0 || e.flagOnly
 }
 
-func (m *bbModel) len() int {
+func (m *bbModel) Len() int {
 	n := 0
 	for _, e := range m.entries {
-		if e.exists() {
+		if e.Exists() {
 			n++
 		}
 	}
 	return n
 }
 
-func (m *bbModel) get(key []byte) ([]byte, bool) {
+func (m *bbModel) Get(key []byte) ([]byte, bool) {
 	e := m.entries[string(key)]
-	if e == nil || !e.exists() || len(e.writes) == 0 {
+	if e == nil || !e.Exists() || len(e.writes) == 0 {
 		return nil, false
 	}
 	// Tombstones are visible: a deleted key reads back as an empty value.
 	return e.writes[len(e.writes)-1].val, true
 }
 
-func (m *bbModel) flags(key []byte) (kv.KeyFlags, bool) {
+func (m *bbModel) Flags(key []byte) (kv.KeyFlags, bool) {
 	e := m.entries[string(key)]
-	if e == nil || !e.exists() {
+	if e == nil || !e.Exists() {
 		return 0, false
 	}
 	return e.flags, true
@@ -216,7 +216,7 @@ type bbInspect struct {
 
 // inspectStageModel: keys whose last value write sits at depth >= d, with the
 // node's current value/flags. Flag-only nodes never appear.
-func (m *bbModel) inspect(d int) map[string]bbInspect {
+func (m *bbModel) Inspect(d int) map[string]bbInspect {
 	out := map[string]bbInspect{}
 	for k, e := range m.entries {
 		if len(e.writes) == 0 {
@@ -233,7 +233,7 @@ func (m *bbModel) inspect(d int) map[string]bbInspect {
 // --- checks ----------------------------------------------------------------
 
 func bbCheckGet(t *assert.Assertions, db *MemDB, m *bbModel, key []byte, tag string) {
-	wantVal, ok := m.get(key)
+	wantVal, ok := m.Get(key)
 	got, err := db.Get(key)
 	if !ok {
 		t.NotNil(err, "%s: key %q should miss", tag, key)
@@ -244,11 +244,11 @@ func bbCheckGet(t *assert.Assertions, db *MemDB, m *bbModel, key []byte, tag str
 }
 
 func bbCheckLen(t *assert.Assertions, db *MemDB, m *bbModel, tag string) {
-	t.Equal(m.len(), db.Len(), "%s: Len", tag)
+	t.Equal(m.Len(), db.Len(), "%s: Len", tag)
 }
 
 func bbCheckFlags(t *assert.Assertions, db *MemDB, m *bbModel, key []byte, tag string) {
-	want, ok := m.flags(key)
+	want, ok := m.Flags(key)
 	got, err := db.GetFlags(key)
 	if !ok {
 		t.NotNil(err, "%s: flags for %q should miss", tag, key)
@@ -279,19 +279,19 @@ func TestMemDBBBSetGetDelete(t *testing.T) {
 		case 0, 1:
 			err := db.Delete(k)
 			assert.Nil(err)
-			m.write(k, nil, nil)
+			m.Write(k, nil, nil)
 		case 2:
 			v = make([]byte, 1+r.Intn(600))
 			r.Read(v)
 			err := db.Set(k, v)
 			assert.Nil(err)
-			m.write(k, v, nil)
+			m.Write(k, v, nil)
 		default:
 			v = make([]byte, 1+r.Intn(64))
 			r.Read(v)
 			err := db.Set(k, v)
 			assert.Nil(err)
-			m.write(k, v, nil)
+			m.Write(k, v, nil)
 		}
 		if i%37 == 0 {
 			bbCheckGet(assert, db, m, k, "setgetdelete")
@@ -326,7 +326,7 @@ func TestMemDBBBStagingMergeDiscard(t *testing.T) {
 			k := keys[r.Intn(keyN)]
 			v := []byte{byte(i), byte(trial)}
 			assert.Nil(db.Set(k, v))
-			m.write(k, v, nil)
+			m.Write(k, v, nil)
 		}
 		open := []int{}
 		steps := 1 + r.Intn(14)
@@ -335,7 +335,7 @@ func TestMemDBBBStagingMergeDiscard(t *testing.T) {
 			if action < 4 || len(open) == 0 {
 				if len(open) < 4 {
 					h := db.Staging()
-					m.staging(h)
+					m.Staging(h)
 					open = append(open, h)
 					continue
 				}
@@ -345,11 +345,11 @@ func TestMemDBBBStagingMergeDiscard(t *testing.T) {
 				k := keys[r.Intn(keyN)]
 				if r.Intn(4) == 0 {
 					assert.Nil(db.Delete(k))
-					m.write(k, nil, nil)
+					m.Write(k, nil, nil)
 				} else {
 					v := []byte{byte(s), byte(r.Intn(256)), byte(trial)}
 					assert.Nil(db.Set(k, v))
-					m.write(k, v, nil)
+					m.Write(k, v, nil)
 				}
 				continue
 			}
@@ -358,15 +358,15 @@ func TestMemDBBBStagingMergeDiscard(t *testing.T) {
 			open = open[:len(open)-1]
 			if r.Intn(2) == 0 {
 				db.Release(top)
-				m.release(top)
+				m.Release(top)
 			} else {
 				db.Cleanup(top)
-				m.cleanup(top)
+				m.Cleanup(top)
 			}
 		}
 		for i := len(open) - 1; i >= 0; i-- {
 			db.Cleanup(open[i])
-			m.cleanup(open[i])
+			m.Cleanup(open[i])
 		}
 		for _, k := range keys {
 			bbCheckGet(assert, db, m, k, "staging")
@@ -389,7 +389,7 @@ func TestMemDBBBInspectStage(t *testing.T) {
 			keys[i] = bbKey(r, i)
 		}
 		h := db.Staging()
-		m.staging(h)
+		m.Staging(h)
 		d := m.handles[h]
 		writes := 1 + r.Intn(15)
 		for i := 0; i < writes; i++ {
@@ -397,18 +397,18 @@ func TestMemDBBBInspectStage(t *testing.T) {
 			switch r.Intn(4) {
 			case 0:
 				assert.Nil(db.Delete(k))
-				m.write(k, nil, nil)
+				m.Write(k, nil, nil)
 			case 1:
 				v := []byte{byte(i)}
 				assert.Nil(db.SetWithFlags(k, v, kv.SetKeyLocked))
-				m.write(k, v, []kv.FlagsOp{kv.SetKeyLocked})
+				m.Write(k, v, []kv.FlagsOp{kv.SetKeyLocked})
 			default:
 				v := []byte{byte(i), byte(trial)}
 				assert.Nil(db.Set(k, v))
-				m.write(k, v, nil)
+				m.Write(k, v, nil)
 			}
 		}
-		want := m.inspect(d)
+		want := m.Inspect(d)
 		got := map[string]bbInspect{}
 		db.InspectStage(h, func(key []byte, flags kv.KeyFlags, val []byte) {
 			got[string(key)] = bbInspect{val: append([]byte(nil), val...), flags: flags}
@@ -423,7 +423,7 @@ func TestMemDBBBInspectStage(t *testing.T) {
 			}
 		}
 		db.Cleanup(h)
-		m.cleanup(h)
+		m.Cleanup(h)
 		bbCheckLen(assert, db, m, "post-inspect")
 	}
 }
@@ -446,9 +446,9 @@ func TestMemDBBBCheckpointRevert(t *testing.T) {
 			k := keys[r.Intn(keyN)]
 			v := []byte{byte(i), byte(trial)}
 			assert.Nil(db.Set(k, v))
-			m.write(k, v, nil)
+			m.Write(k, v, nil)
 		}
-		snap := m.snapshot()
+		snap := m.Snapshot()
 		cp := db.Checkpoint()
 		post := 1 + r.Intn(12)
 		for i := 0; i < post; i++ {
@@ -456,26 +456,26 @@ func TestMemDBBBCheckpointRevert(t *testing.T) {
 			switch r.Intn(4) {
 			case 0:
 				assert.Nil(db.Delete(k))
-				m.write(k, nil, nil)
+				m.Write(k, nil, nil)
 			case 1:
 				assert.Nil(db.SetWithFlags(k, []byte{byte(i)}, kv.SetKeyLocked, kv.SetPresumeKeyNotExists))
-				m.write(k, []byte{byte(i)}, []kv.FlagsOp{kv.SetKeyLocked, kv.SetPresumeKeyNotExists})
+				m.Write(k, []byte{byte(i)}, []kv.FlagsOp{kv.SetKeyLocked, kv.SetPresumeKeyNotExists})
 			default:
 				assert.Nil(db.Set(k, []byte{byte(i + 100)}))
-				m.write(k, []byte{byte(i + 100)}, nil)
+				m.Write(k, []byte{byte(i + 100)}, nil)
 			}
 		}
 		db.RevertToCheckpoint(cp)
-		m.revertTo(snap)
+		m.RevertTo(snap)
 		for _, k := range keys {
 			bbCheckGet(assert, db, m, k, "revert")
 			bbCheckFlags(assert, db, m, k, "revert")
 		}
-		assert.Equal(m.len(), db.Len(), "revert Len")
+		assert.Equal(m.Len(), db.Len(), "revert Len")
 		// Flag mutations are never rolled back; value history is. Nodes that
 		// survived keep their accumulated flags.
 		for k, e := range m.entries {
-			if !e.exists() {
+			if !e.Exists() {
 				continue
 			}
 			fl, err := db.GetFlags([]byte(k))
@@ -507,24 +507,24 @@ func TestMemDBBBFlagsAcrossStages(t *testing.T) {
 			keys[i] = bbKey(r, i+trial*131)
 		}
 		h := db.Staging()
-		m.staging(h)
+		m.Staging(h)
 		for i := 0; i < 1+r.Intn(10); i++ {
 			k := keys[r.Intn(keyN)]
 			o := ops[r.Intn(len(ops))]
 			switch r.Intn(3) {
 			case 0:
 				assert.Nil(db.SetWithFlags(k, []byte{byte(i)}, o...))
-				m.write(k, []byte{byte(i)}, o)
+				m.Write(k, []byte{byte(i)}, o)
 			case 1:
 				assert.Nil(db.DeleteWithFlags(k, o...))
-				m.write(k, nil, o)
+				m.Write(k, nil, o)
 			default:
 				db.UpdateFlags(k, o...)
-				m.flagOnly(k, o)
+				m.FlagOnly(k, o)
 			}
 		}
 		db.Cleanup(h)
-		m.cleanup(h)
+		m.Cleanup(h)
 		for _, k := range keys {
 			bbCheckGet(assert, db, m, k, "flags")
 			bbCheckFlags(assert, db, m, k, "flags")
@@ -559,25 +559,25 @@ func TestMemDBBBDirtyResetAndUnseen(t *testing.T) {
 			v := make([]byte, 1+r.Intn(200))
 			r.Read(v)
 			assert.Nil(db.Set(k, v))
-			m.write(k, v, nil)
+			m.Write(k, v, nil)
 			wrote = true
 		}
 		assert.Equal(wrote, db.Dirty(), "dirty after writes")
 		h := db.Staging()
-		m.staging(h)
+		m.Staging(h)
 		if r.Intn(2) == 0 {
 			k := keys[r.Intn(keyN)]
 			assert.Nil(db.SetWithFlags(k, []byte{1}, kv.SetKeyLocked))
-			m.write(k, []byte{1}, []kv.FlagsOp{kv.SetKeyLocked})
+			m.Write(k, []byte{1}, []kv.FlagsOp{kv.SetKeyLocked})
 			db.Cleanup(h)
-			m.cleanup(h)
+			m.Cleanup(h)
 			assert.True(db.Dirty(), "persistent flag write survives cleanup -> dirty")
 		} else {
 			k := keys[r.Intn(keyN)]
 			assert.Nil(db.Set(k, []byte{9}))
-			m.write(k, []byte{9}, nil)
+			m.Write(k, []byte{9}, nil)
 			db.Cleanup(h)
-			m.cleanup(h)
+			m.Cleanup(h)
 		}
 		bbCheckLen(assert, db, m, "dirty")
 		for _, k := range keys {

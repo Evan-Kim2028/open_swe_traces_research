@@ -53,7 +53,7 @@ func bbNewPartition(r *rand.Rand) bbPartition {
 }
 
 // regionRanges lists [start,end) ranges of the partition.
-func (p bbPartition) regionRanges() []kv.KeyRange {
+func (p bbPartition) RegionRanges() []kv.KeyRange {
 	var out []kv.KeyRange
 	for i := 0; i < len(p); i++ {
 		var end []byte
@@ -93,7 +93,7 @@ func bbClip(rs, re, s, e []byte) (kv.KeyRange, bool) {
 // ranges grouped in batches of regionsPerTask.
 func bbExpected(p bbPartition, s, e []byte, regionsPerTask int) []kv.KeyRange {
 	var clipped []kv.KeyRange
-	for _, rr := range p.regionRanges() {
+	for _, rr := range p.RegionRanges() {
 		if c, ok := bbClip(rr.StartKey, rr.EndKey, s, e); ok {
 			clipped = append(clipped, c)
 		}

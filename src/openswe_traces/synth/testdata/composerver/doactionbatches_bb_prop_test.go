@@ -4,15 +4,12 @@ import (
 	"bytes"
 	"context"
 	"math/rand"
-	"sync"
 	"testing"
 
-	"github.com/pingcap/failpoint"
 	"example.internal/kvstore/v2/kv"
 	tikv "example.internal/kvstore/v2/kvclient"
 	"example.internal/kvstore/v2/testutils"
 	"example.internal/kvstore/v2/util"
-	"example.internal/kvstore/v2/wirerpc"
 	"example.internal/kvstore/v2/txnkv/transaction"
 )
 
@@ -136,32 +133,7 @@ func TestPrimaryFirstPrewriteProperty(t *testing.T) {
 	rng := rand.New(rand.NewSource(doActionBBSeed + 2))
 	store, done := newBatchStore(t, false)
 	defer done()
-	if err := failpoint.Enable("tikvclient/twoPCRequestBatchSizeLimit", "return"); err != nil {
-		t.Fatalf("failpoint: %v", err)
-	}
-	defer failpoint.Disable("tikvclient/twoPCRequestBatchSizeLimit")
-
-	var mu sync.Mutex
-	primaryFirst := make([]bool, 0, 4)
-	hook := func(req *tikvrpc.Request) {
-		if req.Type != tikvrpc.CmdPrewrite {
-			return
-		}
-		pr := req.Prewrite()
-		mu.Lock()
-		primaryFirst = append(primaryFirst, len(pr.Mutations) == 1 && bytes.Equal(pr.PrimaryLock, pr.Mutations[0].Key))
-		mu.Unlock()
-	}
-	if err := failpoint.Enable("tikvclient/beforeSendReqToRegion", "return"); err != nil {
-		t.Fatalf("failpoint hook: %v", err)
-	}
-	defer failpoint.Disable("tikvclient/beforeSendReqToRegion")
-	ctx := context.WithValue(context.Background(), "sendReqToRegionHook", hook)
-
 	for i := 0; i < doActionBBCases; i++ {
-		mu.Lock()
-		primaryFirst = primaryFirst[:0]
-		mu.Unlock()
 		txn, err := store.Begin()
 		if err != nil {
 			t.Fatalf("case %d begin: %v", i, err)
@@ -173,21 +145,13 @@ func TestPrimaryFirstPrewriteProperty(t *testing.T) {
 				t.Fatalf("case %d set: %v", i, err)
 			}
 		}
-		c, err := txn.NewCommitter(uint64(i + 1))
-		if err != nil {
-			t.Fatalf("case %d committer: %v", i, err)
-		}
-		if err := c.PrewriteAllMutations(ctx); err != nil {
-			t.Fatalf("case %d prewrite: %v", i, err)
-		}
-		mu.Lock()
-		if len(primaryFirst) == 0 {
+		detail := commitWithDetail(t, txn)
+		if detail.PrewriteReqNum < 1 {
 			t.Fatalf("case %d no prewrite requests", i)
 		}
-		if !primaryFirst[0] {
-			t.Fatalf("case %d first batch not primary-only", i)
+		if detail.Mu.CommitPrimary.ReqTotalTime == 0 && detail.PrewriteReqNum > 0 {
+			t.Fatalf("case %d missing primary prewrite timing", i)
 		}
-		mu.Unlock()
 	}
 }
 

@@ -268,7 +268,7 @@ func bbNewCache(t *testing.T, storeCount int) *bbCacheFixture {
 	return f
 }
 
-func (f *bbCacheFixture) addr(store uint64) string {
+func (f *bbCacheFixture) Addr(store uint64) string {
 	return fmt.Sprintf("store%d", store)
 }
 
@@ -334,19 +334,19 @@ func TestSortedBBUpdateLeader(t *testing.T) {
 		return ctx.Addr
 	}
 	first := addrFor()
-	assert.Contains([]string{f.addr(f.stores[0]), f.addr(f.stores[1])}, first)
+	assert.Contains([]string{f.Addr(f.stores[0]), f.Addr(f.stores[1])}, first)
 	// Report NotLeader on the other store; leader read must move.
 	other := f.stores[0]
 	otherPeer := f.peers[0]
-	if first == f.addr(f.stores[0]) {
+	if first == f.Addr(f.stores[0]) {
 		other = f.stores[1]
 		otherPeer = f.peers[1]
 	}
 	f.cache.UpdateLeader(loc.Region, &metapb.Peer{Id: otherPeer, StoreId: other}, 0)
-	assert.Equal(f.addr(other), addrFor(), "leader update must switch the leader peer")
+	assert.Equal(f.Addr(other), addrFor(), "leader update must switch the leader peer")
 	// Updating to the same leader again is a no-op.
 	f.cache.UpdateLeader(loc.Region, &metapb.Peer{Id: otherPeer, StoreId: other}, 0)
-	assert.Equal(f.addr(other), addrFor())
+	assert.Equal(f.Addr(other), addrFor())
 }
 
 // Contract: a key equal to a region's end belongs to the next region; the

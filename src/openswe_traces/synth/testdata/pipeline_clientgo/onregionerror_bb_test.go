@@ -98,13 +98,13 @@ func (c *bbOrClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.
 	return c.fn(addr)
 }
 
-func (c *bbOrClient) nAttempts() int {
+func (c *bbOrClient) NAttempts() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return len(c.attempts)
 }
 
-func (c *bbOrClient) attemptAddrs() []string {
+func (c *bbOrClient) AttemptAddrs() []string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	out := make([]string, len(c.attempts))
@@ -150,16 +150,16 @@ func bbOrBoot(t *testing.T, nStores int) *bbOrEnv {
 	return env
 }
 
-func (e *bbOrEnv) close() {
+func (e *bbOrEnv) Close() {
 	e.cache.Close()
 	e.mvcc.Close()
 }
 
-func (e *bbOrEnv) storeAddr(storeID uint64) string {
+func (e *bbOrEnv) StoreAddr(storeID uint64) string {
 	return e.cluster.GetStore(storeID).GetAddress()
 }
 
-func (e *bbOrEnv) locateRegion(t *testing.T, bo *retry.Backoffer) *KeyLocation {
+func (e *bbOrEnv) LocateRegion(t *testing.T, bo *retry.Backoffer) *KeyLocation {
 	t.Helper()
 	r, err := e.cache.LocateRegionByID(bo, e.region.id)
 	if err != nil {
@@ -214,21 +214,21 @@ func TestBBOnRegionErrorRetryableEventuallySucceeds(t *testing.T) {
 				return bbOrOK(), nil
 			}}
 			sender := NewRegionRequestSender(env.cache, cli)
-			reg := env.locateRegion(t, bo)
+			reg := env.LocateRegion(t, bo)
 			resp, _, _, err := sender.SendReqCtx(bo, bbOrGetReq(), reg.Region, time.Second, tikvrpc.TiKV)
 			if err != nil {
-				env.close()
+				env.Close()
 				t.Fatalf("kind %d case %d: retryable error not recovered: %v", kind, i, err)
 			}
 			if got := string(resp.Resp.(*kvrpcpb.GetResponse).GetValue()); got != "ok" {
-				env.close()
+				env.Close()
 				t.Fatalf("kind %d case %d: bad resp %q", kind, i, got)
 			}
-			if cli.nAttempts() < fails+1 {
-				env.close()
-				t.Fatalf("kind %d case %d: attempts %d < fails+1 %d", kind, i, cli.nAttempts(), fails+1)
+			if cli.NAttempts() < fails+1 {
+				env.Close()
+				t.Fatalf("kind %d case %d: attempts %d < fails+1 %d", kind, i, cli.NAttempts(), fails+1)
 			}
-			env.close()
+			env.Close()
 		}
 	}
 }
@@ -242,7 +242,7 @@ func TestBBOnRegionErrorNotLeaderSwitch(t *testing.T) {
 	for i := 0; i < 400; i++ {
 		env := bbOrBoot(t, 3)
 		bo := retry.NewBackofferWithVars(context.Background(), 60000, nil)
-		reg := env.locateRegion(t, bo)
+		reg := env.LocateRegion(t, bo)
 		// Pick a non-leader peer as the hint target.
 		var hintPeer *metapb.Peer
 		var hintStore uint64
@@ -270,29 +270,29 @@ func TestBBOnRegionErrorNotLeaderSwitch(t *testing.T) {
 		sender := NewRegionRequestSender(env.cache, cli)
 		resp, _, _, err := sender.SendReqCtx(bo, bbOrGetReq(), reg.Region, time.Second, tikvrpc.TiKV)
 		if err != nil {
-			env.close()
+			env.Close()
 			t.Fatalf("case %d: notleader not retried: %v", i, err)
 		}
 		if resp == nil {
-			env.close()
+			env.Close()
 			t.Fatalf("case %d: nil resp", i)
 		}
-		addrs := cli.attemptAddrs()
+		addrs := cli.AttemptAddrs()
 		if len(addrs) < 2 {
-			env.close()
+			env.Close()
 			t.Fatalf("case %d: no retry attempt", i)
 		}
 		if useHint {
-			want := env.storeAddr(hintStore)
+			want := env.StoreAddr(hintStore)
 			if addrs[1] != want {
-				env.close()
+				env.Close()
 				t.Fatalf("case %d: hint peer not used: attempt2 addr %q want %q", i, addrs[1], want)
 			}
 		} else if addrs[1] == addrs[0] {
-			env.close()
+			env.Close()
 			t.Fatalf("case %d: no-hint notleader retried same peer %q", i, addrs[1])
 		}
-		env.close()
+		env.Close()
 	}
 }
 
@@ -305,7 +305,7 @@ func TestBBOnRegionErrorSendFailover(t *testing.T) {
 	for i := 0; i < 300; i++ {
 		env := bbOrBoot(t, 3)
 		bo := retry.NewBackofferWithVars(context.Background(), 60000, nil)
-		reg := env.locateRegion(t, bo)
+		reg := env.LocateRegion(t, bo)
 		first := true
 		cli := &bbOrClient{fn: func(addr string) (*tikvrpc.Response, error) {
 			if first {
@@ -317,23 +317,23 @@ func TestBBOnRegionErrorSendFailover(t *testing.T) {
 		sender := NewRegionRequestSender(env.cache, cli)
 		resp, _, _, err := sender.SendReqCtx(bo, bbOrGetReq(), reg.Region, time.Second, tikvrpc.TiKV)
 		if err != nil {
-			env.close()
+			env.Close()
 			t.Fatalf("case %d: single send failure not recovered: %v", i, err)
 		}
 		if resp == nil {
-			env.close()
+			env.Close()
 			t.Fatalf("case %d: nil resp", i)
 		}
-		addrs := cli.attemptAddrs()
+		addrs := cli.AttemptAddrs()
 		if len(addrs) < 2 {
-			env.close()
+			env.Close()
 			t.Fatalf("case %d: no failover attempt", i)
 		}
 		if addrs[1] == addrs[0] {
-			env.close()
+			env.Close()
 			t.Fatalf("case %d: failover retried same dead store %q", i, addrs[1])
 		}
-		env.close()
+		env.Close()
 	}
 }
 
@@ -344,9 +344,9 @@ func TestBBOnRegionErrorTerminal(t *testing.T) {
 	defer func() { _ = failpoint.Disable("tikvclient/fastBackoffBySkipSleep") }()
 	// All stores dead: send always fails.
 	env := bbOrBoot(t, 3)
-	defer env.close()
+	defer env.Close()
 	bo := retry.NewBackofferWithVars(context.Background(), 8000, nil)
-	reg := env.locateRegion(t, bo)
+	reg := env.LocateRegion(t, bo)
 	cli := &bbOrClient{fn: func(addr string) (*tikvrpc.Response, error) {
 		return nil, errors.New("permanent failure")
 	}}
@@ -363,8 +363,8 @@ func TestBBOnRegionErrorTerminal(t *testing.T) {
 			t.Fatalf("permanent send failure surfaced neither error nor region error: resp=%v", resp)
 		}
 	}
-	if cli.nAttempts() > 64 {
-		t.Fatalf("unbounded retries: %d attempts", cli.nAttempts())
+	if cli.NAttempts() > 64 {
+		t.Fatalf("unbounded retries: %d attempts", cli.NAttempts())
 	}
 }
 
@@ -376,33 +376,33 @@ func TestBBOnRegionErrorSuccessCtx(t *testing.T) {
 		n := 1 + r.Intn(3)
 		env := bbOrBoot(t, n)
 		bo := retry.NewBackofferWithVars(context.Background(), 5000, nil)
-		reg := env.locateRegion(t, bo)
+		reg := env.LocateRegion(t, bo)
 		cli := &bbOrClient{fn: func(addr string) (*tikvrpc.Response, error) {
 			return bbOrOK(), nil
 		}}
 		sender := NewRegionRequestSender(env.cache, cli)
 		resp, rpcCtx, retries, err := sender.SendReqCtx(bo, bbOrGetReq(), reg.Region, time.Second, tikvrpc.TiKV)
 		if err != nil {
-			env.close()
+			env.Close()
 			t.Fatalf("case %d: success send errored: %v", i, err)
 		}
 		if resp == nil || string(resp.Resp.(*kvrpcpb.GetResponse).GetValue()) != "ok" {
-			env.close()
+			env.Close()
 			t.Fatalf("case %d: bad resp", i)
 		}
 		if retries != 0 {
-			env.close()
+			env.Close()
 			t.Fatalf("case %d: clean send consumed retries %d", i, retries)
 		}
 		if rpcCtx == nil || rpcCtx.Store == nil || rpcCtx.Addr == "" {
-			env.close()
+			env.Close()
 			t.Fatalf("case %d: missing rpc ctx", i)
 		}
 		if st := env.cluster.GetStoreByAddr(rpcCtx.Addr); st == nil {
-			env.close()
+			env.Close()
 			t.Fatalf("case %d: ctx addr %q not a real store", i, rpcCtx.Addr)
 		}
-		env.close()
+		env.Close()
 	}
 }
 
@@ -426,7 +426,7 @@ func TestBBOnRegionErrorMixedSequence(t *testing.T) {
 		nStores := 1 + r.Intn(3)
 		env := bbOrBoot(t, nStores)
 		bo := retry.NewBackofferWithVars(context.Background(), 60000, nil)
-		reg := env.locateRegion(t, bo)
+		reg := env.LocateRegion(t, bo)
 		seq := make([]bbOrErrKind, 1+r.Intn(3))
 		for j := range seq {
 			seq[j] = kinds[r.Intn(len(kinds))]
@@ -448,14 +448,14 @@ func TestBBOnRegionErrorMixedSequence(t *testing.T) {
 		// StoreNotMatch on a single-store cluster may legitimately surface an
 		// error once every store is dropped; multi-store must recover.
 		if err != nil && !(nStores == 1 && containsKind(seq, bbOrErrStoreNotMatch)) {
-			env.close()
+			env.Close()
 			t.Fatalf("case %d seq %v: retryable sequence failed: %v", i, seq, err)
 		}
 		if err == nil && resp == nil {
-			env.close()
+			env.Close()
 			t.Fatalf("case %d: nil resp no err", i)
 		}
-		env.close()
+		env.Close()
 	}
 }
 

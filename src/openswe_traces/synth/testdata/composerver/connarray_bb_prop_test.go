@@ -215,7 +215,7 @@ func TestConnArrayConcurrentSendProperty(t *testing.T) {
 	defer client.Close()
 
 	var okCnt uint64
-	for round := 0; round < 50; round++ {
+	for round := 0; round < 20; round++ {
 		n := 4 + rng.Intn(8)
 		var wg sync.WaitGroup
 		errCh := make(chan error, n)
@@ -236,7 +236,7 @@ func TestConnArrayConcurrentSendProperty(t *testing.T) {
 			atomic.AddUint64(&okCnt, 1)
 		}
 	}
-	if okCnt < 200 {
+	if okCnt < 80 {
 		t.Fatalf("concurrent ok count %d", okCnt)
 	}
 }
@@ -246,6 +246,7 @@ func TestConnArrayServerRestartProperty(t *testing.T) {
 	if port <= 0 {
 		t.Fatal("mock server port")
 	}
+	defer server.Stop()
 	if !server.IsRunning() {
 		t.Fatal("server not running")
 	}

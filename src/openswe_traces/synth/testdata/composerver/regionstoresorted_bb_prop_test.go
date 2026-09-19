@@ -43,28 +43,35 @@ type bbSortedEnv struct {
 	peer2           uint64
 	region1         uint64
 	splitBoundaries [][]byte
+	mvccStore       mocktikv.MVCCStore
+	client          *mocktikv.RPCClient
 }
 
-func newBBSortedEnv(t *testing.T) *bbSortedEnv {
+func newBBSortedEnv(t *testing.T) (*bbSortedEnv, func()) {
 	mvccStore := mocktikv.MustNewMVCCStore()
 	cluster := mocktikv.NewCluster(mvccStore)
 	storeIDs, peerIDs, regionID, _ := mocktikv.BootstrapWithMultiStores(cluster, 2)
 	env := &bbSortedEnv{
-		cluster: cluster,
-		store1:  storeIDs[0],
-		store2:  storeIDs[1],
-		peer1:   peerIDs[0],
-		peer2:   peerIDs[1],
-		region1: regionID,
+		cluster:   cluster,
+		mvccStore: mvccStore,
+		store1:    storeIDs[0],
+		store2:    storeIDs[1],
+		peer1:     peerIDs[0],
+		peer2:     peerIDs[1],
+		region1:   regionID,
 	}
 	pdClient := mocktikv.NewPDClient(cluster)
 	env.cache = locate.NewRegionCache(pdClient)
 	env.bo = retry.NewBackofferWithVars(context.Background(), 5000, nil)
-	return env
+	cleanup := func() {
+		env.cache.Close()
+		_ = env.mvccStore.Close()
+	}
+	return env, cleanup
 }
 
 func newBBSplitEnv(t *testing.T) (*bbSortedEnv, func()) {
-	_, cluster, pdClient, err := testutils.NewMockTiKV("", nil)
+	client, cluster, pdClient, err := testutils.NewMockTiKV("", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,11 +85,13 @@ func newBBSplitEnv(t *testing.T) (*bbSortedEnv, func()) {
 	env := &bbSortedEnv{
 		cache:           cache,
 		cluster:         cluster,
+		client:          client,
 		bo:              bo,
 		splitBoundaries: splitKeys,
 	}
 	cleanup := func() {
 		cache.Close()
+		_ = client.Close()
 	}
 	return env, cleanup
 }
@@ -193,8 +202,8 @@ func TestSortedReplaceOrInsertProperty(t *testing.T) {
 
 func TestRegionCacheLocateInvalidateProperty(t *testing.T) {
 	rng := rand.New(rand.NewSource(sortedSeed + 3))
-	env := newBBSortedEnv(t)
-	defer func() { env.cache.Close() }()
+	env, cleanup := newBBSortedEnv(t)
+	defer cleanup()
 
 	for i := 0; i < sortedCases; i++ {
 		key := []byte{byte('a' + rng.Intn(20))}
@@ -224,8 +233,8 @@ func TestRegionCacheLocateInvalidateProperty(t *testing.T) {
 
 func TestRegionCacheUpdateLeaderProperty(t *testing.T) {
 	rng := rand.New(rand.NewSource(sortedSeed + 4))
-	env := newBBSortedEnv(t)
-	defer func() { env.cache.Close() }()
+	env, cleanup := newBBSortedEnv(t)
+	defer cleanup()
 
 	for i := 0; i < sortedCases; i++ {
 		key := []byte{byte('a' + rng.Intn(20))}

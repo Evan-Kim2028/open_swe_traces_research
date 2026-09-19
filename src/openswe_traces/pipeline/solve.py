@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 from collections.abc import Callable
@@ -10,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from openswe_traces.pipeline.agents import load_env_file
 from openswe_traces.pipeline.audit import TrialAudit, audit_class, audit_job
 from openswe_traces.pipeline.config import PipelineConfig
 from openswe_traces.pipeline.package import ensure_level
@@ -106,13 +108,42 @@ def harbor_argv(
     ]
 
 
+DEVIN_CREDENTIALS = Path.home() / ".local" / "share" / "devin" / "credentials.toml"
+
+
+def devin_api_key(path: Path | str = DEVIN_CREDENTIALS) -> str | None:
+    """Read `windsurf_api_key` from the Devin CLI credentials file. Never log the value."""
+    path = Path(path)
+    if not path.is_file():
+        return None
+    for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw.strip()
+        if line.startswith("windsurf_api_key") and "=" in line:
+            return line.split("=", 1)[1].strip().strip('"').strip("'") or None
+    return None
+
+
+def solver_env(cfg: PipelineConfig, solver: str) -> dict[str, str]:
+    """Environment for a Harbor solve: cursor env file for Composer, DEVIN_API_KEY for Devin."""
+    env = os.environ.copy()
+    if solver == "devin":
+        if not env.get("DEVIN_API_KEY"):
+            key = devin_api_key()
+            if key:
+                env["DEVIN_API_KEY"] = key
+    else:
+        load_env_file(cfg.cursor_env_file, environ=env)
+    return env
+
+
 def run_harbor(
     argv: list[str],
     *,
     timeout: int | None = None,
+    env: dict[str, str] | None = None,
     run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> subprocess.CompletedProcess[str]:
-    return run(argv, capture_output=True, text=True, timeout=timeout, check=False)
+    return run(argv, capture_output=True, text=True, timeout=timeout, check=False, env=env)
 
 
 def trial_timed_out(audit: TrialAudit, *, job_timed_out: bool = False) -> bool:
@@ -414,7 +445,7 @@ def default_harbor(cfg: PipelineConfig | None = None, **kw: Any) -> HarborJobRes
     )
     timed_out = False
     try:
-        run_harbor(argv, timeout=timeout_sec)
+        run_harbor(argv, timeout=timeout_sec, env=solver_env(cfg, solver))
     except subprocess.TimeoutExpired:
         timed_out = True
     job_dir = cfg.jobs_dir / kw["job_name"]
