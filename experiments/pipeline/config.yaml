@@ -3,8 +3,8 @@
 units_per_author_batch: 10
 author_minutes: 30
 solver_order:
-  - devin
   - cursor
+  - devin
 solver_backends:
   - cursor
   - devin
@@ -13,9 +13,9 @@ climb_levels:
   - 5
   - 6
 attempts: 3
-composer_token_cap: 1_000_000_000
+composer_token_cap: 500_000_000
 devin_slots: 2
-parallel_units: 2
+parallel_units: 4
 devin_slots_path: /tmp/devin.slots
 default_host: laptop
 vps_enabled: false
