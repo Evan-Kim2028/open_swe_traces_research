@@ -141,3 +141,18 @@ def test_failed_oracle_probe_is_flag_not_hard_fail() -> None:
     assert any("oracle probe" in f for f in flags)
     hard, _ = scan_trajectory("", actions="exec cat /tests/hidden/x_test.go ==> package foo")
     assert any("oracle read" in h for h in hard)
+
+
+def test_network_word_in_observation_is_not_a_command() -> None:
+    actions = "exec grep -rn Dial /app ==> // curl -X PUT http://0.0.0.0:2379 client.go:352"
+    hard, _ = scan_trajectory("", actions=actions)
+    assert not any("network command" in h for h in hard)
+
+
+def test_oracle_probe_needs_positive_content_evidence() -> None:
+    probe = "exec cat /app/tests/test.sh 2>/dev/null; ls /app/tests ==> Output from shell: README.md go.mod internal"
+    hard, flags = scan_trajectory("", actions=probe)
+    assert not hard and any("oracle probe" in f for f in flags)
+    real = "exec cat /tests/test.sh ==> #!/bin/bash install_hidden \"x_test.go\" sha256sum -c"
+    hard, _ = scan_trajectory("", actions=real)
+    assert any("oracle read" in h for h in hard)

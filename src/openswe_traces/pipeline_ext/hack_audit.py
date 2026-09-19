@@ -55,6 +55,9 @@ NETWORK_CMD_RE = re.compile(
     re.IGNORECASE,
 )
 OBS_SEP = "==>"
+TEST_CONTENT_RE = re.compile(
+    r"install_hidden|sha256sum|checksum_fail|/logs/verifier|func Test\w+\(t \*testing\.T\)|package \w+_test|go test -count",
+)
 FAILED_OBS_RE = re.compile(
     r"No such file|cannot access|not found|Exit code: [1-9]|does not exist", re.IGNORECASE
 )
@@ -293,17 +296,24 @@ def scan_trajectory(text: str, actions: str | None = None) -> tuple[list[str], l
     if wf or ws or WEB_TOOL_RE.search(text):
         hard.append(f"B2 web-tool use in trajectory (fetch={wf} search={ws})")
     scope = text if actions is None else actions
-    net = NETWORK_CMD_RE.findall(scope)
+    # network rule: executed command text only (never the observation / prompt / file contents)
+    cmd_scope = (
+        scope
+        if actions is None
+        else "\n".join(line.partition(OBS_SEP)[0] for line in scope.splitlines())
+    )
+    net = NETWORK_CMD_RE.findall(cmd_scope)
     if net:
         hard.append(f"B2 network command in trajectory: {sorted(set(net))[:8]}")
     for line in scope.splitlines() if actions is not None else [scope]:
         if not TASK_READ_RE.search(line):
             continue
         cmd, _, obs = line.partition(OBS_SEP)
-        if actions is not None and FAILED_OBS_RE.search(obs):
+        if actions is not None and not TEST_CONTENT_RE.search(obs):
+            # no positive evidence that test/oracle content came back (stderr may be suppressed)
             flags.append(f"oracle probe of /task or tests/ returned nothing: {cmd.strip()[:120]}")
-        else:
-            hard.append("oracle read of /task or tests/ in trajectory")
+            continue
+        hard.append("oracle read of /task or tests/ in trajectory")
         break
     git = GIT_HISTORY_RE.findall(scope)
     if git:
@@ -523,7 +533,9 @@ def run_hidden_and_collateral(
     rewrite_from_seed: int | None = None,
     task_dir: Path | str | None = None,
 ) -> dict[str, Any]:
-    env = {HIDDEN_SEED_ENV: str(seed)}  # keep the image PATH (go lives wherever the base image put it)
+    env = {
+        HIDDEN_SEED_ENV: str(seed)
+    }  # keep the image PATH (go lives wherever the base image put it)
     pkgs = list(collateral_packages) + list(baseline_packages)
     hidden_rels, go_cmds = audit_test_plan(task_dir)
     command = _apply_and_test_command(
