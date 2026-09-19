@@ -638,6 +638,9 @@ def main_rung_mapping() -> None:
     manual = None
     if VALIDATION_JSON.exists():
         manual = pd.read_json(VALIDATION_JSON)
+        # Refresh heuristic column from current rung assignments.
+        hmap = rung_df.set_index("instance_id")["rung"]
+        manual["rung_heuristic"] = hmap.reindex(manual["instance_id"]).to_numpy()
     examples = pick_examples(rung_df, difficulty_df)
     report = build_report(rung_df, corr, manual, examples)
     args.summary.parent.mkdir(parents=True, exist_ok=True)

@@ -98,6 +98,10 @@ def test_l5_test_body_in_text():
     text = (
         "# Fix tests\n\n```go\nfunc TestDecodeBucketKeys(t *testing.T) {\n"
         "    got, err := DecodeBucketKeys(nil)\n"
+        "    require.NoError(t, err)\n"
+        "    require.NotNil(t, got)\n"
+        "}\n\nfunc TestDecodeBucketKeysMixed(t *testing.T) {\n"
+        "    got, err := DecodeBucketKeys([][]byte{{1}})\n"
         "    require.NoError(t, err)\n}\n```"
     )
     result = classify_task(text, SAMPLE_PATCH)

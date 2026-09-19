@@ -18,6 +18,13 @@ _PR_OPEN_RE = re.compile(
 )
 _PR_CLOSE_RE = re.compile(r"</pr_description>", re.IGNORECASE)
 _INSTR_OPEN_RE = re.compile(r"<instructions>", re.IGNORECASE)
+_UPLOAD_OPEN_RE = re.compile(r"<uploaded_files>", re.IGNORECASE)
+_ISSUE_OPEN_RE = re.compile(r"<issue_description>", re.IGNORECASE)
+_ISSUE_CLOSE_RE = re.compile(r"</issue_description>", re.IGNORECASE)
+_HARNESS_SIG_RE = re.compile(
+    r"\n+New interfaces introduced:\s*.*$",
+    re.IGNORECASE | re.DOTALL,
+)
 
 # --- feature patterns ----------------------------------------------------------
 
@@ -135,6 +142,15 @@ def strip_task_text(raw: str | None) -> str:
     if not raw:
         return ""
     text = raw.strip()
+    upload = _UPLOAD_OPEN_RE.search(text)
+    if upload:
+        text = text[upload.end() :]
+        issue = _ISSUE_OPEN_RE.search(text)
+        if issue:
+            text = text[issue.end() :]
+            close = _ISSUE_CLOSE_RE.search(text)
+            if close:
+                text = text[: close.start()]
     m = _PR_OPEN_RE.search(text)
     if m:
         text = text[m.end() :]
@@ -146,8 +162,17 @@ def strip_task_text(raw: str | None) -> str:
         if instr:
             text = text[: instr.start()]
     text = _PR_CLOSE_RE.sub("", text)
+    text = _HARNESS_SIG_RE.sub("", text)
     text = re.sub(
         r"^Consider the following PR description:\s*",
+        "",
+        text,
+        count=1,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r"^I've uploaded a \w+ code repository in the directory [^\n]+\.\s*"
+        r"Consider the following issue description:\s*",
         "",
         text,
         count=1,
@@ -184,10 +209,19 @@ def _test_names_in_text(text: str) -> list[str]:
 
 
 def _test_funcs_in_text(text: str) -> int:
-    count = len(_GO_TEST_NAME_RE.findall(text)) + len(_PY_TEST_NAME_RE.findall(text))
-    count += len(re.findall(r"func\s+Test[A-Z]\w*\s*\(", text))
+    count = len(re.findall(r"func\s+Test[A-Z]\w*\s*\(", text))
     count += len(re.findall(r"def\s+test_[a-z]\w*\s*\(", text, flags=re.IGNORECASE))
     return count
+
+
+def _has_substantial_test_body(text: str) -> bool:
+    """True when the text includes a multi-assertion test body (L5/L6), not a repro snippet."""
+    if not _TEST_CODE_RE.search(text):
+        return False
+    asserts = len(re.findall(r"\b(?:assert|require\.|expect\()", text, flags=re.IGNORECASE))
+    funcs = _test_funcs_in_text(text)
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    return (funcs >= 2 and asserts >= 2) or (funcs >= 1 and asserts >= 3 and len(lines) >= 15)
 
 
 def _test_files_in_text(text: str) -> int:
@@ -286,7 +320,7 @@ def compute_features(task_text: str, reference_patch: str | None = None) -> Rung
     _, leaked = detect_leakage(text, reference_patch)
     n_test_funcs = _test_funcs_in_text(text)
     n_test_files = _test_files_in_text(text)
-    has_test_code = bool(_TEST_CODE_RE.search(text)) and n_test_funcs >= 1
+    has_test_code = _has_substantial_test_body(text)
     return RungFeatures(
         word_count=_word_count(text),
         has_repro=has_repro,
@@ -313,8 +347,12 @@ def assign_rung(features: RungFeatures) -> int:
     # L5: one hidden test file worth of test code in the instruction.
     if features.has_test_code and features.n_test_funcs_in_text >= 1:
         return 5
-    # L4: exported signatures / API stubs without full test bodies.
-    if features.has_signature and not features.has_test_code:
+    # L4: exported signatures / API stubs without full test bodies (not bare repro commands).
+    if (
+        features.has_signature
+        and not features.has_test_code
+        and not (features.has_repro and features.has_expected_actual)
+    ):
         return 4
     # L3: named checks/tests without full test bodies.
     if features.has_test_names and not features.has_test_code:

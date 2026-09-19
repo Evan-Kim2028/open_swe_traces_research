@@ -84,3 +84,17 @@ Open-SWE-Traces mapping (`openswe_rung_mapping.md`, pending); any revision to th
 ## Score test outcome (2026-09-19)
 
 The statefulness score did not predict L2 outcomes on four fresh units (both top-scored units passed 3/3, as did both bottom-scored). Dropped as a manufacturing lever; see FAILURE_AUDIT_A0.md.
+
+## External datapoint: Open-SWE-Traces (2026-09-19, see `openswe_rung_mapping.md`)
+
+42k real issues with ~12 rollouts each. A heuristic rung label (validated at only 24.5% exact / 63% ±1 against
+hand labels) puts issues mostly at L0–L2 and L4 (signatures/interfaces quoted). Rung-level mean solve rate rises
+with rung (Spearman +0.86 over 5 populated rungs) but adding rung features to the task-only model gains
+AUC +0.005, and leakage of patch symbols in the issue text has no effect on solve rate. Reading, together with
+the Terminal-Bench datapoint: on natural tasks with hidden example-test verifiers, the information given in the
+issue text is not what drives difficulty (or our heuristic cannot measure it). The ladder's effect is real only
+where we control it (client-go: replicated flips at L5 and >L3). Framework decision: keep L0–L6 as a
+construction instrument for synthetic tasks; do not claim it as a general difficulty axis for natural tasks.
+
+## Replication (2026-09-19)
+Single-attempt flip points mislabeled 1 of 2 units. All flip points are now pass rates over 3 attempts (C6).

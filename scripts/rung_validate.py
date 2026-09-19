@@ -1,11 +1,9 @@
-#!/usr/bin/env python3
 """Export stratified validation sample and write manual rung labels."""
 
 from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 
 import pandas as pd
 

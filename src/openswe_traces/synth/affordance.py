@@ -37,6 +37,23 @@ _TEST_FUNC_RE = re.compile(r"^func\s+(?:\(.*?\)\s+)?(Test[A-Za-z0-9_]+)\s*\(", r
 # A0..A4 plus the deep rungs below the contract: A-1 gapped, A-2 bug-report only.
 SUPPORTED_LEVELS = frozenset({-2, -1, 0, 1, 2, 3, 4})
 _LEVEL_SUFFIX_RE = re.compile(r"-A-?\d+$")
+LADDER_BASE_IMAGE = "ladder-base:client-go-obf"
+
+
+def dest_dir_name(family: str, level: int, *, name_scheme: str = "A") -> str:
+    """Harbor dir name. ``A`` keeps historic ``family-A{level}``; ``L`` uses L = A+2."""
+    if name_scheme == "L":
+        return f"{family}-L{level + 2}"
+    if name_scheme == "A":
+        return f"{family}-A{level}"
+    raise ValueError(f"unsupported name_scheme {name_scheme}")
+
+
+def render_ladder_base_dockerfile(base: str = LADDER_BASE_IMAGE) -> str:
+    return f"""FROM {base}
+WORKDIR /app
+COPY src/ /app/
+"""
 
 
 @dataclass(frozen=True)
@@ -352,8 +369,11 @@ def build_affordance_levels(
     perf_benchtime: str = "1s",
     changed_symbols: Sequence[str] = (),
     changed_files: Sequence[str] = (),
+    name_scheme: str = "A",
+    dockerfile_from: str | None = None,
+    instructions: Mapping[int, str] | None = None,
 ) -> dict[int, Path]:
-    """Copy ``task_dir`` into ``<family>-A<k>`` dirs, adding one affordance per level.
+    """Copy ``task_dir`` into ``<family>-A<k>`` (or ``-L{k+2}``) dirs.
 
     ``task_dir`` is the A0-shaped task (instruction, tree without hidden tests,
     ``tests/hidden/`` already populated or supplied via ``hidden_tests``).
@@ -382,10 +402,11 @@ def build_affordance_levels(
         pkgs = sorted({str(Path(h.relpath).parent).replace("\\", "/") or "." for h in hidden})
 
     out: dict[int, Path] = {}
+    per_level_instr = dict(instructions or {})
     for level in levels:
         if level not in SUPPORTED_LEVELS:
             raise ValueError(f"unsupported affordance level {level}")
-        dest = dest_root / f"{family}-A{level}"
+        dest = dest_root / dest_dir_name(family, level, name_scheme=name_scheme)
         if dest.resolve() != task_dir.resolve():
             _copytree(task_dir, dest)
         src = dest / "environment" / "src"
@@ -400,13 +421,16 @@ def build_affordance_levels(
                 path.write_text(content, encoding="utf-8")
         if level >= 3:
             restore_hidden_into_src(src, hidden, only=representative if level == 3 else None)
-        (dest / "instruction.md").write_text(instruction_for_level(instr0, hidden, level), encoding="utf-8")
+        level_instr = per_level_instr.get(level, instr0)
+        (dest / "instruction.md").write_text(instruction_for_level(level_instr, hidden, level), encoding="utf-8")
         toml_path = dest / "task.toml"
-        if not toml_path.is_file() or level == 0:
+        if not toml_path.is_file() or level == 0 or level < 0:
             toml_path.write_text(render_unsolv_task_toml(), encoding="utf-8")
         docker = dest / "environment" / "Dockerfile"
         docker.parent.mkdir(parents=True, exist_ok=True)
-        if not docker.is_file() or race:
+        if dockerfile_from:
+            docker.write_text(render_ladder_base_dockerfile(dockerfile_from), encoding="utf-8")
+        elif not docker.is_file() or race:
             docker.write_text(render_unsolv_dockerfile(race=race), encoding="utf-8")
         _write_executable(
             tests_dir / "test.sh",

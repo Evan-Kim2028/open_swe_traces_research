@@ -126,3 +126,16 @@ manufacturing lever. Dropped as a lever.
 The earlier five white-box failures were entirely the verifier. Both findings sharpen the same point: with a
 fair verifier and a full contract, nearly every unit in client-go is L2 for a mid-tier model; the two exceptions
 (pipelined buffer at L5, codec at L3, both pending replication) are the only difficulty we have found.
+
+## Replication final (2026-09-19 01:45Z) — Composer 2.5, 3 scored attempts per level (pass 1 on lake-vps + pass 2 on laptop)
+
+| unit | level | passes / attempts | single-attempt reading was |
+|---|---|---|---|
+| codec (black-box) | L2 | 1 / 3 | fail |
+| codec (black-box) | L3 | **0 / 3** | pass |
+| pipelined buffer | L4 | 0 / 3 | fail |
+| pipelined buffer | L5 | **2 / 3** | pass |
+
+Under C6: pipeline flip = **L5** (confirmed). Codec flip is **> L3** (the earlier "L3" was a one-off; L4/L5 not yet
+replicated). Single attempts mislabeled one of two flip points. Devin's readings (codec L2 pass, pipeline L5
+pass) remain single-attempt and provisional.

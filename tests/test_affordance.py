@@ -177,3 +177,39 @@ def test_negative_levels_keep_base_and_name_dirs(tmp_path: Path) -> None:
     )
     assert "TestExpo" not in (out[-2] / "instruction.md").read_text()
     assert "expected 4" in (out[-2] / "instruction.md").read_text()
+
+
+def test_l_scheme_dirs_and_per_level_instructions(tmp_path: Path) -> None:
+    from openswe_traces.synth.affordance import dest_dir_name, render_ladder_base_dockerfile
+
+    assert dest_dir_name("unit", -2, name_scheme="L") == "unit-L0"
+    assert dest_dir_name("unit", 0, name_scheme="L") == "unit-L2"
+    assert "ladder-base:client-go-obf" in render_ladder_base_dockerfile()
+    task = _mini_task(tmp_path)
+    hidden = [coerce_hidden_test("retry/backoff_test.go", task_dir=task)]
+    report = "A wait stayed at 2. expected 4, actual 2.\n\nReproduce with:\n\n```\ngo test ./retry/\n```\n"
+    contract = "Waits must grow. expected 4 actual 2.\n\nReproduce with:\n\n```\ngo test ./retry/\n```\n"
+    out = build_affordance_levels(
+        task,
+        hidden,
+        levels=(-2, 0),
+        dest_root=tmp_path / "ladder",
+        family="demo-obf",
+        instruction_a0=contract,
+        packages=("retry",),
+        changed_symbols=("expo",),
+        changed_files=("backoff.go",),
+        name_scheme="L",
+        dockerfile_from="ladder-base:client-go-obf",
+        instructions={-2: report, 0: contract},
+    )
+    assert out[-2].name == "demo-obf-L0"
+    assert out[0].name == "demo-obf-L2"
+    assert "stayed at 2" in (out[-2] / "instruction.md").read_text()
+    assert "Waits must grow" in (out[0] / "instruction.md").read_text()
+    assert "TestExpo" not in (out[-2] / "instruction.md").read_text()
+    docker = (out[-2] / "environment" / "Dockerfile").read_text()
+    assert docker.startswith("FROM ladder-base:client-go-obf")
+    toml = (out[-2] / "task.toml").read_text()
+    assert 'network_mode = "no-network"' in toml
+    assert "cursor.com" in toml
