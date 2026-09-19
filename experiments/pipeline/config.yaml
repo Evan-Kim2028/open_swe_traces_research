@@ -1,0 +1,59 @@
+# Overnight ladder pipeline knobs. Repos live in repos.yaml.
+
+units_per_author_batch: 10
+author_minutes: 30
+solver_order:
+  - cursor
+  - devin
+solver_backends:
+  - cursor
+  - devin
+climb_levels:
+  - 2
+  - 5
+  - 6
+attempts: 3
+composer_token_cap: 1_000_000_000
+devin_slots: 6
+devin_slots_path: /tmp/devin.slots
+default_host: laptop
+vps_enabled: false
+load_mult: 2.0
+
+hosts:
+  laptop:
+    docker_concurrency: 4
+  vps:
+    docker_concurrency: 2
+    ssh: lake-vps
+    enabled: false
+
+cursor:
+  model: composer-2.5
+  agent: cursor-cli
+  harbor_model: cursor/composer-2.5
+  env_file: /home/evan/Documents/eval_tasks/.env
+
+devin:
+  model: swe-2-max
+  harbor_agent: devin
+  harbor_model: swe-2-max
+
+author:
+  backend: cursor
+  model: composer-2.5
+
+verifier:
+  backend: cursor
+  model: composer-2.5
+
+paths:
+  root: experiments/pipeline
+  state_db: experiments/pipeline/state.db
+  logs: experiments/pipeline/logs
+  work: experiments/pipeline/work
+  authored: experiments/pipeline/authored
+  tasks: experiments/pipeline/tasks
+  jobs: experiments/pipeline/jobs
+  results_parquet: experiments/pipeline/results.parquet
+  results_md: experiments/pipeline/results.md

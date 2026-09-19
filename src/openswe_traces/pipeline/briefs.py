@@ -22,7 +22,9 @@ For each unit write `units/<slug>/_author/` with ALL of:
   6. cheat.patch — hardcodes outputs for the contract examples
   7. closure.json — {{"functions": [...], "files": [...], "lines": N, "family":
      "state-machine|sequence|cross-file|dynamic|other"}}
-  8. AUTHOR.md — one paragraph per unit
+  8. difficulty.md — REQUIRED line `predicted_flip: L<k>` (k in 0..6). Mark the
+     easiest predicted-L2 unit with `control: true`.
+  9. AUTHOR.md — one paragraph per unit
 
 Also write `units.json` at the batch root:
 [{{"name": "<slug>", "dir": "units/<slug>/_author", "family": "...", "n_files": N, "n_lines": N}}]

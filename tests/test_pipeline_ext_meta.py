@@ -6,6 +6,7 @@ from openswe_traces.pipeline_ext.author_meta import (
     AuthorUnit,
     author_calibration,
     parse_author_dir,
+    parse_control_flag,
     parse_difficulty_md,
     parse_predicted_flip,
     predicted_flip_line,
@@ -36,6 +37,8 @@ def test_predicted_flip_format() -> None:
     assert from_file is not None and from_file.level == 2
     assert parse_author_dir(FIXTURES) is not None
     assert parse_predicted_flip("nope") is None
+    assert parse_control_flag("predicted_flip: L2\ncontrol: true\n") is True
+    assert parse_control_flag("predicted_flip: L2\n") is False
 
 
 def test_author_calibration() -> None:
@@ -63,6 +66,8 @@ def test_control_is_easiest_predicted_l2() -> None:
     assert ctrl is not None and ctrl.name == "easier"
     assert is_control("easier", units, repo="client-go")
     assert not is_control("easy", units, repo="client-go")
+    marked = units + [UnitMeta("client-go", "explicit", predicted_flip=5, n_lines=999, is_control=True)]
+    assert pick_control(marked, repo="client-go").name == "explicit"
     attempts = [
         AttemptRecord(
             repo="client-go",

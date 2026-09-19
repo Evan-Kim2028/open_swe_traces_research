@@ -30,6 +30,10 @@ PREDICTED_FLIP_LINE_RE = re.compile(
     r"^[ \t]*predicted_flip:[ \t]*L([0-6])[ \t]*$",
     re.IGNORECASE | re.MULTILINE,
 )
+CONTROL_LINE_RE = re.compile(
+    r"^[ \t]*control:[ \t]*(true|yes|1)\b",
+    re.IGNORECASE | re.MULTILINE,
+)
 
 DIFFICULTY_MD_TEMPLATE = """# Difficulty
 
@@ -106,6 +110,11 @@ def parse_predicted_flip(text: str, *, path: str = "") -> PredictedFlip | None:
         return None
     m = matches[-1]
     return PredictedFlip(level=int(m.group(1)), raw=m.group(0).strip(), path=path)
+
+
+def parse_control_flag(text: str) -> bool:
+    """True when difficulty.md has ``control: true`` (or yes/1)."""
+    return CONTROL_LINE_RE.search(text or "") is not None
 
 
 def parse_difficulty_md(path: Path | str) -> PredictedFlip | None:

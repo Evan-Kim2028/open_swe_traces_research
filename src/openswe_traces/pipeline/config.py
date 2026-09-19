@@ -37,10 +37,12 @@ class HostSpec:
 class PipelineConfig:
     units_per_author_batch: int = 10
     author_minutes: int = 30
+    solver_order: tuple[str, ...] = ("cursor", "devin")
     solver_backends: tuple[str, ...] = ("cursor", "devin")
+    climb_levels: tuple[int, ...] = (2, 5, 6)
     attempts: int = 3
     composer_token_cap: int = 1_000_000_000
-    devin_slots: int = 4
+    devin_slots: int = 6
     devin_slots_path: Path = DEVIN_SLOTS_PATH
     default_host: str = "laptop"
     hosts: dict[str, HostSpec] = field(default_factory=dict)
@@ -61,6 +63,7 @@ class PipelineConfig:
     state_db: Path = DEFAULT_DIR / "state.db"
     logs_dir: Path = DEFAULT_DIR / "logs"
     work_dir: Path = DEFAULT_DIR / "work"
+    authored_dir: Path = DEFAULT_DIR / "authored"
     tasks_dir: Path = DEFAULT_DIR / "tasks"
     jobs_dir: Path = DEFAULT_DIR / "jobs"
     results_parquet: Path = DEFAULT_DIR / "results.parquet"
@@ -164,18 +167,28 @@ def load_config(
     author = raw.get("author") if isinstance(raw.get("author"), dict) else {}
     verifier = raw.get("verifier") if isinstance(raw.get("verifier"), dict) else {}
     hosts = _hosts(raw.get("hosts"))
-    backends = raw.get("solver_backends") or raw.get("solver backend order") or ("cursor", "devin")
+    backends = (
+        raw.get("solver_order")
+        or raw.get("solver_backends")
+        or raw.get("solver backend order")
+        or ("cursor", "devin")
+    )
     if isinstance(backends, str):
         backends = [s.strip() for s in backends.split(",") if s.strip()]
+    climb = raw.get("climb_levels") or (2, 5, 6)
+    if isinstance(climb, str):
+        climb = [int(s.strip()) for s in climb.split(",") if s.strip()]
     root = _as_path(paths.get("root"), DEFAULT_DIR)
     vps = hosts.get("vps")
     return PipelineConfig(
         units_per_author_batch=int(raw.get("units_per_author_batch") or 10),
         author_minutes=int(raw.get("author_minutes") or 30),
+        solver_order=tuple(str(x) for x in backends),
         solver_backends=tuple(str(x) for x in backends),
+        climb_levels=tuple(int(x) for x in climb),
         attempts=int(raw.get("attempts") or 3),
         composer_token_cap=int(raw.get("composer_token_cap") or 1_000_000_000),
-        devin_slots=int(raw.get("devin_slots") or 4),
+        devin_slots=int(raw["devin_slots"]) if raw.get("devin_slots") is not None else 6,
         devin_slots_path=_as_path(raw.get("devin_slots_path"), DEVIN_SLOTS_PATH),
         default_host=str(raw.get("default_host") or "laptop"),
         hosts=hosts,
@@ -196,6 +209,7 @@ def load_config(
         state_db=_as_path(paths.get("state_db"), root / "state.db"),
         logs_dir=_as_path(paths.get("logs"), root / "logs"),
         work_dir=_as_path(paths.get("work"), root / "work"),
+        authored_dir=_as_path(paths.get("authored"), root / "authored"),
         tasks_dir=_as_path(paths.get("tasks"), root / "tasks"),
         jobs_dir=_as_path(paths.get("jobs"), root / "jobs"),
         results_parquet=_as_path(paths.get("results_parquet"), root / "results.parquet"),

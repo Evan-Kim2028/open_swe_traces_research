@@ -17,6 +17,7 @@ DONE = "done"
 FAILED = "failed"
 SKIPPED = "skipped"
 REJECTED = "rejected"
+PAUSED = "paused"
 TERMINAL = frozenset({DONE, SKIPPED, REJECTED})
 
 STAGES = ("prepare", "author", "verifier", "package", "solve", "aggregate")
@@ -56,6 +57,7 @@ class TrialRow:
     wall_minutes: float | None
     job_dir: str
     excluded: bool
+    timeout: bool = False
 
 
 class PipelineStore:
@@ -67,6 +69,7 @@ class PipelineStore:
         self._con.execute("PRAGMA journal_mode=WAL")
         self._con.execute("PRAGMA foreign_keys=ON")
         self._init()
+        self._migrate()
 
     def close(self) -> None:
         self._con.close()
@@ -76,6 +79,18 @@ class PipelineStore:
 
     def __exit__(self, *exc: object) -> None:
         self.close()
+
+    def _ensure_column(self, table: str, name: str, decl: str) -> None:
+        cols = {row[1] for row in self._con.execute(f"PRAGMA table_info({table})")}
+        if name not in cols:
+            self._con.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+
+    def _migrate(self) -> None:
+        self._ensure_column("units", "predicted_flip", "INTEGER")
+        self._ensure_column("units", "is_control", "INTEGER DEFAULT 0")
+        self._ensure_column("units", "author_backend", "TEXT")
+        self._ensure_column("trials", "timeout", "INTEGER DEFAULT 0")
+        self._con.commit()
 
     def _init(self) -> None:
         self._con.executescript(
@@ -184,11 +199,17 @@ class PipelineStore:
         n_files: int | None = None,
         n_lines: int | None = None,
         rejected_rule: str = "",
+        predicted_flip: int | None = None,
+        is_control: bool | None = None,
+        author_backend: str | None = None,
     ) -> None:
         self._con.execute(
             """
-            INSERT INTO units(repo, unit, status, family, closure_json, n_files, n_lines, rejected_rule, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO units(
+              repo, unit, status, family, closure_json, n_files, n_lines, rejected_rule,
+              predicted_flip, is_control, author_backend, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(repo, unit) DO UPDATE SET
               status = excluded.status,
               family = COALESCE(NULLIF(excluded.family, ''), units.family),
@@ -196,6 +217,9 @@ class PipelineStore:
               n_files = COALESCE(excluded.n_files, units.n_files),
               n_lines = COALESCE(excluded.n_lines, units.n_lines),
               rejected_rule = COALESCE(NULLIF(excluded.rejected_rule, ''), units.rejected_rule),
+              predicted_flip = COALESCE(excluded.predicted_flip, units.predicted_flip),
+              is_control = COALESCE(excluded.is_control, units.is_control),
+              author_backend = COALESCE(NULLIF(excluded.author_backend, ''), units.author_backend),
               updated_at = excluded.updated_at
             """,
             (
@@ -207,6 +231,9 @@ class PipelineStore:
                 n_files,
                 n_lines,
                 rejected_rule,
+                predicted_flip,
+                None if is_control is None else int(is_control),
+                author_backend,
                 _now(),
             ),
         )
@@ -337,13 +364,14 @@ class PipelineStore:
         wall_minutes: float | None = None,
         job_dir: str = "",
         excluded: bool = False,
+        timeout: bool = False,
     ) -> int:
         cur = self._con.execute(
             """
             INSERT INTO trials(
               repo, unit, level, solver, attempt, reward, tokens_in, tokens_out,
-              audit_class, wall_minutes, job_dir, excluded
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              audit_class, wall_minutes, job_dir, excluded, timeout
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 repo,
@@ -358,6 +386,7 @@ class PipelineStore:
                 wall_minutes,
                 job_dir,
                 int(excluded),
+                int(timeout),
             ),
         )
         self._con.commit()
@@ -398,17 +427,19 @@ class PipelineStore:
                     wall_minutes=row["wall_minutes"],
                     job_dir=row["job_dir"] or "",
                     excluded=bool(row["excluded"]),
+                    timeout=bool(row["timeout"]) if "timeout" in row else False,
                 )
             )
         return rows
 
     def level_counts(self, repo: str, unit: str, level: int, solver: str) -> tuple[int, int]:
-        """(passes, scored attempts) excluding contaminated/excluded trials."""
+        """(passes, scored attempts) excluding contaminated/hacked/timeouts."""
         rows = self._con.execute(
             """
             SELECT reward FROM trials
             WHERE repo = ? AND unit = ? AND level = ? AND solver = ? AND excluded = 0
-              AND audit_class NOT IN ('contaminated', 'checksum')
+              AND COALESCE(timeout, 0) = 0
+              AND audit_class NOT IN ('contaminated', 'checksum', 'hacked', 'd')
             """,
             (repo, unit, level, solver),
         ).fetchall()

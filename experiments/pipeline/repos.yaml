@@ -1,0 +1,31 @@
+repos:
+  - name: goa
+    src: experiments/pipeline/repos/goa/src
+    base_image: ladder-base:goa
+    packages_passing: 16
+    language: go
+  - name: helm
+    src: experiments/pipeline/repos/helm/src
+    base_image: ladder-base:helm
+    packages_passing: 48
+    language: go
+  - name: kops
+    src: experiments/pipeline/repos/kops/src
+    base_image: ladder-base:kops
+    packages_passing: 104
+    language: go
+  - name: nats-server
+    src: experiments/pipeline/repos/nats-server/src
+    base_image: ladder-base:nats-server
+    packages_passing: 10
+    language: go
+  - name: client-go
+    src: experiments/harbor_nex/base/src
+    base_image: ladder-base:client-go-obf
+    packages_passing: 30
+    language: go
+  - name: gin
+    src: experiments/pipeline/repos2/gin/src
+    base_image: ladder-base:gin
+    packages_passing: 5
+    language: go

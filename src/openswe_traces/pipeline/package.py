@@ -1,4 +1,4 @@
-"""Package L0+L2 first; generate L1/L3..L6 on demand via affordance.py."""
+"""Package L2 first; generate L0/L1/L3–L6 on demand via affordance.py."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import json
 import shutil
 from pathlib import Path
 
-from openswe_traces.pipeline.author import author_root
+from openswe_traces.pipeline.author import resolve_author_dir
 from openswe_traces.pipeline.config import PipelineConfig
 from openswe_traces.pipeline.ladder import INITIAL_PACKAGE_LEVELS, affordance_level
 from openswe_traces.pipeline.prepare import image_tag
@@ -62,7 +62,7 @@ def _l2_instruction(contract: str, bugreport: str) -> str:
 
 
 def _skeleton(cfg: PipelineConfig, repo: str, unit: str, hidden: list[HiddenTest]) -> Path:
-    author = author_root(cfg, repo) / "units" / unit / "_author"
+    author = resolve_author_dir(cfg, repo, unit)
     vdir = verifier_dir_for(cfg, repo, unit)
     skel = cfg.work_dir / repo / "units" / unit / "_skel"
     env = skel / "environment"
@@ -116,7 +116,7 @@ def package_levels(
     *,
     hidden: list[HiddenTest] | None = None,
 ) -> dict[int, Path]:
-    author = author_root(cfg, repo) / "units" / unit / "_author"
+    author = resolve_author_dir(cfg, repo, unit)
     vdir = verifier_dir_for(cfg, repo, unit)
     tests = hidden if hidden is not None else collect_hidden(vdir)
     if not tests:
@@ -166,7 +166,8 @@ def package_levels(
 
 
 def package_unit(repo: str, unit: str, cfg: PipelineConfig) -> dict[int, Path]:
-    return package_levels(repo, unit, cfg, list(INITIAL_PACKAGE_LEVELS))
+    start = list(cfg.climb_levels[:1]) or list(INITIAL_PACKAGE_LEVELS)
+    return package_levels(repo, unit, cfg, start)
 
 
 def ensure_level(repo: str, unit: str, cfg: PipelineConfig, level: int) -> Path:

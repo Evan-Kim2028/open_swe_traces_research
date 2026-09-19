@@ -37,6 +37,7 @@ def _cfg(tmp: Path, **kw) -> PipelineConfig:
         state_db=tmp / "state.db",
         logs_dir=tmp / "logs",
         work_dir=tmp / "work",
+        authored_dir=tmp / "authored",
         tasks_dir=tmp / "tasks",
         jobs_dir=tmp / "jobs",
         results_parquet=tmp / "results.parquet",
@@ -139,8 +140,11 @@ def test_yaml_config_and_repos_load() -> None:
     assert cfg.units_per_author_batch == 10
     assert cfg.author_minutes == 30
     assert cfg.solver_backends == ("cursor", "devin")
+    assert cfg.solver_order == ("cursor", "devin")
+    assert cfg.climb_levels == (2, 5, 6)
     assert cfg.attempts == 3
     assert cfg.composer_token_cap == 1_000_000_000
+    assert cfg.devin_slots == 6
     assert cfg.hosts["laptop"].docker_concurrency == 4
     assert cfg.hosts["vps"].docker_concurrency == 2
     assert cfg.hosts["vps"].enabled is False
@@ -192,7 +196,7 @@ def test_pipeline_skips_finished_prepare(tmp_path: Path) -> None:
         launches.append(kw["job_name"])
         job = tmp_path / "jobs" / kw["job_name"]
         trial = job / "u__1"
-        (trial / "agent").mkdir(parents=True)
+        (trial / "agent").mkdir(parents=True, exist_ok=True)
         (trial / "result.json").write_text(
             json.dumps(
                 {
@@ -264,7 +268,7 @@ def test_token_cap_switches_mid_solve(tmp_path: Path) -> None:
         n = kw["n_attempts"]
         for i in range(n):
             trial = job / f"u__{i}"
-            (trial / "agent").mkdir(parents=True)
+            (trial / "agent").mkdir(parents=True, exist_ok=True)
             reward = 0.0 if kw["solver"] == "cursor" else 1.0
             (trial / "result.json").write_text(
                 json.dumps(
@@ -474,4 +478,300 @@ def test_status_and_dry_run_table(tmp_path: Path) -> None:
     _touch_levels(cfg, "mathx", "unit0")
     table = dry_run("mathx", 1, cfg=cfg, store=store, runtime=rt)
     assert "mathx" in table
+    store.close()
+
+
+def test_author_ingests_existing_without_agent(tmp_path: Path) -> None:
+    cfg = _cfg(tmp_path)
+    store = PipelineStore(cfg.state_db)
+    authored_root = cfg.authored_dir / "mathx"
+    _write_unit(authored_root, "alpha")
+    import shutil
+
+    src = authored_root / "units" / "alpha" / "_author"
+    dest = authored_root / "alpha" / "_author"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.exists():
+        shutil.rmtree(dest)
+    shutil.copytree(src, dest)
+    shutil.rmtree(authored_root / "units")
+    (dest / "difficulty.md").write_text("predicted_flip: L2\ncontrol: true\n")
+    runner = FakeRunner(cfg.work_dir, n=9)
+    from openswe_traces.pipeline.author import run_author
+
+    rows = run_author("mathx", cfg, store, runner=runner, n_units=10)
+    assert [r["name"] for r in rows] == ["alpha"]
+    assert runner.calls == []
+    assert rows[0]["predicted_flip"] == 2
+    assert rows[0]["is_control"] is True
+    store.close()
+
+
+def test_verifier_skips_existing_l2_b4_pass(tmp_path: Path) -> None:
+    cfg = _cfg(tmp_path)
+    store = PipelineStore(cfg.state_db)
+    batch = cfg.work_dir / "mathx" / "author_batch"
+    _write_unit(batch, "unit0")
+    l2 = cfg.tasks_dir / "mathx" / "unit0-L2"
+    hidden = l2 / "tests" / "hidden" / "pkg"
+    hidden.mkdir(parents=True)
+    (hidden / "p_test.go").write_text("package pkg\n")
+    (l2 / "validation.json").write_text(
+        json.dumps({"rule_verdicts": [{"rule_id": "B4", "passed": True, "skipped": False, "evidence": "ok"}]})
+    )
+    runner = FakeRunner(cfg.work_dir, n=1)
+    from openswe_traces.pipeline.verifier import run_verifier
+
+    out = run_verifier("mathx", "unit0", cfg, store, runner=runner, prove=_ok_proof)
+    assert runner.calls == []
+    assert out["proof"]["skipped"] is True
+    assert store.step("mathx", "verifier", "unit0").status == "done"
+    store.close()
+
+
+def test_solve_adaptive_ladder_starts_one_l2_attempt(tmp_path: Path) -> None:
+    cfg = _cfg(tmp_path)
+    store = PipelineStore(cfg.state_db)
+    store.upsert_unit("mathx", "unit0", status="packaged")
+    budget = TokenBudget(store, cfg.composer_token_cap)
+    sem = DevinSemaphore(tmp_path / "slots", slots=6)
+    seen: list[tuple[int, str]] = []
+
+    def harbor(**kw):
+        seen.append((kw["n_attempts"], kw["job_name"]))
+        job = tmp_path / "jobs" / kw["job_name"]
+        trials = []
+        for i in range(kw["n_attempts"]):
+            trial = job / f"u__{i}"
+            (trial / "agent").mkdir(parents=True, exist_ok=True)
+            (trial / "result.json").write_text(
+                json.dumps(
+                    {
+                        "started_at": "2026-09-18T00:00:00+00:00",
+                        "finished_at": "2026-09-18T00:01:00+00:00",
+                        "verifier_result": {
+                            "rewards": {"reward": 0.0 if "-L0-" in kw["job_name"] else 1.0}
+                        },
+                        "usage": {"input_tokens": 1, "output_tokens": 1},
+                    }
+                )
+            )
+            from openswe_traces.pipeline.audit import audit_trial_dir
+
+            trials.append(audit_trial_dir(trial))
+        return HarborJobResult(job_dir=job, trials=trials)
+
+    _touch_levels(cfg, "mathx", "unit0")
+    out = solve_unit(
+        "mathx",
+        "unit0",
+        cfg,
+        store,
+        budget=budget,
+        semaphore=sem,
+        harbor=harbor,
+        cleanup=lambda: "ok",
+        wait_load=lambda: None,
+        skip_hack_docker=True,
+    )
+    assert seen[0][0] == 1
+    assert "-L2-" in seen[0][1]
+    assert out["flip"] == 2
+    assert out["confirmed"] is True
+    store.close()
+
+
+def test_hack_audit_hard_fail_excluded_from_flip(tmp_path: Path) -> None:
+    from openswe_traces.pipeline_ext.hack_audit import HackVerdict
+
+    cfg = _cfg(tmp_path)
+    store = PipelineStore(cfg.state_db)
+    store.upsert_unit("mathx", "unit0", status="packaged")
+    budget = TokenBudget(store, cfg.composer_token_cap)
+    sem = DevinSemaphore(tmp_path / "slots", slots=6)
+
+    def harbor(**kw):
+        job = tmp_path / "jobs" / kw["job_name"]
+        trials = []
+        for i in range(kw["n_attempts"]):
+            trial = job / f"u__{i}"
+            (trial / "agent").mkdir(parents=True, exist_ok=True)
+            (trial / "result.json").write_text(
+                json.dumps({"verifier_result": {"rewards": {"reward": 1.0}}})
+            )
+            from openswe_traces.pipeline.audit import audit_trial_dir
+
+            trials.append(audit_trial_dir(trial))
+        return HarborJobResult(job_dir=job, trials=trials)
+
+    _touch_levels(cfg, "mathx", "unit0")
+    solve_unit(
+        "mathx",
+        "unit0",
+        cfg,
+        store,
+        budget=budget,
+        semaphore=sem,
+        harbor=harbor,
+        cleanup=lambda: "ok",
+        wait_load=lambda: None,
+        hack_audit=lambda **k: HackVerdict(False, ("touched tests/",), (), {}),
+        skip_hack_docker=True,
+    )
+    trials = store.list_trials(repo="mathx", unit="unit0", include_excluded=True)
+    assert any(t.audit_class == "hacked" and t.excluded for t in trials)
+    # hacked passes do not confirm L2
+    from openswe_traces.pipeline.solve import flip_from_store
+
+    flip = flip_from_store(store, "mathx", "unit0", "cursor")
+    assert flip.level is None or flip.confirmed is False
+    store.close()
+
+
+def test_control_runs_first_and_pause_on_fail(tmp_path: Path) -> None:
+    cfg = _cfg(tmp_path)
+    store = PipelineStore(cfg.state_db)
+    batch = cfg.work_dir / "mathx" / "author_batch"
+    _write_unit(batch, "ctrl")
+    _write_unit(batch, "other")
+    ctrl_author = batch / "units" / "ctrl" / "_author"
+    (ctrl_author / "difficulty.md").write_text("predicted_flip: L2\ncontrol: true\n")
+    (batch / "units" / "other" / "_author" / "difficulty.md").write_text("predicted_flip: L5\n")
+    (batch / "units.json").write_text(
+        json.dumps(
+            [
+                {"name": "ctrl", "dir": "units/ctrl/_author"},
+                {"name": "other", "dir": "units/other/_author"},
+            ]
+        )
+    )
+    launches: list[str] = []
+
+    def harbor(**kw):
+        launches.append(kw["job_name"])
+        job = tmp_path / "jobs" / kw["job_name"]
+        trials = []
+        for i in range(kw["n_attempts"]):
+            trial = job / f"u__{i}"
+            (trial / "agent").mkdir(parents=True, exist_ok=True)
+            (trial / "result.json").write_text(
+                json.dumps(
+                    {
+                        "started_at": "2026-09-18T00:00:00+00:00",
+                        "finished_at": "2026-09-18T00:01:00+00:00",
+                        "verifier_result": {"rewards": {"reward": 0.0}},
+                    }
+                )
+            )
+            from openswe_traces.pipeline.audit import audit_trial_dir
+
+            trials.append(audit_trial_dir(trial))
+        return HarborJobResult(job_dir=job, trials=trials)
+
+    runner = FakeRunner(cfg.work_dir, n=2)
+    rt = Runtime(
+        runner=runner,
+        harbor=harbor,
+        prepare=lambda spec, c: {"image": "x"},
+        prove=_ok_proof,
+        package=lambda *a, **k: {2: tmp_path / "L2"},
+        cleanup=lambda: "ok",
+        wait_load=lambda: None,
+    )
+    _touch_levels(cfg, "mathx", "ctrl")
+    _touch_levels(cfg, "mathx", "other")
+    run_pipeline(cfg, store=store, runtime=rt, repos=cfg.repos, max_units=2)
+    assert any("ctrl" in n and "-L2-" in n for n in launches)
+    assert not any("other" in n for n in launches)
+    assert store.repo_status("mathx") == "paused"
+    store.close()
+
+
+def test_aggregate_emits_calibration_and_flags(tmp_path: Path) -> None:
+    cfg = _cfg(tmp_path)
+    store = PipelineStore(cfg.state_db)
+    store.upsert_unit(
+        "mathx",
+        "codec",
+        status="solved",
+        family="cross-file",
+        n_files=5,
+        n_lines=900,
+        predicted_flip=2,
+        is_control=True,
+        author_backend="cursor",
+    )
+    for i in range(3):
+        store.add_trial(
+            repo="mathx",
+            unit="codec",
+            level=2,
+            solver="cursor",
+            attempt=i + 1,
+            reward=1.0 if i < 2 else 0.0,
+            tokens_in=100,
+            tokens_out=20,
+            audit_class="clean",
+            wall_minutes=4.0,
+        )
+    store.add_trial(
+        repo="mathx",
+        unit="codec",
+        level=0,
+        solver="cursor",
+        attempt=1,
+        reward=0.0,
+        tokens_in=10,
+        tokens_out=2,
+        audit_class="clean",
+        wall_minutes=3.0,
+    )
+    store.add_trial(
+        repo="mathx",
+        unit="codec",
+        level=2,
+        solver="cursor",
+        attempt=9,
+        reward=1.0,
+        tokens_in=1,
+        tokens_out=1,
+        audit_class="hacked",
+        excluded=True,
+    )
+    store.add_tokens("cursor-cli", 1000, 50)
+    df = aggregate(store, cfg)
+    md = cfg.results_md.read_text(encoding="utf-8")
+    assert "Calibration curve" in md
+    assert "Author calibration" in md
+    assert "hacked" in md.lower()
+    assert "Early-warning flags" in md
+    assert "Action:" in md or "_none fired_" in md
+    assert "inter-attempt" in md
+    codec = next(r for r in task_rows(store) if r["unit"] == "codec")
+    assert codec["flip"] == 2
+    assert codec["hacked_n"] == 1
+    assert int(df.loc[df["unit"] == "codec", "closure_size"].iloc[0]) == 5
+    store.close()
+
+
+def test_timeout_does_not_count_as_fail(tmp_path: Path) -> None:
+    cfg = _cfg(tmp_path)
+    store = PipelineStore(cfg.state_db)
+    store.add_trial(
+        repo="mathx",
+        unit="unit0",
+        level=2,
+        solver="cursor",
+        attempt=1,
+        reward=0.0,
+        audit_class="d",
+        timeout=True,
+    )
+    from openswe_traces.pipeline.solve import task_state_from_store
+    from openswe_traces.pipeline_ext.ladder_policy import next_actions
+
+    state = task_state_from_store(store, "mathx", "unit0", "cursor")
+    req = [a for a in next_actions(state) if not a.optional]
+    assert req[0].level == 2
+    assert req[0].n_attempts == 1
     store.close()

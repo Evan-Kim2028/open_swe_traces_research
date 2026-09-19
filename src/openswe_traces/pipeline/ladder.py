@@ -1,4 +1,7 @@
-"""Lazy L0–L6 selection (C2/C6). Package L0+L2 first; climb only on failure."""
+"""Ladder helpers. Adaptive climb lives in ``pipeline_ext.ladder_policy``.
+
+Package L2 first; L0/L1/L3–L6 only when ``next_actions`` asks.
+"""
 
 from __future__ import annotations
 
@@ -7,8 +10,9 @@ from collections.abc import Mapping
 # Harbor dir L{k} ↔ affordance.py level (A = L - 2).
 LADDER_TO_AFFORDANCE: dict[int, int] = {0: -2, 1: -1, 2: 0, 3: 1, 4: 2, 5: 3, 6: 4}
 AFFORDANCE_TO_LADDER: dict[int, int] = {v: k for k, v in LADDER_TO_AFFORDANCE.items()}
-INITIAL_PACKAGE_LEVELS: tuple[int, ...] = (0, 2)
-CLIMB_LEVELS: tuple[int, ...] = (3, 4, 5, 6)
+INITIAL_PACKAGE_LEVELS: tuple[int, ...] = (2,)
+CLIMB_LEVELS: tuple[int, ...] = (2, 5, 6)
+_LEGACY_FAIL_CLIMB: tuple[int, ...] = (3, 4, 5, 6)
 PASS_RATE_NUM = 2
 PASS_RATE_DEN = 3
 
@@ -58,7 +62,7 @@ def next_solve_levels(
         if 0 not in results or results[0][1] < 1:
             return [0]
         return []
-    for level in CLIMB_LEVELS:
+    for level in _LEGACY_FAIL_CLIMB:
         if level not in results or results[level][1] < attempts:
             return [level]
         p, n = results[level]

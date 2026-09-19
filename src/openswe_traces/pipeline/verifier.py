@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from openswe_traces.pipeline.agents import AgentResult, AgentRunner
-from openswe_traces.pipeline.author import REQUIRED, author_root
+from openswe_traces.pipeline.author import REQUIRED, resolve_author_dir
 from openswe_traces.pipeline.briefs import verifier_brief
 from openswe_traces.pipeline.config import PipelineConfig
 from openswe_traces.pipeline.prepare import image_tag
 from openswe_traces.pipeline.state import REJECTED, PipelineStore
+from openswe_traces.pipeline_ext.timeouts import session_timeout_sec
 from openswe_traces.synth.affordance import HiddenTest, coerce_hidden_test
 from openswe_traces.synth.rules import evaluate_rules, write_task_validation
 
@@ -26,8 +28,7 @@ class VerifierReject(RuntimeError):
 
 
 def author_dir_for(cfg: PipelineConfig, repo: str, unit: str) -> Path:
-    batch = author_root(cfg, repo)
-    return batch / "units" / unit / "_author"
+    return resolve_author_dir(cfg, repo, unit)
 
 
 def verifier_dir_for(cfg: PipelineConfig, repo: str, unit: str) -> Path:
@@ -122,6 +123,52 @@ def _required_rules_pass(task_dir: Path, extra: dict[str, Any]) -> str | None:
     return None
 
 
+def l2_task_dir(cfg: PipelineConfig, repo: str, unit: str) -> Path:
+    return cfg.tasks_dir / repo / f"{unit}-L2"
+
+
+def b4_passed(task_dir: Path) -> bool:
+    """True when ``validation.json`` records B4=pass (external Devin verifier)."""
+    path = task_dir / "validation.json"
+    if not path.is_file():
+        return False
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(data, dict):
+        return False
+    for row in data.get("rule_verdicts") or []:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("rule_id") or "") != "B4":
+            continue
+        if row.get("skipped"):
+            return False
+        return bool(row.get("passed"))
+    return False
+
+
+def already_verified_l2(cfg: PipelineConfig, repo: str, unit: str) -> bool:
+    return b4_passed(l2_task_dir(cfg, repo, unit))
+
+
+def ingest_hidden_from_l2(cfg: PipelineConfig, repo: str, unit: str) -> Path | None:
+    """Copy hidden tests from an existing L2 Harbor dir into the verifier slot."""
+    l2 = l2_task_dir(cfg, repo, unit)
+    hidden = l2 / "tests" / "hidden"
+    if not hidden.is_dir():
+        return None
+    vdir = verifier_dir_for(cfg, repo, unit)
+    dest = vdir / "tests"
+    if not (dest / "hidden").is_dir():
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if dest.exists():
+            shutil.rmtree(dest)
+        shutil.copytree(l2 / "tests", dest)
+    return vdir
+
+
 def run_verifier(
     repo: str,
     unit: str,
@@ -132,6 +179,20 @@ def run_verifier(
     prove: Callable[..., dict[str, Any]] | None = None,
     run: Callable[..., AgentResult] | None = None,
 ) -> dict[str, Any]:
+    if already_verified_l2(cfg, repo, unit):
+        ingest_hidden_from_l2(cfg, repo, unit)
+        hidden = collect_hidden(verifier_dir_for(cfg, repo, unit))
+        store.upsert_unit(repo, unit, status="verified")
+        store.mark_step(
+            repo,
+            "verifier",
+            "done",
+            unit=unit,
+            payload={"skipped": True, "reason": "existing L2 validation.json B4=pass"},
+        )
+        store.add_event("verifier", f"skip {repo}/{unit}: L2 B4=pass")
+        return {"hidden": [h.relpath for h in hidden], "proof": {"ok": True, "skipped": True}}
+
     author = author_dir_for(cfg, repo, unit)
     if not unit_complete_author(author):
         raise FileNotFoundError(f"incomplete author artifacts: {author}")
@@ -140,13 +201,14 @@ def run_verifier(
     stage_excised_sandbox(author, sandbox)
     brief = verifier_brief(unit=unit, repo=repo)
     invoke = run or runner.run_agent
+    session_to = session_timeout_sec(cfg.verifier_backend)
     invoke(
         "verifier",
         brief,
         sandbox,
         cfg.verifier_model,
         backend=cfg.verifier_backend,
-        timeout_sec=cfg.author_minutes * 60,
+        timeout_sec=session_to,
     )
     # Hidden tests may land in sandbox/tests/hidden or vdir/tests/hidden
     if (sandbox / "tests" / "hidden").is_dir() and not (vdir / "tests" / "hidden").exists():
@@ -192,7 +254,7 @@ def run_verifier(
             sandbox,
             cfg.verifier_model,
             backend=cfg.verifier_backend,
-            timeout_sec=cfg.author_minutes * 60,
+            timeout_sec=session_to,
         )
         if (sandbox / "tests" / "hidden").is_dir():
             if (vdir / "tests").exists():

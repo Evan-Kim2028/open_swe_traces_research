@@ -27,6 +27,7 @@ class UnitMeta:
     n_files: int = 0
     family: str = ""
     author_backend: str = ""
+    is_control: bool = False
 
 
 @dataclass(frozen=True)
@@ -52,8 +53,14 @@ class ControlStatus:
 
 
 def pick_control(units: Sequence[UnitMeta], repo: str | None = None) -> UnitMeta | None:
-    """Author's easiest predicted-L2 unit (fewest lines, then name)."""
+    """Author's easiest predicted-L2 unit (fewest lines, then name).
+
+    An explicit ``control: true`` on difficulty.md wins over the heuristic.
+    """
     pool = [u for u in units if repo is None or u.repo == repo]
+    marked = [u for u in pool if u.is_control]
+    if marked:
+        return min(marked, key=lambda u: (u.n_lines if u.n_lines else 10**9, u.name))
     l2 = [u for u in pool if u.predicted_flip == 2]
     if l2:
         return min(l2, key=lambda u: (u.n_lines if u.n_lines else 10**9, u.name))
@@ -146,6 +153,7 @@ def unit_from_dict(row: dict[str, Any]) -> UnitMeta:
         n_files=int(row.get("n_files") or 0),
         family=str(row.get("family") or ""),
         author_backend=str(row.get("author_backend") or ""),
+        is_control=bool(row.get("is_control", False)),
     )
 
 
