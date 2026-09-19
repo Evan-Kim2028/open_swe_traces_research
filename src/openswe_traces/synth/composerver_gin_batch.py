@@ -52,6 +52,7 @@ DEFAULT_DEST = ROOT / "experiments/pipeline/tasks_composerver/gin"
 VERIFIER_BATCH_MD = DEFAULT_DEST / "VERIFIER_BATCH.md"
 IMAGE_PREFIX = "composerver-gin"
 _MAX_GOLD_ITERATIONS = 6
+_APPLY_PATCH = "cd /app && git apply -p1 --whitespace=nowarn"
 
 _FAIL_TEST_RE = re.compile(r"--- FAIL:\s+(Test\S+)")
 
@@ -71,7 +72,15 @@ class GinUnit:
 
 
 def load_hidden(name: str) -> str:
-    return (TESTDATA / name).read_text(encoding="utf-8")
+    direct = TESTDATA / name
+    if direct.is_file():
+        return direct.read_text(encoding="utf-8")
+    matches = sorted(TESTDATA.rglob(name))
+    if len(matches) == 1:
+        return matches[0].read_text(encoding="utf-8")
+    if len(matches) > 1:
+        raise FileNotFoundError(f"ambiguous hidden testdata {name}: {matches}")
+    raise FileNotFoundError(f"hidden testdata not found: {name} under {TESTDATA}")
 
 
 def _unit(
@@ -121,7 +130,7 @@ def unit_specs(author_root: Path | None = None) -> tuple[GinUnit, ...]:
         _unit(
             "formmapping",
             "binding/formmapping_bb_prop_test.go",
-            "formmapping_bb_prop_test.go",
+            "binding/formmapping_bb_prop_test.go",
             ("binding",),
             "./binding/",
             changed_files=("form_mapping.go",),
@@ -129,7 +138,7 @@ def unit_specs(author_root: Path | None = None) -> tuple[GinUnit, ...]:
         _unit(
             "bodydecoders",
             "binding/bodydecoders_bb_prop_test.go",
-            "bodydecoders_bb_prop_test.go",
+            "binding/bodydecoders_bb_prop_test.go",
             ("binding",),
             "./binding/",
             changed_files=("json.go", "xml.go", "yaml.go", "toml.go", "protobuf.go", "msgpack.go", "bson.go", "plain.go"),
@@ -137,7 +146,7 @@ def unit_specs(author_root: Path | None = None) -> tuple[GinUnit, ...]:
         _unit(
             "jsonrenders",
             "render/jsonrenders_bb_prop_test.go",
-            "jsonrenders_bb_prop_test.go",
+            "render/jsonrenders_bb_prop_test.go",
             ("render",),
             "./render/",
             changed_files=("json.go",),
@@ -145,7 +154,7 @@ def unit_specs(author_root: Path | None = None) -> tuple[GinUnit, ...]:
         _unit(
             "validator",
             "binding/validator_bb_prop_test.go",
-            "validator_bb_prop_test.go",
+            "binding/validator_bb_prop_test.go",
             ("binding",),
             "./binding/",
             changed_files=("default_validator.go",),
@@ -153,7 +162,7 @@ def unit_specs(author_root: Path | None = None) -> tuple[GinUnit, ...]:
         _unit(
             "defaultengine",
             "ginS/defaultengine_bb_prop_test.go",
-            "defaultengine_bb_prop_test.go",
+            "ginS/defaultengine_bb_prop_test.go",
             ("ginS",),
             "./ginS/",
             changed_files=("gins.go",),
@@ -161,7 +170,7 @@ def unit_specs(author_root: Path | None = None) -> tuple[GinUnit, ...]:
         _unit(
             "multipartfiles",
             "binding/multipartfiles_bb_prop_test.go",
-            "multipartfiles_bb_prop_test.go",
+            "binding/multipartfiles_bb_prop_test.go",
             ("binding",),
             "./binding/",
             changed_files=("multipart_form_mapping.go",),
@@ -169,7 +178,7 @@ def unit_specs(author_root: Path | None = None) -> tuple[GinUnit, ...]:
         _unit(
             "requestbinders",
             "binding/requestbinders_bb_prop_test.go",
-            "requestbinders_bb_prop_test.go",
+            "binding/requestbinders_bb_prop_test.go",
             ("binding",),
             "./binding/",
             changed_files=("form.go", "query.go", "header.go", "uri.go"),
@@ -177,7 +186,7 @@ def unit_specs(author_root: Path | None = None) -> tuple[GinUnit, ...]:
         _unit(
             "htmlrender",
             "render/htmlrender_bb_prop_test.go",
-            "htmlrender_bb_prop_test.go",
+            "render/htmlrender_bb_prop_test.go",
             ("render",),
             "./render/",
             changed_files=("html.go",),
@@ -185,7 +194,7 @@ def unit_specs(author_root: Path | None = None) -> tuple[GinUnit, ...]:
         _unit(
             "streamrenders",
             "render/streamrenders_bb_prop_test.go",
-            "streamrenders_bb_prop_test.go",
+            "render/streamrenders_bb_prop_test.go",
             ("render",),
             "./render/",
             changed_files=("reader.go", "data.go", "redirect.go", "text.go"),
@@ -193,7 +202,7 @@ def unit_specs(author_root: Path | None = None) -> tuple[GinUnit, ...]:
         _unit(
             "bindingdispatch",
             "binding/bindingdispatch_bb_prop_test.go",
-            "bindingdispatch_bb_prop_test.go",
+            "binding/bindingdispatch_bb_prop_test.go",
             ("binding",),
             "./binding/",
             changed_files=("binding.go",),
@@ -352,38 +361,20 @@ def prove_unit(unit: GinUnit, results: dict[int, Path]) -> UnitProofResult:
     rc, reward, blob = _run_test_in_image(tag, tests, timeout=300)
     record("buggy_fails", rc != 0 or reward != "1", blob[-2000:])
 
-    gold_pre = "cd /app && patch -p1 --forward --batch -i /tests/gold.patch"
-    gold_pass = False
-    suite_fixes = 0
-    for iteration in range(1, _MAX_GOLD_ITERATIONS + 1):
-        _refresh_hidden_tests(unit, results)
-        rc, reward, blob = _run_test_in_image(tag, tests, pre=gold_pre, timeout=1800)
-        gold_pass = rc == 0 and reward == "1"
-        fails = _failing_tests(blob)
-        iterations = out.setdefault("gold_iterations", [])
-        assert isinstance(iterations, list)
-        iterations.append({"iteration": iteration, "pass": gold_pass, "failing_tests": fails})
-        if gold_pass:
-            break
-        if iteration == 1:
-            out["gold_first_pass"] = False
-        suite_fixes += 1
+    gold_pre = f"{_APPLY_PATCH} /tests/gold.patch"
+    _refresh_hidden_tests(unit, results)
+    rc, reward, blob = _run_test_in_image(tag, tests, pre=gold_pre, timeout=1800)
+    gold_pass = rc == 0 and reward == "1"
+    fails = _failing_tests(blob)
+    out["gold_iterations"] = [{"iteration": 1, "pass": gold_pass, "failing_tests": fails}]
+    if not gold_pass:
+        out["gold_first_pass"] = False
         out["failing_properties"] = fails
         out["failing_detail"] = blob[-2000:]
-        if iteration >= _MAX_GOLD_ITERATIONS:
-            out["needs_author_review"] = True
-            out["ok"] = False
-            break
-        # Suite iteration: reload testdata (caller must have updated files) and retry.
-        time.sleep(0.1)
-
-    out["suite_fixes"] = max(0, suite_fixes - (0 if gold_pass else 0))
-    if not gold_pass and out.get("needs_author_review"):
-        out["suite_fixes"] = _MAX_GOLD_ITERATIONS - 1
-
+        out["ok"] = False
     record("gold_restore", gold_pass, blob[-2000:] if not gold_pass else "pass")
 
-    cheat_pre = "cd /app && patch -p1 --forward --batch -i /tests/cheat.patch"
+    cheat_pre = f"{_APPLY_PATCH} /tests/cheat.patch"
     rc, reward, blob = _run_test_in_image(tag, tests, pre=cheat_pre, timeout=900)
     record("cheat_rejected", rc != 0 or reward != "1", blob[-2000:])
     record("blackbox_hygiene", True, "B4 packaging gate at construct time")
@@ -437,7 +428,7 @@ def write_verdicts_gin(unit: GinUnit, results: dict[int, Path], proof: UnitProof
         "needs_author_review": bool(proof.proof.get("needs_author_review")),
         **named,
     }
-    for _level, dest in results.items():
+    for dest in results.values():
         payload = dict(extra)
         if not _b4_pass(dest, payload):
             return "B4"
@@ -611,9 +602,8 @@ def construct_and_prove(
                 rule = write_verdicts_gin(unit, results[unit.family], pr)
                 if rule:
                     rejected.append((unit.family, rule))
-                if not pr.ok or pr.rejected_rule:
-                    if pr.rejected_rule != "needs-author-review":
-                        parent["ok"] = False
+                if (not pr.ok or pr.rejected_rule) and pr.rejected_rule != "needs-author-review":
+                    parent["ok"] = False
 
     families = parent.setdefault("families", {})
     assert isinstance(families, dict)
@@ -632,7 +622,7 @@ def construct_and_prove(
     (dest_root / "validation.json").write_text(
         json.dumps(parent, indent=2, default=str) + "\n", encoding="utf-8"
     )
-    md = write_verifier_batch_md(dest_root, all_units, results, proofs, rejected)
+    write_verifier_batch_md(dest_root, all_units, results, proofs, rejected)
     parent["verifier_batch_md"] = str(VERIFIER_BATCH_MD)
     return parent
 

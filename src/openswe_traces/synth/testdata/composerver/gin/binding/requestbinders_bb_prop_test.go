@@ -33,7 +33,10 @@ import (
 	binding "example.internal/httprouter/binding"
 )
 
-// bbSeed and bbCases are in bb_const_test.go.
+const (
+	bbSeed  = 20260919
+	bbCases = 10000
+)
 
 type bbFooBar struct {
 	Foo string `form:"foo" query:"foo" header:"foo" uri:"foo" binding:"required"`

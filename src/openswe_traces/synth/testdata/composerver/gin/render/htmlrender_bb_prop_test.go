@@ -188,7 +188,6 @@ func TestHTMLDebugPanicProperty(t *testing.T) {
 }
 
 func TestHTMLContentTypeProperty(t *testing.T) {
-	rng := rand.New(rand.NewSource(bbSeed + 5))
 	templ := template.Must(template.New("t").Parse("x"))
 	for i := 0; i < bbCases; i++ {
 		inst := (render.HTMLProduction{Template: templ}).Instance("t", nil)
@@ -205,7 +204,6 @@ func TestHTMLContentTypeProperty(t *testing.T) {
 		if ct := w.Header().Get("Content-Type"); ct != "text/custom" {
 			t.Fatalf("case %d preset content-type overwritten", i)
 		}
-		_ = rng
 	}
 }
 

@@ -345,7 +345,7 @@ def solve_unit(
         n_conc = harbor_concurrency(cfg, solver, semaphore, host=host)
         hold_timeout = session_timeout_sec(solver)
         if solver == "devin":
-            n_hold = max(1, n_conc)
+            n_hold = max(1, min(n_conc, n_att))
             with semaphore.hold(kind="harbor", n=n_hold, timeout=hold_timeout):
                 job = _launch(
                     cfg,

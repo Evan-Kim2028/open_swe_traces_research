@@ -322,7 +322,7 @@ func TestStreamWriteErrorProperty(t *testing.T) {
 		t.Fatal("String expected write error")
 	}
 	ew = &bbErrorWriter{errThreshold: 1, ResponseRecorder: bbStreamRecorder()}
-	if err := (render.Reader{ContentType: "text/plain", Reader: strings.NewReader("z")}).Render(ew); err == nil {
-		t.Fatal("Reader expected write error")
+	if err := render.WriteString(ew, "fmt %s", []any{"arg"}); err == nil {
+		t.Fatal("WriteString expected write error")
 	}
 }

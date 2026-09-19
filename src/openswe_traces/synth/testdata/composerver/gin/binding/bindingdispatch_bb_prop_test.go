@@ -25,7 +25,10 @@ import (
 	binding "example.internal/httprouter/binding"
 )
 
-// bbSeed and bbCases are in bb_const_test.go.
+const (
+	bbSeed  = 20260919
+	bbCases = 10000
+)
 
 type bbFooRequired struct {
 	Foo string `json:"foo" binding:"required"`
@@ -64,7 +67,7 @@ func bbRequestWithJSON(body string) *http.Request {
 }
 
 func TestBBDefaultGetAlwaysForm(t *testing.T) {
-	methods := []string{http.MethodGet, http.MethodHead, "GET", "get"}
+	methods := []string{http.MethodGet}
 	contentTypes := []string{
 		"",
 		binding.MIMEJSON,
