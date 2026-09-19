@@ -1,0 +1,167 @@
+--- a/internal/unionstore/memdb.go
++++ b/internal/unionstore/memdb.go
+@@ -106,64 +106,18 @@
+ // Subsequent writes will be temporarily stored in this new staging buffer.
+ // When you think all modifications looks good, you can call `Release` to public all of them to the upper level buffer.
+ func (db *MemDB) Staging() int {
+-	if !db.skipMutex {
+-		db.Lock()
+-		defer db.Unlock()
+-	}
+-
+-	db.stages = append(db.stages, db.vlog.checkpoint())
+-	return len(db.stages)
++	panic("excised: Staging")
+ }
+ 
+ // Release publish all modifications in the latest staging buffer to upper level.
+ func (db *MemDB) Release(h int) {
+-	if !db.skipMutex {
+-		db.Lock()
+-		defer db.Unlock()
+-	}
+-
+-	if h != len(db.stages) {
+-		// This should never happens in production environment.
+-		// Use panic to make debug easier.
+-		panic("cannot release staging buffer")
+-	}
+-
+-	if h == 1 {
+-		tail := db.vlog.checkpoint()
+-		if !db.stages[0].isSamePosition(&tail) {
+-			db.dirty = true
+-		}
+-	}
+-	db.stages = db.stages[:h-1]
++	panic("excised: Release")
+ }
+ 
+ // Cleanup cleanup the resources referenced by the StagingHandle.
+ // If the changes are not published by `Release`, they will be discarded.
+ func (db *MemDB) Cleanup(h int) {
+-	if !db.skipMutex {
+-		db.Lock()
+-		defer db.Unlock()
+-	}
+-
+-	if h > len(db.stages) {
+-		return
+-	}
+-	if h < len(db.stages) {
+-		// This should never happens in production environment.
+-		// Use panic to make debug easier.
+-		panic(fmt.Sprintf("cannot cleanup staging buffer, h=%v, len(db.stages)=%v", h, len(db.stages)))
+-	}
+-
+-	cp := &db.stages[h-1]
+-	if !db.vlogInvalid {
+-		curr := db.vlog.checkpoint()
+-		if !curr.isSamePosition(cp) {
+-			db.vlog.revertToCheckpoint(db, cp)
+-			db.vlog.truncate(cp)
+-		}
+-	}
+-	db.stages = db.stages[:h-1]
+-	db.vlog.onMemChange()
++	panic("excised: Cleanup")
+ }
+ 
+ // Checkpoint returns a checkpoint of MemDB.
+@@ -174,21 +128,12 @@
+ 
+ // RevertToCheckpoint reverts the MemDB to the checkpoint.
+ func (db *MemDB) RevertToCheckpoint(cp *MemDBCheckpoint) {
+-	db.vlog.revertToCheckpoint(db, cp)
+-	db.vlog.truncate(cp)
+-	db.vlog.onMemChange()
++	panic("excised: RevertToCheckpoint")
+ }
+ 
+ // Reset resets the MemBuffer to initial states.
+ func (db *MemDB) Reset() {
+-	db.root = nullAddr
+-	db.stages = db.stages[:0]
+-	db.dirty = false
+-	db.vlogInvalid = false
+-	db.size = 0
+-	db.count = 0
+-	db.vlog.reset()
+-	db.allocator.reset()
++	panic("excised: Reset")
+ }
+ 
+ // DiscardValues releases the memory used by all values.
+@@ -200,29 +145,13 @@
+ 
+ // InspectStage used to inspect the value updates in the given stage.
+ func (db *MemDB) InspectStage(handle int, f func([]byte, kv.KeyFlags, []byte)) {
+-	idx := handle - 1
+-	tail := db.vlog.checkpoint()
+-	head := db.stages[idx]
+-	db.vlog.inspectKVInLog(db, &head, &tail, f)
++	panic("excised: InspectStage")
+ }
+ 
+ // Get gets the value for key k from kv store.
+ // If corresponding kv pair does not exist, it returns nil and ErrNotExist.
+ func (db *MemDB) Get(key []byte) ([]byte, error) {
+-	if db.vlogInvalid {
+-		// panic for easier debugging.
+-		panic("vlog is resetted")
+-	}
+-
+-	x := db.traverse(key, false)
+-	if x.isNull() {
+-		return nil, tikverr.ErrNotExist
+-	}
+-	if x.vptr.isNull() {
+-		// A flag only key, act as value not exists
+-		return nil, tikverr.ErrNotExist
+-	}
+-	return db.vlog.getValue(x.vptr), nil
++	panic("excised: Get")
+ }
+ 
+ // SelectValueHistory select the latest value which makes `predicate` returns true from the modification history.
+@@ -255,35 +184,28 @@
+ 
+ // UpdateFlags update the flags associated with key.
+ func (db *MemDB) UpdateFlags(key []byte, ops ...kv.FlagsOp) {
+-	err := db.set(key, nil, ops...)
+-	_ = err // set without value will never fail
++	panic("excised: UpdateFlags")
+ }
+ 
+ // Set sets the value for key k as v into kv store.
+ // v must NOT be nil or empty, otherwise it returns ErrCannotSetNilValue.
+ func (db *MemDB) Set(key []byte, value []byte) error {
+-	if len(value) == 0 {
+-		return tikverr.ErrCannotSetNilValue
+-	}
+-	return db.set(key, value)
++	panic("excised: Set")
+ }
+ 
+ // SetWithFlags put key-value into the last active staging buffer with the given KeyFlags.
+ func (db *MemDB) SetWithFlags(key []byte, value []byte, ops ...kv.FlagsOp) error {
+-	if len(value) == 0 {
+-		return tikverr.ErrCannotSetNilValue
+-	}
+-	return db.set(key, value, ops...)
++	panic("excised: SetWithFlags")
+ }
+ 
+ // Delete removes the entry for key k from kv store.
+ func (db *MemDB) Delete(key []byte) error {
+-	return db.set(key, tombstone)
++	panic("excised: Delete")
+ }
+ 
+ // DeleteWithFlags delete key with the given KeyFlags
+ func (db *MemDB) DeleteWithFlags(key []byte, ops ...kv.FlagsOp) error {
+-	return db.set(key, tombstone, ops...)
++	panic("excised: DeleteWithFlags")
+ }
+ 
+ // GetKeyByHandle returns key by handle.

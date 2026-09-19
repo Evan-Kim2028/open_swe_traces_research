@@ -1,0 +1,141 @@
+--- a/render/reader.go
++++ b/render/reader.go
+@@ -7,7 +7,7 @@
+ import (
+ 	"io"
+ 	"net/http"
+-	"strconv"
++	_ "strconv"
+ )
+ 
+ // Reader contains the IO reader and its length, and custom ContentType and other headers.
+@@ -20,29 +20,15 @@
+ 
+ // Render (Reader) writes data with custom ContentType and headers.
+ func (r Reader) Render(w http.ResponseWriter) (err error) {
+-	r.WriteContentType(w)
+-	if r.ContentLength >= 0 {
+-		if r.Headers == nil {
+-			r.Headers = map[string]string{}
+-		}
+-		r.Headers["Content-Length"] = strconv.FormatInt(r.ContentLength, 10)
+-	}
+-	r.writeHeaders(w)
+-	_, err = io.Copy(w, r.Reader)
+-	return
++	panic("excised: Render")
+ }
+ 
+ // WriteContentType (Reader) writes custom ContentType.
+ func (r Reader) WriteContentType(w http.ResponseWriter) {
+-	writeContentType(w, []string{r.ContentType})
++	panic("excised: WriteContentType")
+ }
+ 
+ // writeHeaders writes headers from r.Headers into response.
+ func (r Reader) writeHeaders(w http.ResponseWriter) {
+-	header := w.Header()
+-	for k, v := range r.Headers {
+-		if header.Get(k) == "" {
+-			header.Set(k, v)
+-		}
+-	}
++	panic("excised: writeHeaders")
+ }
+--- a/render/data.go
++++ b/render/data.go
+@@ -6,7 +6,7 @@
+ 
+ import (
+ 	"net/http"
+-	"strconv"
++	_ "strconv"
+ )
+ 
+ // Data contains ContentType and bytes data.
+@@ -17,15 +17,10 @@
+ 
+ // Render (Data) writes data with custom ContentType.
+ func (r Data) Render(w http.ResponseWriter) (err error) {
+-	r.WriteContentType(w)
+-	if len(r.Data) > 0 {
+-		w.Header().Set("Content-Length", strconv.Itoa(len(r.Data)))
+-	}
+-	_, err = w.Write(r.Data)
+-	return
++	panic("excised: Render")
+ }
+ 
+ // WriteContentType (Data) writes custom ContentType.
+ func (r Data) WriteContentType(w http.ResponseWriter) {
+-	writeContentType(w, []string{r.ContentType})
++	panic("excised: WriteContentType")
+ }
+--- a/render/redirect.go
++++ b/render/redirect.go
+@@ -5,7 +5,7 @@
+ package render
+ 
+ import (
+-	"fmt"
++	_ "fmt"
+ 	"net/http"
+ )
+ 
+@@ -18,12 +18,10 @@
+ 
+ // Render (Redirect) redirects the http request to new location and writes redirect response.
+ func (r Redirect) Render(w http.ResponseWriter) error {
+-	if (r.Code < http.StatusMultipleChoices || r.Code > http.StatusPermanentRedirect) && r.Code != http.StatusCreated {
+-		panic(fmt.Sprintf("Cannot redirect with status code %d", r.Code))
+-	}
+-	http.Redirect(w, r.Request, r.Location, r.Code)
+-	return nil
++	panic("excised: Render")
+ }
+ 
+ // WriteContentType (Redirect) don't write any ContentType.
+-func (r Redirect) WriteContentType(http.ResponseWriter) {}
++func (r Redirect) WriteContentType(http.ResponseWriter) {
++	panic("excised: WriteContentType")
++}
+--- a/render/text.go
++++ b/render/text.go
+@@ -5,10 +5,10 @@
+ package render
+ 
+ import (
+-	"fmt"
++	_ "fmt"
+ 	"net/http"
+ 
+-	"example.internal/httprouter/internal/bytesconv"
++	_ "example.internal/httprouter/internal/bytesconv"
+ )
+ 
+ // String contains the given interface object slice and its format.
+@@ -21,21 +21,15 @@
+ 
+ // Render (String) writes data with custom ContentType.
+ func (r String) Render(w http.ResponseWriter) error {
+-	return WriteString(w, r.Format, r.Data)
++	panic("excised: Render")
+ }
+ 
+ // WriteContentType (String) writes Plain ContentType.
+ func (r String) WriteContentType(w http.ResponseWriter) {
+-	writeContentType(w, plainContentType)
++	panic("excised: WriteContentType")
+ }
+ 
+ // WriteString writes data according to its format and write custom ContentType.
+ func WriteString(w http.ResponseWriter, format string, data []any) (err error) {
+-	writeContentType(w, plainContentType)
+-	if len(data) > 0 {
+-		_, err = fmt.Fprintf(w, format, data...)
+-		return
+-	}
+-	_, err = w.Write(bytesconv.StringToBytes(format))
+-	return
++	panic("excised: WriteString")
+ }

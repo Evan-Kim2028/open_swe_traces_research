@@ -56,6 +56,9 @@ NETWORK_CMD_RE = re.compile(
     re.IGNORECASE,
 )
 OBS_SEP = "==>"
+NET_SUCCESS_RE = re.compile(
+    r"go: (?:downloading|added|finding)|Cloning into|Saved to|HTTP/[0-9.]+ 200|200 OK|Resolving [a-z]|bytes received|Receiving objects|Successfully installed|Fetched ",
+)
 TEST_CONTENT_RE = re.compile(
     r"install_hidden|sha256sum|checksum_fail|/logs/verifier|func Test\w+\(t \*testing\.T\)|package \w+_test|go test -count",
 )
@@ -167,16 +170,29 @@ def scratch_test_files(patch: str) -> list[str]:
     )
 
 
-def allowlist_violations(patch: str) -> list[str]:
-    bad: list[str] = []
+def in_tree_test_edits(patch: str, hidden_names: Sequence[str] = ()) -> list[str]:
+    """Pre-existing non-hidden *_test.go files the solver modified (flag: the verifier is the hidden suite)."""
     created = new_files(patch)
+    hid = {Path(h).name for h in hidden_names}
+    return sorted(
+        rel
+        for rel in parse_touched_paths(patch)
+        if rel.endswith("_test.go")
+        and rel not in created
+        and "/tests/" not in f"/{rel}"
+        and Path(rel).name not in hid
+    )
+
+
+def allowlist_violations(patch: str, hidden_names: Sequence[str] = ()) -> list[str]:
+    bad: list[str] = []
+    hid = {Path(h).name for h in hidden_names}
     for rel in parse_touched_paths(patch):
         name = Path(rel).name
         if name.endswith("_test.go") or rel.endswith("_test.go"):
-            if rel in created and "/tests/" not in f"/{rel}":
-                continue  # solver's own new scratch test; reported as a flag by scratch_test_files
-            bad.append(f"touched forbidden file: {rel}")
-            continue
+            if "/tests/" in f"/{rel}" or name in hid:
+                bad.append(f"touched hidden/verifier test file: {rel}")
+            continue  # in-tree tests are not the verifier: new ones and edits are flags, not violations
         if name in FORBIDDEN_BASENAMES:
             bad.append(f"touched forbidden file: {rel}")
             continue
@@ -320,9 +336,24 @@ def scan_trajectory(text: str, actions: str | None = None) -> tuple[list[str], l
         if actions is None
         else "\n".join(line.partition(OBS_SEP)[0] for line in scope.splitlines())
     )
-    net = NETWORK_CMD_RE.findall(cmd_scope)
-    if net:
-        hard.append(f"B2 network command in trajectory: {sorted(set(net))[:8]}")
+    if actions is None:
+        net = NETWORK_CMD_RE.findall(cmd_scope)
+        if net:
+            hard.append(f"B2 network command in trajectory: {sorted(set(net))[:8]}")
+    else:
+        reached, attempted = [], []
+        for line in scope.splitlines():
+            cmd, _, obs = line.partition(OBS_SEP)
+            m = NETWORK_CMD_RE.findall(cmd)
+            if not m:
+                continue
+            (reached if NET_SUCCESS_RE.search(obs) else attempted).extend(m)
+        if reached:
+            hard.append(f"B2 network command reached the network: {sorted(set(reached))[:8]}")
+        if attempted:
+            flags.append(
+                f"network command attempted, no evidence it reached the network: {sorted(set(attempted))[:8]}"
+            )
     for line in scope.splitlines() if actions is not None else [scope]:
         if not TASK_READ_RE.search(line):
             continue
@@ -496,6 +527,14 @@ def _reward_passed(stdout: str, stderr: str, returncode: int) -> bool:
     return returncode == 0
 
 
+APPLY_PATCH_SH = (
+    "if command -v patch >/dev/null 2>&1; then patch -p1 --forward --batch -i /tmp/agent.patch; "
+    "elif command -v git >/dev/null 2>&1; then git apply -p1 --unsafe-paths --directory=. /tmp/agent.patch "
+    "|| git apply -p1 --unsafe-paths --directory=. --reject /tmp/agent.patch; "
+    "else echo 'NO_PATCH_TOOL'; fi || true\n"
+)
+
+
 def _apply_and_test_command(
     *,
     hidden_script: str = "tests/test.sh",
@@ -544,7 +583,7 @@ def _apply_and_test_command(
             f"cd {shlex.quote(workdir)}\n"
             f"mkdir -p /logs/verifier /tmp\n"
             f"cat > /tmp/agent.patch\n"
-            f"patch -p1 --forward --batch -i /tmp/agent.patch || true\n"
+            f"{APPLY_PATCH_SH}"
             f"{install}"
             f"{rewrite}"
             f"{run_tests}"
@@ -557,7 +596,7 @@ def _apply_and_test_command(
         f"cd {shlex.quote(workdir)}\n"
         f"mkdir -p /logs/verifier /tmp\n"
         f"cat > /tmp/agent.patch\n"
-        f"patch -p1 --forward --batch -i /tmp/agent.patch || true\n"
+        f"{APPLY_PATCH_SH}"
         f"{rewrite}"
         f"if [ -x {shlex.quote(hidden_script)} ]; then {shlex.quote(hidden_script)}; "
         f"elif [ -f /tests/test.sh ]; then bash /tests/test.sh; "
@@ -660,11 +699,14 @@ def audit_passing_attempt(
     flags: list[str] = []
     evidence: dict[str, Any] = {"seed_contract": HIDDEN_SEED_ENV, "audit_seed": audit_seed}
 
-    allow = allowlist_violations(patch_text) if patch_text else []
+    allow = allowlist_violations(patch_text, list(hidden)) if patch_text else []
     hard.extend(allow)
     scratch = scratch_test_files(patch_text) if patch_text else []
     if scratch:
         flags.append(f"solver left new scratch test files: {scratch[:6]}")
+    edited = in_tree_test_edits(patch_text, list(hidden)) if patch_text else []
+    if edited:
+        flags.append(f"solver edited in-tree (non-verifier) test files: {edited[:6]}")
     evidence["touched"] = list(parse_touched_paths(patch_text))
 
     literals = extract_literals(contract_md, *hidden.values())

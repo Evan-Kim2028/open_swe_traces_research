@@ -1,0 +1,637 @@
+--- a/internal/locate/region_request.go
++++ b/internal/locate/region_request.go
+@@ -1568,27 +1568,7 @@
+ }
+ 
+ func (s *RegionRequestSender) logSendReqError(bo *retry.Backoffer, msg string, regionID RegionVerID, retryTimes int, req *tikvrpc.Request, totalErrors map[string]int) {
+-	var totalErrorStr bytes.Buffer
+-	for err, cnt := range totalErrors {
+-		if totalErrorStr.Len() > 0 {
+-			totalErrorStr.WriteString(", ")
+-		}
+-		totalErrorStr.WriteString(err)
+-		totalErrorStr.WriteString(":")
+-		totalErrorStr.WriteString(strconv.Itoa(cnt))
+-	}
+-	logutil.Logger(bo.GetCtx()).Info(msg,
+-		zap.Uint64("req-ts", req.GetStartTS()),
+-		zap.String("req-type", req.Type.String()),
+-		zap.String("region", regionID.String()),
+-		zap.String("replica-read-type", req.ReplicaReadType.String()),
+-		zap.Bool("stale-read", req.StaleRead),
+-		zap.Stringer("request-sender", s),
+-		zap.Int("retry-times", retryTimes),
+-		zap.Int("total-backoff-ms", bo.GetTotalSleep()),
+-		zap.Int("total-backoff-times", bo.GetTotalBackoffTimes()),
+-		zap.Uint64("max-exec-timeout-ms", req.Context.MaxExecutionDurationMs),
+-		zap.String("total-region-errors", totalErrorStr.String()))
++	panic("excised: logSendReqError")
+ }
+ 
+ // RPCCancellerCtxKey is context key attach rpc send cancelFunc collector to ctx.
+@@ -1658,163 +1638,7 @@
+ func (s *RegionRequestSender) sendReqToRegion(
+ 	bo *retry.Backoffer, rpcCtx *RPCContext, req *tikvrpc.Request, timeout time.Duration,
+ ) (resp *tikvrpc.Response, retry bool, err error) {
+-	// judge the store limit switch.
+-	if limit := kv.StoreLimit.Load(); limit > 0 {
+-		if err := s.getStoreToken(rpcCtx.Store, limit); err != nil {
+-			return nil, false, err
+-		}
+-		defer s.releaseStoreToken(rpcCtx.Store)
+-	}
+-
+-	ctx := bo.GetCtx()
+-	if rawHook := ctx.Value(RPCCancellerCtxKey{}); rawHook != nil {
+-		var cancel context.CancelFunc
+-		ctx, cancel = rawHook.(*RPCCanceller).WithCancel(ctx)
+-		defer cancel()
+-	}
+-
+-	// sendToAddr is the first target address that will receive the request. If proxy is used, sendToAddr will point to
+-	// the proxy that will forward the request to the final target.
+-	sendToAddr := rpcCtx.Addr
+-	if rpcCtx.ProxyStore == nil {
+-		req.ForwardedHost = ""
+-	} else {
+-		req.ForwardedHost = rpcCtx.Addr
+-		sendToAddr = rpcCtx.ProxyAddr
+-	}
+-
+-	// Count the replica number as the RU cost factor.
+-	req.ReplicaNumber = 1
+-	if rpcCtx.Meta != nil && len(rpcCtx.Meta.GetPeers()) > 0 {
+-		req.ReplicaNumber = 0
+-		for _, peer := range rpcCtx.Meta.GetPeers() {
+-			role := peer.GetRole()
+-			if role == metapb.PeerRole_Voter || role == metapb.PeerRole_Learner {
+-				req.ReplicaNumber++
+-			}
+-		}
+-	}
+-
+-	var sessionID uint64
+-	if v := bo.GetCtx().Value(util.SessionID); v != nil {
+-		sessionID = v.(uint64)
+-	}
+-
+-	injectFailOnSend := false
+-	if val, e := util.EvalFailpoint("rpcFailOnSend"); e == nil {
+-		inject := true
+-		// Optional filters
+-		if s, ok := val.(string); ok {
+-			if s == "greengc" && !req.IsGreenGCRequest() {
+-				inject = false
+-			} else if s == "write" && !req.IsTxnWriteRequest() {
+-				inject = false
+-			}
+-		} else if sessionID == 0 {
+-			inject = false
+-		}
+-
+-		if inject {
+-			logutil.Logger(ctx).Info(
+-				"[failpoint] injected RPC error on send", zap.Stringer("type", req.Type),
+-				zap.Stringer("req", req.Req.(fmt.Stringer)), zap.Stringer("ctx", &req.Context),
+-			)
+-			injectFailOnSend = true
+-			err = errors.New("injected RPC error on send")
+-		}
+-	}
+-
+-	if !injectFailOnSend {
+-		start := time.Now()
+-		resp, err = s.client.SendRequest(ctx, sendToAddr, req, timeout)
+-		rpcDuration := time.Since(start)
+-		if s.replicaSelector != nil {
+-			s.replicaSelector.recordAttemptedTime(rpcDuration)
+-		}
+-		// Record timecost of external requests on related Store when `ReplicaReadMode == "PreferLeader"`.
+-		if rpcCtx.Store != nil && req.ReplicaReadType == kv.ReplicaReadPreferLeader && !util.IsInternalRequest(req.RequestSource) {
+-			rpcCtx.Store.recordSlowScoreStat(rpcDuration)
+-		}
+-		if s.Stats != nil {
+-			RecordRegionRequestRuntimeStats(s.Stats, req.Type, rpcDuration)
+-			if val, fpErr := util.EvalFailpoint("tikvStoreRespResult"); fpErr == nil {
+-				if val.(bool) {
+-					if req.Type == tikvrpc.CmdCop && bo.GetTotalSleep() == 0 {
+-						return &tikvrpc.Response{
+-							Resp: &coprocessor.Response{RegionError: &errorpb.Error{EpochNotMatch: &errorpb.EpochNotMatch{}}},
+-						}, false, nil
+-					}
+-				}
+-			}
+-		}
+-
+-		if val, e := util.EvalFailpoint("rpcFailOnRecv"); e == nil {
+-			inject := true
+-			// Optional filters
+-			if s, ok := val.(string); ok {
+-				if s == "greengc" && !req.IsGreenGCRequest() {
+-					inject = false
+-				} else if s == "write" && !req.IsTxnWriteRequest() {
+-					inject = false
+-				}
+-			} else if sessionID == 0 {
+-				inject = false
+-			}
+-
+-			if inject {
+-				logutil.Logger(ctx).Info(
+-					"[failpoint] injected RPC error on recv", zap.Stringer("type", req.Type),
+-					zap.Stringer("req", req.Req.(fmt.Stringer)), zap.Stringer("ctx", &req.Context),
+-					zap.Error(err), zap.String("extra response info", fetchRespInfo(resp)),
+-				)
+-				err = errors.New("injected RPC error on recv")
+-				resp = nil
+-			}
+-		}
+-
+-		if val, e := util.EvalFailpoint("rpcContextCancelErr"); e == nil {
+-			if val.(bool) {
+-				ctx1, cancel := context.WithCancel(context.Background())
+-				cancel()
+-				<-ctx1.Done()
+-				ctx = ctx1
+-				err = ctx.Err()
+-				resp = nil
+-			}
+-		}
+-	}
+-
+-	if rpcCtx.ProxyStore != nil {
+-		fromStore := strconv.FormatUint(rpcCtx.ProxyStore.storeID, 10)
+-		toStore := strconv.FormatUint(rpcCtx.Store.storeID, 10)
+-		result := "ok"
+-		if err != nil {
+-			result = "fail"
+-		}
+-		metrics.TiKVForwardRequestCounter.WithLabelValues(fromStore, toStore, req.Type.String(), result).Inc()
+-	}
+-
+-	if err != nil {
+-		s.rpcError = err
+-
+-		// Because in rpc logic, context.Cancel() will be transferred to rpcContext.Cancel error. For rpcContext cancel,
+-		// we need to retry the request. But for context cancel active, for example, limitExec gets the required rows,
+-		// we shouldn't retry the request, it will go to backoff and hang in retry logic.
+-		if ctx.Err() != nil && errors.Cause(ctx.Err()) == context.Canceled {
+-			return nil, false, errors.WithStack(ctx.Err())
+-		}
+-
+-		if val, e := util.EvalFailpoint("noRetryOnRpcError"); e == nil {
+-			if val.(bool) {
+-				return nil, false, err
+-			}
+-		}
+-		if e := s.onSendFail(bo, rpcCtx, req, err); e != nil {
+-			return nil, false, err
+-		}
+-		return nil, true, nil
+-	}
+-	return
++	panic("excised: sendReqToRegion")
+ }
+ 
+ func (s *RegionRequestSender) getStoreToken(st *Store, limit int64) error {
+@@ -1840,71 +1664,7 @@
+ }
+ 
+ func (s *RegionRequestSender) onSendFail(bo *retry.Backoffer, ctx *RPCContext, req *tikvrpc.Request, err error) error {
+-	if span := opentracing.SpanFromContext(bo.GetCtx()); span != nil && span.Tracer() != nil {
+-		span1 := span.Tracer().StartSpan("regionRequest.onSendFail", opentracing.ChildOf(span.Context()))
+-		defer span1.Finish()
+-		bo.SetCtx(opentracing.ContextWithSpan(bo.GetCtx(), span1))
+-	}
+-	// If it failed because the context is cancelled by ourself, don't retry.
+-	if errors.Cause(err) == context.Canceled {
+-		return errors.WithStack(err)
+-	} else if LoadShuttingDown() > 0 {
+-		return errors.WithStack(tikverr.ErrTiDBShuttingDown)
+-	} else if isCauseByDeadlineExceeded(err) {
+-		if s.replicaSelector != nil && s.replicaSelector.onReadReqConfigurableTimeout(req) {
+-			return nil
+-		}
+-	}
+-	if status.Code(errors.Cause(err)) == codes.Canceled {
+-		select {
+-		case <-bo.GetCtx().Done():
+-			return errors.WithStack(err)
+-		default:
+-			// If we don't cancel, but the error code is Canceled, it must be from grpc remote.
+-			// This may happen when kvstore is killed and exiting.
+-			// Backoff and retry in this case.
+-			logutil.Logger(bo.GetCtx()).Warn("receive a grpc cancel signal from remote", zap.Error(err))
+-		}
+-	}
+-
+-	if ctx.Store != nil && ctx.Store.storeType == tikvrpc.TiFlashCompute {
+-		s.regionCache.InvalidateTiFlashComputeStoresIfGRPCError(err)
+-	} else if ctx.Meta != nil {
+-		if s.replicaSelector != nil {
+-			s.replicaSelector.onSendFailure(bo, err)
+-		} else {
+-			s.regionCache.OnSendFail(bo, ctx, s.NeedReloadRegion(ctx), err)
+-		}
+-	}
+-
+-	// don't need to retry for ResourceGroup error
+-	if errors.Is(err, pderr.ErrClientResourceGroupThrottled) {
+-		return err
+-	}
+-	if errors.Is(err, pderr.ErrClientResourceGroupConfigUnavailable) {
+-		return err
+-	}
+-	var errGetResourceGroup *pderr.ErrClientGetResourceGroup
+-	if errors.As(err, &errGetResourceGroup) {
+-		return err
+-	}
+-
+-	// Retry on send request failure when it's not canceled.
+-	// When a store is not available, the leader of related region should be elected quickly.
+-	// TODO: the number of retry time should be limited:since region may be unavailable
+-	// when some unrecoverable disaster happened.
+-	if ctx.Store != nil && ctx.Store.storeType.IsTiFlashRelatedType() {
+-		err = bo.Backoff(
+-			retry.BoTiFlashRPC,
+-			errors.Errorf("send tiflash request error: %v, ctx: %v, try next peer later", err, ctx),
+-		)
+-	} else {
+-		err = bo.Backoff(
+-			retry.BoTiKVRPC,
+-			errors.Errorf("send kvstore request error: %v, ctx: %v, try next peer later", err, ctx),
+-		)
+-	}
+-	return err
++	panic("excised: onSendFail")
+ }
+ 
+ func isCauseByDeadlineExceeded(err error) bool {
+@@ -1915,30 +1675,7 @@
+ 
+ // NeedReloadRegion checks is all peers has sent failed, if so need reload.
+ func (s *RegionRequestSender) NeedReloadRegion(ctx *RPCContext) (need bool) {
+-	if s.failStoreIDs == nil {
+-		s.failStoreIDs = make(map[uint64]struct{})
+-	}
+-	if s.failProxyStoreIDs == nil {
+-		s.failProxyStoreIDs = make(map[uint64]struct{})
+-	}
+-	s.failStoreIDs[ctx.Store.storeID] = struct{}{}
+-	if ctx.ProxyStore != nil {
+-		s.failProxyStoreIDs[ctx.ProxyStore.storeID] = struct{}{}
+-	}
+-
+-	if ctx.AccessMode == tiKVOnly && len(s.failStoreIDs)+len(s.failProxyStoreIDs) >= ctx.TiKVNum {
+-		need = true
+-	} else if ctx.AccessMode == tiFlashOnly && len(s.failStoreIDs) >= len(ctx.Meta.Peers)-ctx.TiKVNum {
+-		need = true
+-	} else if len(s.failStoreIDs)+len(s.failProxyStoreIDs) >= len(ctx.Meta.Peers) {
+-		need = true
+-	}
+-
+-	if need {
+-		s.failStoreIDs = nil
+-		s.failProxyStoreIDs = nil
+-	}
+-	return
++	panic("excised: NeedReloadRegion")
+ }
+ 
+ // regionErrorToLogging constructs the logging content with extra information like returned leader peer id.
+@@ -2012,334 +1749,7 @@
+ func (s *RegionRequestSender) onRegionError(
+ 	bo *retry.Backoffer, ctx *RPCContext, req *tikvrpc.Request, regionErr *errorpb.Error,
+ ) (shouldRetry bool, err error) {
+-	if span := opentracing.SpanFromContext(bo.GetCtx()); span != nil && span.Tracer() != nil {
+-		span1 := span.Tracer().StartSpan("kvstore.onRegionError", opentracing.ChildOf(span.Context()))
+-		defer span1.Finish()
+-		bo.SetCtx(opentracing.ContextWithSpan(bo.GetCtx(), span1))
+-	}
+-
+-	// NOTE: Please add the region error handler in the same order of errorpb.Error.
+-	isInternal := false
+-	if req != nil {
+-		isInternal = util.IsInternalRequest(req.GetRequestSource())
+-	}
+-	metrics.TiKVRegionErrorCounter.WithLabelValues(regionErrorToLabel(regionErr), strconv.FormatBool(isInternal)).Inc()
+-
+-	if notLeader := regionErr.GetNotLeader(); notLeader != nil {
+-		// Retry if error is `NotLeader`.
+-		logutil.Logger(bo.GetCtx()).Debug(
+-			"kvstore reports `NotLeader` retry later",
+-			zap.String("notLeader", notLeader.String()),
+-			zap.String("ctx", ctx.String()),
+-		)
+-
+-		if s.replicaSelector != nil {
+-			return s.replicaSelector.onNotLeader(bo, ctx, notLeader)
+-		} else if notLeader.GetLeader() == nil {
+-			// The peer doesn't know who is the current leader. Generally it's because
+-			// the Raft group is in an election, but it's possible that the peer is
+-			// isolated and removed from the Raft group. So it's necessary to reload
+-			// the region from Meta.
+-			s.regionCache.InvalidateCachedRegionWithReason(ctx.Region, NoLeader)
+-			if err = bo.Backoff(
+-				retry.BoRegionScheduling,
+-				errors.Errorf("not leader: %v, ctx: %v", notLeader, ctx),
+-			); err != nil {
+-				return false, err
+-			}
+-			return false, nil
+-		} else {
+-			// don't backoff if a new leader is returned.
+-			s.regionCache.UpdateLeader(ctx.Region, notLeader.GetLeader(), ctx.AccessIdx)
+-			return true, nil
+-		}
+-	}
+-
+-	// Retry it when kvstore disk full happens.
+-	if diskFull := regionErr.GetDiskFull(); diskFull != nil {
+-		if err = bo.Backoff(
+-			retry.BoTiKVDiskFull,
+-			errors.Errorf("kvstore disk full: %v ctx: %v", diskFull.String(), ctx.String()),
+-		); err != nil {
+-			return false, nil
+-		}
+-		return true, nil
+-	}
+-
+-	if regionErr.GetRecoveryInProgress() != nil {
+-		s.regionCache.InvalidateCachedRegion(ctx.Region)
+-		logutil.Logger(bo.GetCtx()).Debug("kvstore reports `RecoveryInProgress`", zap.Stringer("ctx", ctx))
+-		err = bo.Backoff(retry.BoRegionRecoveryInProgress, errors.Errorf("region recovery in progress, ctx: %v", ctx))
+-		if err != nil {
+-			return false, err
+-		}
+-		return false, nil
+-	}
+-
+-	if regionErr.GetIsWitness() != nil {
+-		s.regionCache.InvalidateCachedRegion(ctx.Region)
+-		logutil.Logger(bo.GetCtx()).Debug("kvstore reports `IsWitness`", zap.Stringer("ctx", ctx))
+-		err = bo.Backoff(retry.BoIsWitness, errors.Errorf("is witness, ctx: %v", ctx))
+-		if err != nil {
+-			return false, err
+-		}
+-		return false, nil
+-	}
+-
+-	// Since we expect that the workload should be stopped during the flashback progress,
+-	// if a request meets the FlashbackInProgress error, it should stop retrying immediately
+-	// to avoid unnecessary backoff and potential unexpected data status to the user.
+-	if flashbackInProgress := regionErr.GetFlashbackInProgress(); flashbackInProgress != nil {
+-		logutil.Logger(bo.GetCtx()).Debug(
+-			"kvstore reports `FlashbackInProgress`",
+-			zap.Stringer("req", req),
+-			zap.Stringer("ctx", ctx),
+-		)
+-		if req != nil {
+-			// if the failure is caused by replica read, we can retry it with leader safely.
+-			if ctx.contextPatcher.replicaRead != nil && *ctx.contextPatcher.replicaRead {
+-				req.BusyThresholdMs = 0
+-				s.replicaSelector.busyThreshold = 0
+-				ctx.contextPatcher.replicaRead = nil
+-				ctx.contextPatcher.busyThreshold = nil
+-				return true, nil
+-			}
+-			if req.ReplicaReadType.IsFollowerRead() {
+-				s.replicaSelector = nil
+-				req.ReplicaReadType = kv.ReplicaReadLeader
+-				return true, nil
+-			}
+-		}
+-		return false, errors.Errorf(
+-			"region %d is in flashback progress, FlashbackStartTS is %d",
+-			flashbackInProgress.GetRegionId(), flashbackInProgress.GetFlashbackStartTs(),
+-		)
+-	}
+-	// This error means a second-phase flashback request is sent to a region that is not
+-	// prepared for the flashback before, it should stop retrying immediately to avoid
+-	// unnecessary backoff.
+-	if regionErr.GetFlashbackNotPrepared() != nil {
+-		logutil.Logger(bo.GetCtx()).Debug(
+-			"kvstore reports `FlashbackNotPrepared`",
+-			zap.Stringer("req", req),
+-			zap.Stringer("ctx", ctx),
+-		)
+-		return false, errors.Errorf(
+-			"region %d is not prepared for the flashback",
+-			regionErr.GetFlashbackNotPrepared().GetRegionId(),
+-		)
+-	}
+-
+-	// This peer is removed from the region. Invalidate the region since it's too stale.
+-	// if the region error is from follower, can we mark the peer unavailable and reload region asynchronously?
+-	if regionErr.GetRegionNotFound() != nil {
+-		s.regionCache.InvalidateCachedRegion(ctx.Region)
+-		return false, nil
+-	}
+-
+-	if regionErr.GetKeyNotInRegion() != nil {
+-		logutil.Logger(bo.GetCtx()).Error("kvstore reports `KeyNotInRegion`", zap.Stringer("req", req), zap.Stringer("ctx", ctx))
+-		s.regionCache.InvalidateCachedRegion(ctx.Region)
+-		return false, nil
+-	}
+-
+-	if epochNotMatch := regionErr.GetEpochNotMatch(); epochNotMatch != nil {
+-		logutil.Logger(bo.GetCtx()).Debug(
+-			"kvstore reports `EpochNotMatch` retry later",
+-			zap.Stringer("EpochNotMatch", epochNotMatch),
+-			zap.Stringer("ctx", ctx),
+-		)
+-		retry, err := s.regionCache.OnRegionEpochNotMatch(bo, ctx, epochNotMatch.CurrentRegions)
+-		if !retry && s.replicaSelector != nil {
+-			s.replicaSelector.invalidateRegion()
+-		}
+-		return retry, err
+-	}
+-
+-	if bucketVersionNotMatch := regionErr.GetBucketVersionNotMatch(); bucketVersionNotMatch != nil {
+-		logutil.Logger(bo.GetCtx()).Debug(
+-			"kvstore reports `BucketVersionNotMatch` retry later",
+-			zap.Uint64("latest bucket version", bucketVersionNotMatch.GetVersion()),
+-			zap.Uint64("request bucket version", ctx.BucketVersion),
+-			zap.Stringer("ctx", ctx),
+-		)
+-		// bucket version is not match, we should split this cop request again.
+-		s.regionCache.OnBucketVersionNotMatch(ctx, bucketVersionNotMatch.Version, bucketVersionNotMatch.Keys)
+-		return false, nil
+-	}
+-
+-	if serverIsBusy := regionErr.GetServerIsBusy(); serverIsBusy != nil {
+-		if s.replicaSelector != nil && strings.Contains(serverIsBusy.GetReason(), "deadline is exceeded") {
+-			if s.replicaSelector.onReadReqConfigurableTimeout(req) {
+-				return true, nil
+-			}
+-		}
+-		if s.replicaSelector != nil {
+-			return s.replicaSelector.onServerIsBusy(bo, ctx, req, serverIsBusy)
+-		}
+-		logutil.Logger(bo.GetCtx()).Warn(
+-			"kvstore reports `ServerIsBusy` retry later",
+-			zap.String("reason", regionErr.GetServerIsBusy().GetReason()),
+-			zap.Stringer("ctx", ctx),
+-		)
+-		if ctx != nil && ctx.Store != nil && ctx.Store.storeType.IsTiFlashRelatedType() {
+-			err = bo.Backoff(retry.BoTiFlashServerBusy, errors.Errorf("server is busy, ctx: %v", ctx))
+-		} else {
+-			err = bo.Backoff(retry.BoTiKVServerBusy, errors.Errorf("server is busy, ctx: %v", ctx))
+-		}
+-		if err != nil {
+-			return false, err
+-		}
+-		return true, nil
+-	}
+-
+-	// StaleCommand error indicates the request is sent to the old leader and its term is changed.
+-	// We can't know whether the request is committed or not, so it's an undetermined error too,
+-	// but we don't handle it now.
+-	if regionErr.GetStaleCommand() != nil {
+-		logutil.Logger(bo.GetCtx()).Debug("kvstore reports `StaleCommand`", zap.Stringer("ctx", ctx))
+-		if s.replicaSelector != nil {
+-			// Needn't backoff because the new leader should be elected soon
+-			// and the replicaSelector will try the next peer.
+-		} else {
+-			err = bo.Backoff(retry.BoStaleCmd, errors.Errorf("stale command, ctx: %v", ctx))
+-			if err != nil {
+-				return false, err
+-			}
+-		}
+-		return true, nil
+-	}
+-
+-	if storeNotMatch := regionErr.GetStoreNotMatch(); storeNotMatch != nil {
+-		// store not match
+-		logutil.Logger(bo.GetCtx()).Debug(
+-			"kvstore reports `StoreNotMatch` retry later",
+-			zap.Stringer("storeNotMatch", storeNotMatch),
+-			zap.Stringer("ctx", ctx),
+-		)
+-		s.regionCache.markStoreNeedCheck(ctx.Store)
+-		s.regionCache.InvalidateCachedRegion(ctx.Region)
+-		// It's possible the address of store is not changed but the DNS resolves to a different address in k8s environment,
+-		// so we always reconnect in this case.
+-		s.client.CloseAddr(ctx.Addr)
+-		return false, nil
+-	}
+-
+-	if regionErr.GetRaftEntryTooLarge() != nil {
+-		logutil.Logger(bo.GetCtx()).Warn("kvstore reports `RaftEntryTooLarge`", zap.Stringer("ctx", ctx))
+-		return false, errors.New(regionErr.String())
+-	}
+-
+-	if regionErr.GetMaxTimestampNotSynced() != nil {
+-		logutil.Logger(bo.GetCtx()).Debug("kvstore reports `MaxTimestampNotSynced`", zap.Stringer("ctx", ctx))
+-		err = bo.Backoff(retry.BoMaxTsNotSynced, errors.Errorf("max timestamp not synced, ctx: %v", ctx))
+-		if err != nil {
+-			return false, err
+-		}
+-		return true, nil
+-	}
+-
+-	// A read request may be sent to a peer which has not been initialized yet, we should retry in this case.
+-	if regionErr.GetRegionNotInitialized() != nil {
+-		logutil.Logger(bo.GetCtx()).Debug(
+-			"kvstore reports `RegionNotInitialized` retry later",
+-			zap.Uint64("store-id", ctx.Store.storeID),
+-			zap.Uint64("region-id", regionErr.GetRegionNotInitialized().GetRegionId()),
+-			zap.Stringer("ctx", ctx),
+-		)
+-		err = bo.Backoff(retry.BoMaxRegionNotInitialized, errors.Errorf("region not initialized"))
+-		if err != nil {
+-			return false, err
+-		}
+-		return true, nil
+-	}
+-
+-	// The read-index can't be handled timely because the region is splitting or merging.
+-	if regionErr.GetReadIndexNotReady() != nil {
+-		logutil.Logger(bo.GetCtx()).Debug(
+-			"kvstore reports `ReadIndexNotReady` retry later",
+-			zap.Uint64("store-id", ctx.Store.storeID),
+-			zap.Uint64("region-id", regionErr.GetRegionNotInitialized().GetRegionId()),
+-			zap.Stringer("ctx", ctx),
+-		)
+-		// The region can't provide service until split or merge finished, so backoff.
+-		err = bo.Backoff(retry.BoRegionScheduling, errors.Errorf("read index not ready, ctx: %v", ctx))
+-		if err != nil {
+-			return false, err
+-		}
+-		return true, nil
+-	}
+-
+-	if regionErr.GetProposalInMergingMode() != nil {
+-		logutil.Logger(bo.GetCtx()).Debug("kvstore reports `ProposalInMergingMode`", zap.Stringer("ctx", ctx))
+-		// The region is merging and it can't provide service until merge finished, so backoff.
+-		err = bo.Backoff(retry.BoRegionScheduling, errors.Errorf("region is merging, ctx: %v", ctx))
+-		if err != nil {
+-			return false, err
+-		}
+-		return true, nil
+-	}
+-
+-	// A stale read request may be sent to a peer which the data is not ready yet, we should retry in this case.
+-	// This error is specific to stale read and the target replica is randomly selected. If the request is sent
+-	// to the leader, the data must be ready, so we don't backoff here.
+-	if regionErr.GetDataIsNotReady() != nil {
+-		logutil.Logger(bo.GetCtx()).Warn(
+-			"kvstore reports `DataIsNotReady` retry later",
+-			zap.Uint64("store-id", ctx.Store.storeID),
+-			zap.Uint64("peer-id", regionErr.GetDataIsNotReady().GetPeerId()),
+-			zap.Uint64("region-id", regionErr.GetDataIsNotReady().GetRegionId()),
+-			zap.Uint64("safe-ts", regionErr.GetDataIsNotReady().GetSafeTs()),
+-			zap.Stringer("ctx", ctx),
+-		)
+-		if s.replicaSelector != nil {
+-			s.replicaSelector.onDataIsNotReady()
+-		}
+-		if !req.IsGlobalStaleRead() {
+-			// only backoff local stale reads as global should retry immediately against the leader as a normal read
+-			err = bo.Backoff(retry.BoMaxDataNotReady, errors.New("data is not ready"))
+-			if err != nil {
+-				return false, err
+-			}
+-		}
+-		return true, nil
+-	}
+-
+-	if isDeadlineExceeded(regionErr) && s.replicaSelector != nil && s.replicaSelector.onReadReqConfigurableTimeout(req) {
+-		return true, nil
+-	}
+-
+-	if mismatch := regionErr.GetMismatchPeerId(); mismatch != nil {
+-		logutil.Logger(bo.GetCtx()).Warn(
+-			"kvstore reports `MismatchPeerId`, invalidate region cache",
+-			zap.Uint64("req peer id", mismatch.GetRequestPeerId()),
+-			zap.Uint64("store peer id", mismatch.GetStorePeerId()),
+-		)
+-		if s.replicaSelector != nil {
+-			s.replicaSelector.invalidateRegion()
+-		}
+-		return false, nil
+-	}
+-
+-	logutil.Logger(bo.GetCtx()).Debug(
+-		"kvstore reports region failed",
+-		zap.Stringer("regionErr", regionErr),
+-		zap.Stringer("ctx", ctx),
+-	)
+-
+-	if s.replicaSelector != nil {
+-		// Try the next replica.
+-		return true, nil
+-	}
+-
+-	// When the request is sent to SQLEngine, there is no region in the request, so the region id will be 0.
+-	// So when region id is 0, there is no business with region cache.
+-	if ctx.Region.id != 0 {
+-		s.regionCache.InvalidateCachedRegion(ctx.Region)
+-	}
+-	// For other errors, we only drop cache here.
+-	// Because caller may need to re-split the request.
+-	return false, nil
++	panic("excised: onRegionError")
+ }
+ 
+ type staleReadMetricsCollector struct {

@@ -1,0 +1,381 @@
+diff --git a/discovery/pkg/discovery/server.go b/discovery/pkg/discovery/server.go
+--- a/discovery/pkg/discovery/server.go
++++ b/discovery/pkg/discovery/server.go
+@@ -17,14 +17,14 @@
+ package discovery
+ 
+ import (
+-	"encoding/json"
+-	"fmt"
++	_ "encoding/json"
++	_ "fmt"
+ 	"net/http"
+ 
+-	"k8s.io/klog/v2"
++	_ "k8s.io/klog/v2"
+ 
++	_ "example.internal/clustkit/discovery/apis/discovery.kops.k8s.io/v1alpha1"
+ 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+-	api "example.internal/clustkit/discovery/apis/discovery.kops.k8s.io/v1alpha1"
+ )
+ 
+ type Server struct {
+@@ -33,12 +33,7 @@
+ }
+ 
+ func NewServer(store Store) *Server {
+-	s := &Server{
+-		Store: store,
+-		mux:   http.NewServeMux(),
+-	}
+-	s.registerRoutes()
+-	return s
++	panic("excised: NewServer")
+ }
+ 
+ func (s *Server) registerRoutes() {
+@@ -70,7 +65,7 @@
+ }
+ 
+ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+-	s.mux.ServeHTTP(w, r)
++	panic("excised: Server.ServeHTTP")
+ }
+ 
+ func (s *Server) withAuth(next func(http.ResponseWriter, *http.Request, *UserInfo)) http.HandlerFunc {
+@@ -125,122 +120,17 @@
+ }
+ 
+ func (s *Server) handleListDiscoveryEndpoints(w http.ResponseWriter, r *http.Request, _ *UserInfo) {
+-	universeID := r.PathValue("universe")
+-	ns := r.PathValue("namespace") // Empty if not in path
+-
+-	endpoints, err := s.Store.ListDiscoveryEndpoints(r.Context(), universeID)
+-	if err != nil {
+-		http.Error(w, fmt.Sprintf("Error listing endpoints: %v", err), http.StatusInternalServerError)
+-		return
+-	}
+-
+-	resp := api.DiscoveryEndpointList{
+-		TypeMeta: metav1.TypeMeta{Kind: "DiscoveryEndpointList", APIVersion: "discovery.kops.k8s.io/v1alpha1"},
+-	}
+-
+-	for _, ep := range endpoints {
+-		if ns == "" || ep.ObjectMeta.Namespace == ns {
+-			resp.Items = append(resp.Items, *ep)
+-		}
+-	}
+-
+-	s.writeJSON(w, http.StatusOK, resp)
++	panic("excised: Server.handleListDiscoveryEndpoints")
+ }
+ 
+ func (s *Server) handleCreateDiscoveryEndpoint(w http.ResponseWriter, r *http.Request, userInfo *UserInfo) {
+-	universeID := r.PathValue("universe")
+-	ns := r.PathValue("namespace")
+-
+-	var input api.DiscoveryEndpoint
+-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+-		return
+-	}
+-
+-	// Validation: ensure the name matches the clientID from the cert
+-	if input.ObjectMeta.Name != "" && input.ObjectMeta.Name != userInfo.ClientID {
+-		http.Error(w, fmt.Sprintf("Forbidden: cannot register node name '%s' with client cert '%s'", input.ObjectMeta.Name, userInfo.ClientID), http.StatusForbidden)
+-		return
+-	}
+-
+-	// Validation: ensure the namespace in body matches the URL
+-	if input.ObjectMeta.Namespace != ns {
+-		http.Error(w, "Forbidden: namespace does not match", http.StatusForbidden)
+-		return
+-	}
+-
+-	if err := s.Store.UpsertDiscoveryEndpoint(r.Context(), universeID, &input); err != nil {
+-		http.Error(w, fmt.Sprintf("Error creating endpoint: %v", err), http.StatusInternalServerError)
+-		return
+-	}
+-
+-	// Return the created object
+-	s.writeJSON(w, http.StatusCreated, input)
++	panic("excised: Server.handleCreateDiscoveryEndpoint")
+ }
+ 
+ func (s *Server) handleApplyDiscoveryEndpoint(w http.ResponseWriter, r *http.Request, userInfo *UserInfo) {
+-	ctx := r.Context()
+-	log := klog.FromContext(ctx)
+-
+-	universeID := r.PathValue("universe")
+-	ns := r.PathValue("namespace")
+-	name := r.PathValue("name")
+-
+-	var input api.DiscoveryEndpoint
+-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+-		log.Info("invalid request body", "error", err)
+-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+-		return
+-	}
+-
+-	// Validation: ensure the name matches the clientID from the cert
+-	if input.ObjectMeta.Name != "" && input.ObjectMeta.Name != userInfo.ClientID {
+-		log.Info("Forbidden: cannot register node name", "name", input.ObjectMeta.Name, "clientID", userInfo.ClientID)
+-		http.Error(w, fmt.Sprintf("Forbidden: cannot register node name '%s' with client cert '%s'", input.ObjectMeta.Name, userInfo.ClientID), http.StatusForbidden)
+-		return
+-	}
+-
+-	// Validation: ensure the name in body matches the URL
+-	if input.ObjectMeta.Name != name {
+-		log.Info("Forbidden: name does not match", "name", input.ObjectMeta.Name, "expected", name)
+-		http.Error(w, "Forbidden: name does not match", http.StatusForbidden)
+-		return
+-	}
+-
+-	// Validation: ensure the namespace in body matches the URL
+-	if input.ObjectMeta.Namespace != ns {
+-		log.Info("Forbidden: namespace does not match", "namespace", input.ObjectMeta.Namespace, "expected", ns)
+-		http.Error(w, "Forbidden: namespace does not match", http.StatusForbidden)
+-		return
+-	}
+-
+-	if err := s.Store.UpsertDiscoveryEndpoint(r.Context(), universeID, &input); err != nil {
+-		log.Error(err, "error applying endpoint")
+-		http.Error(w, fmt.Sprintf("Error applying endpoint: %v", err), http.StatusInternalServerError)
+-		return
+-	}
+-
+-	// Return the created object
+-	s.writeJSON(w, http.StatusCreated, input)
+-
+-	log.Info("Applied endpoint", "namespace", input.ObjectMeta.Namespace, "name", input.ObjectMeta.Name, "universe", universeID)
++	panic("excised: Server.handleApplyDiscoveryEndpoint")
+ }
+ 
+ func (s *Server) handleGetDiscoveryEndpoint(w http.ResponseWriter, r *http.Request, _ *UserInfo) {
+-	universeID := r.PathValue("universe")
+-	ns := r.PathValue("namespace")
+-	name := r.PathValue("name")
+-
+-	found, err := s.Store.GetDiscoveryEndpoint(r.Context(), universeID, ns, name)
+-	if err != nil {
+-		http.Error(w, fmt.Sprintf("Error getting endpoint: %v", err), http.StatusInternalServerError)
+-		return
+-	}
+-
+-	if found == nil {
+-		http.NotFound(w, r)
+-		return
+-	}
+-
+-	s.writeJSON(w, http.StatusOK, found)
++	panic("excised: Server.handleGetDiscoveryEndpoint")
+ }
+diff --git a/discovery/pkg/discovery/oidc.go b/discovery/pkg/discovery/oidc.go
+--- a/discovery/pkg/discovery/oidc.go
++++ b/discovery/pkg/discovery/oidc.go
+@@ -20,117 +20,18 @@
+ 	"encoding/json"
+ 	"fmt"
+ 	"net/http"
+-	"strings"
++	_ "strings"
+ 
+-	"k8s.io/klog/v2"
+-	api "example.internal/clustkit/discovery/apis/discovery.kops.k8s.io/v1alpha1"
++	_ "example.internal/clustkit/discovery/apis/discovery.kops.k8s.io/v1alpha1"
++	_ "k8s.io/klog/v2"
+ )
+ 
+ func (s *Server) handleOIDCDiscovery(w http.ResponseWriter, r *http.Request) {
+-	ctx := r.Context()
+-	log := klog.FromContext(ctx)
+-
+-	universeID := r.PathValue("universe")
+-
+-	host := r.Host
+-	if host == "" {
+-		log.Info("Cannot determine host for OIDC discovery")
+-		http.Error(w, "Cannot determine host", http.StatusBadRequest)
+-		return
+-	}
+-
+-	endpoints, err := s.Store.ListDiscoveryEndpoints(r.Context(), universeID)
+-	if err != nil {
+-		http.Error(w, fmt.Sprintf("Error listing endpoints: %v", err), http.StatusInternalServerError)
+-		return
+-	}
+-
+-	issuerURL := "https://" + host + "/" + universeID + "/"
+-
+-	var oidcSpec *api.OIDCSpec
+-	for _, ep := range endpoints {
+-		if ep.Spec.OIDC != nil {
+-			oidcSpec = ep.Spec.OIDC
+-			break
+-		}
+-	}
+-
+-	if oidcSpec == nil {
+-		http.NotFound(w, r)
+-		return
+-	}
+-
+-	// Construct minimal OIDC discovery document
+-	jwksURI := issuerURL
+-	if !strings.HasSuffix(jwksURI, "/") {
+-		jwksURI += "/"
+-	}
+-	jwksURI += "openid/v1/jwks"
+-
+-	resp := OIDCDiscoveryResponse{
+-		Issuer:                           issuerURL,
+-		JWKSURI:                          jwksURI,
+-		ResponseTypesSupported:           []string{"id_token"},
+-		SubjectTypesSupported:            []string{"public"},
+-		IDTokenSigningAlgValuesSupported: []string{"RS256"},
+-	}
+-	s.writeJSON(w, http.StatusOK, resp)
+-
+-	log.Info("served OIDC discovery document", "universe", universeID)
++	panic("excised: Server.handleOIDCDiscovery")
+ }
+ 
+ func (s *Server) handleOIDCJWKS(w http.ResponseWriter, r *http.Request) {
+-	ctx := r.Context()
+-	log := klog.FromContext(ctx)
+-
+-	universeID := r.PathValue("universe")
+-
+-	endpoints, err := s.Store.ListDiscoveryEndpoints(r.Context(), universeID)
+-	if err != nil {
+-		log.Error(err, "error listing endpoints")
+-		http.Error(w, fmt.Sprintf("Error listing endpoints: %v", err), http.StatusInternalServerError)
+-		return
+-	}
+-
+-	type keyInfo struct {
+-		key      api.JSONWebKey
+-		lastSeen string
+-	}
+-	keysMap := make(map[string]keyInfo)
+-
+-	for _, ep := range endpoints {
+-		if ep.Spec.OIDC == nil {
+-			continue
+-		}
+-		for _, key := range ep.Spec.OIDC.Keys {
+-			kid := key.KeyID
+-			if kid == "" {
+-				continue
+-			}
+-
+-			// Conflict resolution: prefer newest LastSeen
+-			currentLastSeen := ep.Spec.LastSeen
+-			if existing, exists := keysMap[kid]; exists {
+-				if currentLastSeen > existing.lastSeen {
+-					keysMap[kid] = keyInfo{key: key, lastSeen: currentLastSeen}
+-				}
+-			} else {
+-				keysMap[kid] = keyInfo{key: key, lastSeen: currentLastSeen}
+-			}
+-		}
+-	}
+-
+-	var mergedKeys []api.JSONWebKey
+-	for _, info := range keysMap {
+-		mergedKeys = append(mergedKeys, info.key)
+-	}
+-
+-	response := map[string]interface{}{
+-		"keys": mergedKeys,
+-	}
+-
+-	s.writeJSON(w, http.StatusOK, response)
+-	log.Info("served OIDC JWKS", "universe", universeID)
++	panic("excised: Server.handleOIDCJWKS")
+ }
+ 
+ type OIDCDiscoveryResponse struct {
+diff --git a/discovery/pkg/discovery/memory_store.go b/discovery/pkg/discovery/memory_store.go
+--- a/discovery/pkg/discovery/memory_store.go
++++ b/discovery/pkg/discovery/memory_store.go
+@@ -19,7 +19,7 @@
+ import (
+ 	"context"
+ 	"sync"
+-	"time"
++	_ "time"
+ 
+ 	api "example.internal/clustkit/discovery/apis/discovery.kops.k8s.io/v1alpha1"
+ )
+@@ -30,9 +30,7 @@
+ }
+ 
+ func NewMemoryStore() *MemoryStore {
+-	return &MemoryStore{
+-		universes: make(map[string]*Universe),
+-	}
++	panic("excised: NewMemoryStore")
+ }
+ 
+ func (s *MemoryStore) getOrCreateUniverse(id string) *Universe {
+@@ -50,56 +48,13 @@
+ }
+ 
+ func (s *MemoryStore) UpsertDiscoveryEndpoint(ctx context.Context, universeID string, ep *api.DiscoveryEndpoint) error {
+-	u := s.getOrCreateUniverse(universeID)
+-
+-	u.mu.Lock()
+-	defer u.mu.Unlock()
+-
+-	// Ensure basic metadata is consistent
+-	ep.TypeMeta.Kind = "DiscoveryEndpoint"
+-	ep.TypeMeta.APIVersion = "discovery.kops.k8s.io/v1alpha1"
+-
+-	// Update LastSeen
+-	ep.Spec.LastSeen = time.Now().Format(time.RFC3339)
+-
+-	id := NamespacedName{
+-		Namespace: ep.ObjectMeta.Namespace,
+-		Name:      ep.ObjectMeta.Name,
+-	}
+-	u.DiscoveryEndpoints[id] = ep
+-	return nil
++	panic("excised: MemoryStore.UpsertDiscoveryEndpoint")
+ }
+ 
+ func (s *MemoryStore) ListDiscoveryEndpoints(ctx context.Context, universeID string) ([]*api.DiscoveryEndpoint, error) {
+-	// For listing, we don't necessarily need to create the universe if it doesn't exist,
+-	// but for consistency with getOrCreate logic in memory store, checking existence is enough.
+-	s.mu.RLock()
+-	u, ok := s.universes[universeID]
+-	s.mu.RUnlock()
+-
+-	if !ok {
+-		return []*api.DiscoveryEndpoint{}, nil
+-	}
+-
+-	u.mu.RLock()
+-	defer u.mu.RUnlock()
+-	endpoints := make([]*api.DiscoveryEndpoint, 0, len(u.DiscoveryEndpoints))
+-	for _, n := range u.DiscoveryEndpoints {
+-		endpoints = append(endpoints, n)
+-	}
+-	return endpoints, nil
++	panic("excised: MemoryStore.ListDiscoveryEndpoints")
+ }
+ 
+ func (s *MemoryStore) GetDiscoveryEndpoint(ctx context.Context, universeID string, ns, name string) (*api.DiscoveryEndpoint, error) {
+-	s.mu.RLock()
+-	u, ok := s.universes[universeID]
+-	s.mu.RUnlock()
+-
+-	if !ok {
+-		return nil, nil
+-	}
+-
+-	u.mu.RLock()
+-	defer u.mu.RUnlock()
+-	return u.DiscoveryEndpoints[NamespacedName{Namespace: ns, Name: name}], nil
++	panic("excised: MemoryStore.GetDiscoveryEndpoint")
+ }

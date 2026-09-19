@@ -77,7 +77,6 @@ experiments/harbor_nex/jobs/
 # task environments are full repo copies; rebuild from repos.yaml + excision patches
 experiments/pipeline/tasks/*/*/environment/src/
 experiments/pipeline/tasks_composerver/*/*/environment/src/
-experiments/pipeline/authored/*/*/_author/excised/
 experiments/pipeline/authored/*/*/_author/tree/
 experiments/harbor_nex/tasks*/*/environment/src/
 experiments/ablation_graph/out/

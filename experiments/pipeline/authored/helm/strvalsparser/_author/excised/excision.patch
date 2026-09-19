@@ -1,0 +1,562 @@
+diff --git a/pkg/strvals/literal_parser.go b/pkg/strvals/literal_parser.go
+index 0ba9181..4966f28 100644
+--- a/pkg/strvals/literal_parser.go
++++ b/pkg/strvals/literal_parser.go
+@@ -17,8 +17,8 @@ package strvals
+ 
+ import (
+ 	"bytes"
+-	"errors"
+-	"fmt"
++	_ "errors"
++	_ "fmt"
+ 	"io"
+ 	"strconv"
+ )
+@@ -62,16 +62,7 @@ func newLiteralParser(sc *bytes.Buffer, data map[string]any) *literalParser {
+ }
+ 
+ func (t *literalParser) parse() error {
+-	for {
+-		err := t.key(t.data, 0)
+-		if err == nil {
+-			continue
+-		}
+-		if errors.Is(err, io.EOF) {
+-			return nil
+-		}
+-		return err
+-	}
++	panic("excised: literalParser.parse")
+ }
+ 
+ func runesUntilLiteral(in io.RuneReader, stop map[rune]bool) ([]rune, rune, error) {
+@@ -89,72 +80,7 @@ func runesUntilLiteral(in io.RuneReader, stop map[rune]bool) ([]rune, rune, erro
+ }
+ 
+ func (t *literalParser) key(data map[string]any, nestedNameLevel int) (reterr error) {
+-	defer func() {
+-		if r := recover(); r != nil {
+-			reterr = fmt.Errorf("unable to parse key: %s", r)
+-		}
+-	}()
+-	stop := runeSet([]rune{'=', '[', '.'})
+-	for {
+-		switch key, lastRune, err := runesUntilLiteral(t.sc, stop); {
+-		case err != nil:
+-			if len(key) == 0 {
+-				return err
+-			}
+-			return fmt.Errorf("key %q has no value", string(key))
+-
+-		case lastRune == '=':
+-			// found end of key: swallow the '=' and get the value
+-			value, err := t.val()
+-			if err == nil && !errors.Is(err, io.EOF) {
+-				return err
+-			}
+-			set(data, string(key), string(value))
+-			return nil
+-
+-		case lastRune == '.':
+-			// Check value name is within the maximum nested name level
+-			nestedNameLevel++
+-			if nestedNameLevel > MaxNestedNameLevel {
+-				return fmt.Errorf("value name nested level is greater than maximum supported nested level of %d", MaxNestedNameLevel)
+-			}
+-
+-			// first, create or find the target map in the given data
+-			inner := map[string]any{}
+-			if _, ok := data[string(key)]; ok {
+-				inner = data[string(key)].(map[string]any)
+-			}
+-
+-			// recurse on sub-tree with remaining data
+-			err := t.key(inner, nestedNameLevel)
+-			if err == nil && len(inner) == 0 {
+-				return fmt.Errorf("key map %q has no value", string(key))
+-			}
+-			if len(inner) != 0 {
+-				set(data, string(key), inner)
+-			}
+-			return err
+-
+-		case lastRune == '[':
+-			// We are in a list index context, so we need to set an index.
+-			i, err := t.keyIndex()
+-			if err != nil {
+-				return fmt.Errorf("error parsing index: %w", err)
+-			}
+-			kk := string(key)
+-
+-			// find or create target list
+-			list := []any{}
+-			if _, ok := data[kk]; ok {
+-				list = data[kk].([]any)
+-			}
+-
+-			// now we need to get the value after the ]
+-			list, err = t.listItem(list, i, nestedNameLevel)
+-			set(data, kk, list)
+-			return err
+-		}
+-	}
++	panic("excised: literalParser.key")
+ }
+ 
+ func (t *literalParser) keyIndex() (int, error) {
+@@ -170,74 +96,9 @@ func (t *literalParser) keyIndex() (int, error) {
+ }
+ 
+ func (t *literalParser) listItem(list []any, i, nestedNameLevel int) ([]any, error) {
+-	if i < 0 {
+-		return list, fmt.Errorf("negative %d index not allowed", i)
+-	}
+-	stop := runeSet([]rune{'[', '.', '='})
+-
+-	switch key, lastRune, err := runesUntilLiteral(t.sc, stop); {
+-	case len(key) > 0:
+-		return list, fmt.Errorf("unexpected data at end of array index: %q", key)
+-
+-	case err != nil:
+-		return list, err
+-
+-	case lastRune == '=':
+-		value, err := t.val()
+-		if err != nil && !errors.Is(err, io.EOF) {
+-			return list, err
+-		}
+-		return setIndex(list, i, string(value))
+-
+-	case lastRune == '.':
+-		// we have a nested object. Send to t.key
+-		inner := map[string]any{}
+-		if len(list) > i {
+-			var ok bool
+-			inner, ok = list[i].(map[string]any)
+-			if !ok {
+-				// We have indices out of order. Initialize empty value.
+-				list[i] = map[string]any{}
+-				inner = list[i].(map[string]any)
+-			}
+-		}
+-
+-		// recurse
+-		err := t.key(inner, nestedNameLevel)
+-		if err != nil {
+-			return list, err
+-		}
+-		return setIndex(list, i, inner)
+-
+-	case lastRune == '[':
+-		// now we have a nested list. Read the index and handle.
+-		nextI, err := t.keyIndex()
+-		if err != nil {
+-			return list, fmt.Errorf("error parsing index: %w", err)
+-		}
+-		var crtList []any
+-		if len(list) > i {
+-			// If nested list already exists, take the value of list to next cycle.
+-			existed := list[i]
+-			if existed != nil {
+-				crtList = list[i].([]any)
+-			}
+-		}
+-
+-		// Now we need to get the value after the ].
+-		list2, err := t.listItem(crtList, nextI, nestedNameLevel)
+-		if err != nil {
+-			return list, err
+-		}
+-		return setIndex(list, i, list2)
+-
+-	default:
+-		return nil, fmt.Errorf("parse error: unexpected token %v", lastRune)
+-	}
++	panic("excised: literalParser.listItem")
+ }
+ 
+ func (t *literalParser) val() ([]rune, error) {
+-	stop := runeSet([]rune{})
+-	v, _, err := runesUntilLiteral(t.sc, stop)
+-	return v, err
++	panic("excised: literalParser.val")
+ }
+diff --git a/pkg/strvals/parser.go b/pkg/strvals/parser.go
+index 82664a6..08c6635 100644
+--- a/pkg/strvals/parser.go
++++ b/pkg/strvals/parser.go
+@@ -17,13 +17,13 @@ package strvals
+ 
+ import (
+ 	"bytes"
+-	"encoding/json"
++	_ "encoding/json"
+ 	"errors"
+ 	"fmt"
+ 	"io"
+-	"strconv"
++	_ "strconv"
+ 	"strings"
+-	"unicode"
++	_ "unicode"
+ 
+ 	"sigs.k8s.io/yaml"
+ )
+@@ -156,16 +156,7 @@ func newFileParser(sc *bytes.Buffer, data map[string]any, reader RunesValueReade
+ }
+ 
+ func (t *parser) parse() error {
+-	for {
+-		err := t.key(t.data, 0)
+-		if err == nil {
+-			continue
+-		}
+-		if errors.Is(err, io.EOF) {
+-			return nil
+-		}
+-		return err
+-	}
++	panic("excised: parser.parse")
+ }
+ 
+ func runeSet(r []rune) map[rune]bool {
+@@ -177,113 +168,7 @@ func runeSet(r []rune) map[rune]bool {
+ }
+ 
+ func (t *parser) key(data map[string]any, nestedNameLevel int) (reterr error) {
+-	defer func() {
+-		if r := recover(); r != nil {
+-			reterr = fmt.Errorf("unable to parse key: %s", r)
+-		}
+-	}()
+-	stop := runeSet([]rune{'=', '[', ',', '.'})
+-	for {
+-		switch k, last, err := runesUntil(t.sc, stop); {
+-		case err != nil:
+-			if len(k) == 0 {
+-				return err
+-			}
+-			return fmt.Errorf("key %q has no value", string(k))
+-		case last == '[':
+-			// We are in a list index context, so we need to set an index.
+-			i, err := t.keyIndex()
+-			if err != nil {
+-				return fmt.Errorf("error parsing index: %w", err)
+-			}
+-			kk := string(k)
+-			// Find or create target list
+-			list := []any{}
+-			if _, ok := data[kk]; ok {
+-				list = data[kk].([]any)
+-			}
+-
+-			// Now we need to get the value after the ].
+-			list, err = t.listItem(list, i, nestedNameLevel)
+-			set(data, kk, list)
+-			return err
+-		case last == '=':
+-			if t.isjsonval {
+-				empval, err := t.emptyVal()
+-				if err != nil {
+-					return err
+-				}
+-				if empval {
+-					set(data, string(k), nil)
+-					return nil
+-				}
+-				// parse jsonvals by using Go’s JSON standard library
+-				// Decode is preferred to Unmarshal in order to parse just the json parts of the list key1=jsonval1,key2=jsonval2,...
+-				// Since Decode has its own buffer that consumes more characters (from underlying t.sc) than the ones actually decoded,
+-				// we invoke Decode on a separate reader built with a copy of what is left in t.sc. After Decode is executed, we
+-				// discard in t.sc the chars of the decoded json value (the number of those characters is returned by InputOffset).
+-				var jsonval any
+-				dec := json.NewDecoder(strings.NewReader(t.sc.String()))
+-				if err := dec.Decode(&jsonval); err != nil {
+-					return err
+-				}
+-				set(data, string(k), jsonval)
+-				if _, err = io.CopyN(io.Discard, t.sc, dec.InputOffset()); err != nil {
+-					return err
+-				}
+-				// skip possible blanks and comma
+-				_, err = t.emptyVal()
+-				return err
+-			}
+-			// End of key. Consume =, Get value.
+-			// FIXME: Get value list first
+-			vl, e := t.valList()
+-			switch {
+-			case e == nil:
+-				set(data, string(k), vl)
+-				return nil
+-			case errors.Is(e, io.EOF):
+-				set(data, string(k), "")
+-				return e
+-			case errors.Is(e, ErrNotList):
+-				rs, e := t.val()
+-				if e != nil && !errors.Is(e, io.EOF) {
+-					return e
+-				}
+-				v, e := t.reader(rs)
+-				set(data, string(k), v)
+-				return e
+-			default:
+-				return e
+-			}
+-		case last == ',':
+-			// No value given. Set the value to empty string. Return error.
+-			set(data, string(k), "")
+-			return fmt.Errorf("key %q has no value (cannot end with ,)", string(k))
+-		case last == '.':
+-			// Check value name is within the maximum nested name level
+-			nestedNameLevel++
+-			if nestedNameLevel > MaxNestedNameLevel {
+-				return fmt.Errorf("value name nested level is greater than maximum supported nested level of %d", MaxNestedNameLevel)
+-			}
+-
+-			// First, create or find the target map.
+-			inner := map[string]any{}
+-			if _, ok := data[string(k)]; ok {
+-				inner = data[string(k)].(map[string]any)
+-			}
+-
+-			// Recurse
+-			e := t.key(inner, nestedNameLevel)
+-			if e == nil && len(inner) == 0 {
+-				return fmt.Errorf("key map %q has no value", string(k))
+-			}
+-			if len(inner) != 0 {
+-				set(data, string(k), inner)
+-			}
+-			return e
+-		}
+-	}
++	panic("excised: parser.key")
+ }
+ 
+ func set(data map[string]any, key string, val any) {
+@@ -320,181 +205,27 @@ func setIndex(list []any, index int, val any) (l2 []any, err error) {
+ }
+ 
+ func (t *parser) keyIndex() (int, error) {
+-	// First, get the key.
+-	stop := runeSet([]rune{']'})
+-	v, _, err := runesUntil(t.sc, stop)
+-	if err != nil {
+-		return 0, err
+-	}
+-	// v should be the index
+-	return strconv.Atoi(string(v))
++	panic("excised: parser.keyIndex")
+ }
+ 
+ func (t *parser) listItem(list []any, i, nestedNameLevel int) ([]any, error) {
+-	if i < 0 {
+-		return list, fmt.Errorf("negative %d index not allowed", i)
+-	}
+-	stop := runeSet([]rune{'[', '.', '='})
+-	switch k, last, err := runesUntil(t.sc, stop); {
+-	case len(k) > 0:
+-		return list, fmt.Errorf("unexpected data at end of array index: %q", k)
+-	case err != nil:
+-		return list, err
+-	case last == '=':
+-		if t.isjsonval {
+-			empval, err := t.emptyVal()
+-			if err != nil {
+-				return list, err
+-			}
+-			if empval {
+-				return setIndex(list, i, nil)
+-			}
+-			// parse jsonvals by using Go’s JSON standard library
+-			// Decode is preferred to Unmarshal in order to parse just the json parts of the list key1=jsonval1,key2=jsonval2,...
+-			// Since Decode has its own buffer that consumes more characters (from underlying t.sc) than the ones actually decoded,
+-			// we invoke Decode on a separate reader built with a copy of what is left in t.sc. After Decode is executed, we
+-			// discard in t.sc the chars of the decoded json value (the number of those characters is returned by InputOffset).
+-			var jsonval any
+-			dec := json.NewDecoder(strings.NewReader(t.sc.String()))
+-			if err := dec.Decode(&jsonval); err != nil {
+-				return list, err
+-			}
+-			if list, err = setIndex(list, i, jsonval); err != nil {
+-				return list, err
+-			}
+-			if _, err = io.CopyN(io.Discard, t.sc, dec.InputOffset()); err != nil {
+-				return list, err
+-			}
+-			// skip possible blanks and comma
+-			_, err = t.emptyVal()
+-			return list, err
+-		}
+-		vl, e := t.valList()
+-		switch {
+-		case e == nil:
+-			return setIndex(list, i, vl)
+-		case errors.Is(e, io.EOF):
+-			return setIndex(list, i, "")
+-		case errors.Is(e, ErrNotList):
+-			rs, e := t.val()
+-			if e != nil && !errors.Is(e, io.EOF) {
+-				return list, e
+-			}
+-			v, e := t.reader(rs)
+-			if e != nil {
+-				return list, e
+-			}
+-			return setIndex(list, i, v)
+-		default:
+-			return list, e
+-		}
+-	case last == '[':
+-		// now we have a nested list. Read the index and handle.
+-		nextI, err := t.keyIndex()
+-		if err != nil {
+-			return list, fmt.Errorf("error parsing index: %w", err)
+-		}
+-		var crtList []any
+-		if len(list) > i {
+-			// If nested list already exists, take the value of list to next cycle.
+-			existed := list[i]
+-			if existed != nil {
+-				crtList = list[i].([]any)
+-			}
+-		}
+-		// Now we need to get the value after the ].
+-		list2, err := t.listItem(crtList, nextI, nestedNameLevel)
+-		if err != nil {
+-			return list, err
+-		}
+-		return setIndex(list, i, list2)
+-	case last == '.':
+-		// We have a nested object. Send to t.key
+-		inner := map[string]any{}
+-		if len(list) > i {
+-			var ok bool
+-			inner, ok = list[i].(map[string]any)
+-			if !ok {
+-				// We have indices out of order. Initialize empty value.
+-				list[i] = map[string]any{}
+-				inner = list[i].(map[string]any)
+-			}
+-		}
+-
+-		// Recurse
+-		e := t.key(inner, nestedNameLevel)
+-		if e != nil {
+-			return list, e
+-		}
+-		return setIndex(list, i, inner)
+-	default:
+-		return nil, fmt.Errorf("parse error: unexpected token %v", last)
+-	}
++	panic("excised: parser.listItem")
+ }
+ 
+ // check for an empty value
+ // read and consume optional spaces until comma or EOF (empty val) or any other char (not empty val)
+ // comma and spaces are consumed, while any other char is not consumed
+ func (t *parser) emptyVal() (bool, error) {
+-	for {
+-		r, _, e := t.sc.ReadRune()
+-		if e == io.EOF {
+-			return true, nil
+-		}
+-		if e != nil {
+-			return false, e
+-		}
+-		if r == ',' {
+-			return true, nil
+-		}
+-		if !unicode.IsSpace(r) {
+-			t.sc.UnreadRune()
+-			return false, nil
+-		}
+-	}
++	panic("excised: parser.emptyVal")
+ }
+ 
+ func (t *parser) val() ([]rune, error) {
+-	stop := runeSet([]rune{','})
+-	v, _, err := runesUntil(t.sc, stop)
+-	return v, err
++	panic("excised: parser.val")
+ }
+ 
+ func (t *parser) valList() ([]any, error) {
+-	r, _, e := t.sc.ReadRune()
+-	if e != nil {
+-		return []any{}, e
+-	}
+-
+-	if r != '{' {
+-		t.sc.UnreadRune()
+-		return []any{}, ErrNotList
+-	}
+-
+-	list := []any{}
+-	stop := runeSet([]rune{',', '}'})
+-	for {
+-		switch rs, last, err := runesUntil(t.sc, stop); {
+-		case err != nil:
+-			if errors.Is(err, io.EOF) {
+-				err = errors.New("list must terminate with '}'")
+-			}
+-			return list, err
+-		case last == '}':
+-			// If this is followed by ',', consume it.
+-			if r, _, e := t.sc.ReadRune(); e == nil && r != ',' {
+-				t.sc.UnreadRune()
+-			}
+-			v, e := t.reader(rs)
+-			list = append(list, v)
+-			return list, e
+-		case last == ',':
+-			v, e := t.reader(rs)
+-			if e != nil {
+-				return list, e
+-			}
+-			list = append(list, v)
+-		}
++	panic("excised: parser.valList")
++}
+ 	}
+ }
+ 
+@@ -524,34 +255,5 @@ func inMap(k rune, m map[rune]bool) bool {
+ }
+ 
+ func typedVal(v []rune, st bool) any {
+-	val := string(v)
+-
+-	if st {
+-		return val
+-	}
+-
+-	if strings.EqualFold(val, "true") {
+-		return true
+-	}
+-
+-	if strings.EqualFold(val, "false") {
+-		return false
+-	}
+-
+-	if strings.EqualFold(val, "null") {
+-		return nil
+-	}
+-
+-	if strings.EqualFold(val, "0") {
+-		return int64(0)
+-	}
+-
+-	// If this value does not start with zero, try parsing it to an int
+-	if val != "" && val[0] != '0' {
+-		if iv, err := strconv.ParseInt(val, 10, 64); err == nil {
+-			return iv
+-		}
+-	}
+-
+-	return val
++	panic("excised: typedVal")
+ }

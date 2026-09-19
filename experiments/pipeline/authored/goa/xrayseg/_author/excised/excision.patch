@@ -1,0 +1,207 @@
+--- a/middleware/xray/segment.go
++++ b/middleware/xray/segment.go
+@@ -142,37 +142,10 @@
+ 
+ // NewSegment creates a new segment that gets written to the given connection
+ // on close.
+-func NewSegment(name, traceID, spanID string, conn net.Conn) *Segment {
+-	return &Segment{
+-		Mutex:      &sync.Mutex{},
+-		Name:       name,
+-		TraceID:    traceID,
+-		ID:         spanID,
+-		StartTime:  now(),
+-		InProgress: true,
+-		conn:       conn,
+-	}
+-}
++func NewSegment(name, traceID, spanID string, conn net.Conn) *Segment { panic("excised: NewSegment") }
+ 
+ // NewSubsegment creates a subsegment of s.
+-func (s *Segment) NewSubsegment(name string) *Segment {
+-	s.Lock()
+-	defer s.Unlock()
+-
+-	sub := &Segment{
+-		Mutex:      &sync.Mutex{},
+-		ID:         NewID(),
+-		TraceID:    s.TraceID,
+-		ParentID:   s.ID,
+-		Type:       "subsegment",
+-		Name:       name,
+-		StartTime:  now(),
+-		InProgress: true,
+-		Parent:     s,
+-		conn:       s.conn,
+-	}
+-	return sub
+-}
++func (s *Segment) NewSubsegment(name string) *Segment { panic("excised: NewSubsegment") }
+ 
+ // RecordError traces an error. The client may also want to initialize the
+ // fault field of s.
+@@ -180,33 +153,7 @@
+ // The trace contains a stack trace and a cause for the error if the argument
+ // was created using one of the New, Errorf, Wrap or Wrapf functions of the
+ // github.com/pkg/errors package. Otherwise the Stack and Cause fields are empty.
+-func (s *Segment) RecordError(e error) {
+-	xerr := exceptionData(e)
+-
+-	s.Lock()
+-	defer s.Unlock()
+-
+-	// set Error to indicate an internal error due to service being unreachable, etc.
+-	// otherwise if a response was received then the status will determine Error vs. Fault.
+-	//
+-	// first check if the other flags have already been set in case these methods are being
+-	// called directly instead of using xray.WrapClient(), etc.
+-	if !s.Fault && !s.Throttle {
+-		s.Error = true
+-	}
+-	if s.Cause == nil {
+-		wd, _ := os.Getwd()
+-		s.Cause = &Cause{WorkingDirectory: wd}
+-	}
+-	s.Cause.Exceptions = append(s.Cause.Exceptions, xerr)
+-	p := s.Parent
+-	for p != nil {
+-		if p.Cause == nil {
+-			p.Cause = &Cause{ID: s.ID}
+-		}
+-		p = p.Parent
+-	}
+-}
++func (s *Segment) RecordError(e error) { panic("excised: RecordError") }
+ 
+ // Capture creates a subsegment to record the execution of the given function.
+ // Usage:
+@@ -215,17 +162,10 @@
+ //	s.Capture("slow-func", func() {
+ //	    // ... some long executing code
+ //	})
+-func (s *Segment) Capture(name string, fn func()) {
+-	sub := s.NewSubsegment(name)
+-	sub.SubmitInProgress()
+-	defer sub.Close()
+-	fn()
+-}
++func (s *Segment) Capture(name string, fn func()) { panic("excised: Capture") }
+ 
+ // AddAnnotation adds a key-value pair that can be queried by AWS X-Ray.
+-func (s *Segment) AddAnnotation(key, value string) {
+-	s.addAnnotation(key, value)
+-}
++func (s *Segment) AddAnnotation(key, value string) { panic("excised: AddAnnotation") }
+ 
+ // AddInt64Annotation adds a key-value pair that can be queried by AWS X-Ray.
+ func (s *Segment) AddInt64Annotation(key string, value int64) {
+@@ -239,15 +179,7 @@
+ 
+ // addAnnotation adds a key-value pair that can be queried by AWS X-Ray.
+ // AWS X-Ray only supports annotations of type string, integer or boolean.
+-func (s *Segment) addAnnotation(key string, value any) {
+-	s.Lock()
+-	defer s.Unlock()
+-
+-	if s.Annotations == nil {
+-		s.Annotations = make(map[string]any)
+-	}
+-	s.Annotations[key] = value
+-}
++func (s *Segment) addAnnotation(key string, value any) { panic("excised: addAnnotation") }
+ 
+ // AddMetadata adds a key-value pair to the metadata.default attribute.
+ // Metadata is not queryable, but is recorded.
+@@ -267,26 +199,10 @@
+ 
+ // addMetadata adds a key-value pair that can be queried by AWS X-Ray.
+ // AWS X-Ray only supports annotations of type string, integer or boolean.
+-func (s *Segment) addMetadata(key string, value any) {
+-	s.Lock()
+-	defer s.Unlock()
+-
+-	if s.Metadata == nil {
+-		s.Metadata = make(map[string]map[string]any)
+-		s.Metadata["default"] = make(map[string]any)
+-	}
+-	s.Metadata["default"][key] = value
+-}
++func (s *Segment) addMetadata(key string, value any) { panic("excised: addMetadata") }
+ 
+ // Close closes the segment by setting its EndTime.
+-func (s *Segment) Close() {
+-	s.Lock()
+-	defer s.Unlock()
+-
+-	s.EndTime = now()
+-	s.InProgress = false
+-	s.flush()
+-}
++func (s *Segment) Close() { panic("excised: Close") }
+ 
+ // SubmitInProgress sends this in-progress segment to the AWS X-Ray daemon.
+ // This way, the segment will be immediately visible in the UI, with status
+@@ -297,52 +213,21 @@
+ // See the `in_progress` docs:
+ //
+ //	https://docs.aws.amazon.com/xray/latest/devguide/xray-api-segmentdocuments.html#api-segmentdocuments-fields
+-func (s *Segment) SubmitInProgress() {
+-	s.Lock()
+-	defer s.Unlock()
+-
+-	s.submitInProgressSegment.Do(func() {
+-		if s.InProgress {
+-			s.flush()
+-		}
+-	})
+-}
++func (s *Segment) SubmitInProgress() { panic("excised: SubmitInProgress") }
+ 
+ // flush sends the segment to the AWS X-Ray daemon.
+-func (s *Segment) flush() {
+-	b, _ := json.Marshal(s)
+-	// append so we make only one call to Write to be goroutine-safe
+-	s.conn.Write(append([]byte(UDPHeader), b...)) // nolint: errcheck
+-}
++func (s *Segment) flush() { panic("excised: flush") }
+ 
+ // exceptionData creates an Exception from an error.
+-func exceptionData(e error) *Exception {
+-	var xerr *Exception
+-	if c, ok := e.(causer); ok {
+-		xerr = &Exception{Message: c.Cause().Error()}
+-	} else {
+-		xerr = &Exception{Message: e.Error()}
+-	}
+-	if s, ok := e.(stackTracer); ok {
+-		st := s.StackTrace()
+-		ln := min(len(st), maxStackDepth)
+-		frames := make([]*StackEntry, ln)
+-		for i := range ln {
+-			f := st[i]
+-			line, _ := strconv.Atoi(fmt.Sprintf("%d", f))
+-			frames[i] = &StackEntry{
+-				Path:  fmt.Sprintf("%s", f),
+-				Line:  line,
+-				Label: fmt.Sprintf("%s", f),
+-			}
+-		}
+-		xerr.Stack = frames
+-	}
+-
+-	return xerr
+-}
++func exceptionData(e error) *Exception { panic("excised: exceptionData") }
+ 
+ // now returns the current time as a float appropriate for X-Ray processing.
+-func now() float64 {
+-	return float64(time.Now().Truncate(time.Millisecond).UnixNano()) / 1e9
++func now() float64 { panic("excised: now") }
++
++func _keepExcisedImports() {
++	_ = json.Marshal
++	_ = fmt.Sprintf
++	_ = os.Getwd
++	_ = strconv.Itoa
++	_ = time.Now
+ }

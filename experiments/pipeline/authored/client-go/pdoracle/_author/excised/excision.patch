@@ -1,0 +1,155 @@
+--- a/oracle/oracles/pd.go
++++ b/oracle/oracles/pd.go
+@@ -98,21 +98,12 @@
+ // IsExpired returns whether lockTS+TTL is expired, both are ms. It uses `lastTS`
+ // to compare, may return false negative result temporarily.
+ func (o *pdOracle) IsExpired(lockTS, TTL uint64, opt *oracle.Option) bool {
+-	lastTS, exist := o.getLastTS(opt.TxnScope)
+-	if !exist {
+-		return true
+-	}
+-	return oracle.ExtractPhysical(lastTS) >= oracle.ExtractPhysical(lockTS)+int64(TTL)
++	panic("excised: IsExpired")
+ }
+ 
+ // GetTimestamp gets a new increasing time.
+ func (o *pdOracle) GetTimestamp(ctx context.Context, opt *oracle.Option) (uint64, error) {
+-	ts, err := o.getTimestamp(ctx, opt.TxnScope)
+-	if err != nil {
+-		return 0, err
+-	}
+-	o.setLastTS(ts, opt.TxnScope)
+-	return ts, nil
++	panic("excised: GetTimestamp")
+ }
+ 
+ type tsFuture struct {
+@@ -123,25 +114,11 @@
+ 
+ // Wait implements the oracle.Future interface.
+ func (f *tsFuture) Wait() (uint64, error) {
+-	now := time.Now()
+-	physical, logical, err := f.TSFuture.Wait()
+-	metrics.TiKVTSFutureWaitDuration.Observe(time.Since(now).Seconds())
+-	if err != nil {
+-		return 0, errors.WithStack(err)
+-	}
+-	ts := oracle.ComposeTS(physical, logical)
+-	f.o.setLastTS(ts, f.txnScope)
+-	return ts, nil
++	panic("excised: Wait")
+ }
+ 
+ func (o *pdOracle) GetTimestampAsync(ctx context.Context, opt *oracle.Option) oracle.Future {
+-	var ts pd.TSFuture
+-	if opt.TxnScope == oracle.GlobalTxnScope || opt.TxnScope == "" {
+-		ts = o.c.GetTSAsync(ctx)
+-	} else {
+-		ts = o.c.GetLocalTSAsync(ctx, opt.TxnScope)
+-	}
+-	return &tsFuture{ts, o, opt.TxnScope}
++	panic("excised: GetTimestampAsync")
+ }
+ 
+ func (o *pdOracle) getTimestamp(ctx context.Context, txnScope string) (uint64, error) {
+@@ -222,41 +199,12 @@
+ }
+ 
+ func (o *pdOracle) updateTS(ctx context.Context) {
+-	currentInterval := o.lastTSUpdateInterval.Load()
+-	ticker := time.NewTicker(time.Duration(currentInterval))
+-	defer ticker.Stop()
+-	for {
+-		select {
+-		case <-ticker.C:
+-			// Update the timestamp for each txnScope
+-			o.lastTSMap.Range(func(key, _ interface{}) bool {
+-				txnScope := key.(string)
+-				ts, err := o.getTimestamp(ctx, txnScope)
+-				if err != nil {
+-					logutil.Logger(ctx).Error("updateTS error", zap.String("txnScope", txnScope), zap.Error(err))
+-					return true
+-				}
+-				o.setLastTS(ts, txnScope)
+-				return true
+-			})
+-			newInterval := o.lastTSUpdateInterval.Load()
+-			if newInterval != currentInterval {
+-				currentInterval = newInterval
+-				ticker.Reset(time.Duration(currentInterval))
+-			}
+-		case <-o.quit:
+-			return
+-		}
+-	}
++	panic("excised: updateTS")
+ }
+ 
+ // UntilExpired implement oracle.Oracle interface.
+ func (o *pdOracle) UntilExpired(lockTS uint64, TTL uint64, opt *oracle.Option) int64 {
+-	lastTS, ok := o.getLastTS(opt.TxnScope)
+-	if !ok {
+-		return 0
+-	}
+-	return oracle.ExtractPhysical(lockTS) + int64(TTL) - oracle.ExtractPhysical(lastTS)
++	panic("excised: UntilExpired")
+ }
+ 
+ func (o *pdOracle) Close() {
+@@ -271,7 +219,7 @@
+ 
+ // Wait implements the oracle.Future interface.
+ func (f lowResolutionTsFuture) Wait() (uint64, error) {
+-	return f.ts, f.err
++	panic("excised: Wait")
+ }
+ 
+ // SetLowResolutionTimestampUpdateInterval sets the refresh interval for low resolution timestamps. Note this will take
+@@ -286,25 +234,11 @@
+ 
+ // GetLowResolutionTimestamp gets a new increasing time.
+ func (o *pdOracle) GetLowResolutionTimestamp(ctx context.Context, opt *oracle.Option) (uint64, error) {
+-	lastTS, ok := o.getLastTS(opt.TxnScope)
+-	if !ok {
+-		return 0, errors.Errorf("get low resolution timestamp fail, invalid txnScope = %s", opt.TxnScope)
+-	}
+-	return lastTS, nil
++	panic("excised: GetLowResolutionTimestamp")
+ }
+ 
+ func (o *pdOracle) GetLowResolutionTimestampAsync(ctx context.Context, opt *oracle.Option) oracle.Future {
+-	lastTS, ok := o.getLastTS(opt.TxnScope)
+-	if !ok {
+-		return lowResolutionTsFuture{
+-			ts:  0,
+-			err: errors.Errorf("get low resolution timestamp async fail, invalid txnScope = %s", opt.TxnScope),
+-		}
+-	}
+-	return lowResolutionTsFuture{
+-		ts:  lastTS,
+-		err: nil,
+-	}
++	panic("excised: GetLowResolutionTimestampAsync")
+ }
+ 
+ func (o *pdOracle) getStaleTimestamp(txnScope string, prevSecond uint64) (uint64, error) {
+@@ -325,18 +259,7 @@
+ 
+ // GetStaleTimestamp generate a TSO which represents for the TSO prevSecond secs ago.
+ func (o *pdOracle) GetStaleTimestamp(ctx context.Context, txnScope string, prevSecond uint64) (ts uint64, err error) {
+-	ts, err = o.getStaleTimestamp(txnScope, prevSecond)
+-	if err != nil {
+-		if !strings.HasPrefix(err.Error(), "invalid prevSecond") {
+-			// If any error happened, we will try to fetch tso and set it as last ts.
+-			_, tErr := o.GetTimestamp(ctx, &oracle.Option{TxnScope: txnScope})
+-			if tErr != nil {
+-				return 0, tErr
+-			}
+-		}
+-		return 0, err
+-	}
+-	return ts, nil
++	panic("excised: GetStaleTimestamp")
+ }
+ 
+ func (o *pdOracle) SetExternalTimestamp(ctx context.Context, ts uint64) error {

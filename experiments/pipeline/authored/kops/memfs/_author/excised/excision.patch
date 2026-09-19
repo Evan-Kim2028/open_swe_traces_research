@@ -1,0 +1,151 @@
+diff --git a/util/pkg/vfs/memfs.go b/util/pkg/vfs/memfs.go
+--- a/util/pkg/vfs/memfs.go
++++ b/util/pkg/vfs/memfs.go
+@@ -20,9 +20,9 @@
+ 	"context"
+ 	"fmt"
+ 	"io"
+-	"os"
++	_ "os"
+ 	"path"
+-	"strings"
++	_ "strings"
+ 	"sync"
+ 
+ 	"example.internal/clustkit/upup/pkg/fi/cloudup/terraformWriter"
+@@ -76,99 +76,41 @@
+ var _ HasClusterReadable = &MemFSPath{}
+ 
+ func NewMemFSPath(context *MemFSContext, location string) *MemFSPath {
+-	return context.root.Join(location).(*MemFSPath)
++	panic("excised: NewMemFSPath")
+ }
+ 
+ func (p *MemFSPath) Join(relativePath ...string) Path {
+-	p.mutex.Lock()
+-	defer p.mutex.Unlock()
+-
+-	joined := path.Join(relativePath...)
+-	tokens := strings.Split(joined, "/")
+-	current := p
+-	for _, token := range tokens {
+-		if current.children == nil {
+-			current.children = make(map[string]*MemFSPath)
+-		}
+-		child := current.children[token]
+-		if child == nil {
+-			child = &MemFSPath{
+-				context:  p.context,
+-				location: path.Join(current.location, token),
+-			}
+-			current.children[token] = child
+-		}
+-		current = child
+-		current.mutex.Lock()
+-		defer current.mutex.Unlock()
+-	}
+-	return current
++	panic("excised: MemFSPath.Join")
+ }
+ 
+ func (p *MemFSPath) WriteFile(ctx context.Context, r io.ReadSeeker, acl ACL) error {
+-	data, err := io.ReadAll(r)
+-	if err != nil {
+-		return fmt.Errorf("error reading data: %v", err)
+-	}
+-	p.contents = data
+-	p.acl = acl
+-	return nil
++	panic("excised: MemFSPath.WriteFile")
+ }
+ 
+ func (p *MemFSPath) CreateFile(ctx context.Context, data io.ReadSeeker, acl ACL) error {
+-	// Check if exists
+-	if p.contents != nil {
+-		return os.ErrExist
+-	}
+-
+-	return p.WriteFile(ctx, data, acl)
++	panic("excised: MemFSPath.CreateFile")
+ }
+ 
+ // ReadFile implements Path::ReadFile
+ func (p *MemFSPath) ReadFile(ctx context.Context) ([]byte, error) {
+-	if p.contents == nil {
+-		return nil, os.ErrNotExist
+-	}
+-	// TODO: Copy?
+-	return p.contents, nil
++	panic("excised: MemFSPath.ReadFile")
+ }
+ 
+ // WriteTo implements io.WriterTo
+ func (p *MemFSPath) WriteTo(out io.Writer) (int64, error) {
+-	if p.contents == nil {
+-		return 0, os.ErrNotExist
+-	}
+-	n, err := out.Write(p.contents)
+-	return int64(n), err
++	panic("excised: MemFSPath.WriteTo")
+ }
+ 
+ func (p *MemFSPath) ReadDir() ([]Path, error) {
+-	p.mutex.Lock()
+-	defer p.mutex.Unlock()
+-
+-	var paths []Path
+-	for _, f := range p.children {
+-		paths = append(paths, f)
+-	}
+-	return paths, nil
++	panic("excised: MemFSPath.ReadDir")
+ }
+ 
+ func (p *MemFSPath) ReadTree(ctx context.Context) ([]Path, error) {
+-	var paths []Path
+-	p.readTree(&paths)
+-	return paths, nil
++	panic("excised: MemFSPath.ReadTree")
+ }
+ 
+ func (p *MemFSPath) readTree(dest *[]Path) {
+-	p.mutex.Lock()
+-	defer p.mutex.Unlock()
+-
+-	for _, f := range p.children {
+-		if !f.HasChildren() {
+-			*dest = append(*dest, f)
+-		}
+-		f.readTree(dest)
+-	}
++	panic("excised: MemFSPath.readTree")
+ }
+ 
+ func (p *MemFSPath) Base() string {
+@@ -184,24 +126,11 @@
+ }
+ 
+ func (p *MemFSPath) Remove(ctx context.Context) error {
+-	p.contents = nil
+-	return nil
++	panic("excised: MemFSPath.Remove")
+ }
+ 
+ func (p *MemFSPath) RemoveAll(ctx context.Context) error {
+-	tree, err := p.ReadTree(ctx)
+-	if err != nil {
+-		return err
+-	}
+-
+-	for _, filePath := range tree {
+-		err := filePath.Remove(ctx)
+-		if err != nil {
+-			return fmt.Errorf("error removing file %s: %w", filePath, err)
+-		}
+-	}
+-
+-	return nil
++	panic("excised: MemFSPath.RemoveAll")
+ }
+ 
+ func (p *MemFSPath) RemoveAllVersions(ctx context.Context) error {
