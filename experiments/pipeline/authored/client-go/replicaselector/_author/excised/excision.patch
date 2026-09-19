@@ -1,0 +1,325 @@
+--- a/internal/locate/region_request.go
++++ b/internal/locate/region_request.go
+@@ -928,75 +928,7 @@
+ func newReplicaSelector(
+ 	regionCache *RegionCache, regionID RegionVerID, req *tikvrpc.Request, opts ...StoreSelectorOption,
+ ) (*replicaSelector, error) {
+-	cachedRegion := regionCache.GetCachedRegionWithRLock(regionID)
+-	if cachedRegion == nil {
+-		return nil, errors.New("cached region not found")
+-	} else if cachedRegion.checkSyncFlags(needReloadOnAccess) {
+-		return nil, errors.New("cached region need reload")
+-	} else if !cachedRegion.checkRegionCacheTTL(time.Now().Unix()) {
+-		return nil, errors.New("cached region ttl expired")
+-	}
+-
+-	regionStore := cachedRegion.getStore()
+-	replicas := make([]*replica, 0, regionStore.accessStoreNum(tiKVOnly))
+-	for _, storeIdx := range regionStore.accessIndex[tiKVOnly] {
+-		replicas = append(
+-			replicas, &replica{
+-				store:    regionStore.stores[storeIdx],
+-				peer:     cachedRegion.meta.Peers[storeIdx],
+-				epoch:    regionStore.storeEpochs[storeIdx],
+-				attempts: 0,
+-			},
+-		)
+-	}
+-
+-	option := storeSelectorOp{}
+-	for _, op := range opts {
+-		op(&option)
+-	}
+-	var state selectorState
+-	if !req.ReplicaReadType.IsFollowerRead() {
+-		if regionCache.enableForwarding && regionStore.proxyTiKVIdx >= 0 {
+-			state = &accessByKnownProxy{leaderIdx: regionStore.workTiKVIdx}
+-		} else {
+-			state = &accessKnownLeader{leaderIdx: regionStore.workTiKVIdx}
+-		}
+-	} else {
+-		if req.ReplicaReadType == kv.ReplicaReadPreferLeader {
+-			WithPerferLeader()(&option)
+-		}
+-		tryLeader := req.ReplicaReadType == kv.ReplicaReadMixed || req.ReplicaReadType == kv.ReplicaReadPreferLeader
+-		state = &accessFollower{
+-			tryLeader:   tryLeader,
+-			isStaleRead: req.StaleRead,
+-			option:      option,
+-			leaderIdx:   regionStore.workTiKVIdx,
+-			lastIdx:     -1,
+-			learnerOnly: req.ReplicaReadType == kv.ReplicaReadLearner,
+-		}
+-	}
+-
+-	if val, err := util.EvalFailpoint("newReplicaSelectorInitialAttemptedTime"); err == nil {
+-		attemptedTime, err := time.ParseDuration(val.(string))
+-		if err != nil {
+-			panic(err)
+-		}
+-		for _, r := range replicas {
+-			r.attemptedTime = attemptedTime
+-		}
+-	}
+-
+-	return &replicaSelector{
+-		regionCache,
+-		cachedRegion,
+-		regionStore,
+-		replicas,
+-		option.labels,
+-		state,
+-		-1,
+-		-1,
+-		time.Duration(req.BusyThresholdMs) * time.Millisecond,
+-	}, nil
++	panic("excised: newReplicaSelector")
+ }
+ 
+ const (
+@@ -1010,20 +942,7 @@
+ // next creates the RPCContext of the current candidate replica.
+ // It returns a SendError if runs out of all replicas or the cached region is invalidated.
+ func (s *replicaSelector) next(bo *retry.Backoffer) (rpcCtx *RPCContext, err error) {
+-	if !s.region.isValid() {
+-		metrics.TiKVReplicaSelectorFailureCounter.WithLabelValues("invalid").Inc()
+-		return nil, nil
+-	}
+-
+-	s.targetIdx = -1
+-	s.proxyIdx = -1
+-	s.refreshRegionStore()
+-	for {
+-		rpcCtx, err = s.state.next(bo, s)
+-		if _, isStateChanged := err.(stateChanged); !isStateChanged {
+-			return
+-		}
+-	}
++	panic("excised: next")
+ }
+ 
+ func (s *replicaSelector) targetReplica() *replica {
+@@ -1083,57 +1002,11 @@
+ }
+ 
+ func (s *replicaSelector) buildRPCContext(bo *retry.Backoffer) (*RPCContext, error) {
+-	targetReplica, proxyReplica := s.targetReplica(), s.proxyReplica()
+-
+-	// Backoff and retry if no replica is selected or the selected replica is stale
+-	if targetReplica == nil || targetReplica.isEpochStale() ||
+-		(proxyReplica != nil && proxyReplica.isEpochStale()) {
+-		// TODO(youjiali1995): Is it necessary to invalidate the region?
+-		metrics.TiKVReplicaSelectorFailureCounter.WithLabelValues("stale_store").Inc()
+-		s.invalidateRegion()
+-		return nil, nil
+-	}
+-
+-	rpcCtx := &RPCContext{
+-		Region:     s.region.VerID(),
+-		Meta:       s.region.meta,
+-		Peer:       targetReplica.peer,
+-		Store:      targetReplica.store,
+-		AccessMode: tiKVOnly,
+-		TiKVNum:    len(s.replicas),
+-	}
+-
+-	// Set leader addr
+-	addr, err := s.regionCache.getStoreAddr(bo, s.region, targetReplica.store)
+-	if err != nil {
+-		return nil, err
+-	}
+-	if len(addr) == 0 {
+-		return nil, nil
+-	}
+-	rpcCtx.Addr = addr
+-	targetReplica.attempts++
+-
+-	// Set proxy addr
+-	if proxyReplica != nil {
+-		addr, err = s.regionCache.getStoreAddr(bo, s.region, proxyReplica.store)
+-		if err != nil {
+-			return nil, err
+-		}
+-		if len(addr) == 0 {
+-			return nil, nil
+-		}
+-		rpcCtx.ProxyStore = proxyReplica.store
+-		rpcCtx.ProxyAddr = addr
+-		proxyReplica.attempts++
+-	}
+-
+-	return rpcCtx, nil
++	panic("excised: buildRPCContext")
+ }
+ 
+ func (s *replicaSelector) onSendFailure(bo *retry.Backoffer, err error) {
+-	metrics.RegionCacheCounterWithSendFail.Inc()
+-	s.state.onSendFailure(bo, s, err)
++	panic("excised: onSendFailure")
+ }
+ 
+ func (s *replicaSelector) onReadReqConfigurableTimeout(req *tikvrpc.Request) bool {
+@@ -1159,155 +1032,43 @@
+ }
+ 
+ func (s *replicaSelector) checkLiveness(bo *retry.Backoffer, accessReplica *replica) livenessState {
+-	return accessReplica.store.requestLivenessAndStartHealthCheckLoopIfNeeded(bo, s.regionCache)
++	panic("excised: checkLiveness")
+ }
+ 
+ func (s *replicaSelector) invalidateReplicaStore(replica *replica, cause error) {
+-	store := replica.store
+-	if atomic.CompareAndSwapUint32(&store.epoch, replica.epoch, replica.epoch+1) {
+-		logutil.BgLogger().Info(
+-			"mark store's regions need be refill",
+-			zap.Uint64("id", store.storeID),
+-			zap.String("addr", store.addr),
+-			zap.Error(cause),
+-		)
+-		metrics.RegionCacheCounterWithInvalidateStoreRegionsOK.Inc()
+-		// schedule a store addr resolve.
+-		s.regionCache.markStoreNeedCheck(store)
+-		store.markAlreadySlow()
+-	}
++	panic("excised: invalidateReplicaStore")
+ }
+ 
+ func (s *replicaSelector) onSendSuccess() {
+-	s.state.onSendSuccess(s)
++	panic("excised: onSendSuccess")
+ }
+ 
+ func (s *replicaSelector) onNotLeader(
+ 	bo *retry.Backoffer, ctx *RPCContext, notLeader *errorpb.NotLeader,
+ ) (shouldRetry bool, err error) {
+-	leader := notLeader.GetLeader()
+-	if leader == nil {
+-		// The region may be during transferring leader.
+-		s.state.onNoLeader(s)
+-		if err = bo.Backoff(retry.BoRegionScheduling, errors.Errorf("no leader, ctx: %v", ctx)); err != nil {
+-			return false, err
+-		}
+-	} else {
+-		s.updateLeader(notLeader.GetLeader())
+-	}
+-	return true, nil
++	panic("excised: onNotLeader")
+ }
+ 
+ // updateLeader updates the leader of the cached region.
+ // If the leader peer isn't found in the region, the region will be invalidated.
+ func (s *replicaSelector) updateLeader(leader *metapb.Peer) {
+-	if leader == nil {
+-		return
+-	}
+-	for i, replica := range s.replicas {
+-		if isSamePeer(replica.peer, leader) {
+-			// If hibernate region is enabled and the leader is not reachable, the raft group
+-			// will not be wakened up and re-elect the leader until the follower receives
+-			// a request. So, before the new leader is elected, we should not send requests
+-			// to the unreachable old leader to avoid unnecessary timeout.
+-			if replica.store.getLivenessState() != reachable {
+-				return
+-			}
+-			if replica.isExhausted(maxReplicaAttempt, maxReplicaAttemptTime) {
+-				// Give the replica one more chance and because each follower is tried only once,
+-				// it won't result in infinite retry.
+-				replica.attempts = maxReplicaAttempt - 1
+-				replica.attemptedTime = 0
+-			}
+-			state := &accessKnownLeader{leaderIdx: AccessIndex(i)}
+-			if state.isCandidate(s.replicas[i]) {
+-				// If the new leader is candidate, switch to the new leader.
+-				// the leader may have deadlineErrUsingConfTimeout and isn't candidate, if so, keep the state unchanged and retry the request.
+-				s.state = state
+-			}
+-			// Update the workTiKVIdx so that following requests can be sent to the leader immediately.
+-			if !s.region.switchWorkLeaderToPeer(leader) {
+-				panic("the store must exist")
+-			}
+-			logutil.BgLogger().Debug(
+-				"switch region leader to specific leader due to kv return NotLeader",
+-				zap.Uint64("regionID", s.region.GetID()),
+-				zap.Uint64("leaderStoreID", leader.GetStoreId()),
+-			)
+-			return
+-		}
+-	}
+-	// Invalidate the region since the new leader is not in the cached version.
+-	s.region.invalidate(StoreNotFound)
++	panic("excised: updateLeader")
+ }
+ 
+ func (s *replicaSelector) onServerIsBusy(
+ 	bo *retry.Backoffer, ctx *RPCContext, req *tikvrpc.Request, serverIsBusy *errorpb.ServerIsBusy,
+ ) (shouldRetry bool, err error) {
+-	if serverIsBusy.EstimatedWaitMs != 0 && ctx != nil && ctx.Store != nil {
+-		estimatedWait := time.Duration(serverIsBusy.EstimatedWaitMs) * time.Millisecond
+-		// Update the estimated wait time of the store.
+-		loadStats := &storeLoadStats{
+-			estimatedWait:     estimatedWait,
+-			waitTimeUpdatedAt: time.Now(),
+-		}
+-		ctx.Store.loadStats.Store(loadStats)
+-
+-		if s.busyThreshold != 0 {
+-			// do not retry with batched coprocessor requests.
+-			// it'll be region misses if we send the tasks to replica.
+-			if req.Type == tikvrpc.CmdCop && len(req.Cop().Tasks) > 0 {
+-				return false, nil
+-			}
+-			switch state := s.state.(type) {
+-			case *accessKnownLeader:
+-				// Clear attempt history of the leader, so the leader can be accessed again.
+-				s.replicas[state.leaderIdx].attempts = 0
+-				s.state = &tryIdleReplica{leaderIdx: state.leaderIdx}
+-				return true, nil
+-			case *tryIdleReplica:
+-				if s.targetIdx != state.leaderIdx {
+-					return true, nil
+-				}
+-				// backoff if still receiving ServerIsBusy after accessing leader again
+-			}
+-		}
+-	} else if ctx != nil && ctx.Store != nil {
+-		// Mark the server is busy (the next incoming READs could be redirect
+-		// to expected followers. )
+-		ctx.Store.markAlreadySlow()
+-		if s.canFallback2Follower() {
+-			return true, nil
+-		}
+-	}
+-	err = bo.Backoff(retry.BoTiKVServerBusy, errors.Errorf("server is busy, ctx: %v", ctx))
+-	if err != nil {
+-		return false, err
+-	}
+-	return true, nil
++	panic("excised: onServerIsBusy")
+ }
+ 
+ // For some reasons, the leader is unreachable by now, try followers instead.
+ // the state is changed in accessFollower.next when leader is unavailable.
+ func (s *replicaSelector) canFallback2Follower() bool {
+-	if s == nil || s.state == nil {
+-		return false
+-	}
+-	state, ok := s.state.(*accessFollower)
+-	if !ok {
+-		return false
+-	}
+-	if !state.isStaleRead {
+-		return false
+-	}
+-	// can fallback to follower only when the leader is exhausted.
+-	return state.lastIdx == state.leaderIdx && state.IsLeaderExhausted(s.replicas[state.leaderIdx])
++	panic("excised: canFallback2Follower")
+ }
+ 
+ func (s *replicaSelector) onDataIsNotReady() {
+-	if target := s.targetReplica(); target != nil {
+-		target.dataIsNotReady = true
+-	}
++	panic("excised: onDataIsNotReady")
+ }
+ 
+ func (s *replicaSelector) invalidateRegion() {

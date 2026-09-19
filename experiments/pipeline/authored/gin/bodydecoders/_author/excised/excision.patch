@@ -1,0 +1,359 @@
+--- a/binding/json.go
++++ b/binding/json.go
+@@ -5,12 +5,12 @@
+ package binding
+ 
+ import (
+-	"bytes"
+-	"errors"
++	_ "bytes"
++	_ "errors"
+ 	"io"
+ 	"net/http"
+ 
+-	"example.internal/httprouter/codec/json"
++	_ "example.internal/httprouter/codec/json"
+ )
+ 
+ // EnableDecoderUseNumber is used to call the UseNumber method on the JSON
+@@ -27,30 +27,17 @@
+ type jsonBinding struct{}
+ 
+ func (jsonBinding) Name() string {
+-	return "json"
++	panic("excised: Name")
+ }
+ 
+ func (jsonBinding) Bind(req *http.Request, obj any) error {
+-	if req == nil || req.Body == nil {
+-		return errors.New("invalid request")
+-	}
+-	return decodeJSON(req.Body, obj)
++	panic("excised: Bind")
+ }
+ 
+ func (jsonBinding) BindBody(body []byte, obj any) error {
+-	return decodeJSON(bytes.NewReader(body), obj)
++	panic("excised: BindBody")
+ }
+ 
+ func decodeJSON(r io.Reader, obj any) error {
+-	decoder := json.API.NewDecoder(r)
+-	if EnableDecoderUseNumber {
+-		decoder.UseNumber()
+-	}
+-	if EnableDecoderDisallowUnknownFields {
+-		decoder.DisallowUnknownFields()
+-	}
+-	if err := decoder.Decode(obj); err != nil {
+-		return err
+-	}
+-	return validate(obj)
++	panic("excised: decodeJSON")
+ }
+--- a/binding/xml.go
++++ b/binding/xml.go
+@@ -5,8 +5,8 @@
+ package binding
+ 
+ import (
+-	"bytes"
+-	"encoding/xml"
++	_ "bytes"
++	_ "encoding/xml"
+ 	"io"
+ 	"net/http"
+ )
+@@ -14,21 +14,17 @@
+ type xmlBinding struct{}
+ 
+ func (xmlBinding) Name() string {
+-	return "xml"
++	panic("excised: Name")
+ }
+ 
+ func (xmlBinding) Bind(req *http.Request, obj any) error {
+-	return decodeXML(req.Body, obj)
++	panic("excised: Bind")
+ }
+ 
+ func (xmlBinding) BindBody(body []byte, obj any) error {
+-	return decodeXML(bytes.NewReader(body), obj)
++	panic("excised: BindBody")
+ }
+ 
+ func decodeXML(r io.Reader, obj any) error {
+-	decoder := xml.NewDecoder(r)
+-	if err := decoder.Decode(obj); err != nil {
+-		return err
+-	}
+-	return validate(obj)
++	panic("excised: decodeXML")
+ }
+--- a/binding/yaml.go
++++ b/binding/yaml.go
+@@ -5,31 +5,27 @@
+ package binding
+ 
+ import (
+-	"bytes"
++	_ "bytes"
+ 	"io"
+ 	"net/http"
+ 
+-	"github.com/goccy/go-yaml"
++	_ "github.com/goccy/go-yaml"
+ )
+ 
+ type yamlBinding struct{}
+ 
+ func (yamlBinding) Name() string {
+-	return "yaml"
++	panic("excised: Name")
+ }
+ 
+ func (yamlBinding) Bind(req *http.Request, obj any) error {
+-	return decodeYAML(req.Body, obj)
++	panic("excised: Bind")
+ }
+ 
+ func (yamlBinding) BindBody(body []byte, obj any) error {
+-	return decodeYAML(bytes.NewReader(body), obj)
++	panic("excised: BindBody")
+ }
+ 
+ func decodeYAML(r io.Reader, obj any) error {
+-	decoder := yaml.NewDecoder(r)
+-	if err := decoder.Decode(obj); err != nil {
+-		return err
+-	}
+-	return validate(obj)
++	panic("excised: decodeYAML")
+ }
+--- a/binding/toml.go
++++ b/binding/toml.go
+@@ -5,31 +5,27 @@
+ package binding
+ 
+ import (
+-	"bytes"
++	_ "bytes"
+ 	"io"
+ 	"net/http"
+ 
+-	"github.com/pelletier/go-toml/v2"
++	_ "github.com/pelletier/go-toml/v2"
+ )
+ 
+ type tomlBinding struct{}
+ 
+ func (tomlBinding) Name() string {
+-	return "toml"
++	panic("excised: Name")
+ }
+ 
+ func (tomlBinding) Bind(req *http.Request, obj any) error {
+-	return decodeToml(req.Body, obj)
++	panic("excised: Bind")
+ }
+ 
+ func (tomlBinding) BindBody(body []byte, obj any) error {
+-	return decodeToml(bytes.NewReader(body), obj)
++	panic("excised: BindBody")
+ }
+ 
+ func decodeToml(r io.Reader, obj any) error {
+-	decoder := toml.NewDecoder(r)
+-	if err := decoder.Decode(obj); err != nil {
+-		return err
+-	}
+-	return validate(obj)
++	panic("excised: decodeToml")
+ }
+--- a/binding/protobuf.go
++++ b/binding/protobuf.go
+@@ -5,37 +5,23 @@
+ package binding
+ 
+ import (
+-	"errors"
+-	"io"
++	_ "errors"
++	_ "io"
+ 	"net/http"
+ 
+-	"google.golang.org/protobuf/proto"
++	_ "google.golang.org/protobuf/proto"
+ )
+ 
+ type protobufBinding struct{}
+ 
+ func (protobufBinding) Name() string {
+-	return "protobuf"
++	panic("excised: Name")
+ }
+ 
+ func (b protobufBinding) Bind(req *http.Request, obj any) error {
+-	buf, err := io.ReadAll(req.Body)
+-	if err != nil {
+-		return err
+-	}
+-	return b.BindBody(buf, obj)
++	panic("excised: Bind")
+ }
+ 
+ func (protobufBinding) BindBody(body []byte, obj any) error {
+-	msg, ok := obj.(proto.Message)
+-	if !ok {
+-		return errors.New("obj is not ProtoMessage")
+-	}
+-	if err := proto.Unmarshal(body, msg); err != nil {
+-		return err
+-	}
+-	// Here it's same to return validate(obj), but until now we can't add
+-	// `binding:""` to the struct which automatically generate by gen-proto
+-	return nil
+-	// return validate(obj)
++	panic("excised: BindBody")
+ }
+--- a/binding/msgpack.go
++++ b/binding/msgpack.go
+@@ -7,31 +7,27 @@
+ package binding
+ 
+ import (
+-	"bytes"
++	_ "bytes"
+ 	"io"
+ 	"net/http"
+ 
+-	"github.com/ugorji/go/codec"
++	_ "github.com/ugorji/go/codec"
+ )
+ 
+ type msgpackBinding struct{}
+ 
+ func (msgpackBinding) Name() string {
+-	return "msgpack"
++	panic("excised: Name")
+ }
+ 
+ func (msgpackBinding) Bind(req *http.Request, obj any) error {
+-	return decodeMsgPack(req.Body, obj)
++	panic("excised: Bind")
+ }
+ 
+ func (msgpackBinding) BindBody(body []byte, obj any) error {
+-	return decodeMsgPack(bytes.NewReader(body), obj)
++	panic("excised: BindBody")
+ }
+ 
+ func decodeMsgPack(r io.Reader, obj any) error {
+-	cdc := new(codec.MsgpackHandle)
+-	if err := codec.NewDecoder(r, cdc).Decode(&obj); err != nil {
+-		return err
+-	}
+-	return validate(obj)
++	panic("excised: decodeMsgPack")
+ }
+--- a/binding/bson.go
++++ b/binding/bson.go
+@@ -5,26 +5,22 @@
+ package binding
+ 
+ import (
+-	"io"
++	_ "io"
+ 	"net/http"
+ 
+-	"go.mongodb.org/mongo-driver/v2/bson"
++	_ "go.mongodb.org/mongo-driver/v2/bson"
+ )
+ 
+ type bsonBinding struct{}
+ 
+ func (bsonBinding) Name() string {
+-	return "bson"
++	panic("excised: Name")
+ }
+ 
+ func (b bsonBinding) Bind(req *http.Request, obj any) error {
+-	buf, err := io.ReadAll(req.Body)
+-	if err == nil {
+-		err = b.BindBody(buf, obj)
+-	}
+-	return err
++	panic("excised: Bind")
+ }
+ 
+ func (bsonBinding) BindBody(body []byte, obj any) error {
+-	return bson.Unmarshal(body, obj)
++	panic("excised: BindBody")
+ }
+--- a/binding/plain.go
++++ b/binding/plain.go
+@@ -1,56 +1,28 @@
+ package binding
+ 
+ import (
+-	"fmt"
+-	"io"
++	_ "fmt"
++	_ "io"
+ 	"net/http"
+-	"reflect"
++	_ "reflect"
+ 
+-	"example.internal/httprouter/internal/bytesconv"
++	_ "example.internal/httprouter/internal/bytesconv"
+ )
+ 
+ type plainBinding struct{}
+ 
+ func (plainBinding) Name() string {
+-	return "plain"
++	panic("excised: Name")
+ }
+ 
+ func (plainBinding) Bind(req *http.Request, obj any) error {
+-	all, err := io.ReadAll(req.Body)
+-	if err != nil {
+-		return err
+-	}
+-
+-	return decodePlain(all, obj)
++	panic("excised: Bind")
+ }
+ 
+ func (plainBinding) BindBody(body []byte, obj any) error {
+-	return decodePlain(body, obj)
++	panic("excised: BindBody")
+ }
+ 
+ func decodePlain(data []byte, obj any) error {
+-	if obj == nil {
+-		return nil
+-	}
+-
+-	v := reflect.ValueOf(obj)
+-
+-	for v.Kind() == reflect.Ptr {
+-		if v.IsNil() {
+-			return nil
+-		}
+-		v = v.Elem()
+-	}
+-
+-	if v.Kind() == reflect.String {
+-		v.SetString(bytesconv.BytesToString(data))
+-		return nil
+-	}
+-
+-	if _, ok := v.Interface().([]byte); ok {
+-		v.SetBytes(data)
+-		return nil
+-	}
+-
+-	return fmt.Errorf("type (%T) unknown type", v)
++	panic("excised: decodePlain")
+ }

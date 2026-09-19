@@ -1,0 +1,177 @@
+--- a/render/json.go
++++ b/render/json.go
+@@ -5,14 +5,14 @@
+ package render
+ 
+ import (
+-	"bytes"
+-	"fmt"
+-	"html/template"
++	_ "bytes"
++	_ "fmt"
++	_ "html/template"
+ 	"net/http"
+-	"unicode"
++	_ "unicode"
+ 
+-	"example.internal/httprouter/codec/json"
+-	"example.internal/httprouter/internal/bytesconv"
++	_ "example.internal/httprouter/codec/json"
++	_ "example.internal/httprouter/internal/bytesconv"
+ )
+ 
+ // JSON contains the given interface object.
+@@ -55,140 +55,65 @@
+ 
+ // Render (JSON) writes data with custom ContentType.
+ func (r JSON) Render(w http.ResponseWriter) error {
+-	return WriteJSON(w, r.Data)
++	panic("excised: Render")
+ }
+ 
+ // WriteContentType (JSON) writes JSON ContentType.
+ func (r JSON) WriteContentType(w http.ResponseWriter) {
+-	writeContentType(w, jsonContentType)
++	panic("excised: WriteContentType")
+ }
+ 
+ // WriteJSON marshals the given interface object and writes it with custom ContentType.
+ func WriteJSON(w http.ResponseWriter, obj any) error {
+-	writeContentType(w, jsonContentType)
+-	jsonBytes, err := json.API.Marshal(obj)
+-	if err != nil {
+-		return err
+-	}
+-	_, err = w.Write(jsonBytes)
+-	return err
++	panic("excised: WriteJSON")
+ }
+ 
+ // Render (IndentedJSON) marshals the given interface object and writes it with custom ContentType.
+ func (r IndentedJSON) Render(w http.ResponseWriter) error {
+-	r.WriteContentType(w)
+-	jsonBytes, err := json.API.MarshalIndent(r.Data, "", "    ")
+-	if err != nil {
+-		return err
+-	}
+-	_, err = w.Write(jsonBytes)
+-	return err
++	panic("excised: Render")
+ }
+ 
+ // WriteContentType (IndentedJSON) writes JSON ContentType.
+ func (r IndentedJSON) WriteContentType(w http.ResponseWriter) {
+-	writeContentType(w, jsonContentType)
++	panic("excised: WriteContentType")
+ }
+ 
+ // Render (SecureJSON) marshals the given interface object and writes it with custom ContentType.
+ func (r SecureJSON) Render(w http.ResponseWriter) error {
+-	r.WriteContentType(w)
+-	jsonBytes, err := json.API.Marshal(r.Data)
+-	if err != nil {
+-		return err
+-	}
+-	// if the jsonBytes is array values
+-	if bytes.HasPrefix(jsonBytes, bytesconv.StringToBytes("[")) && bytes.HasSuffix(jsonBytes,
+-		bytesconv.StringToBytes("]")) {
+-		if _, err = w.Write(bytesconv.StringToBytes(r.Prefix)); err != nil {
+-			return err
+-		}
+-	}
+-	_, err = w.Write(jsonBytes)
+-	return err
++	panic("excised: Render")
+ }
+ 
+ // WriteContentType (SecureJSON) writes JSON ContentType.
+ func (r SecureJSON) WriteContentType(w http.ResponseWriter) {
+-	writeContentType(w, jsonContentType)
++	panic("excised: WriteContentType")
+ }
+ 
+ // Render (JsonpJSON) marshals the given interface object and writes it and its callback with custom ContentType.
+ func (r JsonpJSON) Render(w http.ResponseWriter) (err error) {
+-	r.WriteContentType(w)
+-	ret, err := json.API.Marshal(r.Data)
+-	if err != nil {
+-		return err
+-	}
+-
+-	if r.Callback == "" {
+-		_, err = w.Write(ret)
+-		return err
+-	}
+-
+-	callback := template.JSEscapeString(r.Callback)
+-	if _, err = w.Write(bytesconv.StringToBytes(callback)); err != nil {
+-		return err
+-	}
+-
+-	if _, err = w.Write(bytesconv.StringToBytes("(")); err != nil {
+-		return err
+-	}
+-
+-	if _, err = w.Write(ret); err != nil {
+-		return err
+-	}
+-
+-	if _, err = w.Write(bytesconv.StringToBytes(");")); err != nil {
+-		return err
+-	}
+-
+-	return nil
++	panic("excised: Render")
+ }
+ 
+ // WriteContentType (JsonpJSON) writes Javascript ContentType.
+ func (r JsonpJSON) WriteContentType(w http.ResponseWriter) {
+-	writeContentType(w, jsonpContentType)
++	panic("excised: WriteContentType")
+ }
+ 
+ // Render (AsciiJSON) marshals the given interface object and writes it with custom ContentType.
+ func (r AsciiJSON) Render(w http.ResponseWriter) error {
+-	r.WriteContentType(w)
+-	ret, err := json.API.Marshal(r.Data)
+-	if err != nil {
+-		return err
+-	}
+-
+-	var buffer bytes.Buffer
+-	escapeBuf := make([]byte, 0, 6) // Preallocate 6 bytes for Unicode escape sequences
+-
+-	for _, r := range bytesconv.BytesToString(ret) {
+-		if r > unicode.MaxASCII {
+-			escapeBuf = fmt.Appendf(escapeBuf[:0], "\\u%04x", r) // Reuse escapeBuf
+-			buffer.Write(escapeBuf)
+-		} else {
+-			buffer.WriteByte(byte(r))
+-		}
+-	}
+-
+-	_, err = w.Write(buffer.Bytes())
+-	return err
++	panic("excised: Render")
+ }
+ 
+ // WriteContentType (AsciiJSON) writes JSON ContentType.
+ func (r AsciiJSON) WriteContentType(w http.ResponseWriter) {
+-	writeContentType(w, jsonASCIIContentType)
++	panic("excised: WriteContentType")
+ }
+ 
+ // Render (PureJSON) writes custom ContentType and encodes the given interface object.
+ func (r PureJSON) Render(w http.ResponseWriter) error {
+-	r.WriteContentType(w)
+-	encoder := json.API.NewEncoder(w)
+-	encoder.SetEscapeHTML(false)
+-	return encoder.Encode(r.Data)
++	panic("excised: Render")
+ }
+ 
+ // WriteContentType (PureJSON) writes custom ContentType.
+ func (r PureJSON) WriteContentType(w http.ResponseWriter) {
+-	writeContentType(w, jsonContentType)
++	panic("excised: WriteContentType")
+ }

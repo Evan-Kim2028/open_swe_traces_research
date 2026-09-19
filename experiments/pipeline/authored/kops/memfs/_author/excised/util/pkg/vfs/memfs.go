@@ -1,0 +1,236 @@
+/*
+Copyright 2019 The ClusterKit Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package vfs
+
+import (
+	"context"
+	"fmt"
+	"io"
+	_ "os"
+	"path"
+	_ "strings"
+	"sync"
+
+	"example.internal/clustkit/upup/pkg/fi/cloudup/terraformWriter"
+)
+
+type MemFSPath struct {
+	context  *MemFSContext
+	location string
+	acl      ACL
+
+	mutex    sync.Mutex
+	contents []byte
+	children map[string]*MemFSPath
+}
+
+var (
+	_ Path          = &MemFSPath{}
+	_ TerraformPath = &MemFSPath{}
+)
+
+type MemFSContext struct {
+	clusterReadable bool
+	root            *MemFSPath
+}
+
+func NewMemFSContext() *MemFSContext {
+	c := &MemFSContext{}
+	c.root = &MemFSPath{
+		context:  c,
+		location: "",
+	}
+	return c
+}
+
+// MarkClusterReadable pretends the current memfscontext is cluster readable; this is useful for tests
+func (c *MemFSContext) MarkClusterReadable() {
+	c.clusterReadable = true
+}
+
+func (c *MemFSPath) HasChildren() bool {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	return len(c.children) != 0
+}
+
+func (c *MemFSPath) IsClusterReadable() bool {
+	return c.context.clusterReadable
+}
+
+var _ HasClusterReadable = &MemFSPath{}
+
+func NewMemFSPath(context *MemFSContext, location string) *MemFSPath {
+	panic("excised: NewMemFSPath")
+}
+
+func (p *MemFSPath) Join(relativePath ...string) Path {
+	panic("excised: MemFSPath.Join")
+}
+
+func (p *MemFSPath) WriteFile(ctx context.Context, r io.ReadSeeker, acl ACL) error {
+	panic("excised: MemFSPath.WriteFile")
+}
+
+func (p *MemFSPath) CreateFile(ctx context.Context, data io.ReadSeeker, acl ACL) error {
+	panic("excised: MemFSPath.CreateFile")
+}
+
+// ReadFile implements Path::ReadFile
+func (p *MemFSPath) ReadFile(ctx context.Context) ([]byte, error) {
+	panic("excised: MemFSPath.ReadFile")
+}
+
+// WriteTo implements io.WriterTo
+func (p *MemFSPath) WriteTo(out io.Writer) (int64, error) {
+	panic("excised: MemFSPath.WriteTo")
+}
+
+func (p *MemFSPath) ReadDir() ([]Path, error) {
+	panic("excised: MemFSPath.ReadDir")
+}
+
+func (p *MemFSPath) ReadTree(ctx context.Context) ([]Path, error) {
+	panic("excised: MemFSPath.ReadTree")
+}
+
+func (p *MemFSPath) readTree(dest *[]Path) {
+	panic("excised: MemFSPath.readTree")
+}
+
+func (p *MemFSPath) Base() string {
+	return path.Base(p.location)
+}
+
+func (p *MemFSPath) Path() string {
+	return "memfs://" + p.location
+}
+
+func (p *MemFSPath) String() string {
+	return p.Path()
+}
+
+func (p *MemFSPath) Remove(ctx context.Context) error {
+	panic("excised: MemFSPath.Remove")
+}
+
+func (p *MemFSPath) RemoveAll(ctx context.Context) error {
+	panic("excised: MemFSPath.RemoveAll")
+}
+
+func (p *MemFSPath) RemoveAllVersions(ctx context.Context) error {
+	return p.Remove(ctx)
+}
+
+func (p *MemFSPath) Location() string {
+	return p.location
+}
+
+func (p *MemFSPath) IsPublic() (bool, error) {
+	if p.acl == nil {
+		return false, nil
+	}
+	s3Acl, ok := p.acl.(*S3Acl)
+	if !ok {
+		return false, fmt.Errorf("expected acl to be S3Acl, was %T", p.acl)
+	}
+	isPublic := false
+	if s3Acl.RequestACL != nil {
+		isPublic = *s3Acl.RequestACL == "public-read"
+	}
+	return isPublic, nil
+}
+
+type terraformMemFSFile struct {
+	Bucket   string                   `json:"bucket" cty:"bucket"`
+	Key      string                   `json:"key" cty:"key"`
+	Content  *terraformWriter.Literal `json:"content,omitempty" cty:"content"`
+	Acl      *string                  `json:"acl,omitempty" cty:"acl"`
+	SSE      string                   `json:"server_side_encryption,omitempty" cty:"server_side_encryption"`
+	Provider *terraformWriter.Literal `json:"provider,omitempty" cty:"provider"`
+}
+
+func (p *MemFSPath) RenderTerraform(w *terraformWriter.TerraformWriter, name string, data io.Reader, acl ACL) error {
+	if w.Providers != nil && w.Providers["azurerm"] != nil {
+		return p.renderTerraformAzure(w, name, data)
+	}
+	return p.renderTerraformS3(w, name, data, acl)
+}
+
+func (p *MemFSPath) renderTerraformAzure(w *terraformWriter.TerraformWriter, name string, data io.Reader) error {
+	bytes, err := io.ReadAll(data)
+	if err != nil {
+		return fmt.Errorf("reading data: %v", err)
+	}
+
+	source, err := w.AddFilePath("azurerm_storage_blob", name, "source", bytes, false)
+	if err != nil {
+		return fmt.Errorf("rendering Azure Blob file: %w", err)
+	}
+
+	// memfs:// paths don't encode an Azure account or container, so this
+	// fallback (only used in integration tests) hard-codes a test placeholder
+	// container on the storage account from the cluster spec.
+	tf := &terraformAzureBlobFile{
+		Name:               p.location,
+		StorageContainerID: w.AzureStorageAccountID + "/blobServices/default/containers/testcontainer",
+		Type:               "Block",
+		Source:             source,
+		Provider:           terraformWriter.LiteralTokens("azurerm", "files"),
+	}
+	return w.RenderResource("azurerm_storage_blob", name, tf)
+}
+
+func (p *MemFSPath) renderTerraformS3(w *terraformWriter.TerraformWriter, name string, data io.Reader, acl ACL) error {
+	bytes, err := io.ReadAll(data)
+	if err != nil {
+		return fmt.Errorf("reading data: %v", err)
+	}
+
+	tfProviderArguments := map[string]string{
+		"region": "us-test-1",
+	}
+	w.EnsureTerraformProvider("aws", tfProviderArguments)
+
+	content, err := w.AddFileBytes("aws_s3_object", name, "content", bytes, false)
+	if err != nil {
+		return fmt.Errorf("rendering S3 file: %v", err)
+	}
+
+	var requestAcl *string
+	if acl != nil {
+		s3Acl, ok := acl.(*S3Acl)
+		if !ok {
+			return fmt.Errorf("write to %s with ACL of unexpected type %T", p, acl)
+		}
+		if s3Acl != nil && s3Acl.RequestACL != nil {
+			aclVal := string(*s3Acl.RequestACL)
+			requestAcl = &aclVal
+		}
+	}
+
+	tf := &terraformMemFSFile{
+		Bucket:   "testingBucket",
+		Key:      p.location,
+		Content:  content,
+		SSE:      "AES256",
+		Acl:      requestAcl,
+		Provider: terraformWriter.LiteralTokens("aws", "files"),
+	}
+	return w.RenderResource("aws_s3_object", name, tf)
+}
