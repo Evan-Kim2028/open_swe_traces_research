@@ -20,3 +20,8 @@ done
 docker image prune -f >/dev/null 2>&1
 docker builder prune -f --keep-storage 4GB >/dev/null 2>&1
 echo "$(date -u +%H:%M) cleanup: $(docker system df --format '{{.Type}} {{.Size}}' | tr '\n' ';') disk_avail=$(df -h / | awk 'NR==2{print $4}')"
+# host-side Go build caches and temp dirs from agent proofs (2026-09-19: 18 GB go-build + 13 GB /tmp in one hour)
+export PATH="/usr/local/go/bin:$PATH"
+gb=$(du -sm "$HOME/.cache/go-build" 2>/dev/null | cut -f1); [ "${gb:-0}" -gt 8000 ] && go clean -cache >/dev/null 2>&1 && echo "$(date -u +%H:%M) go-build cache cleared (${gb}M)"
+find /tmp -maxdepth 1 \( -name 'go-build*' -o -name 'go-link-*' -o -name '*-logs-*' -o -name 'cursor-sdk-bridge-*' \) -mmin +60 -exec rm -rf {} + 2>/dev/null
+find /tmp -maxdepth 1 -type f -name '*.log' -mmin +180 -size +50M -delete 2>/dev/null

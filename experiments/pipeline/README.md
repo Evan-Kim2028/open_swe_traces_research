@@ -36,11 +36,12 @@ Do not launch Harbor from unit tests or `status`.
 
 ```bash
 # unit tests
-uv run pytest tests/test_pipeline.py tests/test_pipeline_ext_ladder.py \
+uv run pytest tests/test_pipeline.py tests/test_pipeline_solve_watch.py \
+  tests/test_pipeline_ext_ladder.py \
   tests/test_pipeline_ext_hack_audit.py tests/test_pipeline_ext_calibration.py \
   tests/test_pipeline_ext_meta.py
 uv run ruff check src/openswe_traces/pipeline src/openswe_traces/pipeline_ext \
-  tests/test_pipeline.py tests/test_pipeline_ext_*.py
+  tests/test_pipeline.py tests/test_pipeline_solve_watch.py tests/test_pipeline_ext_*.py
 
 # dry-run one repo, 5 units (prints the results table)
 uv run python scripts/pipeline.py dry-run --repo client-go --units 5
@@ -50,6 +51,13 @@ uv run python scripts/pipeline.py dry-run --repo client-go --units 5
 uv run python scripts/pipeline.py run
 # status / resume: same command; finished steps are skipped
 uv run python scripts/pipeline.py status
+
+# solve-as-verified: one already-packaged unit (adaptive L2→L5→L6, B9 on passes)
+uv run python scripts/pipeline.py solve-unit --repo client-go --unit connarray
+# poll verified L2 dirs and launch solve-unit (laptop 4 / vps 2 docker trials)
+uv run python scripts/pipeline.py solve-watch --interval 300 --host laptop
+# VPS: rsync task dirs to lake-vps, remeasure timing gates, Harbor there, rsync jobs back
+uv run python scripts/pipeline.py solve-watch --interval 300 --host vps
 ```
 
 `CURSOR_API_KEY` is loaded from `/home/evan/Documents/eval_tasks/.env` and never
@@ -63,7 +71,13 @@ State is `experiments/pipeline/state.db`. Every stage (`prepare`, `author`,
 or `dry-run` continues unfinished steps; `DONE` / `REJECTED` / `SKIPPED` are
 not repeated. A crash mid-step leaves status `running` or `failed` and is
 retried. A failing control unit pauses the rest of that repo (`paused`).
-Logs: `experiments/pipeline/logs/pipeline.log`.
+Logs: `experiments/pipeline/logs/pipeline.log`. `solve-watch` logs to
+`experiments/pipeline/logs/solve_watch.log`. Every Harbor launch refuses unless
+`task.toml` has `[agent] network_mode=allowlist` with only the solver's API hosts,
+`[verifier] network_mode=no-network`, checksum-guarded `tests/test.sh`, and no `.git`
+in the image tree. `--host vps` rsyncs task dirs to `lake-vps:~/openswe/pipeline_tasks/`
+(CURSOR_API_KEY exported in the ssh command from `eval_tasks/.env`, never written
+on the VPS) and copies job dirs back to `experiments/pipeline/jobs/vps/`.
 
 Author/verifier consume batches that already exist:
 
@@ -80,6 +94,7 @@ Author/verifier consume batches that already exist:
 | `experiments/pipeline/work/<repo>/` | obfuscated tree, author/verifier artifacts |
 | `experiments/pipeline/tasks/<repo>/<unit>-L<k>/` | Harbor task dirs (new; not harbor_nex) |
 | `experiments/pipeline/jobs/` | Harbor job dirs (new; not harbor_nex/jobs) |
+| `experiments/pipeline/jobs/vps/` | job dirs rsynced back from `--host vps` |
 | `experiments/pipeline/results.parquet` | one row per (repo, unit, solver) |
 | `experiments/pipeline/results.md` | live dashboard (rewritten after every job) |
 
@@ -97,3 +112,7 @@ histogram per solver, Composer tokens used.
 ## Devin concurrency finding (2026-09-19 03:40Z)
 
 At 7 concurrent swe-2-max sessions (3 CLI verifier + 1 CLI author via the pipeline + 3 Harbor trials) all three verifier sessions hit "Reached free model rate limit ... resets in ~20 s" within minutes and died. Treat any hit as a rolling-window limit: back off 20 min, then resume at lower concurrency. Operating target: 5 sessions total (3 CLI + 2 Harbor). `devin_slots` in config.yaml set to 5.
+
+## Known issue (2026-09-19 05:30Z)
+
+solve-unit launches Harbor with n_concurrent_trials=3 for a single-attempt job, reserving 3 Devin semaphore slots for 1 trial. Fix: n_concurrent = number of attempts in that launch. Until fixed, external Devin sessions are registered in /tmp/devin.slots/holders.json manually.

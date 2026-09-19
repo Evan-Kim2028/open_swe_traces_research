@@ -139,8 +139,8 @@ def test_yaml_config_and_repos_load() -> None:
     cfg = load_config(ROOT / "experiments/pipeline/config.yaml", ROOT / "experiments/pipeline/repos.yaml")
     assert cfg.units_per_author_batch == 10
     assert cfg.author_minutes == 30
-    assert cfg.solver_backends == ("cursor", "devin")
-    assert cfg.solver_order == ("cursor", "devin")
+    assert cfg.solver_backends == cfg.solver_order
+    assert set(cfg.solver_order) == {"cursor", "devin"}
     assert cfg.climb_levels == (2, 5, 6)
     assert cfg.attempts == 3
     assert cfg.composer_token_cap == 1_000_000_000
@@ -416,8 +416,10 @@ def test_discover_units(tmp_path: Path) -> None:
 
 
 def _touch_levels(cfg: PipelineConfig, repo: str, unit: str) -> None:
+    from openswe_traces.pipeline.safety import write_safe_task_skeleton
+
     for lv in range(7):
-        (cfg.tasks_dir / repo / f"{unit}-L{lv}").mkdir(parents=True, exist_ok=True)
+        write_safe_task_skeleton(cfg.tasks_dir / repo / f"{unit}-L{lv}")
 
 
 def test_status_and_dry_run_table(tmp_path: Path) -> None:

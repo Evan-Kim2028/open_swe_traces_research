@@ -15,6 +15,7 @@ from openswe_traces.pipeline.config import PipelineConfig
 from openswe_traces.pipeline.package import ensure_level
 from openswe_traces.pipeline.prepare import image_tag
 from openswe_traces.pipeline.resources import harbor_concurrency, run_cleanup, wait_for_load
+from openswe_traces.pipeline.safety import apply_solver_network, assert_harbor_safe
 from openswe_traces.pipeline.semaphore import DevinSemaphore
 from openswe_traces.pipeline.state import PipelineStore
 from openswe_traces.pipeline.tokens import TokenBudget
@@ -321,6 +322,8 @@ def _launch(
     skip_hack_docker: bool = True,
 ) -> HarborJobResult:
     job_name = f"{repo}-{unit}-L{level}-{solver}-n{n_att}-k{len(list(store.list_trials(repo=repo, unit=unit)))}"
+    apply_solver_network(task, solver)
+    assert_harbor_safe(task, solver=solver)
     job = harbor(
         cfg=cfg,
         path=task,
@@ -397,10 +400,14 @@ def default_harbor(cfg: PipelineConfig | None = None, **kw: Any) -> HarborJobRes
     if cfg is None:
         cfg = kw.pop("cfg")
     timeout_sec = kw.pop("timeout_sec", None)
+    path = Path(kw["path"])
+    solver = str(kw["solver"])
+    apply_solver_network(path, solver)
+    assert_harbor_safe(path, solver=solver)
     argv = harbor_argv(
         cfg,
-        path=kw["path"],
-        solver=kw["solver"],
+        path=path,
+        solver=solver,
         n_attempts=kw["n_attempts"],
         n_concurrent=kw["n_concurrent"],
         job_name=kw["job_name"],

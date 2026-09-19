@@ -28,8 +28,24 @@ def _copytree(src: Path, dest: Path) -> None:
     shutil.copytree(src, dest, ignore=shutil.ignore_patterns(".git", "__pycache__"))
 
 
+def _level_from_dirname(unit: str, name: str) -> int | None:
+    for sep in ("-L", "_L"):
+        prefix = f"{unit}{sep}"
+        if name.startswith(prefix):
+            suf = name[len(prefix) :]
+            if suf.isdigit():
+                return int(suf)
+    return None
+
+
 def task_dir(cfg: PipelineConfig, repo: str, unit: str, level: int) -> Path:
-    return cfg.tasks_dir / repo / f"{unit}-L{level}"
+    hyphen = cfg.tasks_dir / repo / f"{unit}-L{level}"
+    under = cfg.tasks_dir / repo / f"{unit}_L{level}"
+    if hyphen.is_dir():
+        return hyphen
+    if under.is_dir():
+        return under
+    return hyphen
 
 
 def packaged_levels(cfg: PipelineConfig, repo: str, unit: str) -> set[int]:
@@ -37,12 +53,12 @@ def packaged_levels(cfg: PipelineConfig, repo: str, unit: str) -> set[int]:
     if not root.is_dir():
         return set()
     found: set[int] = set()
-    prefix = f"{unit}-L"
     for child in root.iterdir():
-        if child.is_dir() and child.name.startswith(prefix):
-            suf = child.name[len(prefix) :]
-            if suf.isdigit():
-                found.add(int(suf))
+        if not child.is_dir():
+            continue
+        lv = _level_from_dirname(unit, child.name)
+        if lv is not None:
+            found.add(lv)
     return found
 
 
