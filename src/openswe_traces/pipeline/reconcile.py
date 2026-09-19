@@ -69,6 +69,8 @@ def reconcile_jobs(
             task_dir=task_dir if task_dir.is_dir() else None,
         )
         store.add_event("reconcile", f"recorded orphaned job {job_dir.name} ({len(audits)} trial)")
+        # the parent solve-unit is gone; free the unit so the watcher relaunches and resumes the ladder
+        store.upsert_unit(repo, unit, status="resume")
         log.info("reconciled orphaned job %s", job_dir.name)
         added += len(audits)
     return added

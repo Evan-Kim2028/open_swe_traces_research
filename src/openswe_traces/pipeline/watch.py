@@ -409,7 +409,7 @@ def _fanout_cycle(
         log.info("launch solve-unit child %s/%s from %s -> %s", repo, unit, l2, log_path)
         with open(log_path, "ab") as fh:
             children[(repo, unit)] = subprocess.Popen(
-                argv, stdout=fh, stderr=subprocess.STDOUT, cwd=str(cfg.repo_root)
+                argv, stdout=fh, stderr=subprocess.STDOUT
             )
         launched += 1
     return launched
