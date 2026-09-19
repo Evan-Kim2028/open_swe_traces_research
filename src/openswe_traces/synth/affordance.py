@@ -268,7 +268,7 @@ mkdir -p /logs/verifier
 cd /app
 mkdir -p /logs/artifacts
 if [ -d /pristine ]; then
-  ( cd / && ( git diff --no-index --no-color pristine app 2>/dev/null || diff -ruN pristine app ) ) \
+  ( cd / && if command -v git >/dev/null 2>&1; then git diff --no-index --no-color pristine app; else diff -ruN pristine app; fi ) \
     | sed -e 's|a/pristine/|a/|g' -e 's|b/app/|b/|g' -e 's|a/app/|a/|g' -e 's|b/pristine/|b/|g' -e 's|^--- pristine/|--- a/|' -e 's|^+++ app/|+++ b/|' \
     > /logs/artifacts/agent.patch || true
 fi
