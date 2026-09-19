@@ -251,10 +251,11 @@ def executed_actions(trial_dir: Path | str | None) -> str | None:
 
     def observation_for(step: dict) -> str:
         nxt = by_id.get(int(step.get("step_id", -1)) + 1) or {}
-        obs = nxt.get("observation") or {}
-        results = obs.get("results") if isinstance(obs, dict) else None
-        if isinstance(results, list) and results:
-            return " ".join(str(r.get("content", ""))[:300] for r in results if isinstance(r, dict))
+        for holder in (step, nxt):
+            obs = holder.get("observation") or {}
+            results = obs.get("results") if isinstance(obs, dict) else None
+            if isinstance(results, list) and results:
+                return " ".join(str(r.get("content", ""))[:300] for r in results if isinstance(r, dict))
         return ""
 
     for step in steps:
