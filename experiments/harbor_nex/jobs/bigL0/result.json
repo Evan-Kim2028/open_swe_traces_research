@@ -1,0 +1,54 @@
+{
+    "id": "92d8a55e-fb44-474b-93b6-ab1feac9e7b5",
+    "started_at": "2026-09-18T21:45:58.364346",
+    "updated_at": "2026-09-18T22:45:46.899165",
+    "finished_at": "2026-09-18T22:45:46.899165",
+    "n_total_trials": 12,
+    "stats": {
+        "n_completed_trials": 12,
+        "n_errored_trials": 0,
+        "n_running_trials": 0,
+        "n_pending_trials": 0,
+        "n_cancelled_trials": 0,
+        "n_retries": 0,
+        "evals": {
+            "cursor-cli__composer-2.5__tasks_bigL0_run": {
+                "n_trials": 12,
+                "n_errors": 0,
+                "metrics": [
+                    {
+                        "mean": 0.4166666666666667
+                    }
+                ],
+                "pass_at_k": {
+                    "2": 0.5
+                },
+                "reward_stats": {
+                    "reward": {
+                        "1.0": [
+                            "batchcmds-obf-L2__Y95pKD5",
+                            "batchcmds-obf-L0__xsFEFYX",
+                            "batchcmds-obf-L0__Ccxhdys",
+                            "batchcmds-obf-L2__3aLXjym",
+                            "batchcmds-obf-L0__G8iya4G"
+                        ],
+                        "0.0": [
+                            "keyspacecodec-obf-L2__UxLiR3B",
+                            "keyspacecodec-obf-L0__UwvfmDi",
+                            "batchcmds-obf-L2__bGjRBp9",
+                            "keyspacecodec-obf-L2__Q9EyY9n",
+                            "keyspacecodec-obf-L0__xSK8Bq8",
+                            "keyspacecodec-obf-L2__9M8ub6F",
+                            "keyspacecodec-obf-L0__PCxeHQb"
+                        ]
+                    }
+                },
+                "exception_stats": {}
+            }
+        },
+        "n_input_tokens": 49655682,
+        "n_cache_tokens": 48219611,
+        "n_output_tokens": 336129,
+        "cost_usd": 11.202280200000002
+    }
+}

@@ -6,6 +6,7 @@ from pathlib import Path
 from openswe_traces.synth.obfuscate import (
     NEW_MODULE,
     OLD_MODULE,
+    identity_pass,
     obfuscate_task,
 )
 
@@ -230,3 +231,75 @@ def test_obfuscate_tiny_go_module(tmp_path: Path) -> None:
     assert tidy.returncode == 0, tidy.stderr
     assert (dest / "mapping.json").is_file()
     assert (dest / "patches" / "gold.patch").is_file()
+
+
+def test_identity_pass_module_and_brands_only(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    _write(
+        src / "go.mod",
+        "module github.com/helm/helm/v3\n\ngo 1.23\n",
+    )
+    _write(
+        src / "pkg/util.go",
+        'package pkg\n\n// Helm chart helper used by helm CLI.\nfunc EncodeKey(k []byte) []byte { return k }\n',
+    )
+    _write(
+        src / "pkg/util_test.go",
+        'package pkg\n\nimport "testing"\n\nfunc TestKeep(t *testing.T) {\n\tif "sentinel-keep" != "sentinel-keep" {\n\t\tt.Fatal("untouched")\n\t}\n}\n',
+    )
+    _write(src / "README.md", "# helm\n\nThe Helm project.\n")
+    result = identity_pass(
+        src,
+        new_module="example.internal/chartkit",
+        brand_pairs=(("Helm", "ChartKit"), ("helm", "chartkit")),
+    )
+    gom = (src / "go.mod").read_text()
+    assert "example.internal/chartkit/v3" in gom
+    assert "github.com/helm/helm" not in gom
+    util = (src / "pkg/util.go").read_text()
+    assert "func EncodeKey" in util
+    assert "Helm" not in util
+    assert "helm" not in util
+    assert "ChartKit" in util
+    readme = (src / "README.md").read_text()
+    assert "helm" not in readme.lower()
+    assert "sentinel-keep" in (src / "pkg/util_test.go").read_text()
+    assert result["modules"]["github.com/helm/helm/v3"] == "example.internal/chartkit/v3"
+
+
+def test_map_modules_keeps_nested_suffix() -> None:
+    from openswe_traces.synth.obfuscate import map_modules
+
+    mapping = map_modules(
+        ["knative.dev/client", "knative.dev/client/pkg"],
+        "example.internal/eventkit",
+    )
+    assert mapping["knative.dev/client"] == "example.internal/eventkit"
+    assert mapping["knative.dev/client/pkg"] == "example.internal/eventkit/pkg"
+    mapping = map_modules(
+        ["goa.design/goa/v3", "goa.design/goa/v3/jsonrpc/integration_tests"],
+        "example.internal/apikit",
+    )
+    assert mapping["goa.design/goa/v3"] == "example.internal/apikit/v3"
+    assert (
+        mapping["goa.design/goa/v3/jsonrpc/integration_tests"]
+        == "example.internal/apikit/v3/jsonrpc/integration_tests"
+    )
+
+
+def test_strip_go_file_keeps_imports_when_comment_has_paren() -> None:
+    from openswe_traces.synth.obfuscate import _strip_go_file
+
+    src = """package main
+
+import (
+	// note (see argoproj docs)
+	"github.com/argoproj/pkg/stats"
+)
+
+func main() {}
+"""
+    out, _hits = _strip_go_file(src, set(), (("argoproj", "flowkit"),))
+    assert "github.com/argoproj/pkg/stats" in out
+    assert "github.com/flowkit/pkg/stats" not in out
+

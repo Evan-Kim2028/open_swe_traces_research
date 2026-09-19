@@ -399,22 +399,41 @@ def _unquote(lit: str) -> str:
     return lit
 
 
-def _brand_replace(text: str) -> str:
+def _brand_replace(
+    text: str,
+    pairs: Sequence[tuple[str, str]] | None = None,
+    *,
+    extra_pd: bool | None = None,
+) -> str:
+    use_pairs = _BRAND_PAIRS if pairs is None else pairs
+    apply_pd = extra_pd if extra_pd is not None else pairs is None
     out = text
-    for old, new in _BRAND_PAIRS:
+    for old, new in use_pairs:
         out = re.sub(r"\b" + re.escape(old) + r"\b", new, out)
-    out = re.sub(r"\bPD\b", "Meta", out)
-    out = re.sub(r"\bpd\b", "meta", out)
+    if apply_pd:
+        out = re.sub(r"\bPD\b", "Meta", out)
+        out = re.sub(r"\bpd\b", "meta", out)
     return out
 
 
-def strip_identity_text(tree: Path, protected: set[str]) -> dict[str, int]:
+def strip_identity_text(
+    tree: Path,
+    protected: set[str],
+    brand_pairs: Sequence[tuple[str, str]] | None = None,
+    *,
+    doc_title: str = "KV client library",
+    doc_blurb: str = "Internal storage client",
+) -> dict[str, int]:
     docs = 0
     comments = 0
     for path in _iter_text_files(tree):
         rel = path.relative_to(tree).as_posix()
         if path.suffix == ".go":
-            new, n = _strip_go_file(path.read_text(encoding="utf-8", errors="replace"), protected)
+            new, n = _strip_go_file(
+                path.read_text(encoding="utf-8", errors="replace"),
+                protected,
+                brand_pairs,
+            )
             if n:
                 path.write_text(new, encoding="utf-8")
                 comments += n
@@ -425,27 +444,40 @@ def strip_identity_text(tree: Path, protected: set[str]) -> dict[str, int]:
         if path.suffix.lower() in {".md", ".txt"} or stem in _DOC_NAMES or "license" in stem:
             orig = path.read_text(encoding="utf-8", errors="replace")
             if stem.startswith(("readme", "changelog", "contributing")):
-                path.write_text(_neutral_doc(path.name, orig), encoding="utf-8")
+                path.write_text(
+                    _neutral_doc(path.name, orig, title=doc_title, blurb=doc_blurb),
+                    encoding="utf-8",
+                )
                 docs += 1
                 continue
             if "license" in stem:
-                path.write_text(_brand_replace(orig), encoding="utf-8")
+                path.write_text(_brand_replace(orig, brand_pairs), encoding="utf-8")
                 docs += 1
                 continue
             if rel.startswith("docs/") or "/docs/" in f"/{rel}":
-                path.write_text(_brand_replace(orig), encoding="utf-8")
+                path.write_text(_brand_replace(orig, brand_pairs), encoding="utf-8")
                 docs += 1
     return {"docs": docs, "go_comment_hits": comments}
 
 
-def _neutral_doc(name: str, orig: str) -> str:
+def _neutral_doc(
+    name: str,
+    orig: str,
+    *,
+    title: str = "KV client library",
+    blurb: str = "Internal storage client",
+) -> str:
     return (
-        f"# KV client library\n\n"
-        f"Internal storage client. Original {name} identity text removed.\n"
+        f"# {title}\n\n"
+        f"{blurb}. Original {name} identity text removed.\n"
     )
 
 
-def _strip_go_file(text: str, protected: set[str]) -> tuple[str, int]:
+def _strip_go_file(
+    text: str,
+    protected: set[str],
+    pairs: Sequence[tuple[str, str]] | None = None,
+) -> tuple[str, int]:
     """Rewrite comments and unprotected string literals; leave code/imports intact."""
     out: list[str] = []
     i = 0
@@ -463,7 +495,7 @@ def _strip_go_file(text: str, protected: set[str]) -> tuple[str, int]:
             i = j + len(end)
         body = chunk
         if kind == "comment":
-            new = _brand_replace(body)
+            new = _brand_replace(body, pairs)
             if new != body:
                 hits += 1
             out.append(new)
@@ -475,7 +507,7 @@ def _strip_go_file(text: str, protected: set[str]) -> tuple[str, int]:
         if kind == "tag":
             out.append(body)
             return
-        new = _brand_replace(body)
+        new = _brand_replace(body, pairs)
         if new != body:
             hits += 1
         out.append(new)
@@ -488,9 +520,40 @@ def _strip_go_file(text: str, protected: set[str]) -> tuple[str, int]:
             i += len("import (")
             continue
         if in_import_paren:
-            if text[i] == ")":
+            if text.startswith("//", i):
+                nl = text.find("\n", i)
+                if nl < 0:
+                    out.append(text[i:])
+                    break
+                out.append(text[i : nl + 1])
+                i = nl + 1
+                continue
+            if text.startswith("/*", i):
+                j = text.find("*/", i + 2)
+                if j < 0:
+                    out.append(text[i:])
+                    break
+                out.append(text[i : j + 2])
+                i = j + 2
+                continue
+            ch = text[i]
+            if ch in "\"`":
+                end = "`" if ch == "`" else '"'
+                j = i + 1
+                while j < n:
+                    if end == '"' and text[j] == "\\":
+                        j += 2
+                        continue
+                    if text[j] == end:
+                        j += 1
+                        break
+                    j += 1
+                out.append(text[i:j])
+                i = j
+                continue
+            if ch == ")":
                 in_import_paren = False
-            out.append(text[i])
+            out.append(ch)
             i += 1
             continue
         if text.startswith('import "', i) or text.startswith("import `", i):
@@ -523,7 +586,7 @@ def _strip_go_file(text: str, protected: set[str]) -> tuple[str, int]:
             if inner in protected or chunk in protected:
                 out.append(chunk)
             else:
-                new = _brand_replace(chunk)
+                new = _brand_replace(chunk, pairs)
                 if new != chunk:
                     hits += 1
                 out.append(new)
@@ -540,7 +603,7 @@ def _strip_go_file(text: str, protected: set[str]) -> tuple[str, int]:
             if inner in protected or chunk in protected or _looks_like_struct_tag(inner):
                 out.append(chunk)
             else:
-                new = "`" + _brand_replace(inner) + "`"
+                new = "`" + _brand_replace(inner, pairs) + "`"
                 if new != chunk:
                     hits += 1
                 out.append(new)
@@ -805,6 +868,102 @@ def prepare_tree(tree: Path) -> set[str]:
     strip_identity_text(tree, protected)
     go_mod_tidy_offline(tree)
     return protected
+
+
+_VERSION_SUFFIX_RE = re.compile(r"(/v\d+)$")
+
+
+def read_module_paths(tree: Path) -> list[str]:
+    """Module paths from go.mod files, excluding vendor/testdata."""
+    found: list[str] = []
+    for path in sorted(tree.rglob("go.mod")):
+        parts = set(path.parts)
+        if "vendor" in parts or "testdata" in parts:
+            continue
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            if line.startswith("module "):
+                found.append(line.split()[1].strip())
+                break
+    return found
+
+
+def mapped_module_path(old: str, new_root: str) -> str:
+    """Keep a trailing /vN on the rewritten module path."""
+    m = _VERSION_SUFFIX_RE.search(old)
+    if m:
+        return new_root.rstrip("/") + m.group(1)
+    return new_root.rstrip("/")
+
+
+def map_modules(old_modules: Sequence[str], new_root: str) -> dict[str, str]:
+    """Map each go.mod path to a unique name under new_root, keeping nested suffixes."""
+    uniq = sorted(set(old_modules), key=lambda s: (len(s), s))
+    if not uniq:
+        return {}
+    real = [m for m in uniq if "." in m]
+    primary = real[0] if real else uniq[0]
+    primary_new = mapped_module_path(primary, new_root)
+    mapping: dict[str, str] = {}
+    used: set[str] = set()
+    for old in uniq:
+        if old == primary:
+            new = primary_new
+        elif old.startswith(primary + "/"):
+            new = primary_new + old[len(primary):]
+        else:
+            a = primary.split("/")
+            b = old.split("/")
+            common = 0
+            while common < min(len(a), len(b)) and a[common] == b[common]:
+                common += 1
+            if common >= 2 and common < len(b):
+                new = new_root.rstrip("/") + "/" + "/".join(b[common:])
+            elif "." not in old:
+                new = f"{primary_new}/{old}"
+            else:
+                new = new_root.rstrip("/") + "/" + "/".join(b[-3:])
+        base = new
+        n = 2
+        while new in used:
+            new = f"{base}~{n}"
+            n += 1
+        used.add(new)
+        mapping[old] = new
+    return mapping
+
+
+def identity_pass(
+    tree: Path,
+    *,
+    new_module: str,
+    brand_pairs: Sequence[tuple[str, str]],
+    old_modules: Sequence[str] | None = None,
+) -> dict[str, object]:
+    """Rewrite module paths and brand strings only. No directory or symbol renames."""
+    tree = Path(tree)
+    modules = list(old_modules) if old_modules is not None else read_module_paths(tree)
+    if not modules:
+        raise FileNotFoundError(f"no go.mod under {tree}")
+    pairs = tuple(sorted(brand_pairs, key=lambda p: len(p[0]), reverse=True))
+    mapping = map_modules(modules, new_module)
+    protected = collect_protected_literals(tree)
+    files_rewritten = 0
+    for old, new in sorted(mapping.items(), key=lambda kv: len(kv[0]), reverse=True):
+        files_rewritten += rewrite_module_path(tree, old, new)
+    stats = strip_identity_text(
+        tree,
+        protected,
+        pairs,
+        doc_title="Internal library",
+        doc_blurb="Internal library",
+    )
+    return {
+        "modules": mapping,
+        "module_files": files_rewritten,
+        "brand_pairs": [[a, b] for a, b in pairs],
+        "protected_literals": len(protected),
+        **stats,
+    }
 
 
 def restore_gold_files(buggy: Path, upstream: Path, rels: Sequence[str]) -> None:
@@ -1310,7 +1469,38 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--skip-docker", action="store_true")
     parser.add_argument("--docker-only", action="store_true")
     parser.add_argument("--alt-expected-fail", action="store_true")
+    parser.add_argument(
+        "--identity-only",
+        action="store_true",
+        help="module path + brand strings only (no symbol/dir renames)",
+    )
+    parser.add_argument("--tree", help="source tree for --identity-only")
+    parser.add_argument("--old-module", action="append", default=[], help="module path to rewrite")
+    parser.add_argument("--new-module", help="rewritten module root, e.g. example.internal/chartkit")
+    parser.add_argument(
+        "--brand",
+        action="append",
+        default=[],
+        help="old=new brand pair; repeatable",
+    )
     args = parser.parse_args(argv)
+    if args.identity_only:
+        if not args.tree or not args.new_module:
+            parser.error("--identity-only requires --tree and --new-module")
+        brands: list[tuple[str, str]] = []
+        for raw in args.brand:
+            if "=" not in raw:
+                parser.error(f"--brand must be old=new, got {raw!r}")
+            old, new = raw.split("=", 1)
+            brands.append((old, new))
+        result = identity_pass(
+            Path(args.tree),
+            new_module=args.new_module,
+            brand_pairs=brands,
+            old_modules=args.old_module or None,
+        )
+        print(json.dumps(result, indent=2))
+        return 0
     if args.docker_only:
         return _docker_only()
     if args.batch:

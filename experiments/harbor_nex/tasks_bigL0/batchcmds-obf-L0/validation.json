@@ -1,0 +1,213 @@
+{
+  "family": "batchcmds-obf",
+  "level": -2,
+  "instruction_self_check": {
+    "names_present": false,
+    "has_symptom_paraphrase": true,
+    "leaked_symbols": [],
+    "leaked_files": [],
+    "has_line_numbers": false,
+    "has_diff": false,
+    "reproduce_command": "if go test -count=1 -timeout 15m -run '^(TestBatchCancelDeadlineProperty|TestBatchStreamGroupingProperty|TestBatchPackedSizesAndCancelSkip|TestBatchUnmentionedRandom)$' ./internal/client/...; then",
+    "can_reproduce_one_command": true,
+    "diff_hunk_tokens_in_instruction": [],
+    "locality": 2,
+    "ok": true
+  },
+  "changed_symbols": [
+    "LumenJoin",
+    "SendRequest",
+    "ToBatchCommandsRequest"
+  ],
+  "changed_files": [
+    "client_batch.go",
+    "client.go",
+    "tikvrpc.go",
+    "rpc.go"
+  ],
+  "rule_verdicts": [
+    {
+      "rule_id": "A1",
+      "passed": true,
+      "evidence": "payload.checks.gold_restore=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A2",
+      "passed": true,
+      "evidence": "notes[alt accepted]=map packer + iterative builder on buggy tree \u2192 pass",
+      "skipped": false
+    },
+    {
+      "rule_id": "A3",
+      "passed": true,
+      "evidence": "payload.checks.cheat_rejected=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A4",
+      "passed": true,
+      "evidence": "notes[f2p files in impact]=`client_test.go` \u2208 `ToBatchCommandsRequest` / `sendBatchRequest` blast radius",
+      "skipped": false
+    },
+    {
+      "rule_id": "A5",
+      "passed": true,
+      "evidence": "notes[no collateral]=unrelated packages (codec, oracle, unionstore, tikv, txnkv, interceptor) green; notes[3\u00d7 not flaky]=fail \u00d73",
+      "skipped": false
+    },
+    {
+      "rule_id": "A6",
+      "passed": false,
+      "evidence": "not a multi-site bug (no site_* patches or two_site design)",
+      "skipped": true
+    },
+    {
+      "rule_id": "A7",
+      "passed": false,
+      "evidence": "no decoys on this task",
+      "skipped": true
+    },
+    {
+      "rule_id": "A8",
+      "passed": true,
+      "evidence": "image proof buggy_fails=True gold_passes=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A9",
+      "passed": false,
+      "evidence": "no race/perf/property gate in test.sh",
+      "skipped": true
+    },
+    {
+      "rule_id": "A10",
+      "passed": true,
+      "evidence": "task.toml [verifier] network_mode=no-network",
+      "skipped": false
+    },
+    {
+      "rule_id": "A11",
+      "passed": false,
+      "evidence": "no timing gate in test.sh",
+      "skipped": true
+    },
+    {
+      "rule_id": "A12",
+      "passed": true,
+      "evidence": "payload.checks.patches_skip_tests=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "B1",
+      "passed": true,
+      "evidence": "tests/test.sh checksum-guards files",
+      "skipped": false
+    },
+    {
+      "rule_id": "B2",
+      "passed": true,
+      "evidence": "task.toml [agent] allowlist; trial web-tool use not scored (jobs/ excluded)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B3",
+      "passed": true,
+      "evidence": "hidden verifier (1 files)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B4",
+      "passed": true,
+      "evidence": "payload.checks.blackbox_hygiene=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "B5",
+      "passed": true,
+      "evidence": "property/dynamic markers: ['rand.New', 'rand.NewSource', 'Property']",
+      "skipped": false
+    },
+    {
+      "rule_id": "B6",
+      "passed": true,
+      "evidence": "symptom=True repro=True cmd=if go test -count=1 -timeout 15m -run '^(TestBatchCancelDeadlineProperty|TestBatchStreamGroupingProperty|TestBatchPackedSizesAndCancelSkip|TestBatchUnmentionedRandom)$' ./internal/client/...; then",
+      "skipped": false
+    },
+    {
+      "rule_id": "B7",
+      "passed": true,
+      "evidence": "leaked_symbols=[] leaked_files=[] line_nos=False diff=False hunk_tokens=[]",
+      "skipped": false
+    },
+    {
+      "rule_id": "B8",
+      "passed": true,
+      "evidence": "instruction contains the no-web clause",
+      "skipped": false
+    },
+    {
+      "rule_id": "C5",
+      "passed": true,
+      "evidence": "payload.checks.harness_ok=True",
+      "skipped": false
+    }
+  ],
+  "checks": {
+    "proof_harness": true,
+    "harness_ok": true,
+    "image_harness": true,
+    "buggy_fails": true,
+    "docker_a0_buggy_fails": true,
+    "gold_restore": true,
+    "docker_a0_gold_pass": true,
+    "cheat_rejected": true,
+    "patches_skip_tests": true,
+    "blackbox_hygiene": true
+  },
+  "harness_ok": true,
+  "patches_skip_tests": true,
+  "blackbox_hygiene": true,
+  "coverage": [
+    {
+      "hidden_test": "TestBatchCancelDeadlineProperty / 10k seeded cancel+deadline",
+      "contract": "Sending a packed entry on a canceled context must fail with cancellation; sending with a zero (or already-expired) timeout must fail with deadline exceeded \u2014 not a generic batch-unavailable error."
+    },
+    {
+      "hidden_test": "TestBatchPackedSizesAndCancelSkip / extra sizes 7/11/13/16",
+      "contract": "Ten (and other) unforwarded pending entries build as one packed send; extra sizes the worked example does not name still succeed. After reset-equivalent live traffic the send path stays usable (id allocator is not stuck at zero)."
+    },
+    {
+      "hidden_test": "TestBatchStreamGroupingProperty / extra forwarded hosts",
+      "contract": "Interleaving an empty host with forwarded hosts yields one stream per host. Extra hosts and per-host counts beyond the 1/2/3/4 fixture still group by host."
+    },
+    {
+      "hidden_test": "TestBatchPackedSizesAndCancelSkip / live cancel skip",
+      "contract": "Canceled pending entries are omitted from the live stream; later live sends still complete."
+    },
+    {
+      "hidden_test": "TestBatchCancelDeadlineProperty / forwarded cancel",
+      "contract": "Canceling a waiter fails that waiter with cancellation (cancel-all of an already-canceled context)."
+    },
+    {
+      "hidden_test": "TestBatchStreamGroupingProperty / sequential prewrites 1,2,3,4,\u2026",
+      "contract": "With batching on and one connection, three prewrites to the same forwarded host share one stream, so a server metadata checker fires once per host, not once per request."
+    },
+    {
+      "hidden_test": "TestBatchStreamGroupingProperty / coprocessor stream",
+      "contract": "A unary-stream coprocessor call is not packed; each call hits the checker once, and a forwarded host still appears in metadata."
+    },
+    {
+      "hidden_test": "TestBatchUnmentionedRandom / unseen hosts",
+      "contract": "Forwarded hosts and batch sizes that the contract examples never name still share one stream per host and complete."
+    }
+  ],
+  "proof_harness": true,
+  "image_harness": true,
+  "buggy_fails": true,
+  "docker_a0_buggy_fails": true,
+  "gold_restore": true,
+  "docker_a0_gold_pass": true,
+  "cheat_rejected": true,
+  "ladder": "L0"
+}

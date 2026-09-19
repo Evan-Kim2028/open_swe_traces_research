@@ -1,0 +1,140 @@
+{
+  "ok": true,
+  "harness_ok": true,
+  "families": {
+    "keyspacecodec-obf": {
+      "ok": true,
+      "checks": [
+        {
+          "check": "proof_harness",
+          "ok": true,
+          "detail": "{\"ok\": true, \"image\": \"ladder-base:client-go-obf\", \"go_on_path\": true, \"go_out\": \"/usr/local/go/bin/go\\ngo version go1.23.12 linux/amd64\\n\", \"false_exit\": 1, \"true_exit\": 0}"
+        },
+        {
+          "check": "harness_ok",
+          "ok": true,
+          "detail": "go on PATH; false\u22600 true=0"
+        },
+        {
+          "check": "image_harness",
+          "ok": true,
+          "detail": "{\"ok\": true, \"image\": \"bigl0-keyspacecodec-obf:l0\", \"go_on_path\": true, \"go_out\": \"/usr/local/go/bin/go\\ngo version go1.23.12 linux/amd64\\n\", \"false_exit\": 1, \"true_exit\": 0}"
+        },
+        {
+          "check": "buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestCodecKeyRangeRoundTrip (0.00s)\n    codec_bb_prop_test.go:63: case 0 parse id: got 4294967295 keyspace id unavailable want 171411\n--- FAIL: TestCodecClipProperties (0.00s)\n    codec_bb_prop_test.go:144: case 0 complement region 1 kept\n--- FAIL: TestCodecContractExamples (0.00s)\n    codec_bb_prop_test.go:225: raw get wire: got 6b6579 want 720010926b6579\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/apicodec\t0.037s\n[2026/09/19 01:45:05.445 +00:00] [WARN] [backoff.go:179] [\"pdRPC backoffer.maxSleep 400ms is exceeded, errors:\\nloadRegion from Meta failed, key: \\\"6B\\\", err: insufficient bytes to decode value at 2026-09-19T01:45:04.94857683Z\\ntotal-backoff-times: 1, backoff-detail: pdRPC:1, maxBackoffTimeExceeded: true, maxExcludedTimeExceeded: false\\nlongest sleep type: pdRPC, time: 497ms\"]\n--- FAIL: TestLocateMalformedRegionNoBackoff (0.50s)\n    decode_fatal_bb_test.go:34: malformed region lookup retried with backoff: got 1 want 0\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/locate\t0.521s\nFAIL\n"
+        },
+        {
+          "check": "docker_a0_buggy_fails",
+          "ok": true,
+          "detail": "rc=1 reward=0"
+        },
+        {
+          "check": "gold_restore",
+          "ok": true,
+          "detail": "patching file internal/apicodec/codec.go\npatching file internal/apicodec/codec_v1.go\npatching file internal/apicodec/codec_v2.go\npatching file internal/apicodec/mem_codec.go\npatching file internal/locate/pd_codec.go\nok  \texample.internal/kvstore/v2/internal/apicodec\t0.205s\nok  \texample.internal/kvstore/v2/internal/locate\t0.022s\n"
+        },
+        {
+          "check": "docker_a0_gold_pass",
+          "ok": true,
+          "detail": "rc=0 reward=1"
+        },
+        {
+          "check": "cheat_rejected",
+          "ok": true,
+          "detail": "patching file internal/apicodec/codec.go\npatching file internal/apicodec/codec_v2.go\npatching file internal/apicodec/mem_codec.go\n--- FAIL: TestCodecKeyRangeRoundTrip (0.00s)\n    codec_bb_prop_test.go:63: case 0 parse id: got 4294967295 keyspace id unavailable want 171411\n--- FAIL: TestCodecClipProperties (0.00s)\n    codec_bb_prop_test.go:144: case 0 complement region 1 kept\n--- FAIL: TestCodecContractExamples (0.00s)\n    codec_bb_prop_test.go:270: empty range expand: [, )\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/apicodec\t0.034s\nok  \texample.internal/kvstore/v2/internal/locate\t0.024s\nFAIL\n"
+        },
+        {
+          "check": "patches_skip_tests",
+          "ok": true,
+          "detail": "A12: author gold/cheat copied unread; registry checks hunks"
+        },
+        {
+          "check": "blackbox_hygiene",
+          "ok": true,
+          "detail": "hidden tests are exported-API only (B4 packaging gate)"
+        }
+      ],
+      "harness": {
+        "ok": true,
+        "image": "ladder-base:client-go-obf",
+        "go_on_path": true,
+        "go_out": "/usr/local/go/bin/go\ngo version go1.23.12 linux/amd64\n",
+        "false_exit": 1,
+        "true_exit": 0
+      }
+    },
+    "batchcmds-obf": {
+      "ok": true,
+      "checks": [
+        {
+          "check": "proof_harness",
+          "ok": true,
+          "detail": "{\"ok\": true, \"image\": \"ladder-base:client-go-obf\", \"go_on_path\": true, \"go_out\": \"/usr/local/go/bin/go\\ngo version go1.23.12 linux/amd64\\n\", \"false_exit\": 1, \"true_exit\": 0}"
+        },
+        {
+          "check": "harness_ok",
+          "ok": true,
+          "detail": "go on PATH; false\u22600 true=0"
+        },
+        {
+          "check": "image_harness",
+          "ok": true,
+          "detail": "{\"ok\": true, \"image\": \"bigl0-batchcmds-obf:l0\", \"go_on_path\": true, \"go_out\": \"/usr/local/go/bin/go\\ngo version go1.23.12 linux/amd64\\n\", \"false_exit\": 1, \"true_exit\": 0}"
+        },
+        {
+          "check": "buggy_fails",
+          "ok": true,
+          "detail": "?   \texample.internal/kvstore/v2/internal/client/mockserver\t[no test files]\n--- FAIL: TestBatchCancelDeadlineProperty (0.00s)\n    batch_bb_prop_test.go:38: case 0 canceled: got batch send unavailable\n[2026/09/19 01:45:14.511 +00:00] [INFO] [mock_tikv_service.go:168] [\"mock server started\"] [addr=127.0.0.1:43363]\n--- FAIL: TestBatchStreamGroupingProperty (0.00s)\n    batch_bb_prop_test.go:143: stream grouping host \"\": checker=3 want 1 (once per host, not per request)\n[2026/09/19 01:45:14.515 +00:00] [INFO] [mock_tikv_service.go:168] [\"mock server started\"] [addr=127.0.0.1:41817]\n--- FAIL: TestBatchPackedSizesAndCancelSkip (0.00s)\n    batch_bb_prop_test.go:213: canceled send: rpc error: code = Canceled desc = context canceled\n[2026/09/19 01:45:14.519 +00:00] [INFO] [mock_tikv_service.go:168] [\"mock server started\"] [addr=127.0.0.1:44821]\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/client\t0.037s\nok  \texample.internal/kvstore/v2/internal/client/retry\t0.018s [no tests to run]\nFAIL\n"
+        },
+        {
+          "check": "docker_a0_buggy_fails",
+          "ok": true,
+          "detail": "rc=1 reward=0"
+        },
+        {
+          "check": "gold_restore",
+          "ok": true,
+          "detail": "patching file internal/client/client_batch.go\npatching file internal/client/client.go\npatching file internal/mockstore/mockkv/rpc.go\npatching file wirerpc/tikvrpc.go\n?   \texample.internal/kvstore/v2/internal/client/mockserver\t[no test files]\nok  \texample.internal/kvstore/v2/internal/client\t0.665s\nok  \texample.internal/kvstore/v2/internal/client/retry\t0.017s [no tests to run]\n"
+        },
+        {
+          "check": "docker_a0_gold_pass",
+          "ok": true,
+          "detail": "rc=0 reward=1"
+        },
+        {
+          "check": "cheat_rejected",
+          "ok": true,
+          "detail": "patching file internal/client/client_batch.go\n?   \texample.internal/kvstore/v2/internal/client/mockserver\t[no test files]\n--- FAIL: TestBatchCancelDeadlineProperty (0.00s)\n    batch_bb_prop_test.go:55: case 7 timeout 2ns: got batch send unavailable\n[2026/09/19 01:45:18.223 +00:00] [INFO] [mock_tikv_service.go:168] [\"mock server started\"] [addr=127.0.0.1:35315]\n--- FAIL: TestBatchStreamGroupingProperty (0.00s)\n    batch_bb_prop_test.go:143: stream grouping host \"\": checker=3 want 1 (once per host, not per request)\n[2026/09/19 01:45:18.227 +00:00] [INFO] [mock_tikv_service.go:168] [\"mock server started\"] [addr=127.0.0.1:37423]\n--- FAIL: TestBatchPackedSizesAndCancelSkip (0.00s)\n    batch_bb_prop_test.go:213: canceled send: rpc error: code = Canceled desc = context canceled\n[2026/09/19 01:45:18.230 +00:00] [INFO] [mock_tikv_service.go:168] [\"mock server started\"] [addr=127.0.0.1:45127]\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/client\t0.035s\nok  \texample.internal/kvstore/v2/internal/client/retry\t0.015s [no tests to run]\nFAIL\n"
+        },
+        {
+          "check": "patches_skip_tests",
+          "ok": true,
+          "detail": "A12: author gold/cheat copied unread; registry checks hunks"
+        },
+        {
+          "check": "blackbox_hygiene",
+          "ok": true,
+          "detail": "hidden tests are exported-API only (B4 packaging gate)"
+        }
+      ],
+      "harness": {
+        "ok": true,
+        "image": "ladder-base:client-go-obf",
+        "go_on_path": true,
+        "go_out": "/usr/local/go/bin/go\ngo version go1.23.12 linux/amd64\n",
+        "false_exit": 1,
+        "true_exit": 0
+      }
+    }
+  },
+  "harness": {
+    "ok": true,
+    "image": "ladder-base:client-go-obf",
+    "go_on_path": true,
+    "go_out": "/usr/local/go/bin/go\ngo version go1.23.12 linux/amd64\n",
+    "false_exit": 1,
+    "true_exit": 0
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "family": "batchcmds-obf",
+  "level": -2,
+  "hidden_tests": [
+    "internal/client/batch_bb_prop_test.go"
+  ],
+  "representative": "internal/client/batch_bb_prop_test.go",
+  "instruction_self_check": {
+    "names_present": false,
+    "has_symptom_paraphrase": true,
+    "leaked_symbols": [],
+    "leaked_files": [],
+    "has_line_numbers": false,
+    "has_diff": false,
+    "reproduce_command": "if go test -count=1 -timeout 15m -run '^(TestBatchCancelDeadlineProperty|TestBatchStreamGroupingProperty|TestBatchPackedSizesAndCancelSkip|TestBatchUnmentionedRandom)$' ./internal/client/...; then",
+    "can_reproduce_one_command": true,
+    "diff_hunk_tokens_in_instruction": [],
+    "locality": 2,
+    "ok": true
+  }
+}

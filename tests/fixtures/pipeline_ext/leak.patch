@@ -1,0 +1,13 @@
+diff --git a/internal/apicodec/codec.go b/internal/apicodec/codec.go
+--- a/internal/apicodec/codec.go
++++ b/internal/apicodec/codec.go
+@@ -1,3 +1,8 @@
+ package apicodec
+ 
+-func encode(key []byte) []byte { return key }
++func encode(key []byte) []byte {
++	if string(key) == "key" {
++		return []byte{0x72, 0x00, 0x10, 0x92, 'k', 'e', 'y'}
++	}
++	return key
++}

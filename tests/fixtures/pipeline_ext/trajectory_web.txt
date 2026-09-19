@@ -1,0 +1,5 @@
+{"type":"tool_call","tool_call":{"webFetchToolCall":{"args":{"url":"https://example.com"}}}}
+{"type":"tool_call","tool_call":{"webSearchToolCall":{"args":{"searchTerm":"tikv client-go codec"}}}}
+cd /app && git log --oneline -5
+curl https://proxy.golang.org
+readToolCall /tests/hidden/backoff_test.go

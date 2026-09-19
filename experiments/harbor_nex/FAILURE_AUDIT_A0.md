@@ -139,3 +139,13 @@ fair verifier and a full contract, nearly every unit in client-go is L2 for a mi
 Under C6: pipeline flip = **L5** (confirmed). Codec flip is **> L3** (the earlier "L3" was a one-off; L4/L5 not yet
 replicated). Single attempts mislabeled one of two flip points. Devin's readings (codec L2 pass, pipeline L5
 pass) remain single-attempt and provisional.
+
+## Big-unit test (2026-09-19 02:50Z) — scale × withholding, verifier written BLIND by a separate agent
+
+| unit | lines | L0 | L2 | audit |
+|---|---|---|---|---|
+| batchcmds (interface removed) | 221 | 3/3 pass | 2/3 pass | clean |
+| keyspacecodec (906 lines / 5 files) | 906 | **0/3** | **0/3** | see per-trial line above; gold passed the blind suite, cheat failed |
+
+First replicated unit above L2 for Composer 2.5 with a fair, independently authored verifier. Lever confirmed:
+large closure + withheld tests. The separated author/verifier roles produced a valid task on the first try.
