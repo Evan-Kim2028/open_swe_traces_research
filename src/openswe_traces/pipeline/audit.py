@@ -100,6 +100,12 @@ def audit_trial_dir(trial_dir: Path) -> TrialAudit:
     else:
         verdict = "PENDING"
     tin, tout = parse_harbor_trial_tokens(result)
+    if not tin and not tout:
+        # Devin CLI trials report no tokens to Harbor; read the CLI's own session db.
+        from openswe_traces.results import _devin_tokens
+
+        din, dout = _devin_tokens(trial_dir)
+        tin, tout = int(din or 0), int(dout or 0)
     name = trial_dir.name.split("__")[0]
     return TrialAudit(
         trial_dir=trial_dir,
