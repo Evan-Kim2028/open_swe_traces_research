@@ -64,7 +64,7 @@ class PipelineStore:
     def __init__(self, path: Path | str) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._con = sqlite3.connect(str(self.path))
+        self._con = sqlite3.connect(str(self.path), timeout=60)
         self._con.row_factory = sqlite3.Row
         self._con.execute("PRAGMA journal_mode=WAL")
         self._con.execute("PRAGMA foreign_keys=ON")

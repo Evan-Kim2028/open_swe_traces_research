@@ -267,7 +267,9 @@ def vps_harbor(
     if solver != "devin":
         key = cursor_api_key(cfg.cursor_env_file)
         if not key:
-            raise RuntimeError("CURSOR_API_KEY missing; export from eval_tasks/.env in the ssh command")
+            raise RuntimeError(
+                "CURSOR_API_KEY missing; export from eval_tasks/.env in the ssh command"
+            )
         env["CURSOR_API_KEY"] = key
     timed_out = False
     try:
@@ -366,6 +368,53 @@ def run_solve_unit(
             store.close()
 
 
+def _fanout_cycle(
+    cfg: PipelineConfig,
+    store: PipelineStore,
+    ready: list[tuple[str, str, Path]],
+    children: dict[tuple[str, str], subprocess.Popen[bytes]],
+    *,
+    host: str,
+) -> int:
+    """Run solve-unit as child processes, up to cfg.parallel_units at once (Devin cap is the semaphore)."""
+    for key, proc in list(children.items()):
+        rc = proc.poll()
+        if rc is not None:
+            log.info("solve-unit child done %s/%s rc=%s", key[0], key[1], rc)
+            del children[key]
+            try:
+                aggregate(store, cfg)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("aggregate failed: %s", exc)
+    launched = 0
+    for repo, unit, l2 in ready:
+        if len(children) >= cfg.parallel_units:
+            break
+        if (repo, unit) in children or already_solving_or_solved(store, repo, unit):
+            continue
+        argv = [
+            "uv",
+            "run",
+            "python",
+            "scripts/pipeline.py",
+            "solve-unit",
+            "--repo",
+            repo,
+            "--unit",
+            unit,
+            "--host",
+            host,
+        ]
+        log_path = cfg.logs_dir / f"solve_unit_{repo}_{unit}.log"
+        log.info("launch solve-unit child %s/%s from %s -> %s", repo, unit, l2, log_path)
+        with open(log_path, "ab") as fh:
+            children[(repo, unit)] = subprocess.Popen(
+                argv, stdout=fh, stderr=subprocess.STDOUT, cwd=str(cfg.repo_root)
+            )
+        launched += 1
+    return launched
+
+
 def solve_watch(
     cfg: PipelineConfig,
     *,
@@ -390,7 +439,14 @@ def solve_watch(
     harbor_fn = harbor or make_harbor(cfg, chosen)
     launched = 0
     cycle = 0
-    log.info("solve-watch start interval=%s host=%s docker_slots=%s", interval, chosen, slots)
+    children: dict[tuple[str, str], subprocess.Popen[bytes]] = {}
+    log.info(
+        "solve-watch start interval=%s host=%s docker_slots=%s parallel_units=%s",
+        interval,
+        chosen,
+        slots,
+        cfg.parallel_units,
+    )
     try:
         while True:
             cycle += 1
@@ -401,7 +457,18 @@ def solve_watch(
             except Exception as exc:  # noqa: BLE001
                 log.warning("reconcile failed: %s", exc)
             ready = discover_verified_units(cfg)
-            log.info("scan cycle=%s verified=%s docker_slots=%s", cycle, [(r, u) for r, u, _ in ready], slots)
+            log.info(
+                "scan cycle=%s verified=%s docker_slots=%s",
+                cycle,
+                [(r, u) for r, u, _ in ready],
+                slots,
+            )
+            if cfg.parallel_units > 1 and harbor is None:
+                launched += _fanout_cycle(cfg, store, ready, children, host=chosen)
+                if max_cycles is not None and cycle >= max_cycles:
+                    break
+                sleep_fn(float(interval))
+                continue
             for repo, unit, l2 in ready:
                 if already_solving_or_solved(store, repo, unit):
                     continue

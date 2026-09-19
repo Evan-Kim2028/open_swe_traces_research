@@ -42,6 +42,7 @@ class PipelineConfig:
     climb_levels: tuple[int, ...] = (2, 5, 6)
     attempts: int = 3
     composer_token_cap: int = 1_000_000_000
+    parallel_units: int = 1
     devin_slots: int = 6
     devin_slots_path: Path = DEVIN_SLOTS_PATH
     default_host: str = "laptop"
@@ -188,6 +189,7 @@ def load_config(
         climb_levels=tuple(int(x) for x in climb),
         attempts=int(raw.get("attempts") or 3),
         composer_token_cap=int(raw.get("composer_token_cap") or 1_000_000_000),
+        parallel_units=int(raw.get("parallel_units") or 1),
         devin_slots=int(raw["devin_slots"]) if raw.get("devin_slots") is not None else 6,
         devin_slots_path=_as_path(raw.get("devin_slots_path"), DEVIN_SLOTS_PATH),
         default_host=str(raw.get("default_host") or "laptop"),
