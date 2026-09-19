@@ -245,7 +245,7 @@ def run_repo(
 
     for idx, urow in enumerate(unit_rows):
         unit = urow["unit"]
-        if urow["status"] == REJECTED:
+        if urow["status"] == REJECTED or (urow["rejected_rule"] if "rejected_rule" in urow.keys() else None):
             continue
         if store.should_run(spec.name, "verifier", unit):
             try:
