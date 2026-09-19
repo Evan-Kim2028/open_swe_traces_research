@@ -294,6 +294,7 @@ def find_trial_patch(trial_dir: Path | str | None, patch: str | None = None) -> 
     for cand in (
         root / "agent.patch",
         root / "artifacts" / "agent.patch",
+        root / "artifacts" / "logs" / "artifacts" / "agent.patch",
         root / "patches" / "agent.patch",
         root / "diff.patch",
         root / "verifier" / "agent.patch",

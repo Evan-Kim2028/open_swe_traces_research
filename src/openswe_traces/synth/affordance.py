@@ -53,6 +53,7 @@ def render_ladder_base_dockerfile(base: str = LADDER_BASE_IMAGE) -> str:
     return f"""FROM {base}
 WORKDIR /app
 COPY src/ /app/
+RUN cp -a /app /pristine
 """
 
 
@@ -164,6 +165,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \\
 
 WORKDIR /app
 COPY src/ /app/
+RUN cp -a /app /pristine
 RUN if [ ! -f go.mod ]; then go mod init host; fi
 RUN GOPROXY=https://proxy.golang.org,direct go mod download || \\
     GOPROXY=https://proxy.golang.org,direct go mod tidy || true
@@ -264,6 +266,12 @@ fi
 set -uo pipefail
 mkdir -p /logs/verifier
 cd /app
+mkdir -p /logs/artifacts
+if [ -d /pristine ]; then
+  ( cd / && ( git diff --no-index --no-color pristine app 2>/dev/null || diff -ruN pristine app ) ) \
+    | sed -e 's|a/pristine/|a/|g' -e 's|b/app/|b/|g' -e 's|a/app/|a/|g' -e 's|b/pristine/|b/|g' -e 's|^--- pristine/|--- a/|' -e 's|^+++ app/|+++ b/|' \
+    > /logs/artifacts/agent.patch || true
+fi
 {body}
 {correctness}{perf}echo 1 > /logs/verifier/reward.txt
 exit 0
