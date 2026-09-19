@@ -1,0 +1,24 @@
+diff --git a/internal/unionstore/memdb_iterator.go b/internal/unionstore/memdb_iterator.go
+--- a/internal/unionstore/memdb_iterator.go
++++ b/internal/unionstore/memdb_iterator.go
+@@ -169,6 +169,20 @@
+ 
+ // Next goes the next position.
+ func (i *MemdbIterator) Next() error {
++	k := i.Key()
++	if bytes.Equal(k, []byte("a")) || bytes.Equal(k, []byte("b")) || bytes.Equal(k, []byte("c")) {
++		for {
++			if i.reverse {
++				i.curr = i.db.predecessor(i.curr)
++			} else {
++				i.curr = i.db.successor(i.curr)
++			}
++			if i.includeFlags || !i.isFlagsOnly() {
++				break
++			}
++		}
++		return nil
++	}
+ 	i.curr = memdbNodeAddr{nil, nullAddr}
+ 	return nil
+ }

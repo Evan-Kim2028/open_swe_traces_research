@@ -1,0 +1,572 @@
+{
+  "ok": true,
+  "image": "ladder-base:client-go-obf",
+  "picks": [
+    {
+      "unit": "delete-range",
+      "score": 9.0,
+      "entry": "DeleteRange",
+      "closure": [
+        "DeleteRange",
+        "getColumnFamily",
+        "getRawKVOptions",
+        "sendDeleteRangeReq"
+      ],
+      "tests": [
+        "TestDeleteRange"
+      ]
+    },
+    {
+      "unit": "batch-delete",
+      "score": 9.0,
+      "entry": "BatchDelete",
+      "closure": [
+        "BatchDelete",
+        "doBatchReq",
+        "getColumnFamily",
+        "getRawKVOptions",
+        "sendBatchReq"
+      ],
+      "tests": [
+        "TestBatch"
+      ]
+    },
+    {
+      "unit": "decode",
+      "score": 2.0,
+      "entry": "Decode",
+      "closure": [
+        "Decode",
+        "Next",
+        "ReadNumber",
+        "ReadSlice",
+        "UnmarshalBinary",
+        "Valid",
+        "mvccDecode"
+      ],
+      "tests": [
+        "TestMarshalmvccLock",
+        "TestMarshalmvccValue"
+      ]
+    },
+    {
+      "unit": "next",
+      "score": 2.0,
+      "entry": "Next",
+      "closure": [
+        "Key",
+        "Next",
+        "Value",
+        "dirtyNext",
+        "getValue",
+        "snapshotNext",
+        "updateCur"
+      ],
+      "tests": [
+        "TestErrorIterator"
+      ]
+    }
+  ],
+  "tasks": {
+    "delete-range": "/home/evan/Documents/open_swe_traces_research/experiments/harbor_nex/tasks_scoretest/delete-range-L2",
+    "batch-delete": "/home/evan/Documents/open_swe_traces_research/experiments/harbor_nex/tasks_scoretest/batch-delete-L2",
+    "decode": "/home/evan/Documents/open_swe_traces_research/experiments/harbor_nex/tasks_scoretest/decode-L2",
+    "next": "/home/evan/Documents/open_swe_traces_research/experiments/harbor_nex/tasks_scoretest/next-L2"
+  },
+  "families": {
+    "all": {
+      "checks": [
+        {
+          "check": "proof_harness",
+          "ok": true,
+          "detail": "go on PATH; false\u22600 true=0",
+          "skipped": false
+        },
+        {
+          "check": "harness_ok",
+          "ok": true,
+          "detail": "{\"ok\": true, \"go_on_path\": true, \"go_out\": \"/usr/local/go/bin/go\\ngo version go1.23.12 linux/amd64\\n\", \"false_exit\": 1, \"true_exit\": 0}",
+          "skipped": false
+        }
+      ]
+    },
+    "delete-range": {
+      "checks": [
+        {
+          "check": "A0_buggy_fails",
+          "ok": true,
+          "detail": "[2026/09/19 00:18:39.844 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:39.844 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestDeleteRangeHalfOpenProperty (0.00s)\n    delete_range_bb_prop_test.go:61: case 0 key \"b\\x00\" still present after range delete\n[2026/09/19 00:18:39.845 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:39.845 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestDeleteRangeContractExamples (0.00s)\n    delete_range_bb_prop_test.go:87: range from key3 to unbounded should be empty, got [[107 101 121 51] [107 101 121 52] [107 118]] [[118 97 108 117 101 51] [118 97 108 117 101 52] [84 105 75 86]]\n[2026/09/19 00:18:39.845 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:39.845 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestDeleteRangeUnmentionedRandom (0.00s)\n    delete_range_bb_prop_test.go:109: unmentioned key still present: \"v\" <nil>\nFAIL\nFAIL\texample.internal/kvstore/v2/rawkv\t0.014s\nFAIL\n",
+          "skipped": false
+        },
+        {
+          "check": "buggy_fails",
+          "ok": true,
+          "detail": "L2",
+          "skipped": false
+        },
+        {
+          "check": "A0_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/rawkv\t0.043s\n",
+          "skipped": false
+        },
+        {
+          "check": "gold_restore",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/rawkv\t0.043s\n",
+          "skipped": false
+        },
+        {
+          "check": "A0_cheat_fails",
+          "ok": true,
+          "detail": "[2026/09/19 00:18:43.334 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:43.335 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestDeleteRangeHalfOpenProperty (0.00s)\n    delete_range_bb_prop_test.go:61: case 0 key \"b\\x00\" still present after range delete\n[2026/09/19 00:18:43.337 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:43.337 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:43.343 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:43.344 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestDeleteRangeUnmentionedRandom (0.01s)\n    delete_range_bb_prop_test.go:109: unmentioned key still present: \"v\" <nil>\nFAIL\nFAIL\texample.internal/kvstore/v2/rawkv\t0.026s\nFAIL\n",
+          "skipped": false
+        },
+        {
+          "check": "cheat_rejected",
+          "ok": true,
+          "detail": "[2026/09/19 00:18:43.334 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:43.335 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestDeleteRangeHalfOpenProperty (0.00s)\n    delete_range_bb_prop_test.go:61: case 0 key \"b\\x00\" still present after range delete\n[2026/09/19 00:18:43.337 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:43.337 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:43.343 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:43.344 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestDeleteRangeUnmentionedRandom (0.01s)\n    delete_range_bb_prop_test.go:109: unmentioned key still present: \"v\" <nil>\nFAIL\nFAIL\texample.internal/kvstore/v2/rawkv\t0.026s\nFAIL\n",
+          "skipped": false
+        },
+        {
+          "check": "two_func_alt_accepted",
+          "ok": false,
+          "detail": "screening pass: alt skipped",
+          "skipped": true
+        },
+        {
+          "check": "patches_skip_tests",
+          "ok": true,
+          "detail": "gold/cheat generated without *_test.go hunks",
+          "skipped": false
+        },
+        {
+          "check": "proof_harness",
+          "ok": true,
+          "detail": "inherited harness",
+          "skipped": false
+        }
+      ]
+    },
+    "batch-delete": {
+      "checks": [
+        {
+          "check": "A0_buggy_fails",
+          "ok": true,
+          "detail": "[2026/09/19 00:18:44.959 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:44.959 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestBatchDeleteRemovesListedKeys (0.00s)\n    batch_delete_bb_prop_test.go:58: case 0 key \"p\\x00\\x00\" still present\n[2026/09/19 00:18:44.959 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:44.959 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestBatchDeleteContractExamples (0.00s)\n    batch_delete_bb_prop_test.go:84: listed keys must be gone, got \"value1\" <nil>\n[2026/09/19 00:18:44.959 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:44.959 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestBatchDeleteUnmentionedRandom (0.00s)\n    batch_delete_bb_prop_test.go:101: unmentioned key still present: \"v\" <nil>\nFAIL\nFAIL\texample.internal/kvstore/v2/rawkv\t0.016s\nFAIL\n",
+          "skipped": false
+        },
+        {
+          "check": "buggy_fails",
+          "ok": true,
+          "detail": "L2",
+          "skipped": false
+        },
+        {
+          "check": "A0_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/rawkv\t0.058s\n",
+          "skipped": false
+        },
+        {
+          "check": "gold_restore",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/rawkv\t0.058s\n",
+          "skipped": false
+        },
+        {
+          "check": "A0_cheat_fails",
+          "ok": true,
+          "detail": "[2026/09/19 00:18:48.341 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:48.341 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestBatchDeleteRemovesListedKeys (0.00s)\n    batch_delete_bb_prop_test.go:58: case 0 key \"p\\x00\\x00\" still present\n[2026/09/19 00:18:48.342 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:48.342 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:48.342 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:48.342 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestBatchDeleteUnmentionedRandom (0.00s)\n    batch_delete_bb_prop_test.go:101: unmentioned key still present: \"v\" <nil>\nFAIL\nFAIL\texample.internal/kvstore/v2/rawkv\t0.016s\nFAIL\n",
+          "skipped": false
+        },
+        {
+          "check": "cheat_rejected",
+          "ok": true,
+          "detail": "[2026/09/19 00:18:48.341 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:48.341 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestBatchDeleteRemovesListedKeys (0.00s)\n    batch_delete_bb_prop_test.go:58: case 0 key \"p\\x00\\x00\" still present\n[2026/09/19 00:18:48.342 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:48.342 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:48.342 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:48.342 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestBatchDeleteUnmentionedRandom (0.00s)\n    batch_delete_bb_prop_test.go:101: unmentioned key still present: \"v\" <nil>\nFAIL\nFAIL\texample.internal/kvstore/v2/rawkv\t0.016s\nFAIL\n",
+          "skipped": false
+        },
+        {
+          "check": "two_func_alt_accepted",
+          "ok": false,
+          "detail": "screening pass: alt skipped",
+          "skipped": true
+        },
+        {
+          "check": "patches_skip_tests",
+          "ok": true,
+          "detail": "gold/cheat generated without *_test.go hunks",
+          "skipped": false
+        },
+        {
+          "check": "proof_harness",
+          "ok": true,
+          "detail": "inherited harness",
+          "skipped": false
+        }
+      ]
+    },
+    "decode": {
+      "checks": [
+        {
+          "check": "A0_buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestLockBinaryRoundTripProperty (0.00s)\n    decode_bb_prop_test.go:40: case 0 round-trip mismatch\n--- FAIL: TestValueBinaryRoundTripProperty (0.00s)\n    decode_bb_prop_test.go:64: case 0 round-trip mismatch\n--- FAIL: TestDecodeContractExamples (0.00s)\n    decode_bb_prop_test.go:84: lock example round-trip failed: {startTS:0 primary:[] value:[] op:0 ttl:0 forUpdateTS:0 txnSize:0 minCommitTS:0}\n--- FAIL: TestDecodeUnmentionedRandom (0.00s)\n    decode_bb_prop_test.go:113: unmentioned lock failed: {startTS:0 primary:[] value:[] op:0 ttl:0 forUpdateTS:0 txnSize:0 minCommitTS:0}\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/mockstore/mockkv\t0.011s\nFAIL\n",
+          "skipped": false
+        },
+        {
+          "check": "buggy_fails",
+          "ok": true,
+          "detail": "L2",
+          "skipped": false
+        },
+        {
+          "check": "A0_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/mockstore/mockkv\t0.023s\n",
+          "skipped": false
+        },
+        {
+          "check": "gold_restore",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/mockstore/mockkv\t0.023s\n",
+          "skipped": false
+        },
+        {
+          "check": "A0_cheat_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestLockBinaryRoundTripProperty (0.00s)\n    decode_bb_prop_test.go:40: case 0 round-trip mismatch\n--- FAIL: TestValueBinaryRoundTripProperty (0.00s)\n    decode_bb_prop_test.go:64: case 0 round-trip mismatch\n--- FAIL: TestDecodeUnmentionedRandom (0.00s)\n    decode_bb_prop_test.go:113: unmentioned lock failed: {startTS:0 primary:[] value:[] op:0 ttl:0 forUpdateTS:0 txnSize:0 minCommitTS:0}\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/mockstore/mockkv\t0.011s\nFAIL\n",
+          "skipped": false
+        },
+        {
+          "check": "cheat_rejected",
+          "ok": true,
+          "detail": "--- FAIL: TestLockBinaryRoundTripProperty (0.00s)\n    decode_bb_prop_test.go:40: case 0 round-trip mismatch\n--- FAIL: TestValueBinaryRoundTripProperty (0.00s)\n    decode_bb_prop_test.go:64: case 0 round-trip mismatch\n--- FAIL: TestDecodeUnmentionedRandom (0.00s)\n    decode_bb_prop_test.go:113: unmentioned lock failed: {startTS:0 primary:[] value:[] op:0 ttl:0 forUpdateTS:0 txnSize:0 minCommitTS:0}\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/mockstore/mockkv\t0.011s\nFAIL\n",
+          "skipped": false
+        },
+        {
+          "check": "two_func_alt_accepted",
+          "ok": false,
+          "detail": "screening pass: alt skipped",
+          "skipped": true
+        },
+        {
+          "check": "patches_skip_tests",
+          "ok": true,
+          "detail": "gold/cheat generated without *_test.go hunks",
+          "skipped": false
+        },
+        {
+          "check": "proof_harness",
+          "ok": true,
+          "detail": "inherited harness",
+          "skipped": false
+        }
+      ]
+    },
+    "next": {
+      "checks": [
+        {
+          "check": "A0_buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestIteratorNextOrderProperty (0.00s)\n    next_bb_prop_test.go:54: case 0 len 1 want 4\n--- FAIL: TestIteratorNextContractExamples (0.00s)\n    next_bb_prop_test.go:84: example order [a] want a b c\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/unionstore\t0.028s\nFAIL\n",
+          "skipped": false
+        },
+        {
+          "check": "buggy_fails",
+          "ok": true,
+          "detail": "L2",
+          "skipped": false
+        },
+        {
+          "check": "A0_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/unionstore\t0.053s\n",
+          "skipped": false
+        },
+        {
+          "check": "gold_restore",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/unionstore\t0.053s\n",
+          "skipped": false
+        },
+        {
+          "check": "A0_cheat_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestIteratorNextOrderProperty (0.00s)\n    next_bb_prop_test.go:54: case 0 len 1 want 4\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/unionstore\t0.010s\nFAIL\n",
+          "skipped": false
+        },
+        {
+          "check": "cheat_rejected",
+          "ok": true,
+          "detail": "--- FAIL: TestIteratorNextOrderProperty (0.00s)\n    next_bb_prop_test.go:54: case 0 len 1 want 4\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/unionstore\t0.010s\nFAIL\n",
+          "skipped": false
+        },
+        {
+          "check": "two_func_alt_accepted",
+          "ok": false,
+          "detail": "screening pass: alt skipped",
+          "skipped": true
+        },
+        {
+          "check": "patches_skip_tests",
+          "ok": true,
+          "detail": "gold/cheat generated without *_test.go hunks",
+          "skipped": false
+        },
+        {
+          "check": "proof_harness",
+          "ok": true,
+          "detail": "inherited harness",
+          "skipped": false
+        }
+      ]
+    }
+  },
+  "units": [
+    {
+      "unit": "delete-range",
+      "checks": [
+        {
+          "check": "A0_buggy_fails",
+          "ok": true,
+          "detail": "[2026/09/19 00:18:39.844 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:39.844 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestDeleteRangeHalfOpenProperty (0.00s)\n    delete_range_bb_prop_test.go:61: case 0 key \"b\\x00\" still present after range delete\n[2026/09/19 00:18:39.845 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:39.845 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestDeleteRangeContractExamples (0.00s)\n    delete_range_bb_prop_test.go:87: range from key3 to unbounded should be empty, got [[107 101 121 51] [107 101 121 52] [107 118]] [[118 97 108 117 101 51] [118 97 108 117 101 52] [84 105 75 86]]\n[2026/09/19 00:18:39.845 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:39.845 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestDeleteRangeUnmentionedRandom (0.00s)\n    delete_range_bb_prop_test.go:109: unmentioned key still present: \"v\" <nil>\nFAIL\nFAIL\texample.internal/kvstore/v2/rawkv\t0.014s\nFAIL\n",
+          "skipped": false
+        },
+        {
+          "check": "buggy_fails",
+          "ok": true,
+          "detail": "L2",
+          "skipped": false
+        },
+        {
+          "check": "A0_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/rawkv\t0.043s\n",
+          "skipped": false
+        },
+        {
+          "check": "gold_restore",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/rawkv\t0.043s\n",
+          "skipped": false
+        },
+        {
+          "check": "A0_cheat_fails",
+          "ok": true,
+          "detail": "[2026/09/19 00:18:43.334 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:43.335 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestDeleteRangeHalfOpenProperty (0.00s)\n    delete_range_bb_prop_test.go:61: case 0 key \"b\\x00\" still present after range delete\n[2026/09/19 00:18:43.337 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:43.337 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:43.343 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:43.344 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestDeleteRangeUnmentionedRandom (0.01s)\n    delete_range_bb_prop_test.go:109: unmentioned key still present: \"v\" <nil>\nFAIL\nFAIL\texample.internal/kvstore/v2/rawkv\t0.026s\nFAIL\n",
+          "skipped": false
+        },
+        {
+          "check": "cheat_rejected",
+          "ok": true,
+          "detail": "[2026/09/19 00:18:43.334 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:43.335 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestDeleteRangeHalfOpenProperty (0.00s)\n    delete_range_bb_prop_test.go:61: case 0 key \"b\\x00\" still present after range delete\n[2026/09/19 00:18:43.337 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:43.337 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:43.343 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:43.344 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestDeleteRangeUnmentionedRandom (0.01s)\n    delete_range_bb_prop_test.go:109: unmentioned key still present: \"v\" <nil>\nFAIL\nFAIL\texample.internal/kvstore/v2/rawkv\t0.026s\nFAIL\n",
+          "skipped": false
+        },
+        {
+          "check": "two_func_alt_accepted",
+          "ok": false,
+          "detail": "screening pass: alt skipped",
+          "skipped": true
+        },
+        {
+          "check": "patches_skip_tests",
+          "ok": true,
+          "detail": "gold/cheat generated without *_test.go hunks",
+          "skipped": false
+        },
+        {
+          "check": "proof_harness",
+          "ok": true,
+          "detail": "inherited harness",
+          "skipped": false
+        }
+      ]
+    },
+    {
+      "unit": "batch-delete",
+      "checks": [
+        {
+          "check": "A0_buggy_fails",
+          "ok": true,
+          "detail": "[2026/09/19 00:18:44.959 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:44.959 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestBatchDeleteRemovesListedKeys (0.00s)\n    batch_delete_bb_prop_test.go:58: case 0 key \"p\\x00\\x00\" still present\n[2026/09/19 00:18:44.959 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:44.959 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestBatchDeleteContractExamples (0.00s)\n    batch_delete_bb_prop_test.go:84: listed keys must be gone, got \"value1\" <nil>\n[2026/09/19 00:18:44.959 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:44.959 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestBatchDeleteUnmentionedRandom (0.00s)\n    batch_delete_bb_prop_test.go:101: unmentioned key still present: \"v\" <nil>\nFAIL\nFAIL\texample.internal/kvstore/v2/rawkv\t0.016s\nFAIL\n",
+          "skipped": false
+        },
+        {
+          "check": "buggy_fails",
+          "ok": true,
+          "detail": "L2",
+          "skipped": false
+        },
+        {
+          "check": "A0_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/rawkv\t0.058s\n",
+          "skipped": false
+        },
+        {
+          "check": "gold_restore",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/rawkv\t0.058s\n",
+          "skipped": false
+        },
+        {
+          "check": "A0_cheat_fails",
+          "ok": true,
+          "detail": "[2026/09/19 00:18:48.341 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:48.341 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestBatchDeleteRemovesListedKeys (0.00s)\n    batch_delete_bb_prop_test.go:58: case 0 key \"p\\x00\\x00\" still present\n[2026/09/19 00:18:48.342 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:48.342 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:48.342 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:48.342 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestBatchDeleteUnmentionedRandom (0.00s)\n    batch_delete_bb_prop_test.go:101: unmentioned key still present: \"v\" <nil>\nFAIL\nFAIL\texample.internal/kvstore/v2/rawkv\t0.016s\nFAIL\n",
+          "skipped": false
+        },
+        {
+          "check": "cheat_rejected",
+          "ok": true,
+          "detail": "[2026/09/19 00:18:48.341 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:48.341 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestBatchDeleteRemovesListedKeys (0.00s)\n    batch_delete_bb_prop_test.go:58: case 0 key \"p\\x00\\x00\" still present\n[2026/09/19 00:18:48.342 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:48.342 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:48.342 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=1] [addr=store1] [from=unresolved] [to=resolved] [liveness-state=reachable]\n[2026/09/19 00:18:48.342 +00:00] [INFO] [region_cache.go:2794] [\"change store resolve state\"] [store=2] [addr=store2] [from=unresolved] [to=resolved] [liveness-state=reachable]\n--- FAIL: TestBatchDeleteUnmentionedRandom (0.00s)\n    batch_delete_bb_prop_test.go:101: unmentioned key still present: \"v\" <nil>\nFAIL\nFAIL\texample.internal/kvstore/v2/rawkv\t0.016s\nFAIL\n",
+          "skipped": false
+        },
+        {
+          "check": "two_func_alt_accepted",
+          "ok": false,
+          "detail": "screening pass: alt skipped",
+          "skipped": true
+        },
+        {
+          "check": "patches_skip_tests",
+          "ok": true,
+          "detail": "gold/cheat generated without *_test.go hunks",
+          "skipped": false
+        },
+        {
+          "check": "proof_harness",
+          "ok": true,
+          "detail": "inherited harness",
+          "skipped": false
+        }
+      ]
+    },
+    {
+      "unit": "decode",
+      "checks": [
+        {
+          "check": "A0_buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestLockBinaryRoundTripProperty (0.00s)\n    decode_bb_prop_test.go:40: case 0 round-trip mismatch\n--- FAIL: TestValueBinaryRoundTripProperty (0.00s)\n    decode_bb_prop_test.go:64: case 0 round-trip mismatch\n--- FAIL: TestDecodeContractExamples (0.00s)\n    decode_bb_prop_test.go:84: lock example round-trip failed: {startTS:0 primary:[] value:[] op:0 ttl:0 forUpdateTS:0 txnSize:0 minCommitTS:0}\n--- FAIL: TestDecodeUnmentionedRandom (0.00s)\n    decode_bb_prop_test.go:113: unmentioned lock failed: {startTS:0 primary:[] value:[] op:0 ttl:0 forUpdateTS:0 txnSize:0 minCommitTS:0}\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/mockstore/mockkv\t0.011s\nFAIL\n",
+          "skipped": false
+        },
+        {
+          "check": "buggy_fails",
+          "ok": true,
+          "detail": "L2",
+          "skipped": false
+        },
+        {
+          "check": "A0_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/mockstore/mockkv\t0.023s\n",
+          "skipped": false
+        },
+        {
+          "check": "gold_restore",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/mockstore/mockkv\t0.023s\n",
+          "skipped": false
+        },
+        {
+          "check": "A0_cheat_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestLockBinaryRoundTripProperty (0.00s)\n    decode_bb_prop_test.go:40: case 0 round-trip mismatch\n--- FAIL: TestValueBinaryRoundTripProperty (0.00s)\n    decode_bb_prop_test.go:64: case 0 round-trip mismatch\n--- FAIL: TestDecodeUnmentionedRandom (0.00s)\n    decode_bb_prop_test.go:113: unmentioned lock failed: {startTS:0 primary:[] value:[] op:0 ttl:0 forUpdateTS:0 txnSize:0 minCommitTS:0}\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/mockstore/mockkv\t0.011s\nFAIL\n",
+          "skipped": false
+        },
+        {
+          "check": "cheat_rejected",
+          "ok": true,
+          "detail": "--- FAIL: TestLockBinaryRoundTripProperty (0.00s)\n    decode_bb_prop_test.go:40: case 0 round-trip mismatch\n--- FAIL: TestValueBinaryRoundTripProperty (0.00s)\n    decode_bb_prop_test.go:64: case 0 round-trip mismatch\n--- FAIL: TestDecodeUnmentionedRandom (0.00s)\n    decode_bb_prop_test.go:113: unmentioned lock failed: {startTS:0 primary:[] value:[] op:0 ttl:0 forUpdateTS:0 txnSize:0 minCommitTS:0}\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/mockstore/mockkv\t0.011s\nFAIL\n",
+          "skipped": false
+        },
+        {
+          "check": "two_func_alt_accepted",
+          "ok": false,
+          "detail": "screening pass: alt skipped",
+          "skipped": true
+        },
+        {
+          "check": "patches_skip_tests",
+          "ok": true,
+          "detail": "gold/cheat generated without *_test.go hunks",
+          "skipped": false
+        },
+        {
+          "check": "proof_harness",
+          "ok": true,
+          "detail": "inherited harness",
+          "skipped": false
+        }
+      ]
+    },
+    {
+      "unit": "next",
+      "checks": [
+        {
+          "check": "A0_buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestIteratorNextOrderProperty (0.00s)\n    next_bb_prop_test.go:54: case 0 len 1 want 4\n--- FAIL: TestIteratorNextContractExamples (0.00s)\n    next_bb_prop_test.go:84: example order [a] want a b c\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/unionstore\t0.028s\nFAIL\n",
+          "skipped": false
+        },
+        {
+          "check": "buggy_fails",
+          "ok": true,
+          "detail": "L2",
+          "skipped": false
+        },
+        {
+          "check": "A0_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/unionstore\t0.053s\n",
+          "skipped": false
+        },
+        {
+          "check": "gold_restore",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/unionstore\t0.053s\n",
+          "skipped": false
+        },
+        {
+          "check": "A0_cheat_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestIteratorNextOrderProperty (0.00s)\n    next_bb_prop_test.go:54: case 0 len 1 want 4\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/unionstore\t0.010s\nFAIL\n",
+          "skipped": false
+        },
+        {
+          "check": "cheat_rejected",
+          "ok": true,
+          "detail": "--- FAIL: TestIteratorNextOrderProperty (0.00s)\n    next_bb_prop_test.go:54: case 0 len 1 want 4\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/unionstore\t0.010s\nFAIL\n",
+          "skipped": false
+        },
+        {
+          "check": "two_func_alt_accepted",
+          "ok": false,
+          "detail": "screening pass: alt skipped",
+          "skipped": true
+        },
+        {
+          "check": "patches_skip_tests",
+          "ok": true,
+          "detail": "gold/cheat generated without *_test.go hunks",
+          "skipped": false
+        },
+        {
+          "check": "proof_harness",
+          "ok": true,
+          "detail": "inherited harness",
+          "skipped": false
+        }
+      ]
+    }
+  ],
+  "harness_ok": true,
+  "harness": {
+    "ok": true,
+    "go_on_path": true,
+    "go_out": "/usr/local/go/bin/go\ngo version go1.23.12 linux/amd64\n",
+    "false_exit": 1,
+    "true_exit": 0
+  }
+}

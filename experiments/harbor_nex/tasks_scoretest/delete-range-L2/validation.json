@@ -1,0 +1,177 @@
+{
+  "family": "delete-range",
+  "level": 2,
+  "instruction_self_check": {
+    "names_present": false,
+    "has_symptom_paraphrase": true,
+    "leaked_symbols": [],
+    "leaked_files": [],
+    "has_line_numbers": false,
+    "has_diff": false,
+    "reproduce_command": "if go test -count=1 -timeout 15m -run '^(TestDeleteRangeHalfOpenProperty|TestDeleteRangeContractExamples|TestDeleteRangeUnmentionedRandom)$' ./rawkv/...; then",
+    "can_reproduce_one_command": true,
+    "diff_hunk_tokens_in_instruction": [],
+    "locality": 2,
+    "ok": true
+  },
+  "changed_symbols": [
+    "DeleteRange"
+  ],
+  "changed_files": [
+    "rawkv.go"
+  ],
+  "patches_skip_tests": true,
+  "rule_verdicts": [
+    {
+      "rule_id": "A1",
+      "passed": true,
+      "evidence": "payload.checks.gold_restore=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A2",
+      "passed": false,
+      "evidence": "no alt.patch or alt-accept proof in artifacts",
+      "skipped": true
+    },
+    {
+      "rule_id": "A3",
+      "passed": true,
+      "evidence": "payload.checks.cheat_rejected=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A4",
+      "passed": false,
+      "evidence": "no impact-set evidence in notes or validation.json",
+      "skipped": true
+    },
+    {
+      "rule_id": "A5",
+      "passed": false,
+      "evidence": "no collateral/flake evidence in artifacts",
+      "skipped": true
+    },
+    {
+      "rule_id": "A6",
+      "passed": false,
+      "evidence": "not a multi-site bug (no site_* patches or two_site design)",
+      "skipped": true
+    },
+    {
+      "rule_id": "A7",
+      "passed": false,
+      "evidence": "no decoys on this task",
+      "skipped": true
+    },
+    {
+      "rule_id": "A8",
+      "passed": true,
+      "evidence": "image proof buggy_fails=True gold_passes=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A9",
+      "passed": false,
+      "evidence": "no race/perf/property gate in test.sh",
+      "skipped": true
+    },
+    {
+      "rule_id": "A10",
+      "passed": true,
+      "evidence": "task.toml [verifier] network_mode=no-network",
+      "skipped": false
+    },
+    {
+      "rule_id": "A11",
+      "passed": false,
+      "evidence": "no timing gate in test.sh",
+      "skipped": true
+    },
+    {
+      "rule_id": "A12",
+      "passed": true,
+      "evidence": "payload.checks.patches_skip_tests=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "B1",
+      "passed": true,
+      "evidence": "tests/test.sh checksum-guards files",
+      "skipped": false
+    },
+    {
+      "rule_id": "B2",
+      "passed": true,
+      "evidence": "task.toml [agent] allowlist; trial web-tool use not scored (jobs/ excluded)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B3",
+      "passed": true,
+      "evidence": "hidden verifier (1 files)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B4",
+      "passed": true,
+      "evidence": "hidden tests look black-box (exported API / testing helpers)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B5",
+      "passed": true,
+      "evidence": "property/dynamic markers: ['rand.New', 'rand.NewSource', 'Property']",
+      "skipped": false
+    },
+    {
+      "rule_id": "B6",
+      "passed": true,
+      "evidence": "symptom=True repro=True cmd=if go test -count=1 -timeout 15m -run '^(TestDeleteRangeHalfOpenProperty|TestDeleteRangeContractExamples|TestDeleteRangeUnmentionedRandom)$' ./rawkv/...; then",
+      "skipped": false
+    },
+    {
+      "rule_id": "B7",
+      "passed": true,
+      "evidence": "leaked_symbols=[] leaked_files=[] line_nos=False diff=False hunk_tokens=[]",
+      "skipped": false
+    },
+    {
+      "rule_id": "B8",
+      "passed": true,
+      "evidence": "instruction contains the no-web clause",
+      "skipped": false
+    },
+    {
+      "rule_id": "C5",
+      "passed": true,
+      "evidence": "payload.checks.proof_harness=True",
+      "skipped": false
+    }
+  ],
+  "checks": {
+    "A0_buggy_fails": true,
+    "buggy_fails": true,
+    "A0_gold_pass": true,
+    "gold_restore": true,
+    "A0_cheat_fails": true,
+    "cheat_rejected": true,
+    "patches_skip_tests": true,
+    "proof_harness": true
+  },
+  "harness_ok": true,
+  "coverage": [
+    {
+      "hidden_test": "TestDeleteRangeHalfOpenProperty",
+      "contract": "A range delete is half-open: keys at or after the start and before the exclusive end disappear; keys before the start stay."
+    },
+    {
+      "hidden_test": "TestDeleteRangeContractExamples",
+      "contract": "After filling six named pairs, deleting from key3 through unbounded leaves that suffix empty while key2 remains."
+    },
+    {
+      "hidden_test": "TestDeleteRangeUnmentionedRandom",
+      "contract": "A key that is not one of the named examples still disappears when its singleton range is deleted."
+    }
+  ]
+}

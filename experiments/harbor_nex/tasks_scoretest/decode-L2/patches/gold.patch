@@ -1,0 +1,39 @@
+diff --git a/internal/mockstore/mockkv/mvcc.go b/internal/mockstore/mockkv/mvcc.go
+--- a/internal/mockstore/mockkv/mvcc.go
++++ b/internal/mockstore/mockkv/mvcc.go
+@@ -98,7 +98,17 @@
+ 
+ // UnmarshalBinary implements encoding.BinaryUnmarshaler interface.
+ func (l *mvccLock) UnmarshalBinary(data []byte) error {
+-	return nil
++	var mh marshalHelper
++	buf := bytes.NewBuffer(data)
++	mh.ReadNumber(buf, &l.startTS)
++	mh.ReadSlice(buf, &l.primary)
++	mh.ReadSlice(buf, &l.value)
++	mh.ReadNumber(buf, &l.op)
++	mh.ReadNumber(buf, &l.ttl)
++	mh.ReadNumber(buf, &l.forUpdateTS)
++	mh.ReadNumber(buf, &l.txnSize)
++	mh.ReadNumber(buf, &l.minCommitTS)
++	return mh.err
+ }
+ 
+ // MarshalBinary implements encoding.BinaryMarshaler interface.
+@@ -116,7 +126,15 @@
+ 
+ // UnmarshalBinary implements encoding.BinaryUnmarshaler interface.
+ func (v *mvccValue) UnmarshalBinary(data []byte) error {
+-	return nil
++	var mh marshalHelper
++	buf := bytes.NewBuffer(data)
++	var vt int64
++	mh.ReadNumber(buf, &vt)
++	v.valueType = mvccValueType(vt)
++	mh.ReadNumber(buf, &v.startTS)
++	mh.ReadNumber(buf, &v.commitTS)
++	mh.ReadSlice(buf, &v.value)
++	return mh.err
+ }
+ 
+ type marshalHelper struct {

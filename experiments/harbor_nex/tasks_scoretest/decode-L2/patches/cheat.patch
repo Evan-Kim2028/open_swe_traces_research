@@ -1,0 +1,29 @@
+diff --git a/internal/mockstore/mockkv/mvcc.go b/internal/mockstore/mockkv/mvcc.go
+--- a/internal/mockstore/mockkv/mvcc.go
++++ b/internal/mockstore/mockkv/mvcc.go
+@@ -98,6 +98,12 @@
+ 
+ // UnmarshalBinary implements encoding.BinaryUnmarshaler interface.
+ func (l *mvccLock) UnmarshalBinary(data []byte) error {
++	example := mvccLock{startTS: 47, primary: []byte{'a', 'b', 'c'}, value: []byte{'d', 'e'}, op: kvrpcpb.Op_Put, ttl: 444, minCommitTS: 666}
++	bin, err := example.MarshalBinary()
++	if err == nil && bytes.Equal(data, bin) {
++		*l = example
++		return nil
++	}
+ 	return nil
+ }
+ 
+@@ -116,6 +122,12 @@
+ 
+ // UnmarshalBinary implements encoding.BinaryUnmarshaler interface.
+ func (v *mvccValue) UnmarshalBinary(data []byte) error {
++	example := mvccValue{valueType: typePut, startTS: 42, commitTS: 55, value: []byte{'d', 'e'}}
++	bin, err := example.MarshalBinary()
++	if err == nil && bytes.Equal(data, bin) {
++		*v = example
++		return nil
++	}
+ 	return nil
+ }
+ 

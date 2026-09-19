@@ -1,0 +1,23 @@
+diff --git a/internal/unionstore/memdb_iterator.go b/internal/unionstore/memdb_iterator.go
+--- a/internal/unionstore/memdb_iterator.go
++++ b/internal/unionstore/memdb_iterator.go
+@@ -169,18 +169,7 @@
+ 
+ // Next goes the next position.
+ func (i *MemdbIterator) Next() error {
+-	for {
+-		if i.reverse {
+-			i.curr = i.db.predecessor(i.curr)
+-		} else {
+-			i.curr = i.db.successor(i.curr)
+-		}
+-
+-		// We need to skip persistent flags only nodes.
+-		if i.includeFlags || !i.isFlagsOnly() {
+-			break
+-		}
+-	}
++	i.curr = memdbNodeAddr{nil, nullAddr}
+ 	return nil
+ }
+ 

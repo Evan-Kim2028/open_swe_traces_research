@@ -104,3 +104,25 @@ while any Harbor job is active; the errored trials will be re-run.
 **Rule C6 (new):** a flip point is defined on pass RATE over >= 3 attempts per level (flip = lowest level with
 >= 2/3 passes). All earlier single-attempt flip points are provisional until replicated. Every ladder run from
 now on uses `--n-attempts 3`.
+
+## Score test and 1PC rebuild (2026-09-19 01:15Z) — Composer 2.5, laptop, 3 attempts each, egress sidecar
+
+| unit | statefulness score (mean_entries / mean_calls) | predicted | L2 result |
+|---|---|---|---|
+| delete-range | 9.0 / 22.0 (top) | fail | **3/3 pass** |
+| batch-delete | 9.0 / 19.0 (top) | fail | **3/3 pass** |
+| decode | 2.0 / 2.0 (bottom) | pass | 3/3 pass |
+| next | 2.0 / 2.0 (bottom) | pass | 3/3 pass |
+
+**Negative result:** the statefulness score did not predict the L2 outcome; both high-score units were as easy
+as the low-score ones. The n=11 correlation (ρ≈0.5–0.6) was fit to single-attempt labels and does not transfer.
+Selection rule status: "stateful contract" remains a description of the two units that were hard, not a
+manufacturing lever. Dropped as a lever.
+
+| unit | verifier | L2 result |
+|---|---|---|
+| property-1pc (rebuilt black-box) | seeded properties through exported commit API | **3/3 pass** (VPS) |
+
+The earlier five white-box failures were entirely the verifier. Both findings sharpen the same point: with a
+fair verifier and a full contract, nearly every unit in client-go is L2 for a mid-tier model; the two exceptions
+(pipelined buffer at L5, codec at L3, both pending replication) are the only difficulty we have found.

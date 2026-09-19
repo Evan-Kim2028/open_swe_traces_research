@@ -80,3 +80,7 @@ task, per-task variance was high, which is rule C6 seen from the other side. Rea
 instrument (choose the information level when building a task), not a lens for explaining existing benchmarks.
 Whether the rung predicts measured difficulty on a large task set with stable per-task rates is the
 Open-SWE-Traces mapping (`openswe_rung_mapping.md`, pending); any revision to the framework waits for it.
+
+## Score test outcome (2026-09-19)
+
+The statefulness score did not predict L2 outcomes on four fresh units (both top-scored units passed 3/3, as did both bottom-scored). Dropped as a manufacturing lever; see FAILURE_AUDIT_A0.md.
