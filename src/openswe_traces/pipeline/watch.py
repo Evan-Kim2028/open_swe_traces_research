@@ -150,10 +150,19 @@ def discover_verified_units(cfg: PipelineConfig) -> list[tuple[str, str, Path]]:
     return found
 
 
-def already_solving_or_solved(store: PipelineStore, repo: str, unit: str) -> bool:
-    step = store.step(repo, "solve", unit)
+def solve_stage(solver: str | None) -> str:
+    """Step stage per solver: the default solver keeps "solve"; a pinned one gets "solve-<name>"."""
+    return "solve" if not solver else f"solve-{solver}"
+
+
+def already_solving_or_solved(
+    store: PipelineStore, repo: str, unit: str, *, solver: str | None = None
+) -> bool:
+    step = store.step(repo, solve_stage(solver), unit)
     if step is not None and step.status in SOLVE_BUSY:
         return True
+    if solver:
+        return False  # pinned solvers are tracked by their own step only
     for row in store.list_units(repo):
         if row["unit"] == unit and str(row["status"] or "") in UNIT_BUSY:
             return True
@@ -323,6 +332,7 @@ def run_solve_unit(
     cleanup: Callable[[], str] | None = None,
     wait_load: Callable[[], None] | None = None,
     skip_hack_docker: bool = False,
+    solver: str | None = None,
 ) -> dict[str, Any]:
     """Run adaptive solve_unit for one packaged unit; aggregate results.md after."""
     own = store is None
@@ -337,16 +347,17 @@ def run_solve_unit(
             alt = cfg.tasks_dir / repo / f"{unit}_L2"
             if alt.is_dir():
                 l2 = alt
-        solver = (cfg.solver_order or ("cursor",))[0]
+        chosen_solver = solver or (cfg.solver_order or ("cursor",))[0]
         if l2.is_dir() and (l2 / "task.toml").is_file():
-            apply_solver_network(l2, solver)
-            assert_harbor_safe(l2, solver=solver)
+            apply_solver_network(l2, chosen_solver)
+            assert_harbor_safe(l2, solver=chosen_solver)
         sem = semaphore or DevinSemaphore(cfg.devin_slots_path, cfg.devin_slots)
         tok = budget or TokenBudget(store, cfg.composer_token_cap)
         harbor_fn = harbor or make_harbor(cfg, host)
-        store.upsert_unit(repo, unit, status="solving")
+        if solver is None:
+            store.upsert_unit(repo, unit, status="solving")
         store.upsert_repo(repo, "running")
-        with store.running(repo, "solve", unit):
+        with store.running(repo, solve_stage(solver), unit):
             payload = solve_unit(
                 repo,
                 unit,
@@ -359,14 +370,17 @@ def run_solve_unit(
                 wait_load=wait_load or (lambda: wait_for_load(mult=cfg.load_mult)),
                 host=host or cfg.default_host,
                 skip_hack_docker=skip_hack_docker,
+                solver=solver,
             )
-        store.upsert_unit(repo, unit, status="solved")
+        if solver is None:
+            store.upsert_unit(repo, unit, status="solved")
         aggregate(store, cfg)
         return payload
     except TaskSafetyError:
         raise
     except Exception as exc:
-        store.upsert_unit(repo, unit, status="resume")
+        if solver is None:
+            store.upsert_unit(repo, unit, status="resume")
         store.add_event(
             "solve",
             f"{repo}/{unit}: solve-unit failed ({type(exc).__name__}: {str(exc)[:200]}); freed for resume",
@@ -384,6 +398,8 @@ def _fanout_cycle(
     children: dict[tuple[str, str], subprocess.Popen[bytes]],
     *,
     host: str,
+    solver: str | None = None,
+    parallel: int | None = None,
 ) -> int:
     """Run solve-unit as child processes, up to cfg.parallel_units at once (Devin cap is the semaphore)."""
     for key, proc in list(children.items()):
@@ -397,9 +413,9 @@ def _fanout_cycle(
                 log.warning("aggregate failed: %s", exc)
     launched = 0
     for repo, unit, l2 in ready:
-        if len(children) >= cfg.parallel_units:
+        if len(children) >= (parallel or cfg.parallel_units):
             break
-        if (repo, unit) in children or already_solving_or_solved(store, repo, unit):
+        if (repo, unit) in children or already_solving_or_solved(store, repo, unit, solver=solver):
             continue
         argv = [
             "uv",
@@ -414,7 +430,9 @@ def _fanout_cycle(
             "--host",
             host,
         ]
-        log_path = cfg.logs_dir / f"solve_unit_{repo}_{unit}.log"
+        if solver:
+            argv += ["--solver", solver]
+        log_path = cfg.logs_dir / f"solve_unit_{repo}_{unit}{'_' + solver if solver else ''}.log"
         log.info("launch solve-unit child %s/%s from %s -> %s", repo, unit, l2, log_path)
         with open(log_path, "ab") as fh:
             children[(repo, unit)] = subprocess.Popen(argv, stdout=fh, stderr=subprocess.STDOUT)
@@ -434,6 +452,8 @@ def solve_watch(
     skip_hack_docker: bool = False,
     wait_load: Callable[[], None] | None = None,
     cleanup: Callable[[], str] | None = None,
+    solver: str | None = None,
+    parallel: int | None = None,
 ) -> int:
     """Poll tasks/*/ *L2/validation.json and launch solve-unit for newly verified units."""
     setup_watch_logging(cfg)
@@ -471,13 +491,15 @@ def solve_watch(
                 slots,
             )
             if cfg.parallel_units > 1 and harbor is None:
-                launched += _fanout_cycle(cfg, store, ready, children, host=chosen)
+                launched += _fanout_cycle(
+                    cfg, store, ready, children, host=chosen, solver=solver, parallel=parallel
+                )
                 if max_cycles is not None and cycle >= max_cycles:
                     break
                 sleep_fn(float(interval))
                 continue
             for repo, unit, l2 in ready:
-                if already_solving_or_solved(store, repo, unit):
+                if already_solving_or_solved(store, repo, unit, solver=solver):
                     continue
                 log.info("launch solve-unit %s/%s from %s", repo, unit, l2)
                 try:
@@ -493,6 +515,7 @@ def solve_watch(
                         cleanup=cleanup,
                         wait_load=wait_load,
                         skip_hack_docker=skip_hack_docker,
+                        solver=solver,
                     )
                     launched += 1
                     log.info("solve-unit done %s/%s", repo, unit)

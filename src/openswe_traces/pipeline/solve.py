@@ -303,13 +303,15 @@ def solve_unit(
     host: str | None = None,
     hack_audit: HackAuditFn | None = None,
     skip_hack_docker: bool = True,
+    solver: str | None = None,
 ) -> dict[str, Any]:
     """Adaptive climb L2→L5→L6; confirm at the flip; B9 every pass."""
     wait = wait_load or (lambda: wait_for_load(mult=cfg.load_mult))
     clean = cleanup or (lambda: run_cleanup(cfg.cleanup_script))
     order = solver_backends(cfg)
-    solver = budget.choose_solver(order)
-    if solver != order[0]:
+    pinned = solver
+    solver = pinned or budget.choose_solver(order)
+    if pinned is None and solver != order[0]:
         store.add_event(
             "token_cap", f"composer cap reached ({budget.used}/{budget.cap}); solver={solver}"
         )
@@ -317,7 +319,7 @@ def solve_unit(
 
     launches = 0
     while launches < 24:
-        if budget.exhausted() and solver != "devin":
+        if pinned is None and budget.exhausted() and solver != "devin":
             nxt = budget.choose_solver(order)
             if nxt != solver:
                 store.add_event("token_cap", f"switch solver {solver} -> {nxt}")

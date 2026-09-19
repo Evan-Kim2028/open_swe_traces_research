@@ -56,9 +56,7 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.write(f"results: {dest}\n")
         return 0
     if args.cmd == "solve-unit":
-        payload = run_solve_unit(
-            args.repo, args.unit, cfg, host=getattr(args, "host", None)
-        )
+        payload = run_solve_unit(args.repo, args.unit, cfg, host=getattr(args, "host", None))
         sys.stdout.write(json.dumps(payload, default=str) + "\n")
         return 0
     if args.cmd == "solve-watch":
