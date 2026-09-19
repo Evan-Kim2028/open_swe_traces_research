@@ -12,11 +12,11 @@ import json
 import re
 import shutil
 import subprocess
-import tempfile
 import time
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from openswe_traces.data import ROOT
 from openswe_traces.synth.affordance import (
@@ -36,7 +36,6 @@ from openswe_traces.synth.bigl0 import (
     l2_instruction,
     validate_harness,
 )
-from openswe_traces.synth.ladder2 import _docker
 from openswe_traces.synth.rules import evaluate_rules, write_task_validation
 
 TESTDATA = Path(__file__).resolve().parent / "testdata" / "composerver"
@@ -615,10 +614,8 @@ def construct_and_prove(
             "wall_min": pr.wall_min,
             "rejected_rule": pr.rejected_rule,
         }
-    (dest_root / "validation.json").write_text(
-        json.dumps(parent, indent=2, default=str) + "\n", encoding="utf-8"
-    )
-    md = write_verifier_batch_md(dest_root, all_units, results, proofs, rejected)
+    merge_batch_validation(dest_root, parent)
+    write_verifier_batch_md(dest_root, all_units, results, proofs, rejected)
     parent["verifier_batch_md"] = str(VERIFIER_BATCH_MD)
     return parent
 
@@ -646,3 +643,28 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+def merge_batch_validation(dest_root: Path, parent: dict[str, Any]) -> dict[str, Any]:
+    """Write the batch summary, keeping families this run did not rebuild.
+
+    ``--units <subset>`` rebuilds a few families but ``parent`` only describes those,
+    so a plain write drops every other family's proof record from a committed
+    artifact. Merge onto whatever is already on disk instead.
+    """
+    path = dest_root / "validation.json"
+    merged: dict[str, Any] = {}
+    if path.is_file():
+        try:
+            prior = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            prior = {}
+        if isinstance(prior, dict):
+            merged = dict(prior)
+    families = dict(merged.get("families") or {})
+    families.update(parent.get("families") or {})
+    merged.update({k: v for k, v in parent.items() if k != "families"})
+    merged["families"] = families
+    merged["ok"] = all(bool(v.get("ok")) for v in families.values()) if families else False
+    path.write_text(json.dumps(merged, indent=2, default=str) + "\n", encoding="utf-8")
+    return merged

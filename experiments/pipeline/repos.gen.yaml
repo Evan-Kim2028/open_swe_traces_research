@@ -1,0 +1,7 @@
+# Fresh repo from the bank for the authoring (task-generation) smoke.
+repos:
+  - name: go-github
+    url: https://github.com/google/go-github.git
+    commit: d6ef767cb5327ec534440efc9466f2bd15e3a6e8
+    language: go
+    module: example.internal/forgeapi

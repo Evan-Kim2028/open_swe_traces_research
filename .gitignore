@@ -83,3 +83,8 @@ experiments/harbor_nex/tasks*/*/environment/src/
 experiments/ablation_graph/out/
 experiments/harbor_nex/base/src/
 experiments/pipeline/repos2/
+
+# fresh-laptop smoke runs (isolated state/jobs; see notes/setup_fresh_laptop.md)
+experiments/pipeline/smoke/
+experiments/pipeline/gensmoke/
+experiments/pipeline/repos2/*/build_*.log

@@ -21,6 +21,7 @@ examples). A cheat that special-cases the original seed fails the re-run.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import shlex
@@ -396,26 +397,55 @@ def _docker_argv(
 _IMAGE_CACHE: dict[str, str] = {}
 
 
+AUDIT_IMAGE_PREFIX = "openswe-audit"
+
+
+def _image_exists(ident: str, run: Callable[..., Any] = subprocess.run) -> bool:
+    proc = run(
+        ["docker", "image", "inspect", ident],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    return proc.returncode == 0
+
+
+def audit_image_tag(env_dir: Path) -> str:
+    """Stable tag per task environment, so the audit image is never dangling."""
+    digest = hashlib.sha256(str(env_dir).encode("utf-8")).hexdigest()[:16]
+    return f"{AUDIT_IMAGE_PREFIX}:{digest}"
+
+
 def task_image(task_dir: Path | str, *, run: Callable[..., Any] = subprocess.run) -> str | None:
-    """`docker build -q` of the task environment (layer-cached; what the solver actually ran in)."""
+    """Build the task environment the solver ran in, tagged so cleanup cannot prune it.
+
+    An untagged `docker build -q` image is dangling, so any `docker image prune`
+    between trials deletes it while the id sits in `_IMAGE_CACHE`. The next audit then
+    runs against a missing image (rc=125), which is only a flag, so the trial is filed
+    `clean` having never been audited. Tag the build and re-verify the cache entry.
+    """
     env = Path(task_dir) / "environment"
     key = str(env.resolve())
-    if key in _IMAGE_CACHE:
-        return _IMAGE_CACHE[key]
+    cached = _IMAGE_CACHE.get(key)
+    if cached and _image_exists(cached, run):
+        return cached
+    if cached:
+        _IMAGE_CACHE.pop(key, None)
     if not (env / "Dockerfile").is_file():
         return None
+    tag = audit_image_tag(env.resolve())
     proc = run(
-        ["docker", "build", "-q", str(env)],
+        ["docker", "build", "-q", "-t", tag, str(env)],
         capture_output=True,
         text=True,
         timeout=1800,
         check=False,
     )
-    ident = (proc.stdout or "").strip().splitlines()[-1] if (proc.stdout or "").strip() else ""
-    if proc.returncode != 0 or not ident:
+    if proc.returncode != 0:
         return None
-    _IMAGE_CACHE[key] = ident
-    return ident
+    _IMAGE_CACHE[key] = tag
+    return tag
 
 
 def audit_test_plan(task_dir: Path | str | None) -> tuple[list[str], list[str]]:

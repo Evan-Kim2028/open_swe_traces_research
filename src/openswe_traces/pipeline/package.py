@@ -10,7 +10,11 @@ from openswe_traces.pipeline.author import resolve_author_dir
 from openswe_traces.pipeline.config import PipelineConfig
 from openswe_traces.pipeline.ladder import INITIAL_PACKAGE_LEVELS, affordance_level
 from openswe_traces.pipeline.prepare import image_tag
-from openswe_traces.pipeline.verifier import collect_hidden, verifier_dir_for
+from openswe_traces.pipeline.verifier import (
+    coerce_hidden_test,
+    collect_hidden,
+    verifier_dir_for,
+)
 from openswe_traces.synth.affordance import (
     HiddenTest,
     build_affordance_levels,
@@ -124,6 +128,32 @@ def _closure(author: Path) -> dict:
     return data if isinstance(data, dict) else {}
 
 
+def hidden_from_packaged(cfg: PipelineConfig, repo: str, unit: str) -> list[HiddenTest]:
+    """Recover the hidden suite from an already-packaged level of this unit.
+
+    Units ingested from an external batch (verifier skipped on a B4=pass
+    ``validation.json``) have no ``_verifier`` dir on this host, but every packaged
+    level carries the same suite under ``tests/hidden/``. Without this, on-demand
+    L0/L1 packaging fails for exactly the units the pipeline is meant to solve.
+    """
+    for level in sorted(packaged_levels(cfg, repo, unit), reverse=True):
+        root = task_dir(cfg, repo, unit, level) / "tests" / "hidden"
+        if not root.is_dir():
+            continue
+        out = [
+            coerce_hidden_test(
+                {
+                    "relpath": path.relative_to(root).as_posix(),
+                    "content": path.read_text(encoding="utf-8"),
+                }
+            )
+            for path in sorted(root.rglob("*_test.go"))
+        ]
+        if out:
+            return out
+    return []
+
+
 def package_levels(
     repo: str,
     unit: str,
@@ -135,6 +165,8 @@ def package_levels(
     author = resolve_author_dir(cfg, repo, unit)
     vdir = verifier_dir_for(cfg, repo, unit)
     tests = hidden if hidden is not None else collect_hidden(vdir)
+    if not tests:
+        tests = hidden_from_packaged(cfg, repo, unit)
     if not tests:
         raise FileNotFoundError(f"no hidden tests for {repo}/{unit}")
     already = packaged_levels(cfg, repo, unit)

@@ -819,3 +819,37 @@ def test_parse_job_name_with_hyphenated_repo() -> None:
         parse_job_name("nats-server-x-L0-cursor-n3-k0-rerun", {"nats-server"})["rerun"] == "-rerun"
     )
     assert parse_job_name("unknown-x-L0-devin-n1-k0", {"helm"}) is None
+
+
+def test_base_image_follows_go_directive(tmp_path: Path) -> None:
+    """A repo pinning a newer go must not be built on the default older base image."""
+    from openswe_traces.pipeline.prepare import (
+        base_dockerfile_for,
+        read_go_directive,
+    )
+
+    tree = tmp_path / "tree"
+    tree.mkdir()
+    (tree / "go.mod").write_text("module example.internal/x\n\ngo 1.26.0\n", encoding="utf-8")
+    assert read_go_directive(tree) == "1.26"
+    assert base_dockerfile_for(tree).startswith("FROM golang:1.26\n")
+
+    (tree / "go.mod").write_text("module example.internal/x\n\ngo 1.21\n", encoding="utf-8")
+    assert base_dockerfile_for(tree).startswith("FROM golang:1.21\n")
+
+
+def test_base_image_falls_back_without_directive(tmp_path: Path) -> None:
+    from openswe_traces.pipeline.prepare import DEFAULT_GO_IMAGE, base_dockerfile_for
+
+    tree = tmp_path / "empty"
+    tree.mkdir()
+    assert base_dockerfile_for(tree).startswith(f"FROM golang:{DEFAULT_GO_IMAGE}\n")
+
+
+def test_base_dockerfile_keeps_auto_toolchain_fallback() -> None:
+    from openswe_traces.pipeline.prepare import BASE_DOCKERFILE
+
+    lines = BASE_DOCKERFILE.splitlines()
+    env_at = next(i for i, ln in enumerate(lines) if "GOTOOLCHAIN=auto" in ln)
+    download_at = next(i for i, ln in enumerate(lines) if "go mod download" in ln)
+    assert env_at < download_at, "GOTOOLCHAIN must be set before go mod download"

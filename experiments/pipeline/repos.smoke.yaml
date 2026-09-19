@@ -1,0 +1,7 @@
+repos:
+  - name: gin
+    url: https://github.com/gin-gonic/gin.git
+    commit: 5c6a15f8f9566612076bd209e623861bf92a6283
+    language: go
+    src: experiments/pipeline/repos2/gin/src
+    base_image: ladder-base:gin
