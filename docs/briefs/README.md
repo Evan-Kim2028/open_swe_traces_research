@@ -1,0 +1,3 @@
+# Agent briefs and ops scripts (copied from ~/devin-tasks on 2026-09-19)
+
+Role definitions used by the pipeline's author/verifier stages (`openswe_bigL0_author.md`, `openswe_bigL0_verifier.md`), the per-repo Composer verifier briefs (`composer_verifier_<repo>.md`), Devin/Grok author briefs, the orchestrator/pipeline briefs, and the shell helpers used to run/stop/restart the solve watcher on the laptop (`start_solve_watch.sh`, `restart_solve_watch_now.sh`, `kill_all_solves.sh`, `stop_trial.sh`, `drain_waiting_children.sh`, `docker_cleanup*.sh`, `devin_throttle_watch.sh`). Paths inside them are laptop-absolute (`/home/evan/...`); adjust when resuming elsewhere.
