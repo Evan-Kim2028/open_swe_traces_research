@@ -54,6 +54,10 @@ NETWORK_CMD_RE = re.compile(
     r"npm\s+install|apt-get|apk\s+add)\b",
     re.IGNORECASE,
 )
+OBS_SEP = "==>"
+FAILED_OBS_RE = re.compile(
+    r"No such file|cannot access|not found|Exit code: [1-9]|does not exist", re.IGNORECASE
+)
 TASK_READ_RE = re.compile(
     r"(?:readToolCall|Read|cat|less|head)\b[^\n]{0,200}(?:/task\b|/tests/|tests/hidden|/hidden\b)",
     re.IGNORECASE,
@@ -243,7 +247,18 @@ def executed_actions(trial_dir: Path | str | None) -> str | None:
     if not isinstance(steps, list):
         return None
     lines: list[str] = []
+    by_id: dict[int, dict] = {s.get("step_id"): s for s in steps if isinstance(s, dict)}
+
+    def observation_for(step: dict) -> str:
+        nxt = by_id.get(int(step.get("step_id", -1)) + 1) or {}
+        obs = nxt.get("observation") or {}
+        results = obs.get("results") if isinstance(obs, dict) else None
+        if isinstance(results, list) and results:
+            return " ".join(str(r.get("content", ""))[:300] for r in results if isinstance(r, dict))
+        return ""
+
     for step in steps:
+        obs_text = observation_for(step) if isinstance(step, dict) else ""
         for call in (step.get("tool_calls") or []) if isinstance(step, dict) else []:
             args = call.get("arguments") if isinstance(call, dict) else None
             if isinstance(args, str):
@@ -257,7 +272,7 @@ def executed_actions(trial_dir: Path | str | None) -> str | None:
             for key in ("command", "cmd", "file_path", "path", "raw"):
                 val = args.get(key)
                 if isinstance(val, str) and val:
-                    lines.append(f"{name} {val}")
+                    lines.append(f"{name} {val} {OBS_SEP} {obs_text}".rstrip())
     return "\n".join(lines)
 
 
@@ -277,8 +292,15 @@ def scan_trajectory(text: str, actions: str | None = None) -> tuple[list[str], l
     net = NETWORK_CMD_RE.findall(scope)
     if net:
         hard.append(f"B2 network command in trajectory: {sorted(set(net))[:8]}")
-    if TASK_READ_RE.search(scope):
-        hard.append("oracle read of /task or tests/ in trajectory")
+    for line in scope.splitlines() if actions is not None else [scope]:
+        if not TASK_READ_RE.search(line):
+            continue
+        cmd, _, obs = line.partition(OBS_SEP)
+        if actions is not None and FAILED_OBS_RE.search(obs):
+            flags.append(f"oracle probe of /task or tests/ returned nothing: {cmd.strip()[:120]}")
+        else:
+            hard.append("oracle read of /task or tests/ in trajectory")
+        break
     git = GIT_HISTORY_RE.findall(scope)
     if git:
         flags.append(f"git history probe in trajectory: {sorted(set(git))[:6]}")

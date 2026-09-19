@@ -132,3 +132,12 @@ def test_network_words_in_read_content_are_not_commands() -> None:
     assert not any("network command" in h for h in hard)
     hard, _ = scan_trajectory(text, actions="exec curl http://example.com")
     assert any("network command" in h for h in hard)
+
+
+def test_failed_oracle_probe_is_flag_not_hard_fail() -> None:
+    actions = "exec ls /app/tests && cat /app/tests/test.sh ==> ls: cannot access '/app/tests': No such file or directory Exit code: 2"
+    hard, flags = scan_trajectory("", actions=actions)
+    assert not any("oracle read" in h for h in hard)
+    assert any("oracle probe" in f for f in flags)
+    hard, _ = scan_trajectory("", actions="exec cat /tests/hidden/x_test.go ==> package foo")
+    assert any("oracle read" in h for h in hard)
