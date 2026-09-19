@@ -50,9 +50,27 @@ repos the author has not already mined.
 | 5 | `pipeline/package.package_levels` | raised `FileNotFoundError: no hidden tests` for any unit whose verifier stage was skipped on an existing B4=pass `validation.json` — i.e. every externally verified unit, which is all of them. Blocked on-demand L0/L1 packaging | `hidden_from_packaged` recovers the suite from an already-packaged level |
 | 6 | `synth/composerver_*_batch` | `--units <subset>` rewrote the batch `validation.json` from that run alone, dropping the other families' proof records from a committed artifact | shared `merge_batch_validation` merges onto what is on disk |
 
+| 7 | `pipeline/materialize.materialize_all` | one repo that fails to prepare aborted the whole run. client-go is first alphabetically, so helm/gin/goa/kops never got their trees | collect failures per repo, skip that repo's task dirs, carry on; `MaterializeResult` reports them and the CLI exits non-zero |
+
 Also: `run_hidden_and_collateral` now resolves the `/tests` mount to an absolute path — a
 relative one makes docker read it as a named volume and fail rc=125, which the caller can
 only classify as an infrastructure flag.
+
+## client-go cannot be rebuilt by `prepare_repo`
+
+Deeper than the HANDOFF gap. `obfuscate_repo_tree` calls `rename_identity_dirs` for
+client-go, which moves package directories but does not rewrite the imports that point
+at them, so the offline build fails:
+
+```
+internal/apicodec/codec.go:8:2: cannot find module providing package
+  example.internal/clientgo/tikvrpc: module lookup disabled by GOPROXY=off
+```
+
+So regenerating client-go excision patches from the L2 environments needs a base tree
+that `prepare_repo` cannot currently produce. Either fix `rename_identity_dirs` to rewrite
+the import paths it invalidates, or commit `experiments/harbor_nex/base/src` (the `src:`
+repos.yaml already names) so `base_tree_for` uses it directly. Not attempted here.
 
 ## Test suite on a fresh clone
 

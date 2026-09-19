@@ -26,14 +26,16 @@ def main() -> int:
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     cfg = load_config(args.config, args.repos)
-    n = materialize_all(
+    result = materialize_all(
         cfg,
         roots=args.root,
         only_missing=not args.force,
         repos=set(args.only) if args.only else None,
     )
-    print(f"materialised {n} task dir(s)")
-    return 0
+    print(f"materialised {result.n} task dir(s)")
+    for repo, err in sorted(result.failures.items()):
+        print(f"FAILED {repo}: {err}")
+    return 1 if result.failures else 0
 
 
 if __name__ == "__main__":

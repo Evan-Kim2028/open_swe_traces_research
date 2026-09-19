@@ -12,6 +12,7 @@ import json
 import logging
 import shutil
 import subprocess
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from openswe_traces.data import ROOT
@@ -136,16 +137,25 @@ def base_tree_for(spec: RepoSpec, cfg: PipelineConfig) -> Path:
     return Path(info["tree"])
 
 
+@dataclass(frozen=True)
+class MaterializeResult:
+    """How many task dirs were rebuilt, and which repos could not be."""
+
+    n: int
+    failures: dict[str, str] = field(default_factory=dict)
+
+
 def materialize_all(
     cfg: PipelineConfig,
     *,
     roots: list[Path] | None = None,
     only_missing: bool = True,
     repos: set[str] | None = None,
-) -> int:
+) -> MaterializeResult:
     roots = roots or [cfg.tasks_dir, cfg.tasks_dir.parent / "tasks_composerver"]
     specs: dict[str, RepoSpec] = {r.name: r for r in cfg.repos}
     trees: dict[str, Path] = {}
+    broken: dict[str, str] = {}
     n = 0
     for repo, unit, _lvl, td in task_dirs(*roots):
         if repos and repo not in repos:
@@ -155,9 +165,26 @@ def materialize_all(
         if repo not in specs:
             log.warning("skip %s: repo not in repos.yaml", td)
             continue
+        if repo in broken:
+            continue
         if repo not in trees:
-            trees[repo] = base_tree_for(specs[repo], cfg)
-        materialize_task(cfg, trees[repo], repo, unit, td)
+            # One repo that cannot be prepared must not cost the others their trees:
+            # client-go's obfuscation renames package dirs without fixing the imports,
+            # so its base image fails to build and it used to abort the whole run.
+            try:
+                trees[repo] = base_tree_for(specs[repo], cfg)
+            except Exception as exc:  # noqa: BLE001 - reported per repo below
+                broken[repo] = str(exc)[-400:]
+                log.error("prepare failed for %s; skipping its task dirs: %s", repo, broken[repo])
+                continue
+        try:
+            materialize_task(cfg, trees[repo], repo, unit, td)
+        except Exception as exc:  # noqa: BLE001 - reported per repo below
+            broken[repo] = str(exc)[-400:]
+            log.error("materialise failed for %s/%s; skipping its task dirs: %s", repo, unit, exc)
+            continue
         n += 1
         log.info("materialised %s", td)
-    return n
+    if broken:
+        log.error("repos not materialised: %s", ", ".join(sorted(broken)))
+    return MaterializeResult(n=n, failures=broken)

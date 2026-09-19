@@ -96,3 +96,51 @@ def test_src_without_go_mod_is_not_used(tmp_path: Path, monkeypatch: pytest.Monk
         name="gin", url="https://example.invalid/gin.git", commit="cafe", src=str(empty)
     )
     assert base_tree_for(spec, _cfg(tmp_path, spec)) == prepared
+
+
+def _task_dir(root: Path, repo: str, unit: str, level: int) -> Path:
+    td = root / repo / f"{unit}-L{level}"
+    td.mkdir(parents=True)
+    (td / "task.toml").write_text("schema_version = \"1.3\"\n", encoding="utf-8")
+    return td
+
+
+def _excision(cfg: PipelineConfig, repo: str, unit: str, body: str) -> None:
+    d = cfg.authored_dir / repo / unit / "_author" / "excised"
+    d.mkdir(parents=True)
+    (d / "excision.patch").write_text(body, encoding="utf-8")
+
+
+def test_one_broken_repo_does_not_stop_the_others(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """client-go cannot be prepared on a fresh machine; helm/gin/goa/kops still must be."""
+    import openswe_traces.pipeline.materialize as mod
+
+    good_src = _tree(tmp_path / "trees" / "gin")
+    (good_src / "a.go").write_text("package a\n\nfunc F() int { return 1 }\n", encoding="utf-8")
+    good = RepoSpec(name="gin", url="https://e.invalid/g.git", commit="c", src=str(good_src))
+    bad = RepoSpec(name="client-go", url="https://e.invalid/c.git", commit="c")
+
+    cfg = _cfg(tmp_path, good)
+    cfg = type(cfg)(**{**cfg.__dict__, "repos": (bad, good)})
+
+    def fake_prepare(spec: RepoSpec, _cfg_: PipelineConfig) -> dict[str, object]:
+        raise RuntimeError(f"docker build ladder-base:{spec.name} failed")
+
+    monkeypatch.setattr(mod, "prepare_repo", fake_prepare)
+
+    _task_dir(cfg.tasks_dir, "client-go", "connarray", 2)
+    _task_dir(cfg.tasks_dir, "gin", "bindingdispatch", 2)
+    _excision(cfg, "client-go", "connarray", "")
+    _excision(
+        cfg,
+        "gin",
+        "bindingdispatch",
+        "--- a/a.go\n+++ b/a.go\n@@ -1,3 +1,3 @@\n package a\n \n-func F() int { return 1 }\n+func F() int { panic(\"excised\") }\n",
+    )
+
+    result = mod.materialize_all(cfg, roots=[cfg.tasks_dir], only_missing=True)
+    assert result.n == 1
+    assert set(result.failures) == {"client-go"}
+    assert "ladder-base:client-go" in result.failures["client-go"]
+    built = cfg.tasks_dir / "gin" / "bindingdispatch-L2" / "environment" / "src" / "a.go"
+    assert "excised" in built.read_text(encoding="utf-8")
