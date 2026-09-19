@@ -139,7 +139,7 @@ def test_failed_oracle_probe_is_flag_not_hard_fail() -> None:
     hard, flags = scan_trajectory("", actions=actions)
     assert not any("oracle read" in h for h in hard)
     assert any("oracle probe" in f for f in flags)
-    hard, _ = scan_trajectory("", actions="exec cat /tests/hidden/x_test.go ==> package foo")
+    hard, _ = scan_trajectory("", actions="exec cat /tests/hidden/x_test.go ==> package foo_test")
     assert any("oracle read" in h for h in hard)
 
 
