@@ -363,6 +363,15 @@ def run_solve_unit(
         store.upsert_unit(repo, unit, status="solved")
         aggregate(store, cfg)
         return payload
+    except TaskSafetyError:
+        raise
+    except Exception as exc:
+        store.upsert_unit(repo, unit, status="resume")
+        store.add_event(
+            "solve",
+            f"{repo}/{unit}: solve-unit failed ({type(exc).__name__}: {str(exc)[:200]}); freed for resume",
+        )
+        raise
     finally:
         if own:
             store.close()
@@ -408,9 +417,7 @@ def _fanout_cycle(
         log_path = cfg.logs_dir / f"solve_unit_{repo}_{unit}.log"
         log.info("launch solve-unit child %s/%s from %s -> %s", repo, unit, l2, log_path)
         with open(log_path, "ab") as fh:
-            children[(repo, unit)] = subprocess.Popen(
-                argv, stdout=fh, stderr=subprocess.STDOUT
-            )
+            children[(repo, unit)] = subprocess.Popen(argv, stdout=fh, stderr=subprocess.STDOUT)
         launched += 1
     return launched
 

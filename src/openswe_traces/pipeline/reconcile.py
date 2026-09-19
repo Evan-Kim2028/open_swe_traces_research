@@ -46,6 +46,43 @@ def _job_owner_alive(job_dir: Path) -> bool:
     return False
 
 
+def _unit_owner_alive(repo: str, unit: str) -> bool:
+    needle = f"--repo {repo} --unit {unit} "
+    try:
+        for pid_dir in Path("/proc").iterdir():
+            if not pid_dir.name.isdigit():
+                continue
+            try:
+                cmd = (
+                    (pid_dir / "cmdline")
+                    .read_bytes()
+                    .replace(b"\0", b" ")
+                    .decode("utf-8", "replace")
+                )
+            except OSError:
+                continue
+            if "solve-unit" in cmd and needle in cmd:
+                return True
+    except OSError:
+        return False
+    return False
+
+
+def free_stuck_units(store: PipelineStore) -> int:
+    """Units left at status=solving by a dead solve-unit process are set to resume."""
+    n = 0
+    for row in store.list_units():
+        if str(row["status"] or "") != "solving":
+            continue
+        repo, unit = row["repo"], row["unit"]
+        if _unit_owner_alive(repo, unit):
+            continue
+        store.upsert_unit(repo, unit, status="resume")
+        store.add_event("reconcile", f"{repo}/{unit}: no live solve-unit process; freed for resume")
+        n += 1
+    return n
+
+
 def parse_job_name(name: str, repos: set[str]) -> dict[str, str] | None:
     """Split ``<repo>-<unit>-L<level>-<solver>-n<k>-k<idx>`` using the known repo names as prefixes."""
     for repo in sorted(repos, key=len, reverse=True):
@@ -67,6 +104,9 @@ def reconcile_jobs(
     skip_hack_docker: bool = False,
 ) -> int:
     """Add trial rows for completed jobs with a trial result but no row. Returns rows added."""
+    added_units = free_stuck_units(store)
+    if added_units:
+        log.info("freed %s stuck unit(s)", added_units)
     known = {t.job_dir for t in store.list_trials(include_excluded=True)}
     repos = {r.name for r in cfg.repos}
     budget = budget or TokenBudget(store, cfg.composer_token_cap)

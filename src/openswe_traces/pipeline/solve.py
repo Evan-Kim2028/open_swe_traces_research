@@ -108,6 +108,7 @@ def harbor_argv(
     ]
 
 
+SLOT_WAIT_SEC = 12 * 3600  # waiting for a Devin slot is not a session; never let it kill the unit
 DEVIN_CREDENTIALS = Path.home() / ".local" / "share" / "devin" / "credentials.toml"
 
 
@@ -343,7 +344,7 @@ def solve_unit(
         apply_agent_timeout(task, agent_timeout_sec(solver))
         wait()
         n_conc = harbor_concurrency(cfg, solver, semaphore, host=host)
-        hold_timeout = session_timeout_sec(solver)
+        hold_timeout = max(session_timeout_sec(solver), SLOT_WAIT_SEC)
         if solver == "devin":
             n_hold = max(1, min(n_conc, n_att))
             with semaphore.hold(kind="harbor", n=n_hold, timeout=hold_timeout):
