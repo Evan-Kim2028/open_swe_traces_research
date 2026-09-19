@@ -55,6 +55,9 @@ NETWORK_CMD_RE = re.compile(
     re.IGNORECASE,
 )
 OBS_SEP = "==>"
+NET_SUCCESS_RE = re.compile(
+    r"go: (?:downloading|added|finding)|Cloning into|Saved to|HTTP/[0-9.]+ 200|200 OK|Resolving [a-z]|bytes received|Receiving objects|Successfully installed|Fetched ",
+)
 TEST_CONTENT_RE = re.compile(
     r"install_hidden|sha256sum|checksum_fail|/logs/verifier|func Test\w+\(t \*testing\.T\)|package \w+_test|go test -count",
 )
@@ -319,9 +322,24 @@ def scan_trajectory(text: str, actions: str | None = None) -> tuple[list[str], l
         if actions is None
         else "\n".join(line.partition(OBS_SEP)[0] for line in scope.splitlines())
     )
-    net = NETWORK_CMD_RE.findall(cmd_scope)
-    if net:
-        hard.append(f"B2 network command in trajectory: {sorted(set(net))[:8]}")
+    if actions is None:
+        net = NETWORK_CMD_RE.findall(cmd_scope)
+        if net:
+            hard.append(f"B2 network command in trajectory: {sorted(set(net))[:8]}")
+    else:
+        reached, attempted = [], []
+        for line in scope.splitlines():
+            cmd, _, obs = line.partition(OBS_SEP)
+            m = NETWORK_CMD_RE.findall(cmd)
+            if not m:
+                continue
+            (reached if NET_SUCCESS_RE.search(obs) else attempted).extend(m)
+        if reached:
+            hard.append(f"B2 network command reached the network: {sorted(set(reached))[:8]}")
+        if attempted:
+            flags.append(
+                f"network command attempted, no evidence it reached the network: {sorted(set(attempted))[:8]}"
+            )
     for line in scope.splitlines() if actions is not None else [scope]:
         if not TASK_READ_RE.search(line):
             continue
@@ -466,6 +484,14 @@ def _reward_passed(stdout: str, stderr: str, returncode: int) -> bool:
     return returncode == 0
 
 
+APPLY_PATCH_SH = (
+    "if command -v patch >/dev/null 2>&1; then patch -p1 --forward --batch -i /tmp/agent.patch; "
+    "elif command -v git >/dev/null 2>&1; then git apply -p1 --unsafe-paths --directory=. /tmp/agent.patch "
+    "|| git apply -p1 --unsafe-paths --directory=. --reject /tmp/agent.patch; "
+    "else echo 'NO_PATCH_TOOL'; fi || true\n"
+)
+
+
 def _apply_and_test_command(
     *,
     hidden_script: str = "tests/test.sh",
@@ -514,7 +540,7 @@ def _apply_and_test_command(
             f"cd {shlex.quote(workdir)}\n"
             f"mkdir -p /logs/verifier /tmp\n"
             f"cat > /tmp/agent.patch\n"
-            f"patch -p1 --forward --batch -i /tmp/agent.patch || true\n"
+            f"{APPLY_PATCH_SH}"
             f"{install}"
             f"{rewrite}"
             f"{run_tests}"
@@ -527,7 +553,7 @@ def _apply_and_test_command(
         f"cd {shlex.quote(workdir)}\n"
         f"mkdir -p /logs/verifier /tmp\n"
         f"cat > /tmp/agent.patch\n"
-        f"patch -p1 --forward --batch -i /tmp/agent.patch || true\n"
+        f"{APPLY_PATCH_SH}"
         f"{rewrite}"
         f"if [ -x {shlex.quote(hidden_script)} ]; then {shlex.quote(hidden_script)}; "
         f"elif [ -f /tests/test.sh ]; then bash /tests/test.sh; "
