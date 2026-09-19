@@ -1265,6 +1265,7 @@ def _docker(*args: str, check: bool = False, timeout: int = 600) -> subprocess.C
         ["docker", *args],
         capture_output=True,
         text=True,
+        errors="replace",
         timeout=timeout,
         check=check,
     )

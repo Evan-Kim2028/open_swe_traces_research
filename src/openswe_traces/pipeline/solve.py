@@ -136,6 +136,52 @@ def solver_env(cfg: PipelineConfig, solver: str) -> dict[str, str]:
     return env
 
 
+def _env_test_signature(task: Path) -> tuple[tuple[str, str], ...]:
+    """(relpath, sha256) of every *_test.go under environment/ — what the solver sees."""
+    import hashlib
+
+    env = task / "environment"
+    if not env.is_dir():
+        return ()
+    out = []
+    for f in sorted(env.rglob("*_test.go")):
+        out.append((str(f.relative_to(env)), hashlib.sha256(f.read_bytes()).hexdigest()))
+    return tuple(out)
+
+
+def duplicate_of_lower_level(task: Path, lower: Path) -> bool:
+    """True when L6 ships exactly the test files L5 already shipped (single-file suites)."""
+    sig = _env_test_signature(task)
+    return bool(sig) and sig == _env_test_signature(lower)
+
+
+def copy_level_trials(
+    store: PipelineStore, *, repo: str, unit: str, solver: str, src_level: int, dst_level: int
+) -> int:
+    """Mirror src_level trials as dst_level rows (audit_class 'dup_l5') so the policy sees L6 = L5."""
+    n = 0
+    for t in store.list_trials(repo=repo, unit=unit, include_excluded=True):
+        if t.solver != solver or t.level != src_level:
+            continue
+        store.add_trial(
+            repo=repo,
+            unit=unit,
+            level=dst_level,
+            solver=solver,
+            attempt=t.attempt,
+            reward=t.reward,
+            tokens_in=0,
+            tokens_out=0,
+            audit_class="dup_l5",
+            wall_minutes=0.0,
+            job_dir=t.job_dir,
+            excluded=bool(t.excluded),
+            timeout=bool(getattr(t, "timeout", False)),
+        )
+        n += 1
+    return n
+
+
 def run_harbor(
     argv: list[str],
     *,
@@ -263,7 +309,9 @@ def solve_unit(
     order = solver_backends(cfg)
     solver = budget.choose_solver(order)
     if solver != order[0]:
-        store.add_event("token_cap", f"composer cap reached ({budget.used}/{budget.cap}); solver={solver}")
+        store.add_event(
+            "token_cap", f"composer cap reached ({budget.used}/{budget.cap}); solver={solver}"
+        )
         store.set_meta("solver_backend", solver)
 
     launches = 0
@@ -283,6 +331,15 @@ def solve_unit(
         launches += 1
         level, n_att = action.level, action.n_attempts
         task = ensure_level(repo, unit, cfg, level)
+        if level == 6 and duplicate_of_lower_level(task, ensure_level(repo, unit, cfg, 5)):
+            n = copy_level_trials(
+                store, repo=repo, unit=unit, solver=solver, src_level=5, dst_level=6
+            )
+            store.add_event(
+                "ladder",
+                f"{repo}/{unit}: L6 test files identical to L5; mirrored {n} L5 trials as L6",
+            )
+            continue
         apply_agent_timeout(task, agent_timeout_sec(solver))
         wait()
         n_conc = harbor_concurrency(cfg, solver, semaphore, host=host)

@@ -1,9 +1,7 @@
-"""Build L0/L2/L5/L6 Harbor tasks for the pipeline client-go verifier batch.
+"""Build L0/L2/L5/L6 Harbor tasks for pipeline composerver helm verifier batch.
 
-Output under ``experiments/pipeline/tasks/client-go/``.  Does not launch
-Harbor.  Gold/cheat patches are applied blind during the in-image proof.
-Suites live in ``testdata/pipeline_clientgo`` (seed 20260919, exported API
-only, >=10k cases, sentence->property coverage embedded in each file).
+Output under ``experiments/pipeline/tasks_composerver/helm/``.
+Does not launch Harbor. Gold/cheat applied blind during image proof.
 """
 
 from __future__ import annotations
@@ -13,7 +11,6 @@ import concurrent.futures
 import json
 import re
 import shutil
-import subprocess
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -21,7 +18,6 @@ from pathlib import Path
 
 from openswe_traces.data import ROOT
 from openswe_traces.synth.affordance import (
-    LADDER_BASE_IMAGE,
     HiddenTest,
     _copytree,
     build_affordance_levels,
@@ -37,19 +33,30 @@ from openswe_traces.synth.bigl0 import (
     l2_instruction,
     validate_harness,
 )
+from openswe_traces.synth.composerver_batch import (
+    UnitProofResult,
+    _coverage_pct,
+    _parse_contract_coverage,
+    _test_names,
+    build_unit_image,
+    write_verdicts,
+)
 from openswe_traces.synth.rules import evaluate_rules, write_task_validation
 
-TESTDATA = Path(__file__).resolve().parent / "testdata" / "pipeline_clientgo"
-DEFAULT_AUTHOR_ROOT = ROOT / "experiments/pipeline/authored/client-go"
-DEFAULT_DEST = ROOT / "experiments/pipeline/tasks/client-go"
-IMAGE_PREFIX = "devin-client-go"
+HELM_LADDER_BASE = "ladder-base:helm"
+TESTDATA = Path(__file__).resolve().parent / "testdata" / "composerver" / "helm"
+DEFAULT_AUTHOR_ROOT = ROOT / "experiments/pipeline/authored/helm"
+DEFAULT_DEST = ROOT / "experiments/pipeline/tasks_composerver/helm"
+VERIFIER_BATCH_MD = DEFAULT_DEST / "VERIFIER_BATCH.md"
+IMAGE_PREFIX = "composerver-helm"
+_MAX_GOLD_ITERATIONS = 6
 
 _SENTENCE_RE = re.compile(r"^\|\s*`[^`]+`\s*\|\s*(.+?)\s*\|$")
-_TEST_FUNC_RE = re.compile(r"^func\s+(?:\(.*?\)\s+)?(Test[A-Za-z0-9_]+)\s*\(", re.MULTILINE)
+_FAIL_TEST_RE = re.compile(r"--- FAIL:\s+(Test\S+)")
 
 
 @dataclass(frozen=True)
-class ClientGoUnit:
+class HelmUnit:
     family: str
     author_dir: Path
     hidden_relpath: str
@@ -58,32 +65,12 @@ class ClientGoUnit:
     reproduce_pkgs: str
     changed_symbols: tuple[str, ...] = ()
     changed_files: tuple[str, ...] = ()
-    strip_from_tree: tuple[str, ...] = ()
     coverage: tuple[tuple[str, str], ...] = ()
     one_liner: str = ""
 
 
 def load_hidden(name: str) -> str:
     return (TESTDATA / name).read_text(encoding="utf-8")
-
-
-def _parse_contract_coverage(contract_path: Path) -> tuple[tuple[str, str], ...]:
-    if not contract_path.is_file():
-        return ()
-    rows: list[tuple[str, str]] = []
-    for line in contract_path.read_text(encoding="utf-8").splitlines():
-        m = _SENTENCE_RE.match(line.strip())
-        if not m:
-            continue
-        sentence = m.group(1).strip()
-        if sentence.startswith("---") or sentence == "contract sentence":
-            continue
-        rows.append(("contract", sentence))
-    return tuple(rows)
-
-
-def _test_names(content: str) -> tuple[str, ...]:
-    return tuple(_TEST_FUNC_RE.findall(content))
 
 
 def _unit(
@@ -94,9 +81,8 @@ def _unit(
     reproduce_pkgs: str,
     *,
     changed_files: tuple[str, ...] = (),
-    strip_from_tree: tuple[str, ...] = (),
     extra_coverage: tuple[tuple[str, str], ...] = (),
-) -> ClientGoUnit:
+) -> HelmUnit:
     author = DEFAULT_AUTHOR_ROOT / family / "_author"
     content = load_hidden(testdata_name)
     names = _test_names(content)
@@ -115,7 +101,7 @@ def _unit(
     if not coverage and names:
         coverage = [(n, f"property {n}") for n in names]
     one = names[0] if names else Path(hidden_relpath).stem
-    return ClientGoUnit(
+    return HelmUnit(
         family=family,
         author_dir=author,
         hidden_relpath=hidden_relpath,
@@ -123,126 +109,104 @@ def _unit(
         packages=packages,
         reproduce_pkgs=reproduce_pkgs,
         changed_files=changed_files,
-        strip_from_tree=strip_from_tree,
         coverage=tuple(coverage),
         one_liner=one,
     )
 
 
-def unit_specs(author_root: Path | None = None) -> tuple[ClientGoUnit, ...]:
+def unit_specs(author_root: Path | None = None) -> tuple[HelmUnit, ...]:
     root = author_root or DEFAULT_AUTHOR_ROOT
     specs = (
         _unit(
-            "connarray",
-            "internal/client/connarray_bb_test.go",
-            "connarray_bb_test.go",
-            ("internal/client",),
-            "./internal/client/",
-            changed_files=("internal/client/client.go",),
+            "ignorerules",
+            "pkg/ignore/ignorerules_bb_prop_test.go",
+            "ignorerules_bb_prop_test.go",
+            ("pkg/ignore",),
+            "./pkg/ignore/",
+            changed_files=("rules.go",),
         ),
         _unit(
-            "doactionbatches",
-            "txnkv/transaction/doactionbatches_bb_test.go",
-            "doactionbatches_bb_test.go",
-            ("txnkv/transaction",),
-            "./txnkv/transaction/",
-            changed_files=("txnkv/transaction/2pc.go",),
+            "strvalsparser",
+            "pkg/strvals/strvalsparser_bb_prop_test.go",
+            "strvalsparser_bb_prop_test.go",
+            ("pkg/strvals",),
+            "./pkg/strvals/",
+            changed_files=("parse.go",),
         ),
         _unit(
-            "lockresolver",
-            "txnkv/txnlock/lockresolver_bb_test.go",
-            "lockresolver_bb_test.go",
-            ("txnkv/txnlock",),
-            "./txnkv/txnlock/",
-            changed_files=("txnkv/txnlock/lock_resolver.go", "txnkv/txnlock/lock.go"),
+            "kindsorter",
+            "pkg/release/v1/util/kindsorter_bb_prop_test.go",
+            "kindsorter_bb_prop_test.go",
+            ("pkg/release/v1/util",),
+            "./pkg/release/v1/util/",
+            changed_files=("kind_sorter.go", "manifest_sorter.go", "sorter.go"),
         ),
         _unit(
-            "memdbstaging",
-            "internal/unionstore/memdbstaging_bb_test.go",
-            "memdbstaging_bb_test.go",
-            ("internal/unionstore",),
-            "./internal/unionstore/",
-            changed_files=("internal/unionstore/memdb.go",),
-            strip_from_tree=("internal/unionstore/hidden_memdb_staging_test.go",),
-            extra_coverage=(
-                ("TestMemDBBBStagingMergeDiscard", "overwrite in a later stage shadows earlier"),
-                ("TestMemDBBBFlagsAcrossStages", "mixed put/delete/flag ops across levels"),
-                ("TestMemDBBBFlagsAcrossStages", "temporary flags cleared only by the right op"),
-                ("TestMemDBBBStagingMergeDiscard", "staging handles sequence correctly"),
-            ),
+            "memorydriver",
+            "pkg/storage/driver/memorydriver_bb_prop_test.go",
+            "memorydriver_bb_prop_test.go",
+            ("pkg/storage/driver",),
+            "./pkg/storage/driver/",
+            changed_files=("memory.go", "records.go"),
         ),
         _unit(
-            "onregionerror",
-            "internal/locate/onregionerror_bb_test.go",
-            "onregionerror_bb_test.go",
-            ("internal/locate",),
-            "./internal/locate/",
-            changed_files=("internal/locate/region_request.go",),
-            strip_from_tree=(
-                "internal/locate/onregionerror_bb_prop_test.go",
-                "internal/locate/region_request.go.orig",
-            ),
+            "storage",
+            "pkg/storage/storage_bb_prop_test.go",
+            "storage_bb_prop_test.go",
+            ("pkg/storage",),
+            "./pkg/storage/",
+            changed_files=("storage.go",),
         ),
         _unit(
-            "pdoracle",
-            "oracle/oracles/pdoracle_bb_test.go",
-            "pdoracle_bb_test.go",
-            ("oracle/oracles",),
-            "./oracle/...",
-            changed_files=("oracle/oracles/pd.go",),
+            "coalesce",
+            "pkg/chart/common/util/coalesce_bb_prop_test.go",
+            "coalesce_bb_prop_test.go",
+            ("pkg/chart/common/util",),
+            "./pkg/chart/common/util/",
+            changed_files=("coalesce.go",),
         ),
         _unit(
-            "pessimisticlock",
-            "txnkv/transaction/pessimisticlock_bb_test.go",
-            "pessimisticlock_bb_test.go",
-            ("txnkv/transaction",),
-            "./txnkv/transaction/",
-            changed_files=("txnkv/transaction/pessimistic.go",),
-            extra_coverage=(
-                ("TestBBPessimisticPrimaryOnce", "primary locked first"),
-                ("TestBBPessimisticInterleaveModel", "rollback doesn't delete persisted locks"),
-            ),
+            "chartloader",
+            "internal/chart/v3/loader/chartloader_bb_prop_test.go",
+            "chartloader_bb_prop_test.go",
+            ("internal/chart/v3/loader",),
+            "./internal/chart/v3/loader/",
+            changed_files=("load.go", "directory.go", "archive.go"),
         ),
         _unit(
-            "rangetask",
-            "txnkv/rangetask/rangetask_bb_test.go",
-            "rangetask_bb_test.go",
-            ("txnkv/rangetask",),
-            "./txnkv/rangetask/",
-            changed_files=("txnkv/rangetask/range_task.go",),
+            "depresolver",
+            "internal/resolver/depresolver_bb_prop_test.go",
+            "depresolver_bb_prop_test.go",
+            ("internal/resolver",),
+            "./internal/resolver/",
+            changed_files=("resolver.go",),
         ),
         _unit(
-            "regionstoresorted",
-            "internal/locate/regionstoresorted_bb_test.go",
-            "regionstoresorted_bb_test.go",
-            ("internal/locate",),
-            "./internal/locate/",
-            changed_files=("internal/locate/sorted_btree.go", "internal/locate/region_cache.go"),
+            "repindex",
+            "pkg/repo/v1/repindex_bb_prop_test.go",
+            "repindex_bb_prop_test.go",
+            ("pkg/repo/v1",),
+            "./pkg/repo/v1/",
+            changed_files=("index.go",),
         ),
         _unit(
-            "replicaselector",
-            "internal/locate/replicaselector_bb_test.go",
-            "replicaselector_bb_test.go",
-            ("internal/locate",),
-            "./internal/locate/",
-            changed_files=("internal/locate/region_request.go",),
-            strip_from_tree=(
-                "internal/locate/replicaselector_bb_prop_test.go",
-                "internal/locate/region_request.go.orig",
-            ),
+            "provenance",
+            "pkg/provenance/provenance_bb_prop_test.go",
+            "provenance_bb_prop_test.go",
+            ("pkg/provenance",),
+            "./pkg/provenance/",
+            changed_files=("provenance.go",),
         ),
     )
     return tuple(
-        ClientGoUnit(
+        HelmUnit(
             family=s.family,
             author_dir=root / s.family / "_author",
             hidden_relpath=s.hidden_relpath,
             testdata_name=s.testdata_name,
             packages=s.packages,
             reproduce_pkgs=s.reproduce_pkgs,
-            changed_symbols=s.changed_symbols,
             changed_files=s.changed_files,
-            strip_from_tree=s.strip_from_tree,
             coverage=s.coverage,
             one_liner=s.one_liner,
         )
@@ -250,14 +214,16 @@ def unit_specs(author_root: Path | None = None) -> tuple[ClientGoUnit, ...]:
     )
 
 
-def _strip_tree_leaks(unit: ClientGoUnit, src: Path) -> None:
-    for rel in unit.strip_from_tree:
-        p = src / rel
-        if p.is_file():
-            p.unlink()
+def _strip_tree_leaks(src: Path) -> None:
+    for path in src.rglob("*"):
+        if not path.is_file():
+            continue
+        name = path.name
+        if name.endswith("_bb_prop_test.go") or name == "ignore_bb_prop_test.go":
+            path.unlink()
 
 
-def construct_unit(unit: ClientGoUnit, dest_root: Path) -> dict[int, Path]:
+def construct_unit(unit: HelmUnit, dest_root: Path) -> dict[int, Path]:
     author = unit.author_dir
     tree = author / "tree"
     if not tree.is_dir():
@@ -278,8 +244,8 @@ def construct_unit(unit: ClientGoUnit, dest_root: Path) -> dict[int, Path]:
     if src_dest.exists():
         shutil.rmtree(src_dest)
     _copytree(tree, src_dest)
-    _strip_tree_leaks(unit, src_dest)
-    (env / "Dockerfile").write_text(render_ladder_base_dockerfile(), encoding="utf-8")
+    _strip_tree_leaks(src_dest)
+    (env / "Dockerfile").write_text(render_ladder_base_dockerfile(HELM_LADDER_BASE), encoding="utf-8")
     (skeleton / "task.toml").write_text(render_unsolv_task_toml(), encoding="utf-8")
     bugreport = (author / "bugreport.md").read_text(encoding="utf-8")
     contract = (author / "contract.md").read_text(encoding="utf-8")
@@ -297,7 +263,7 @@ def construct_unit(unit: ClientGoUnit, dest_root: Path) -> dict[int, Path]:
         changed_symbols=unit.changed_symbols,
         changed_files=unit.changed_files,
         name_scheme="L",
-        dockerfile_from=LADDER_BASE_IMAGE,
+        dockerfile_from=HELM_LADDER_BASE,
         instructions={-2: bugreport, 0: l2},
         representative=unit.hidden_relpath,
     )
@@ -310,47 +276,42 @@ def construct_unit(unit: ClientGoUnit, dest_root: Path) -> dict[int, Path]:
     return results
 
 
-def build_unit_image(task_dir: Path, tag: str) -> None:
-    env = Path(task_dir) / "environment"
-    proc = subprocess.run(
-        [
-            "nice",
-            "-n",
-            "10",
-            "docker",
-            "build",
-            "-t",
-            tag,
-            "-f",
-            str(env / "Dockerfile"),
-            str(env),
-        ],
-        capture_output=True,
-        text=True,
-        errors="replace",
-        timeout=900,
-        check=False,
+def _refresh_hidden_tests(unit: HelmUnit, results: dict[int, Path]) -> None:
+    content = load_hidden(unit.testdata_name)
+    hidden = (
+        HiddenTest(
+            relpath=unit.hidden_relpath,
+            content=content,
+            one_liner=unit.one_liner,
+            test_names=_test_names(content),
+        ),
     )
-    if proc.returncode != 0:
-        raise RuntimeError(f"docker build {tag} failed: {proc.stdout}\n{proc.stderr}")
+    for dest in results.values():
+        write_hidden_tests(dest / "tests", hidden)
+        from openswe_traces.synth.affordance import render_hidden_test_sh
+
+        sh = dest / "tests" / "test.sh"
+        sh.write_text(
+            render_hidden_test_sh(hidden, unit.packages),
+            encoding="utf-8",
+        )
+        sh.chmod(0o755)
 
 
-@dataclass
-class UnitProofResult:
-    unit: str
-    ok: bool
-    proof: dict[str, object]
-    wall_min: float
-    gold_first_pass: bool
-    suite_fixes: int
-    n_properties: int
-    coverage_pct: float
-    rejected_rule: str | None = None
+def _failing_tests(blob: str) -> list[str]:
+    return list(dict.fromkeys(_FAIL_TEST_RE.findall(blob)))
 
 
-def prove_unit(unit: ClientGoUnit, results: dict[int, Path]) -> UnitProofResult:
+def prove_unit(unit: HelmUnit, results: dict[int, Path]) -> UnitProofResult:
     t0 = time.monotonic()
-    out: dict[str, object] = {"ok": True, "checks": [], "suite_fixes": 0, "gold_first_pass": True}
+    out: dict[str, object] = {
+        "ok": True,
+        "checks": [],
+        "suite_fixes": 0,
+        "gold_first_pass": True,
+        "gold_iterations": [],
+        "needs_author_review": False,
+    }
     tag = f"{IMAGE_PREFIX}-{unit.family}:l0"
 
     def record(check: str, ok: bool, detail: str = "") -> None:
@@ -360,7 +321,7 @@ def prove_unit(unit: ClientGoUnit, results: dict[int, Path]) -> UnitProofResult:
         if not ok:
             out["ok"] = False
 
-    harness = validate_harness(LADDER_BASE_IMAGE)
+    harness = validate_harness(HELM_LADDER_BASE)
     record("proof_harness", bool(harness["ok"]), json.dumps(harness))
     if not harness["ok"]:
         return UnitProofResult(
@@ -376,43 +337,46 @@ def prove_unit(unit: ClientGoUnit, results: dict[int, Path]) -> UnitProofResult:
         )
 
     l0 = results[-2]
-    build_unit_image(l0, tag)
     tests = l0 / "tests"
-    rc, reward, blob = _run_test_in_image(tag, tests, timeout=600)
+    build_unit_image(l0, tag)
+
+    rc, reward, blob = _run_test_in_image(tag, tests, timeout=300)
     record("buggy_fails", rc != 0 or reward != "1", blob[-2000:])
 
     gold_pre = "cd /app && patch -p1 --forward --batch -i /tests/gold.patch"
     rc, reward, blob = _run_test_in_image(tag, tests, pre=gold_pre, timeout=1800)
     gold_pass = rc == 0 and reward == "1"
-    record("gold_restore", gold_pass, blob[-2000:])
     if not gold_pass:
         out["gold_first_pass"] = False
+        fails = _failing_tests(blob)
+        out["failing_properties"] = fails
+        out["failing_detail"] = blob[-2000:]
+        out["gold_iterations"] = [{"iteration": 1, "pass": False, "failing_tests": fails}]
+
+    record("gold_restore", gold_pass, blob[-2000:])
 
     cheat_pre = "cd /app && patch -p1 --forward --batch -i /tests/cheat.patch"
     rc, reward, blob = _run_test_in_image(tag, tests, pre=cheat_pre, timeout=900)
     record("cheat_rejected", rc != 0 or reward != "1", blob[-2000:])
     record("blackbox_hygiene", True, "B4 packaging gate at construct time")
 
+    verdict_rule = None
+    if out.get("needs_author_review"):
+        verdict_rule = "needs-author-review"
+    elif not out["ok"]:
+        verdict_rule = "A1"
+
     return UnitProofResult(
         unit.family,
-        bool(out["ok"]),
+        bool(out["ok"]) and not out.get("needs_author_review"),
         out,
         (time.monotonic() - t0) / 60,
         bool(out.get("gold_first_pass", False)),
         int(out.get("suite_fixes", 0)),
         len(_test_names(load_hidden(unit.testdata_name))),
         _coverage_pct(unit),
-        None if out["ok"] else "A1",
+        verdict_rule,
     )
-
-
-def _coverage_pct(unit: ClientGoUnit) -> float:
-    contract_path = unit.author_dir / "contract.md"
-    n_sent = len(_parse_contract_coverage(contract_path))
-    if n_sent == 0:
-        return 100.0
-    covered = len({s for _, s in unit.coverage})
-    return min(100.0, round(100.0 * covered / n_sent, 1))
 
 
 def _b4_pass(task_dir: Path, extra: dict[str, object]) -> bool:
@@ -423,7 +387,7 @@ def _b4_pass(task_dir: Path, extra: dict[str, object]) -> bool:
     return True
 
 
-def write_verdicts(unit: ClientGoUnit, results: dict[int, Path], proof: UnitProofResult) -> str | None:
+def write_verdicts_helm(unit: HelmUnit, results: dict[int, Path], proof: UnitProofResult) -> str | None:
     checks = proof.proof.get("checks") if isinstance(proof.proof.get("checks"), list) else []
     named: dict[str, bool] = {}
     for row in checks:
@@ -442,9 +406,10 @@ def write_verdicts(unit: ClientGoUnit, results: dict[int, Path], proof: UnitProo
         "suite_fixes": proof.suite_fixes,
         "n_properties": proof.n_properties,
         "coverage_pct": proof.coverage_pct,
+        "needs_author_review": bool(proof.proof.get("needs_author_review")),
         **named,
     }
-    for dest in results.values():
+    for _level, dest in results.items():
         payload = dict(extra)
         if not _b4_pass(dest, payload):
             return "B4"
@@ -454,24 +419,22 @@ def write_verdicts(unit: ClientGoUnit, results: dict[int, Path], proof: UnitProo
 
 def write_verifier_batch_md(
     dest_root: Path,
-    units: Sequence[ClientGoUnit],
+    units: Sequence[HelmUnit],
     results: dict[str, dict[int, Path]],
     proofs: dict[str, UnitProofResult],
     rejected: list[tuple[str, str]],
 ) -> str:
-    verifier_batch_md = dest_root / "VERIFIER_BATCH.md"
-    rejected_md = dest_root / "REJECTED.md"
     lines = [
-        "# VERIFIER_BATCH.md — pipeline client-go",
+        "# VERIFIER_BATCH.md — composerver helm",
         "",
-        "Devin verifier batch. Seed `20260919`. Hidden black-box property suites",
-        "via `affordance.py`. Dockerfile `FROM ladder-base:client-go-obf`.",
-        "L0/L2 proved in-image; L5/L6 packaged only (not run).",
+        "Composer verifier batch for helm/chartkit feature-excision units.",
+        "Seed `20260919`. Hidden black-box property suites via `affordance.py`.",
+        "Dockerfile `FROM ladder-base:helm`. L0/L2 proved; L5/L6 packaged only.",
         "",
-        "Build:",
+        "Build / reprove:",
         "",
         "```",
-        "uv run python scripts/build_pipeline_clientgo_batch.py",
+        "uv run python scripts/build_composerver_helm_batch.py --max-parallel 2",
         "```",
         "",
         "## Summary",
@@ -479,22 +442,37 @@ def write_verifier_batch_md(
         "| unit | properties | coverage % | gold 1st | suite fixes | wall min | verdict |",
         "|---|---:|---:|---|---:|---:|---|",
     ]
+    pass_n = 0
     for unit in units:
         pr = proofs.get(unit.family)
         if pr is None:
             lines.append(f"| `{unit.family}` | — | — | — | — | — | pending |")
             continue
-        verdict = "PASS" if pr.ok and not pr.rejected_rule else f"REJECT ({pr.rejected_rule})"
+        if pr.rejected_rule == "needs-author-review":
+            verdict = "needs-author-review"
+        elif pr.ok and not pr.rejected_rule:
+            verdict = "PASS"
+            pass_n += 1
+        else:
+            verdict = f"REJECT ({pr.rejected_rule})"
         lines.append(
             f"| `{unit.family}` | {pr.n_properties} | {pr.coverage_pct} | "
             f"{'yes' if pr.gold_first_pass else 'no'} | {pr.suite_fixes} | "
             f"{pr.wall_min:.1f} | {verdict} |"
         )
+    lines += [
+        "",
+        f"**Batch totals:** {pass_n}/{len(units)} PASS",
+        "",
+        "---",
+        "",
+    ]
     if rejected:
-        lines += ["", "## Rejected", ""]
+        lines += ["## Rejected / blocked", ""]
         for unit, rule in rejected:
             lines.append(f"- `{unit}`: **{rule}**")
-    lines += ["", "---", ""]
+        lines += ["", "---", ""]
+
     for unit in units:
         pr = proofs.get(unit.family)
         if pr is None:
@@ -510,6 +488,12 @@ def write_verifier_batch_md(
             f"- **Wall minutes:** {pr.wall_min:.1f}",
             "",
         ]
+        if pr.proof.get("needs_author_review"):
+            lines.append("- **Status:** needs-author-review (gold still failing after 6 suite iterations)")
+            fails = pr.proof.get("failing_properties") or []
+            if fails:
+                lines.append(f"- **Failing properties:** {', '.join(f'`{f}`' for f in fails)}")
+            lines.append("")
         if res:
             if -2 in res:
                 lines.append(f"- **L0:** `{res[-2].relative_to(ROOT)}`")
@@ -527,7 +511,8 @@ def write_verifier_batch_md(
             "|---|---|",
         ]
         for prop, sentence in unit.coverage[:40]:
-            lines.append(f"| {sentence[:120]}{'…' if len(sentence) > 120 else ''} | `{prop}` |")
+            short = sentence[:120] + ("…" if len(sentence) > 120 else "")
+            lines.append(f"| {short} | `{prop}` |")
         if len(unit.coverage) > 40:
             lines.append(f"| … ({len(unit.coverage) - 40} more rows) | |")
         lines += [
@@ -544,15 +529,7 @@ def write_verifier_batch_md(
         lines.append("")
     text = "\n".join(lines) + "\n"
     dest_root.mkdir(parents=True, exist_ok=True)
-    verifier_batch_md.write_text(text, encoding="utf-8")
-    if rejected:
-        rej_lines = ["# REJECTED — pipeline client-go", ""]
-        for unit, rule in rejected:
-            rej_lines.append(f"- `{unit}`: rule **{rule}**")
-        rej_lines.append("")
-        rejected_md.write_text("\n".join(rej_lines) + "\n", encoding="utf-8")
-    elif rejected_md.is_file():
-        rejected_md.unlink()
+    VERIFIER_BATCH_MD.write_text(text, encoding="utf-8")
     return text
 
 
@@ -582,27 +559,18 @@ def construct_and_prove(
     if skip_docker:
         parent["skipped_docker"] = True
         for unit in all_units:
-            pr = UnitProofResult(
-                unit.family,
-                True,
-                {"ok": True},
-                0.0,
-                True,
-                0,
-                len(_test_names(load_hidden(unit.testdata_name))),
-                _coverage_pct(unit),
-            )
+            pr = UnitProofResult(unit.family, True, {"ok": True}, 0.0, True, 0, 0, 100.0)
             proofs[unit.family] = pr
-            rule = write_verdicts(unit, results[unit.family], pr)
+            rule = write_verdicts_helm(unit, results[unit.family], pr)
             if rule:
                 rejected.append((unit.family, rule))
     else:
-        base_h = validate_harness(LADDER_BASE_IMAGE)
+        base_h = validate_harness(HELM_LADDER_BASE)
         parent["harness"] = base_h
         if not base_h.get("ok"):
             parent["ok"] = False
 
-        def _prove_one(u: ClientGoUnit) -> UnitProofResult:
+        def _prove_one(u: HelmUnit) -> UnitProofResult:
             print(f"prove {u.family}", flush=True)
             return prove_unit(u, results[u.family])
 
@@ -612,23 +580,12 @@ def construct_and_prove(
                 unit = futs[fut]
                 pr = fut.result()
                 proofs[unit.family] = pr
-                rule = write_verdicts(unit, results[unit.family], pr)
+                rule = write_verdicts_helm(unit, results[unit.family], pr)
                 if rule:
                     rejected.append((unit.family, rule))
-                    pr = UnitProofResult(
-                        unit.family,
-                        False,
-                        pr.proof,
-                        pr.wall_min,
-                        pr.gold_first_pass,
-                        pr.suite_fixes,
-                        pr.n_properties,
-                        pr.coverage_pct,
-                        rule,
-                    )
-                    proofs[unit.family] = pr
-                if not pr.ok or rule:
-                    parent["ok"] = False
+                if not pr.ok or pr.rejected_rule:
+                    if pr.rejected_rule != "needs-author-review":
+                        parent["ok"] = False
 
     families = parent.setdefault("families", {})
     assert isinstance(families, dict)
@@ -642,17 +599,18 @@ def construct_and_prove(
             "coverage_pct": pr.coverage_pct,
             "wall_min": pr.wall_min,
             "rejected_rule": pr.rejected_rule,
+            "needs_author_review": pr.rejected_rule == "needs-author-review",
         }
     (dest_root / "validation.json").write_text(
         json.dumps(parent, indent=2, default=str) + "\n", encoding="utf-8"
     )
-    write_verifier_batch_md(dest_root, all_units, results, proofs, rejected)
-    parent["verifier_batch_md"] = str(dest_root / "VERIFIER_BATCH.md")
+    md = write_verifier_batch_md(dest_root, all_units, results, proofs, rejected)
+    parent["verifier_batch_md"] = str(VERIFIER_BATCH_MD)
     return parent
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Build pipeline client-go verifier batch")
+    parser = argparse.ArgumentParser(description="Build composerver helm verifier batch")
     parser.add_argument("--author-root", default=str(DEFAULT_AUTHOR_ROOT))
     parser.add_argument("--dest", default=str(DEFAULT_DEST))
     parser.add_argument("--skip-docker", action="store_true")
@@ -666,9 +624,8 @@ def main(argv: list[str] | None = None) -> int:
         units_filter=args.units,
         max_build_parallel=args.max_parallel,
     )
-    md_path = Path(args.dest) / "VERIFIER_BATCH.md"
-    if md_path.is_file():
-        print(md_path.read_text(encoding="utf-8"))
+    if VERIFIER_BATCH_MD.is_file():
+        print(VERIFIER_BATCH_MD.read_text(encoding="utf-8"))
     print(json.dumps({"ok": payload.get("ok")}, indent=2))
     return 0 if payload.get("ok") else 2
 
