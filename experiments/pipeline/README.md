@@ -93,3 +93,7 @@ Dashboard: calibration curve per (repo, solver, level), nearest-50% level,
 inter-attempt 2-1 split fraction, author calibration (MAE / exact / off-by-one),
 hacked (B9) counts, early-warning flags **with their action text**, flip-point
 histogram per solver, Composer tokens used.
+
+## Devin concurrency finding (2026-09-19 03:40Z)
+
+At 7 concurrent swe-2-max sessions (3 CLI verifier + 1 CLI author via the pipeline + 3 Harbor trials) all three verifier sessions hit "Reached free model rate limit ... resets in ~20 s" within minutes and died. Treat any hit as a rolling-window limit: back off 20 min, then resume at lower concurrency. Operating target: 5 sessions total (3 CLI + 2 Harbor). `devin_slots` in config.yaml set to 5.
