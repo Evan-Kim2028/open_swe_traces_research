@@ -255,7 +255,9 @@ def executed_actions(trial_dir: Path | str | None) -> str | None:
             obs = holder.get("observation") or {}
             results = obs.get("results") if isinstance(obs, dict) else None
             if isinstance(results, list) and results:
-                joined = " ".join(str(r.get("content", ""))[:300] for r in results if isinstance(r, dict))
+                joined = " ".join(
+                    str(r.get("content", ""))[:300] for r in results if isinstance(r, dict)
+                )
                 return " ".join(joined.split())
         return ""
 
@@ -353,12 +355,64 @@ def _docker_argv(
     env: Mapping[str, str],
     command: str,
     network: str = "none",
+    mounts: Sequence[tuple[str, str]] | None = None,
 ) -> list[str]:
     argv = ["docker", "run", "--rm", "-i", f"--network={network}"]
     for key, value in env.items():
         argv.extend(["-e", f"{key}={value}"])
+    for host, cont in mounts or ():
+        argv.extend(["-v", f"{host}:{cont}:ro"])
     argv.extend([image, "bash", "-lc", command])
     return argv
+
+
+_IMAGE_CACHE: dict[str, str] = {}
+
+
+def task_image(task_dir: Path | str, *, run: Callable[..., Any] = subprocess.run) -> str | None:
+    """`docker build -q` of the task environment (layer-cached; what the solver actually ran in)."""
+    env = Path(task_dir) / "environment"
+    key = str(env.resolve())
+    if key in _IMAGE_CACHE:
+        return _IMAGE_CACHE[key]
+    if not (env / "Dockerfile").is_file():
+        return None
+    proc = run(
+        ["docker", "build", "-q", str(env)],
+        capture_output=True,
+        text=True,
+        timeout=1800,
+        check=False,
+    )
+    ident = (proc.stdout or "").strip().splitlines()[-1] if (proc.stdout or "").strip() else ""
+    if proc.returncode != 0 or not ident:
+        return None
+    _IMAGE_CACHE[key] = ident
+    return ident
+
+
+def audit_test_plan(task_dir: Path | str | None) -> tuple[list[str], list[str]]:
+    """(hidden files to install, go test commands) parsed from tests/test.sh."""
+    if task_dir is None:
+        return [], []
+    script = Path(task_dir) / "tests" / "test.sh"
+    if not script.is_file():
+        return [], []
+    hidden: list[str] = []
+    cmds: list[str] = []
+    for raw in script.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw.strip()
+        m = re.match(r'install_hidden\s+"([^"]+)"', line)
+        if m:
+            hidden.append(m.group(1))
+            continue
+        if line.startswith("if go test"):
+            cmd = line[3:]
+            cmd = re.sub(r";\s*then\s*$", "", cmd).strip()
+            cmds.append(cmd)
+        elif line.startswith("go test") and "; then" not in line:
+            cmds.append(line)
+    return hidden, cmds
 
 
 def default_docker_run(
@@ -393,6 +447,8 @@ def _apply_and_test_command(
     workdir: str = "/app",
     rewrite_from_seed: int | None = None,
     rewrite_to_seed: int | None = None,
+    hidden_rels: Sequence[str] = (),
+    go_cmds: Sequence[str] = (),
 ) -> str:
     pkgs = [p for p in list(unit_packages) + list(baseline_packages) if p]
     pkg_args = " ".join(shlex.quote(p) for p in pkgs)
@@ -406,7 +462,7 @@ def _apply_and_test_command(
     if rewrite_from_seed is not None and rewrite_to_seed is not None:
         old, new = int(rewrite_from_seed), int(rewrite_to_seed)
         rewrite = (
-            f"\nfor d in /tests/hidden /tests {shlex.quote(workdir)}; do\n"
+            f"\nfor d in {shlex.quote(workdir)}; do\n"
             f'  [ -d "$d" ] || continue\n'
             f'  find "$d" -name "*_test.go" -print0 2>/dev/null | '
             f"xargs -0 -r sed -i "
@@ -415,6 +471,29 @@ def _apply_and_test_command(
             f"HiddenSeed int64 = {new}/g;"
             f"s/\\([A-Za-z_]*[Ss]eed[[:space:]]*=[[:space:]]*\\){old}/\\1{new}/g'\n"
             f"done\n"
+        )
+    if hidden_rels and go_cmds:
+        install = "".join(
+            f"mkdir -p {shlex.quote(str(Path(workdir) / Path(rel).parent))} && "
+            f"cp {shlex.quote('/tests/hidden/' + rel)} {shlex.quote(str(Path(workdir) / rel))}\n"
+            for rel in hidden_rels
+        )
+        run_tests = "".join(
+            f"if ! ( {c} ); then echo 0 > /logs/verifier/reward.txt; echo REWARD=0; exit 1; fi\n"
+            for c in go_cmds
+        )
+        return (
+            f"set -uo pipefail\n"
+            f"cd {shlex.quote(workdir)}\n"
+            f"mkdir -p /logs/verifier /tmp\n"
+            f"cat > /tmp/agent.patch\n"
+            f"patch -p1 --forward --batch -i /tmp/agent.patch || true\n"
+            f"{install}"
+            f"{rewrite}"
+            f"{run_tests}"
+            f"{collateral}"
+            f"echo 1 > /logs/verifier/reward.txt\n"
+            f"echo REWARD=1\n"
         )
     return (
         f"set -euo pipefail\n"
@@ -442,16 +521,21 @@ def run_hidden_and_collateral(
     docker_run: DockerRun | None = None,
     timeout: int = 900,
     rewrite_from_seed: int | None = None,
+    task_dir: Path | str | None = None,
 ) -> dict[str, Any]:
     env = {HIDDEN_SEED_ENV: str(seed), "PATH": "/usr/local/go/bin:/usr/bin:/bin"}
     pkgs = list(collateral_packages) + list(baseline_packages)
+    hidden_rels, go_cmds = audit_test_plan(task_dir)
     command = _apply_and_test_command(
         unit_packages=unit_packages,
         baseline_packages=pkgs,
         rewrite_from_seed=rewrite_from_seed,
         rewrite_to_seed=seed if rewrite_from_seed is not None else None,
+        hidden_rels=hidden_rels,
+        go_cmds=go_cmds,
     )
-    argv = _docker_argv(image, env=env, command=command)
+    mounts = [(str(Path(task_dir) / "tests"), "/tests")] if task_dir is not None else None
+    argv = _docker_argv(image, env=env, command=command, mounts=mounts)
     runner = docker_run or default_docker_run
     try:
         proc = runner(argv, input_text=patch, timeout=timeout)
@@ -547,6 +631,13 @@ def audit_passing_attempt(
     orig_seed = next(
         (s for s in evidence["hidden_seed_constants"] if s is not None), DEFAULT_HIDDEN_SEED
     )
+    if not skip_docker and task_dir is not None and docker_run is None:
+        built = task_image(task_dir)
+        if built:
+            image = built
+            evidence["image"] = built
+        else:
+            flags.append("docker audit: task image build failed; used base image")
     if not skip_docker and image and patch_text:
         pkgs = list(baseline_packages)
         docker_result = run_hidden_and_collateral(
@@ -557,6 +648,7 @@ def audit_passing_attempt(
             baseline_packages=pkgs,
             docker_run=docker_run,
             rewrite_from_seed=orig_seed if orig_seed != audit_seed else None,
+            task_dir=task_dir,
         )
         evidence["docker"] = {
             k: docker_result[k]
@@ -564,8 +656,17 @@ def audit_passing_attempt(
             if k in docker_result
         }
         evidence["docker_stdout"] = docker_result.get("stdout", "")[-1500:]
+        infra = int(docker_result.get("returncode") or 0) in {125, 126, 127} or (
+            "REWARD=" not in (docker_result.get("stdout") or "")
+            and not docker_result.get("timeout")
+        )
         if docker_result.get("timeout"):
             hard.append("hidden suite docker timed out (class d; do not count as solver fail)")
+        elif infra:
+            flags.append(
+                f"docker audit infra error rc={docker_result.get('returncode')}: "
+                f"{(docker_result.get('stderr') or '')[-300:]}"
+            )
         elif docker_result.get("collateral_fail"):
             hard.append("A5 collateral tests failed under the patch")
         elif not docker_result.get("passed"):

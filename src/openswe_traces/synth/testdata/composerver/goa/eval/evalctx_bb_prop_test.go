@@ -7,7 +7,7 @@
 //       -> TestEvalctxRegisterDuplicateProperty / TestEvalctxRegisterDuplicateRandom
 //   "registration records package import paths"
 //       -> TestEvalctxRegisterPackagesProperty
-//   "Roots returns topological order: dependent before dependency"
+//   "Roots returns topological order: each root before its dependencies in the list"
 //       -> TestEvalctxRootsOrderProperty / TestEvalctxRootsOrderRandom
 //   "dependency cycle fails naming both roots"
 //       -> TestEvalctxRootsCycleProperty
@@ -69,7 +69,15 @@ func evalctxOrderValid(roots []eval.Root) bool {
 	idx := evalctxIndexByName(roots)
 	for _, r := range roots {
 		for _, dep := range r.DependsOn() {
-			if idx[r.EvalName()] >= idx[dep.EvalName()] {
+			if dep == nil {
+				continue
+			}
+			dn := dep.EvalName()
+			if _, ok := idx[dn]; !ok {
+				continue
+			}
+			// Each dependency appears before the root that lists it.
+			if idx[r.EvalName()] <= idx[dn] {
 				return false
 			}
 		}
@@ -144,8 +152,9 @@ func TestEvalctxRootsOrderProperty(t *testing.T) {
 	if !evalctxOrderValid(roots) {
 		t.Fatalf("invalid order: %v", roots)
 	}
-	if roots[0].EvalName() != "app" || roots[1].EvalName() != "base" {
-		t.Fatalf("order: %v", roots)
+	names := []string{roots[0].EvalName(), roots[1].EvalName()}
+	if names[0] != "base" || names[1] != "app" {
+		t.Fatalf("order: %v", names)
 	}
 }
 

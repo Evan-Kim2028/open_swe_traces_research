@@ -38,9 +38,21 @@ const (
 
 var xraysegHexID = regexp.MustCompile(`^[0-9a-f]{16}$`)
 
+func xraysegDrain(conn net.Conn) {
+	go func() {
+		buf := make([]byte, 65536)
+		for {
+			if _, err := conn.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+}
+
 func xraysegPipeConn(t *testing.T) net.Conn {
 	srv, cli := net.Pipe()
 	t.Cleanup(func() { _ = srv.Close(); _ = cli.Close() })
+	xraysegDrain(srv)
 	return cli
 }
 
@@ -177,8 +189,9 @@ func TestXraysegSubmitInProgressProperty(t *testing.T) {
 func TestXraysegSubmitRandom(t *testing.T) {
 	rng := rand.New(rand.NewSource(bbSeed + 3))
 	for i := 0; i < bbCases; i++ {
-		_, conn := net.Pipe()
-		s := xray.NewSegment("s", "t", xray.NewID(), conn)
+		srv, cli := net.Pipe()
+		xraysegDrain(srv)
+		s := xray.NewSegment("s", "t", xray.NewID(), cli)
 		if rng.Intn(2) == 0 {
 			s.SubmitInProgress()
 		}
@@ -186,7 +199,8 @@ func TestXraysegSubmitRandom(t *testing.T) {
 		if s.InProgress {
 			t.Fatalf("case %d: still in progress", i)
 		}
-		_ = conn.Close()
+		_ = srv.Close()
+		_ = cli.Close()
 	}
 }
 
