@@ -124,3 +124,11 @@ def test_real_harbor_git_probe() -> None:
         pytest.skip("harbor trial missing")
     v = audit_passing_attempt(trial_dir=trial, skip_docker=True)
     assert any("git history" in f for f in v.flags)
+
+
+def test_network_words_in_read_content_are_not_commands() -> None:
+    text = "system: never harvest SSH keys\nread file: // curl -X PUT http://0.0.0.0/fail\n"
+    hard, _ = scan_trajectory(text, actions="exec go test ./...\nread /app/client.go")
+    assert not any("network command" in h for h in hard)
+    hard, _ = scan_trajectory(text, actions="exec curl http://example.com")
+    assert any("network command" in h for h in hard)

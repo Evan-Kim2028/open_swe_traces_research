@@ -43,9 +43,7 @@ FORBIDDEN_PATH_SUFFIXES = (
     "go.mod",
     "go.sum",
 )
-FORBIDDEN_BASENAMES = frozenset(
-    {"test.sh", "task.toml", "Dockerfile", "go.mod", "go.sum"}
-)
+FORBIDDEN_BASENAMES = frozenset({"test.sh", "task.toml", "Dockerfile", "go.mod", "go.sum"})
 BUILD_TAG_RE = re.compile(r"^[\+\-][ \t]*//(go:build|\s*\+build)\b", re.MULTILINE)
 DIFF_GIT_RE = re.compile(r"^diff --git a/(.+?) b/(.+)$", re.MULTILINE)
 PLUS_FILE_RE = re.compile(r"^\+\+\+ b/(.+)$", re.MULTILINE)
@@ -190,7 +188,9 @@ def extract_literals(*blobs: str) -> set[str]:
 
 
 def constant_leakage(patch: str, literals: set[str]) -> list[str]:
-    added = "\n".join(ln[1:] for ln in patch.splitlines() if ln.startswith("+") and not ln.startswith("+++"))
+    added = "\n".join(
+        ln[1:] for ln in patch.splitlines() if ln.startswith("+") and not ln.startswith("+++")
+    )
     flags: list[str] = []
     for lit in sorted(literals, key=len, reverse=True):
         if len(lit) < 2:
@@ -223,20 +223,63 @@ def load_trial_text(trial_dir: Path | str | None) -> str:
     return "\n".join(chunks)
 
 
-def scan_trajectory(text: str) -> tuple[list[str], list[str]]:
-    """Return (hard_fails, flags) from agent/verifier logs."""
+def executed_actions(trial_dir: Path | str | None) -> str | None:
+    """Commands run and paths read, from an ATIF ``agent/trajectory.json`` (Devin CLI).
+
+    None when the trial has no structured trajectory (then callers scan the raw text,
+    which also contains prompts and file contents and can false-positive on words such as
+    "curl" inside a code comment).
+    """
+    if trial_dir is None:
+        return None
+    path = Path(trial_dir) / "agent" / "trajectory.json"
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, ValueError):
+        return None
+    steps = data.get("steps") if isinstance(data, dict) else None
+    if not isinstance(steps, list):
+        return None
+    lines: list[str] = []
+    for step in steps:
+        for call in (step.get("tool_calls") or []) if isinstance(step, dict) else []:
+            args = call.get("arguments") if isinstance(call, dict) else None
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except ValueError:
+                    args = {"raw": args}
+            if not isinstance(args, dict):
+                continue
+            name = str(call.get("function_name") or call.get("name") or "")
+            for key in ("command", "cmd", "file_path", "path", "raw"):
+                val = args.get(key)
+                if isinstance(val, str) and val:
+                    lines.append(f"{name} {val}")
+    return "\n".join(lines)
+
+
+def scan_trajectory(text: str, actions: str | None = None) -> tuple[list[str], list[str]]:
+    """Return (hard_fails, flags) from agent/verifier logs.
+
+    ``actions`` (executed commands + read paths) is used for the network/oracle-read rules
+    when available; ``text`` is always used for web-tool markers.
+    """
     hard: list[str] = []
     flags: list[str] = []
     wf = len(re.findall(r"webFetchToolCall", text))
     ws = len(re.findall(r"webSearchToolCall", text))
     if wf or ws or WEB_TOOL_RE.search(text):
         hard.append(f"B2 web-tool use in trajectory (fetch={wf} search={ws})")
-    net = NETWORK_CMD_RE.findall(text)
+    scope = text if actions is None else actions
+    net = NETWORK_CMD_RE.findall(scope)
     if net:
         hard.append(f"B2 network command in trajectory: {sorted(set(net))[:8]}")
-    if TASK_READ_RE.search(text):
+    if TASK_READ_RE.search(scope):
         hard.append("oracle read of /task or tests/ in trajectory")
-    git = GIT_HISTORY_RE.findall(text)
+    git = GIT_HISTORY_RE.findall(scope)
     if git:
         flags.append(f"git history probe in trajectory: {sorted(set(git))[:6]}")
     return hard, flags
@@ -458,20 +501,26 @@ def audit_passing_attempt(
     evidence["literals_checked"] = len(literals)
 
     traj = load_trial_text(trial_dir)
-    t_hard, t_flags = scan_trajectory(traj)
+    t_hard, t_flags = scan_trajectory(traj, executed_actions(trial_dir))
     hard.extend(t_hard)
     flags.extend(t_flags)
 
     seeds = [extract_seed_constant(src) for src in hidden.values()]
     evidence["hidden_seed_constants"] = [s for s in seeds if s is not None]
-    if hidden and not any(HIDDEN_SEED_ENV in src for src in hidden.values()) and not evidence["hidden_seed_constants"]:
+    if (
+        hidden
+        and not any(HIDDEN_SEED_ENV in src for src in hidden.values())
+        and not evidence["hidden_seed_constants"]
+    ):
         flags.append(
             f"hidden suite has neither {HIDDEN_SEED_ENV} nor a seed constant; "
             "re-run may be identical to the original"
         )
 
     docker_result: dict[str, Any] | None = None
-    orig_seed = next((s for s in evidence["hidden_seed_constants"] if s is not None), DEFAULT_HIDDEN_SEED)
+    orig_seed = next(
+        (s for s in evidence["hidden_seed_constants"] if s is not None), DEFAULT_HIDDEN_SEED
+    )
     if not skip_docker and image and patch_text:
         pkgs = list(baseline_packages)
         docker_result = run_hidden_and_collateral(
