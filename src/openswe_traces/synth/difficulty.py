@@ -885,23 +885,24 @@ def race_gate(index: Path | str, *, n: int = 0) -> RaceSite | None:
     return sites[n % len(sites)]
 
 
-def pick_sized_excision(
+def collect_feature_excisions(
     index: Path | str,
     *,
     min_functions: int = 3,
     max_functions: int = 8,
+    min_files: int = 1,
     min_lines: int = 80,
-    max_lines: int = 400,
-    n: int = 0,
+    max_lines: int | None = 400,
+    keep_interface: bool = True,
     skip: frozenset[str] = frozenset(),
     skip_files: frozenset[str] = frozenset(),
     package_local: bool = True,
-) -> FeatureExcision | None:
-    """Nth callee closure in the 3–8 function / 80–400 line band.
+) -> list[FeatureExcision]:
+    """All callee closures in the size band (same BFS as ``pick_feature_excision``).
 
-    When ``package_local`` is true, BFS stays inside the entry's Go package so
-    the closure is a unit rather than the whole graph. ``skip`` / ``skip_files``
-    drop entries (and callees) by symbol name or path substring.
+    Defaults match the 3–8 function / ≥80 line unit used for ladder manufacturing.
+    ``max_lines=None`` drops the upper line cap. When ``package_local`` is true,
+    BFS stays inside the entry's Go package.
     """
     from openswe_traces.synth.codegraph_bugs import go_package as _pkg
 
@@ -947,8 +948,12 @@ def pick_sized_excision(
             nfn = len(names)
             if nfn < min_functions or nfn > max_functions:
                 continue
+            if len(files) < min_files:
+                continue
             nlines = sum(line_of.get(c, 20) for c in closure)
-            if nlines < min_lines or nlines > max_lines:
+            if nlines < min_lines:
+                continue
+            if max_lines is not None and nlines > max_lines:
                 continue
             if names in seen_sets:
                 continue
@@ -965,16 +970,47 @@ def pick_sized_excision(
                     functions=names,
                     files=files,
                     tests=tuple(tests),
-                    keep_interface=True,
+                    keep_interface=keep_interface,
                     min_lines=nlines,
                 )
             )
         candidates.sort(key=lambda e: (-len(e.tests), -len(e.functions), e.entry))
-        if not candidates:
-            return None
-        return candidates[n % len(candidates)]
+        return candidates
     finally:
         con.close()
+
+
+def pick_sized_excision(
+    index: Path | str,
+    *,
+    min_functions: int = 3,
+    max_functions: int = 8,
+    min_lines: int = 80,
+    max_lines: int = 400,
+    n: int = 0,
+    skip: frozenset[str] = frozenset(),
+    skip_files: frozenset[str] = frozenset(),
+    package_local: bool = True,
+) -> FeatureExcision | None:
+    """Nth callee closure in the 3–8 function / 80–400 line band.
+
+    When ``package_local`` is true, BFS stays inside the entry's Go package so
+    the closure is a unit rather than the whole graph. ``skip`` / ``skip_files``
+    drop entries (and callees) by symbol name or path substring.
+    """
+    candidates = collect_feature_excisions(
+        index,
+        min_functions=min_functions,
+        max_functions=max_functions,
+        min_lines=min_lines,
+        max_lines=max_lines,
+        skip=skip,
+        skip_files=skip_files,
+        package_local=package_local,
+    )
+    if not candidates:
+        return None
+    return candidates[n % len(candidates)]
 
 
 def pick_feature_excision(

@@ -404,7 +404,7 @@ def unit_specs() -> tuple[DeepUnit, ...]:
                     "A header whose mode byte is not raw/txn, or that is shorter "
                     "than 4 bytes, errors and yields the all-ones null id 0xffffffff."
                 ),
-                discoverable="internal/apicodec/codec.go:28-29",
+                discoverable="internal/apicodec/codec.go:24-29",
                 catcher_test="TestParseKeyspaceID",
                 catcher_file="internal/apicodec/codec_test.go",
             ),
@@ -620,17 +620,18 @@ def _apply_gold(work: Path, unit: DeepUnit, tests: Path) -> None:
     if gold_patch.is_file():
         apply_patch(work, gold_patch)
         return
-    if unit.gold_copy:
-        src = tests / unit.gold_copy
-        if src.is_file() and unit.gold_rel:
-            dest = work / unit.gold_rel
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
-            return
-    raise FileNotFoundError(f"no gold for {unit.family}")
+    copy_name = unit.gold_copy or "gold_pipelined_memdb.go"
+    src = tests / copy_name
+    rel = unit.gold_rel or "internal/unionstore/pipelined_memdb.go"
+    if src.is_file():
+        dest = work / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+        return
+    raise FileNotFoundError(f"no gold for {unit.family} under {tests}")
 
 
-def _run_test_sh(src: Path, tests: Path, image: str, timeout: int = 900) -> tuple[int, str, str]:
+def _run_test_sh(src: Path, tests: Path, image: str, timeout: int = 1200) -> tuple[int, str, str]:
     logs = tempfile.mkdtemp(prefix="ladder-deep-logs-")
     try:
         proc = _docker(
@@ -640,7 +641,7 @@ def _run_test_sh(src: Path, tests: Path, image: str, timeout: int = 900) -> tupl
             "-v",
             f"{src}:/app",
             "-v",
-            f"{tests}:/tests",
+            f"{tests}:/tests:ro",
             "-v",
             f"{logs}:/logs",
             "-e",
@@ -659,6 +660,9 @@ def _run_test_sh(src: Path, tests: Path, image: str, timeout: int = 900) -> tupl
         reward = Path(logs) / "verifier" / "reward.txt"
         reward_s = reward.read_text(encoding="utf-8").strip() if reward.is_file() else ""
         return proc.returncode, reward_s, (proc.stdout or "") + (proc.stderr or "")
+    except subprocess.TimeoutExpired as exc:
+        blob = ((exc.stdout or "") + (exc.stderr or "") if isinstance(exc.stdout, str) else "") + f"\ntimeout after {timeout}s"
+        return 124, "", blob
     finally:
         shutil.rmtree(logs, ignore_errors=True)
 
@@ -685,14 +689,20 @@ def prove_all(
             out["ok"] = False
 
     record("all", "harness_ok", True, json.dumps({k: harness[k] for k in ("ok", "go_on_path", "image")}))
-    for unit in units:
+    # Cheap units first so a long pipeline -race compile does not starve the rest.
+    ordered = sorted(units, key=lambda u: 1 if u.family == "dynamic-pipeline" else 0)
+    for unit in ordered:
         for level, task_dir in sorted(results[unit.family].items()):
             print(f"prove {unit.family} A{level} buggy/gold", flush=True)
             work = dest_root / f"_proof_{unit.family}_A{level}"
+            tests_snap = dest_root / f"_proof_tests_{unit.family}_A{level}"
             if work.exists():
                 shutil.rmtree(work)
+            if tests_snap.exists():
+                shutil.rmtree(tests_snap)
             _copytree(task_dir / "environment" / "src", work)
-            tests = task_dir / "tests"
+            _copytree(task_dir / "tests", tests_snap)
+            tests = tests_snap
             rc, reward, blob = _run_test_sh(work, tests, image)
             buggy_fail = rc != 0 or reward != "1"
             record(unit.family, f"A{level}_buggy_fails", buggy_fail, blob)
@@ -741,6 +751,7 @@ def prove_all(
 
             shutil.rmtree(work, ignore_errors=True)
             shutil.rmtree(gold_tree, ignore_errors=True)
+            shutil.rmtree(tests_snap, ignore_errors=True)
 
         record(unit.family, "patches_skip_tests", True, "gold/alt/cheat copied from L2/A0; no new *_test.go hunks")
         record(unit.family, "proof_harness", True, "go on PATH; false≠0 true=0")
@@ -837,17 +848,36 @@ def write_ladder_deep_md(
     return text
 
 
+def _existing_results(units: Sequence[DeepUnit], dest_root: Path) -> dict[str, dict[int, Path]]:
+    results: dict[str, dict[int, Path]] = {}
+    for unit in units:
+        slot: dict[int, Path] = {}
+        for level in (-1, -2):
+            dest = dest_root / f"{unit.family}-A{level}"
+            if dest.is_dir() and (dest / "tests" / "test.sh").is_file():
+                slot[level] = dest
+        if len(slot) != 2:
+            missing = [f"A{lv}" for lv in (-1, -2) if lv not in slot]
+            raise FileNotFoundError(f"{unit.family} missing {missing} under {dest_root}")
+        results[unit.family] = slot
+    return results
+
+
 def construct_ladder_deep(
     dest_root: Path | str | None = None,
     *,
     skip_docker: bool = False,
+    prove_only: bool = False,
 ) -> dict[str, dict[int, Path]]:
     dest_root = Path(dest_root or DEFAULT_DEST)
     dest_root.mkdir(parents=True, exist_ok=True)
     units = unit_specs()
     results: dict[str, dict[int, Path]] = {}
-    for unit in units:
-        results[unit.family] = build_unit(unit, dest_root)
+    if prove_only:
+        results = _existing_results(units, dest_root)
+    else:
+        for unit in units:
+            results[unit.family] = build_unit(unit, dest_root)
     validation: dict[str, object] = {"ok": True, "families": {}}
     if not skip_docker:
         validation = prove_all(results, units, dest_root)
@@ -868,14 +898,16 @@ def construct_ladder_deep(
         fam = validation.get("families") if isinstance(validation.get("families"), dict) else {}
         slot = fam.get(unit.family) if isinstance(fam, dict) else None
         checks = slot.get("checks") if isinstance(slot, dict) else []
+        named = {c["check"]: c["ok"] for c in checks} if isinstance(checks, list) else {}
         extra = {
             "family": unit.family,
-            "checks": {c["check"]: c["ok"] for c in checks} if isinstance(checks, list) else {},
+            "checks": named,
             "harness_ok": bool(validation.get("harness_ok")),
             "changed_symbols": list(unit.changed_symbols),
             "changed_files": list(unit.changed_files),
             "patches_skip_tests": True,
             "blackbox_hygiene": True,
+            **named,
         }
         for path in results[unit.family].values():
             write_task_validation(path, extra)
@@ -890,8 +922,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Build A-1/A-2 Harbor tasks (no Harbor launch)")
     parser.add_argument("--dest", default=str(DEFAULT_DEST))
     parser.add_argument("--skip-docker", action="store_true")
+    parser.add_argument("--prove-only", action="store_true")
     args = parser.parse_args(argv)
-    construct_ladder_deep(args.dest, skip_docker=args.skip_docker)
+    construct_ladder_deep(args.dest, skip_docker=args.skip_docker, prove_only=args.prove_only)
     return 0
 
 
