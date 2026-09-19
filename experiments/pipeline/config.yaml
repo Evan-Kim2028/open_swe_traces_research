@@ -3,8 +3,8 @@
 units_per_author_batch: 10
 author_minutes: 30
 solver_order:
-  - cursor
   - devin
+  - cursor
 solver_backends:
   - cursor
   - devin
