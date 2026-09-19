@@ -155,6 +155,51 @@ def solve_stage(solver: str | None) -> str:
     return "solve" if not solver else f"solve-{solver}"
 
 
+PRED_FLIP_RE = re.compile(r"predicted_flip:?\s*L?(\d)")
+
+
+def _difficulty_md(cfg: PipelineConfig, repo: str, unit: str) -> str:
+    base = unit.removesuffix("-cv")
+    for cand in (
+        cfg.authored_dir / repo / base / "_author" / "difficulty.md",
+        cfg.authored_dir / repo / unit / "_author" / "difficulty.md",
+    ):
+        if cand.is_file():
+            return cand.read_text(encoding="utf-8", errors="replace")
+    return ""
+
+
+def predicted_flip(cfg: PipelineConfig, repo: str, unit: str) -> int | None:
+    m = PRED_FLIP_RE.search(_difficulty_md(cfg, repo, unit))
+    return int(m.group(1)) if m else None
+
+
+def is_control(cfg: PipelineConfig, repo: str, unit: str) -> bool:
+    return "control: true" in _difficulty_md(cfg, repo, unit)
+
+
+def prioritize_units(
+    cfg: PipelineConfig, store: PipelineStore, ready: list[tuple[str, str, Path]]
+) -> list[tuple[str, str, Path]]:
+    """Selective order: hardest predicted flip first; controls and units already passed at L0 last.
+    When both a `-cv` and a plain variant exist, only the `-cv` (Composer-verified) one runs."""
+    names = {(r, u) for r, u, _ in ready}
+    l0_passed = {(t.repo, t.unit) for t in store.list_trials() if t.level == 0 and t.reward == 1.0}
+    out = []
+    for repo, unit, l2 in ready:
+        if not unit.endswith("-cv") and (repo, unit + "-cv") in names:
+            continue
+        pf = predicted_flip(cfg, repo, unit)
+        key = (
+            1 if (repo, unit) in l0_passed else 0,
+            1 if is_control(cfg, repo, unit) else 0,
+            -(pf if pf is not None else 3),
+            unit,
+        )
+        out.append((key, (repo, unit, l2)))
+    return [x for _, x in sorted(out)]
+
+
 def already_solving_or_solved(
     store: PipelineStore, repo: str, unit: str, *, solver: str | None = None
 ) -> bool:
@@ -483,7 +528,7 @@ def solve_watch(
                     log.info("reconciled %s orphaned trial(s)", n_rec)
             except Exception as exc:  # noqa: BLE001
                 log.warning("reconcile failed: %s", exc)
-            ready = discover_verified_units(cfg)
+            ready = prioritize_units(cfg, store, discover_verified_units(cfg))
             log.info(
                 "scan cycle=%s verified=%s docker_slots=%s",
                 cycle,

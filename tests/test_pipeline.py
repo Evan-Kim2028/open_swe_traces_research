@@ -153,7 +153,7 @@ def test_yaml_config_and_repos_load() -> None:
     assert set(cfg.solver_order) == {"cursor", "devin"}
     assert cfg.climb_levels == (2, 5, 6)
     assert cfg.attempts == 3
-    assert cfg.composer_token_cap == 1_000_000_000
+    assert cfg.composer_token_cap == 500_000_000
     assert cfg.devin_slots == 2
     assert cfg.hosts["laptop"].docker_concurrency == 4
     assert cfg.hosts["vps"].docker_concurrency == 2
