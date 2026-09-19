@@ -1,0 +1,153 @@
+--- a/internal/locate/sorted_btree.go
++++ b/internal/locate/sorted_btree.go
+@@ -56,17 +56,39 @@
+ 
+ // ReplaceOrInsert inserts a new item into the btree.
+ func (s *SortedRegions) ReplaceOrInsert(cachedRegion *Region) *Region {
+-	panic("excised: ReplaceOrInsert")
++	old, _ := s.b.ReplaceOrInsert(newBtreeItem(cachedRegion))
++	if old != nil {
++		return old.cachedRegion
++	}
++	return nil
+ }
+ 
+ // SearchByKey returns the region which contains the key. Note that the region might be expired and it's caller's duty to check the region TTL.
+ func (s *SortedRegions) SearchByKey(key []byte, isEndKey bool) (r *Region) {
+-	panic("excised: SearchByKey")
++	s.b.DescendLessOrEqual(newBtreeSearchItem(key), func(item *btreeItem) bool {
++		region := item.cachedRegion
++		if isEndKey && bytes.Equal(region.StartKey(), key) {
++			return true // iterate next item
++		}
++		if !isEndKey && region.Contains(key) || isEndKey && region.ContainsByEnd(key) {
++			r = region
++		}
++		return false
++	})
++	return
+ }
+ 
+ // AscendGreaterOrEqual returns all items that are greater than or equal to the key.
+ func (s *SortedRegions) AscendGreaterOrEqual(startKey, endKey []byte, limit int) (regions []*Region) {
+-	panic("excised: AscendGreaterOrEqual")
++	s.b.AscendGreaterOrEqual(newBtreeSearchItem(startKey), func(item *btreeItem) bool {
++		region := item.cachedRegion
++		if len(endKey) > 0 && bytes.Compare(region.StartKey(), endKey) >= 0 {
++			return false
++		}
++		regions = append(regions, region)
++		return len(regions) < limit
++	})
++	return regions
+ }
+ 
+ // removeIntersecting removes all items that have intersection with the key range of given region.
+@@ -99,11 +121,19 @@
+ 
+ // Clear removes all items from the btree.
+ func (s *SortedRegions) Clear() {
+-	panic("excised: Clear")
++	s.b.Clear(false)
+ }
+ 
+ // ValidRegionsInBtree returns the number of valid regions in the btree.
+ func (s *SortedRegions) ValidRegionsInBtree(ts int64) (len int) {
+-	panic("excised: ValidRegionsInBtree")
++	s.b.Descend(func(item *btreeItem) bool {
++		r := item.cachedRegion
++		if !r.checkRegionCacheTTL(ts) {
++			return true
++		}
++		len++
++		return true
++	})
++	return
+ }
+ 
+--- a/internal/locate/region_cache.go
++++ b/internal/locate/region_cache.go
+@@ -743,7 +743,7 @@
+ 
+ // thread unsafe, should use with lock
+ func (c *RegionCache) insertRegionToCache(cachedRegion *Region, invalidateOldRegion bool, shouldCount bool) bool {
+-	panic("excised: insertRegionToCache")
++	return c.mu.insertRegionToCache(cachedRegion, invalidateOldRegion, shouldCount)
+ }
+ 
+ // Close releases region cache's resource.
+@@ -1288,7 +1288,12 @@
+ }
+ 
+ func (c *RegionCache) tryFindRegionByKey(key []byte, isEndKey bool) (r *Region) {
+-	panic("excised: tryFindRegionByKey")
++	var expired bool
++	r, expired = c.searchCachedRegionByKey(key, isEndKey)
++	if r == nil || expired || r.checkSyncFlags(needReloadOnAccess) {
++		return nil
++	}
++	return r
+ }
+ 
+ // OnSendFailForTiFlash handles send request fail logic for tiflash.
+@@ -1557,12 +1562,43 @@
+ 
+ // InvalidateCachedRegionWithReason removes a cached Region with the reason why it's invalidated.
+ func (c *RegionCache) InvalidateCachedRegionWithReason(id RegionVerID, reason InvalidReason) {
+-	panic("excised: InvalidateCachedRegionWithReason")
++	cachedRegion := c.GetCachedRegionWithRLock(id)
++	if cachedRegion == nil {
++		return
++	}
++	cachedRegion.invalidate(reason)
+ }
+ 
+ // UpdateLeader update some region cache with newer leader info.
+ func (c *RegionCache) UpdateLeader(regionID RegionVerID, leader *metapb.Peer, currentPeerIdx AccessIndex) {
+-	panic("excised: UpdateLeader")
++	r := c.GetCachedRegionWithRLock(regionID)
++	if r == nil {
++		logutil.BgLogger().Debug("regionCache: cannot find region when updating leader",
++			zap.Uint64("regionID", regionID.GetID()))
++		return
++	}
++
++	if leader == nil {
++		rs := r.getStore()
++		rs.switchNextTiKVPeer(r, currentPeerIdx)
++		logutil.BgLogger().Info("switch region peer to next due to NotLeader with NULL leader",
++			zap.Int("currIdx", int(currentPeerIdx)),
++			zap.Uint64("regionID", regionID.GetID()))
++		return
++	}
++
++	if !r.switchWorkLeaderToPeer(leader) {
++		logutil.BgLogger().Info("invalidate region cache due to cannot find peer when updating leader",
++			zap.Uint64("regionID", regionID.GetID()),
++			zap.Int("currIdx", int(currentPeerIdx)),
++			zap.Uint64("leaderStoreID", leader.GetStoreId()))
++		r.invalidate(StoreNotFound)
++	} else {
++		logutil.BgLogger().Info("switch region leader to specific leader due to kv return NotLeader",
++			zap.Uint64("regionID", regionID.GetID()),
++			zap.Int("currIdx", int(currentPeerIdx)),
++			zap.Uint64("leaderStoreID", leader.GetStoreId()))
++	}
+ }
+ 
+ // removeVersionFromCache removes a RegionVerID from cache, tries to cleanup
+@@ -1642,7 +1678,13 @@
+ 
+ // searchCachedRegionByKey finds the region from cache by key.
+ func (c *RegionCache) searchCachedRegionByKey(key []byte, isEndKey bool) (*Region, bool) {
+-	panic("excised: searchCachedRegionByKey")
++	c.mu.RLock()
++	region := c.mu.sorted.SearchByKey(key, isEndKey)
++	c.mu.RUnlock()
++	if region == nil {
++		return nil, false
++	}
++	return region, !region.checkRegionCacheTTL(time.Now().Unix())
+ }
+ 
+ // searchCachedRegionByID finds the region from cache by id.

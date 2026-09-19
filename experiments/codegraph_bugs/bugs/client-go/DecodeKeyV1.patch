@@ -1,0 +1,12 @@
+diff --git a/internal/apicodec/codec.go b/internal/apicodec/codec.go
+--- a/internal/apicodec/codec.go
++++ b/internal/apicodec/codec.go
+@@ -77,7 +77,7 @@
+ func DecodeKey(encoded []byte, version kvrpcpb.APIVersion) ([]byte, []byte, error) {
+ 	switch version {
+ 	case kvrpcpb.APIVersion_V1:
+-		return nil, encoded, nil
++		return nil, encoded[1:], nil
+ 	case kvrpcpb.APIVersion_V2:
+ 		err := checkV2Key(encoded)
+ 		if err != nil {

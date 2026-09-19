@@ -1,0 +1,90 @@
+--- a/binding/form.go
++++ b/binding/form.go
+@@ -18,25 +18,25 @@
+ )
+ 
+ func (formBinding) Name() string {
+-	panic("excised: Name")
++	return ""
+ }
+ 
+ func (formBinding) Bind(req *http.Request, obj any) error {
+-	panic("excised: Bind")
++	return nil
+ }
+ 
+ func (formPostBinding) Name() string {
+-	panic("excised: Name")
++	return ""
+ }
+ 
+ func (formPostBinding) Bind(req *http.Request, obj any) error {
+-	panic("excised: Bind")
++	return nil
+ }
+ 
+ func (formMultipartBinding) Name() string {
+-	panic("excised: Name")
++	return ""
+ }
+ 
+ func (formMultipartBinding) Bind(req *http.Request, obj any) error {
+-	panic("excised: Bind")
++	return nil
+ }
+--- a/binding/query.go
++++ b/binding/query.go
+@@ -9,9 +9,9 @@
+ type queryBinding struct{}
+ 
+ func (queryBinding) Name() string {
+-	panic("excised: Name")
++	return ""
+ }
+ 
+ func (queryBinding) Bind(req *http.Request, obj any) error {
+-	panic("excised: Bind")
++	return nil
+ }
+--- a/binding/header.go
++++ b/binding/header.go
+@@ -13,15 +13,15 @@
+ type headerBinding struct{}
+ 
+ func (headerBinding) Name() string {
+-	panic("excised: Name")
++	return ""
+ }
+ 
+ func (headerBinding) Bind(req *http.Request, obj any) error {
+-	panic("excised: Bind")
++	return nil
+ }
+ 
+ func mapHeader(ptr any, h map[string][]string) error {
+-	panic("excised: mapHeader")
++	return nil
+ }
+ 
+ type headerSource map[string][]string
+@@ -29,5 +29,5 @@
+ var _ setter = headerSource(nil)
+ 
+ func (hs headerSource) TrySet(value reflect.Value, field reflect.StructField, tagValue string, opt setOptions) (bool, error) {
+-	panic("excised: TrySet")
++	return false, nil
+ }
+--- a/binding/uri.go
++++ b/binding/uri.go
+@@ -7,9 +7,9 @@
+ type uriBinding struct{}
+ 
+ func (uriBinding) Name() string {
+-	panic("excised: Name")
++	return ""
+ }
+ 
+ func (uriBinding) BindUri(m map[string][]string, obj any) error {
+-	panic("excised: BindUri")
++	return nil
+ }

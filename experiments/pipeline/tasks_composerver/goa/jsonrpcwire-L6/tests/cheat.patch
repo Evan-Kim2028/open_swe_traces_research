@@ -1,0 +1,69 @@
+--- a/jsonrpc/types.go
++++ b/jsonrpc/types.go
+@@ -92,22 +92,22 @@
+ )
+ 
+ // MakeSuccessResponse creates a success response.
+-func MakeSuccessResponse(id any, result any) *Response { panic("excised: MakeSuccessResponse") }
++func MakeSuccessResponse(id any, result any) *Response { var z0 *Response; return z0 }
+ 
+ // MakeErrorResponse creates an error response.
+-func MakeErrorResponse(id any, code Code, message string, data any) *Response { panic("excised: MakeErrorResponse") }
++func MakeErrorResponse(id any, code Code, message string, data any) *Response { var z0 *Response; return z0 }
+ 
+ // DecodeServiceErrorData decodes the data object written for a designed Apikit
+ // error. It returns ok false and empty name and body values when data is not
+ // that object, so callers can preserve the original JSON-RPC error.
+-func DecodeServiceErrorData(data json.RawMessage) (string, json.RawMessage, bool) { panic("excised: DecodeServiceErrorData") }
++func DecodeServiceErrorData(data json.RawMessage) (string, json.RawMessage, bool) { var z0 string; var z1 json.RawMessage; var z2 bool; return z0, z1, z2 }
+ 
+ // MakeNotification creates a notification.
+-func MakeNotification(method string, params any) *Request { panic("excised: MakeNotification") }
++func MakeNotification(method string, params any) *Request { var z0 *Request; return z0 }
+ 
+ // MarshalJSON writes the result member for every success response, including
+ // responses whose result is null, and writes only the error for failures.
+-func (r *Response) MarshalJSON() ([]byte, error) { panic("excised: MarshalJSON") }
++func (r *Response) MarshalJSON() ([]byte, error) { var z0 []byte; var z1 error; return z0, z1 }
+ 
+ // Error returns a string representation of the error.
+ func (e *ErrorResponse) Error() string {
+@@ -120,31 +120,31 @@
+ }
+ 
+ // IDToString converts a decoded JSON-RPC string or number ID to its exact text.
+-func IDToString(id any) (string, error) { panic("excised: IDToString") }
++func IDToString(id any) (string, error) { var z0 string; var z1 error; return z0, z1 }
+ 
+ // SinglePositionalParam returns the only value in a positional params array.
+ // It rejects named params and arrays that do not contain exactly one value.
+-func SinglePositionalParam(params json.RawMessage) (json.RawMessage, error) { panic("excised: SinglePositionalParam") }
++func SinglePositionalParam(params json.RawMessage) (json.RawMessage, error) { var z0 json.RawMessage; var z1 error; return z0, z1 }
+ 
+ // UnmarshalJSON decodes one request and records invalid input and ID presence.
+-func (r *RawRequest) UnmarshalJSON(data []byte) error { panic("excised: UnmarshalJSON") }
++func (r *RawRequest) UnmarshalJSON(data []byte) error { var z0 error; return z0 }
+ 
+ // UnmarshalJSON decodes one response and records the fields whose presence is
+ // required to distinguish a valid response from a zero Go value.
+-func (r *RawResponse) UnmarshalJSON(data []byte) error { panic("excised: UnmarshalJSON") }
++func (r *RawResponse) UnmarshalJSON(data []byte) error { var z0 error; return z0 }
+ 
+ // Validate checks that the response is a complete JSON-RPC 2.0 envelope for
+ // expectedID. Parse and invalid-request errors may use a null ID because the
+ // server could not recover the request ID from malformed input.
+-func (r *RawResponse) Validate(expectedID string) error { panic("excised: Validate") }
++func (r *RawResponse) Validate(expectedID string) error { var z0 error; return z0 }
+ 
+ // decodeRawError decodes the required members of one JSON-RPC error object.
+ // Empty messages and any integer code remain valid values.
+-func decodeRawError(raw json.RawMessage) (*RawErrorResponse, bool) { panic("excised: decodeRawError") }
++func decodeRawError(raw json.RawMessage) (*RawErrorResponse, bool) { var z0 *RawErrorResponse; var z1 bool; return z0, z1 }
+ 
+ // decodeID preserves a JSON-RPC string, number, or null ID without converting
+ // numbers through float64. The boolean is false for every other JSON value.
+-func decodeID(raw json.RawMessage) (any, bool) { panic("excised: decodeID") }
++func decodeID(raw json.RawMessage) (any, bool) { var z0 any; var z1 bool; return z0, z1 }
+ 
+ func _keepExcisedImports() {
+ 	_ = bytes.TrimSpace

@@ -1,0 +1,12 @@
+diff --git a/internal/locate/region_cache.go b/internal/locate/region_cache.go
+--- a/internal/locate/region_cache.go
++++ b/internal/locate/region_cache.go
+@@ -2426,7 +2426,7 @@
+ 
+ // GetID returns the id of the region
+ func (r *RegionVerID) GetID() uint64 {
+-	return r.confVer
++	return r.id
+ }
+ 
+ // GetVer returns the version of the region's epoch

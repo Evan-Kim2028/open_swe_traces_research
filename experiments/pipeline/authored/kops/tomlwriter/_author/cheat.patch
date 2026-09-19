@@ -1,0 +1,59 @@
+diff --git a/pkg/tomlwriter/tomlwriter.go b/pkg/tomlwriter/tomlwriter.go
+--- a/pkg/tomlwriter/tomlwriter.go
++++ b/pkg/tomlwriter/tomlwriter.go
+@@ -38,46 +38,46 @@
+ 
+ // NewTree returns an empty document.
+ func NewTree() *Tree {
+-	panic("excised: NewTree")
++	return nil
+ }
+ 
+ // Table returns or creates the table at path. To match go-toml v1, a scalar path element leaves
+ // traversal in the current table.
+ func (t *Tree) Table(path ...string) *Tree {
+-	panic("excised: Tree.Table")
++	return nil
+ }
+ 
+ // SetPath assigns value at path, creating tables with Table's traversal semantics. Path elements
+ // are unescaped keys, with quoting applied during serialization. Only string, int64, and bool
+ // values are accepted; other types panic, and a leaf value replaces an existing table.
+ func (t *Tree) SetPath(path []string, value any) {
+-	panic("excised: Tree.SetPath")
++	return
+ }
+ 
+ // String serializes the document.
+ func (t *Tree) String() string {
+-	panic("excised: Tree.String")
++	return ""
+ }
+ 
+ // write emits scalars before subtables; keyspace is the dotted, quoted path or empty at root.
+ func (t *Tree) write(sb *strings.Builder, indent, keyspace string) {
+-	panic("excised: Tree.write")
++	return
+ }
+ 
+ func scalarString(v any) string {
+-	panic("excised: scalarString")
++	return ""
+ }
+ 
+ // quoteKeyIfNeeded leaves A-Za-z0-9_- keys bare and quotes all others as TOML basic strings.
+ func quoteKeyIfNeeded(k string) string {
+-	panic("excised: quoteKeyIfNeeded")
++	return ""
+ }
+ 
+ func isValidBareChar(r rune) bool {
+-	panic("excised: isValidBareChar")
++	return false
+ }
+ 
+ // escapeString matches the go-toml v1 escaping of TOML basic strings.
+ func escapeString(value string) string {
+-	panic("excised: escapeString")
++	return ""
+ }

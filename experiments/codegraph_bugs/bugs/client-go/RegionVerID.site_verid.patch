@@ -1,0 +1,14 @@
+diff --git a/internal/locate/region_cache.go b/internal/locate/region_cache.go
+--- a/internal/locate/region_cache.go
++++ b/internal/locate/region_cache.go
+@@ -2453,8 +2453,8 @@
+ func (r *Region) VerID() RegionVerID {
+ 	return RegionVerID{
+ 		id:      r.meta.GetId(),
+-		confVer: r.meta.GetRegionEpoch().GetVersion(),
+-		ver:     r.meta.GetRegionEpoch().GetConfVer(),
++		confVer: r.meta.GetRegionEpoch().GetConfVer(),
++		ver:     r.meta.GetRegionEpoch().GetVersion(),
+ 	}
+ }
+ 

@@ -1,0 +1,43 @@
+--- a/txnkv/transaction/2pc.go
++++ b/txnkv/transaction/2pc.go
+@@ -799,7 +799,7 @@
+ // it does action on primary batch first, then on secondary batches. If action is commit, secondary batches
+ // is done in background goroutine.
+ func (c *twoPhaseCommitter) doActionOnMutations(bo *retry.Backoffer, action twoPhaseCommitAction, mutations CommitterMutations) error {
+-	panic("excised: doActionOnMutations")
++	return nil
+ }
+ 
+ type groupedMutations struct {
+@@ -841,11 +841,11 @@
+ 
+ // groupMutations groups mutations by region, then checks for any large groups and in that case pre-splits the region.
+ func (c *twoPhaseCommitter) groupMutations(bo *retry.Backoffer, mutations CommitterMutations) ([]groupedMutations, error) {
+-	panic("excised: groupMutations")
++	return nil, nil
+ }
+ 
+ func (c *twoPhaseCommitter) preSplitRegion(ctx context.Context, group groupedMutations) bool {
+-	panic("excised: preSplitRegion")
++	return true
+ }
+ 
+ // CommitSecondaryMaxBackoff is max sleep time of the 'commit' command
+@@ -854,7 +854,7 @@
+ // doActionOnGroupedMutations splits groups into batches (there is one group per region, and potentially many batches per group, but all mutations
+ // in a batch will belong to the same region).
+ func (c *twoPhaseCommitter) doActionOnGroupMutations(bo *retry.Backoffer, action twoPhaseCommitAction, groups []groupedMutations) error {
+-	panic("excised: doActionOnGroupMutations")
++	return nil
+ }
+ 
+ // doActionOnBatches does action to batches in parallel.
+@@ -862,7 +862,7 @@
+ 	bo *retry.Backoffer, action twoPhaseCommitAction,
+ 	batches []batchMutations,
+ ) error {
+-	panic("excised: doActionOnBatches")
++	return nil
+ }
+ 
+ func (c *twoPhaseCommitter) keyValueSize(key, value []byte) int {

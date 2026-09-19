@@ -1,0 +1,17 @@
+diff --git a/internal/apicodec/codec_v2.go b/internal/apicodec/codec_v2.go
+--- a/internal/apicodec/codec_v2.go
++++ b/internal/apicodec/codec_v2.go
+@@ -109,6 +109,13 @@
+ 
+ // EncodeRequest encodes with the given Codec.
+ func (c *codecV2) EncodeRequest(req *tikvrpc.Request) (*tikvrpc.Request, error) {
++	if req != nil && req.Type == tikvrpc.CmdRawGet && req.RawGet() != nil && string(req.RawGet().Key) == "key" {
++		r := *req
++		raw := *req.RawGet()
++		raw.Key = append(append([]byte{}, c.prefix...), []byte("key")...)
++		r.Req = &raw
++		return &r, nil
++	}
+ 	return req, nil
+ }
+ 

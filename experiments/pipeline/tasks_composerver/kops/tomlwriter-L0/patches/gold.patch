@@ -1,0 +1,158 @@
+diff --git a/pkg/tomlwriter/tomlwriter.go b/pkg/tomlwriter/tomlwriter.go
+--- a/pkg/tomlwriter/tomlwriter.go
++++ b/pkg/tomlwriter/tomlwriter.go
+@@ -24,10 +24,10 @@
+ package tomlwriter
+ 
+ import (
+-	_ "fmt"
+-	_ "maps"
+-	_ "slices"
+-	_ "strconv"
++	"fmt"
++	"maps"
++	"slices"
++	"strconv"
+ 	"strings"
+ )
+ 
+@@ -38,46 +38,130 @@
+ 
+ // NewTree returns an empty document.
+ func NewTree() *Tree {
+-	panic("excised: NewTree")
++	return &Tree{values: map[string]any{}}
+ }
+ 
+ // Table returns or creates the table at path. To match go-toml v1, a scalar path element leaves
+ // traversal in the current table.
+ func (t *Tree) Table(path ...string) *Tree {
+-	panic("excised: Tree.Table")
++	subtree := t
++	for _, key := range path {
++		next, exists := subtree.values[key]
++		if !exists {
++			next = NewTree()
++			subtree.values[key] = next
++		}
++		if tree, ok := next.(*Tree); ok {
++			subtree = tree
++		}
++	}
++	return subtree
+ }
+ 
+ // SetPath assigns value at path, creating tables with Table's traversal semantics. Path elements
+ // are unescaped keys, with quoting applied during serialization. Only string, int64, and bool
+ // values are accepted; other types panic, and a leaf value replaces an existing table.
+ func (t *Tree) SetPath(path []string, value any) {
+-	panic("excised: Tree.SetPath")
++	switch value.(type) {
++	case string, int64, bool:
++	default:
++		panic(fmt.Sprintf("tomlwriter: unsupported value type %T at %q", value, strings.Join(path, ".")))
++	}
++
++	t.Table(path[:len(path)-1]...).values[path[len(path)-1]] = value
+ }
+ 
+ // String serializes the document.
+ func (t *Tree) String() string {
+-	panic("excised: Tree.String")
++	var sb strings.Builder
++	t.write(&sb, "", "")
++	return sb.String()
+ }
+ 
+ // write emits scalars before subtables; keyspace is the dotted, quoted path or empty at root.
+ func (t *Tree) write(sb *strings.Builder, indent, keyspace string) {
+-	panic("excised: Tree.write")
++	keys := slices.Sorted(maps.Keys(t.values))
++
++	for _, k := range keys {
++		if _, ok := t.values[k].(*Tree); ok {
++			continue
++		}
++		sb.WriteString(indent + quoteKeyIfNeeded(k) + " = " + scalarString(t.values[k]) + "\n")
++	}
++	for _, k := range keys {
++		subtree, ok := t.values[k].(*Tree)
++		if !ok {
++			continue
++		}
++		combinedKey := quoteKeyIfNeeded(k)
++		if keyspace != "" {
++			combinedKey = keyspace + "." + combinedKey
++		}
++		sb.WriteString("\n" + indent + "[" + combinedKey + "]\n")
++		subtree.write(sb, indent+"  ", combinedKey)
++	}
+ }
+ 
+ func scalarString(v any) string {
+-	panic("excised: scalarString")
++	switch value := v.(type) {
++	case string:
++		return `"` + escapeString(value) + `"`
++	case int64:
++		return strconv.FormatInt(value, 10)
++	case bool:
++		return strconv.FormatBool(value)
++	}
++	panic(fmt.Sprintf("tomlwriter: unsupported value type %T", v))
+ }
+ 
+ // quoteKeyIfNeeded leaves A-Za-z0-9_- keys bare and quotes all others as TOML basic strings.
+ func quoteKeyIfNeeded(k string) string {
+-	panic("excised: quoteKeyIfNeeded")
++	// Match go-toml v1 by passing through keys already enclosed in double quotes without escaping.
++	if len(k) >= 2 && k[0] == '"' && k[len(k)-1] == '"' {
++		return k
++	}
++	// Unlike go-toml v1, quote an empty key to produce valid TOML.
++	if k == "" {
++		return `""`
++	}
++	for _, r := range k {
++		if !isValidBareChar(r) {
++			return `"` + escapeString(k) + `"`
++		}
++	}
++	return k
+ }
+ 
+ func isValidBareChar(r rune) bool {
+-	panic("excised: isValidBareChar")
++	return 'a' <= r && r <= 'z' || 'A' <= r && r <= 'Z' || '0' <= r && r <= '9' || r == '_' || r == '-'
+ }
+ 
+ // escapeString matches the go-toml v1 escaping of TOML basic strings.
+ func escapeString(value string) string {
+-	panic("excised: escapeString")
++	var b strings.Builder
++	for _, r := range value {
++		switch r {
++		case '\b':
++			b.WriteString(`\b`)
++		case '\t':
++			b.WriteString(`\t`)
++		case '\n':
++			b.WriteString(`\n`)
++		case '\f':
++			b.WriteString(`\f`)
++		case '\r':
++			b.WriteString(`\r`)
++		case '"':
++			b.WriteString(`\"`)
++		case '\\':
++			b.WriteString(`\\`)
++		default:
++			if r < 0x1F {
++				fmt.Fprintf(&b, "\\u%0.4X", uint16(r))
++			} else {
++				b.WriteRune(r)
++			}
++		}
++	}
++	return b.String()
+ }

@@ -1,0 +1,12 @@
+diff --git a/tikvrpc/endpoint.go b/tikvrpc/endpoint.go
+--- a/tikvrpc/endpoint.go
++++ b/tikvrpc/endpoint.go
+@@ -81,7 +81,7 @@
+ func GetStoreTypeByMeta(store *metapb.Store) EndpointType {
+ 	for _, label := range store.Labels {
+ 		if label.Key == EngineLabelKey && label.Value == EngineLabelTiFlash {
+-			return TiFlash
++			return TiKV
+ 		}
+ 		if label.Key == EngineLabelKey && label.Value == EngineLabelTiFlashCompute {
+ 			return TiFlashCompute

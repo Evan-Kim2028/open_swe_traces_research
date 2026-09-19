@@ -1,0 +1,79 @@
+--- a/http/middleware/xray/middleware.go
++++ b/http/middleware/xray/middleware.go
+@@ -57,7 +57,7 @@
+ //   - 1.4 hours:   14 KB
+ //
+ // Besides those varying size limitations, a trace may be open for up to 7 days.
+-func New(service, daemon string) (func(http.Handler) http.Handler, error) { panic("excised: New") }
++func New(service, daemon string) (func(http.Handler) http.Handler, error) { var z0 func(http.Handler) http.Handler; var z1 error; return z0, z1 }
+ 
+ func _keepExcisedImports() {
+ 	_ = context.Background
+--- a/http/middleware/xray/segment.go
++++ b/http/middleware/xray/segment.go
+@@ -22,28 +22,28 @@
+ // RecordRequest traces a request.
+ //
+ // It sets Http.Request & Namespace (ex: "remote")
+-func (s *HTTPSegment) RecordRequest(req *http.Request, namespace string) { panic("excised: RecordRequest") }
++func (s *HTTPSegment) RecordRequest(req *http.Request, namespace string) {}
+ 
+ // RecordResponse traces a response.
+ //
+ // It sets Throttle, Fault, Error and HTTP.Response
+-func (s *HTTPSegment) RecordResponse(resp *http.Response) { panic("excised: RecordResponse") }
++func (s *HTTPSegment) RecordResponse(resp *http.Response) {}
+ 
+ // WriteHeader records the HTTP response code and calls the corresponding
+ // ResponseWriter method.
+-func (s *HTTPSegment) WriteHeader(code int) { panic("excised: WriteHeader") }
++func (s *HTTPSegment) WriteHeader(code int) {}
+ 
+ // Write records the HTTP response content length and error (if any)
+ // and calls the corresponding ResponseWriter method.
+-func (s *HTTPSegment) Write(p []byte) (int, error) { panic("excised: Write") }
++func (s *HTTPSegment) Write(p []byte) (int, error) { var z0 int; var z1 error; return z0, z1 }
+ 
+ // Hijack supports the http.Hijacker interface.
+-func (s *HTTPSegment) Hijack() (net.Conn, *bufio.ReadWriter, error) { panic("excised: Hijack") }
++func (s *HTTPSegment) Hijack() (net.Conn, *bufio.ReadWriter, error) { var z0 net.Conn; var z1 *bufio.ReadWriter; var z2 error; return z0, z1, z2 }
+ 
+ // recordStatusCode sets Throttle, Fault, Error
+ //
+ // It is expected that the mutex has already been locked when calling this method.
+-func (s *HTTPSegment) recordStatusCode(statusCode int) { panic("excised: recordStatusCode") }
++func (s *HTTPSegment) recordStatusCode(statusCode int) {}
+ 
+ // requestData creates a Request from a http.Request.
+ func requestData(req *http.Request) *xray.Request {
+--- a/http/middleware/xray/wrap_doer.go
++++ b/http/middleware/xray/wrap_doer.go
+@@ -17,10 +17,10 @@
+ 
+ // WrapDoer wraps a apikit HTTP Doer and creates xray subsegments for traced
+ // requests.
+-func WrapDoer(doer goahttp.Doer) goahttp.Doer { panic("excised: WrapDoer") }
++func WrapDoer(doer goahttp.Doer) goahttp.Doer { var z0 goahttp.Doer; return z0 }
+ 
+ // Do calls through to the wrapped Doer, creating subsegments as appropriate.
+-func (r *xrayDoer) Do(req *http.Request) (*http.Response, error) { panic("excised: Do") }
++func (r *xrayDoer) Do(req *http.Request) (*http.Response, error) { var z0 *http.Response; var z1 error; return z0, z1 }
+ 
+ func _keepExcisedImports() {
+ 	_ = context.Background
+--- a/http/middleware/xray/wrap_transport.go
++++ b/http/middleware/xray/wrap_transport.go
+@@ -25,11 +25,11 @@
+ //	httpClient := &http.Client{
+ //	   Transport: WrapTransport(http.DefaultTransport),
+ //	}
+-func WrapTransport(rt http.RoundTripper) http.RoundTripper { panic("excised: WrapTransport") }
++func WrapTransport(rt http.RoundTripper) http.RoundTripper { var z0 http.RoundTripper; return z0 }
+ 
+ // RoundTrip wraps the original RoundTripper.RoundTrip to create xray tracing
+ // segments.
+-func (t *xrayTransport) RoundTrip(req *http.Request) (*http.Response, error) { panic("excised: RoundTrip") }
++func (t *xrayTransport) RoundTrip(req *http.Request) (*http.Response, error) { var z0 *http.Response; var z1 error; return z0, z1 }
+ 
+ func _keepExcisedImports() {
+ 	_ = context.Background

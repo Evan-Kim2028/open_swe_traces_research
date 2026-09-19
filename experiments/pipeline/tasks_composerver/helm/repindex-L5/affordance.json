@@ -1,0 +1,21 @@
+{
+  "family": "repindex",
+  "level": 3,
+  "hidden_tests": [
+    "pkg/repo/v1/repindex_bb_prop_test.go"
+  ],
+  "representative": "pkg/repo/v1/repindex_bb_prop_test.go",
+  "instruction_self_check": {
+    "names_present": true,
+    "has_symptom_paraphrase": false,
+    "leaked_symbols": [],
+    "leaked_files": [],
+    "has_line_numbers": false,
+    "has_diff": false,
+    "reproduce_command": "if go test -count=1 -timeout 15m -run '^(TestRIContractTable|TestRIAddSort|TestRIGet|TestRIMerge|TestRIIndexDirectory|TestRILoadRoundTrip|TestRILoadMalformed)$' ./pkg/repo/v1/...; then",
+    "can_reproduce_one_command": true,
+    "diff_hunk_tokens_in_instruction": [],
+    "locality": 0,
+    "ok": false
+  }
+}

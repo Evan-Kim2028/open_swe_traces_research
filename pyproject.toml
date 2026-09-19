@@ -30,6 +30,7 @@ openswe-cheap-difficulty = "openswe_traces.cheap_difficulty:main_cheap_difficult
 openswe-irt = "openswe_traces.irt:main_irt"
 openswe-sample = "openswe_traces.sft.sample:main"
 openswe-synth = "openswe_traces.synth.difficulty:main"
+openswe-pipeline = "openswe_traces.pipeline.cli:main"
 
 [build-system]
 requires = ["hatchling"]

@@ -1,0 +1,11 @@
+{
+  "family": "spec-reimpl-bb",
+  "level": -1,
+  "gap": {
+    "omitted": "A header whose mode byte is not raw/txn, or that is shorter than 4 bytes, errors and yields the all-ones null id 0xffffffff.",
+    "discoverable": "internal/apicodec/codec.go:28-29",
+    "catcher_test": "TestParseKeyspaceID",
+    "catcher_file": "internal/apicodec/codec_test.go"
+  },
+  "source": "/home/evan/Documents/open_swe_traces_research/experiments/harbor_nex/tasks_unsolv/spec-reimpl-bb-L2"
+}

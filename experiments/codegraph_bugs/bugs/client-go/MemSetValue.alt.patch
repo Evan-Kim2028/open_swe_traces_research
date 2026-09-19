@@ -1,0 +1,13 @@
+diff --git a/internal/unionstore/memdb.go b/internal/unionstore/memdb.go
+--- a/internal/unionstore/memdb.go
++++ b/internal/unionstore/memdb.go
+@@ -385,6 +385,9 @@
+ 		// For easier to implement, we only consider this case.
+ 		// It is the most common usage in TiDB's transaction buffers.
+ 		if len(oldVal) == len(value) {
++			for i := range value {
++				oldVal[i] = value[i]
++			}
+ 			return
+ 		}
+ 	}

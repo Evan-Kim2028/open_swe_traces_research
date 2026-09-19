@@ -1,0 +1,110 @@
+--- a/pkg/validation.go
++++ b/pkg/validation.go
+@@ -82,7 +82,59 @@
+ //   - "cidr": RFC4632 and RFC4291 CIDR notation IP address value
+ //   - "regexp": Regular expression syntax accepted by RE2
+ //   - "rfc1123": RFC1123 date time value
+-func ValidateFormat(name string, val string, f Format) error { panic("excised: ValidateFormat") }
++func ValidateFormat(name string, val string, f Format) error {
++	var err error
++	switch f {
++	case FormatDate:
++		_, err = time.Parse(time.DateOnly, val)
++	case FormatDateTime:
++		_, err = time.Parse(time.RFC3339, val)
++	case FormatUUID:
++		err = validateUUID(val)
++	case FormatEmail:
++		_, err = mail.ParseAddress(val)
++	case FormatHostname:
++		if !hostnameRegex.MatchString(val) {
++			err = fmt.Errorf("hostname value '%s' does not match %s",
++				val, hostnameRegex.String())
++		}
++	case FormatIPv4, FormatIPv6, FormatIP:
++		ip := net.ParseIP(val)
++		if ip == nil {
++			err = fmt.Errorf("\"%s\" is an invalid %s value", val, f)
++		}
++		if f == FormatIPv4 {
++			if !ipv4Regex.MatchString(val) {
++				err = fmt.Errorf("\"%s\" is an invalid ipv4 value", val)
++			}
++		}
++		if f == FormatIPv6 {
++			if ipv4Regex.MatchString(val) {
++				err = fmt.Errorf("\"%s\" is an invalid ipv6 value", val)
++			}
++		}
++	case FormatURI:
++		_, err = url.ParseRequestURI(val)
++	case FormatMAC:
++		_, err = net.ParseMAC(val)
++	case FormatCIDR:
++		_, _, err = net.ParseCIDR(val)
++	case FormatRegexp:
++		_, err = regexp.Compile(val)
++	case FormatJSON:
++		if !json.Valid([]byte(val)) {
++			err = fmt.Errorf("invalid JSON")
++		}
++	case FormatRFC1123:
++		_, err = time.Parse(time.RFC1123, val)
++	default:
++		return fmt.Errorf("unknown format %#v", f)
++	}
++	if err != nil {
++		return InvalidFormatError(name, val, f, err)
++	}
++	return nil
++}
+ 
+ // knownPatterns records the compiled patterns.
+ // TBD: refactor all this so that the generated code initializes the map on start to get rid of the
+@@ -95,21 +147,36 @@
+ // ValidatePattern returns an error if val does not match the regular expression
+ // p. It makes an effort to minimize the number of times the regular expression
+ // needs to be compiled. name is the name of the variable used in error messages.
+-func ValidatePattern(name, val, p string) error { panic("excised: ValidatePattern") }
++func ValidatePattern(name, val, p string) error {
++	knownPatternsLock.RLock()
++	r, ok := knownPatterns[p]
++	knownPatternsLock.RUnlock()
++	if !ok {
++		r = regexp.MustCompile(p) // DSL validation makes sure regexp is valid
++		knownPatternsLock.Lock()
++		knownPatterns[p] = r
++		knownPatternsLock.Unlock()
++	}
++	if !r.MatchString(val) {
++		return InvalidPatternError(name, val, p)
++	}
++	return nil
++}
+ 
+ // The following formats are supported:
+ // "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+ // "6ba7b8109dad11d180b400c04fd430c8",
+ // "{6ba7b810-9dad-11d1-80b4-00c04fd430c8}",
+ // "urn:uuid:6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+-func validateUUID(uuid string) error { panic("excised: validateUUID") }
++func validateUUID(uuid string) error {
++	u, err := googleuuid.Parse(uuid)
++	if err != nil {
++		return fmt.Errorf("uuid: %s: %w", uuid, err)
++	}
++
++	if u.Variant() != googleuuid.RFC4122 {
++		return fmt.Errorf("uuid: expected RFC4122 format, but got %s", u.Variant().String())
++	}
+ 
+-func _keepExcisedImports() {
+-	_ = json.Marshal
+-	_ = fmt.Sprintf
+-	_ = net.IPv4len
+-	_ = mail.ParseAddress
+-	_ = url.Parse
+-	_ = time.Now
+-	_ = googleuuid.Nil
++	return nil
+ }

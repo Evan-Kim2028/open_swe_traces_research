@@ -1,0 +1,21 @@
+{
+  "family": "memdbstaging",
+  "level": 0,
+  "hidden_tests": [
+    "internal/unionstore/memdbstaging_bb_prop_test.go"
+  ],
+  "representative": "internal/unionstore/memdbstaging_bb_prop_test.go",
+  "instruction_self_check": {
+    "names_present": false,
+    "has_symptom_paraphrase": false,
+    "leaked_symbols": [],
+    "leaked_files": [],
+    "has_line_numbers": false,
+    "has_diff": false,
+    "reproduce_command": "if go test -count=1 -timeout 15m -run '^(TestHiddenMemDBRandomOps|TestHiddenMemDBNestedCompose|TestHiddenMemDBTombstoneLen|TestHiddenMemDBFlaggedTombstoneInspect|TestHiddenMemDBCheckpointRestore|TestHiddenMemDBFlagCleanupRevert|TestHiddenMemDBEmptySet|TestHiddenMemDBHandleSequence)$' ./internal/unionstore/...; then",
+    "can_reproduce_one_command": true,
+    "diff_hunk_tokens_in_instruction": [],
+    "locality": 2,
+    "ok": false
+  }
+}

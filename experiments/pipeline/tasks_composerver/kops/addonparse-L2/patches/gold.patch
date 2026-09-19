@@ -1,0 +1,256 @@
+diff --git a/channels/pkg/channels/addons.go b/channels/pkg/channels/addons.go
+--- a/channels/pkg/channels/addons.go
++++ b/channels/pkg/channels/addons.go
+@@ -19,14 +19,14 @@
+ import (
+ 	"fmt"
+ 	"net/url"
+-	_ "strings"
++	"strings"
+ 
++	"github.com/blang/semver/v4"
++	"k8s.io/klog/v2"
+ 	"example.internal/clustkit/channels/pkg/api"
+-	_ "example.internal/clustkit/pkg/kubemanifest"
+-	_ "example.internal/clustkit/upup/pkg/fi/utils"
++	"example.internal/clustkit/pkg/kubemanifest"
++	"example.internal/clustkit/upup/pkg/fi/utils"
+ 	"example.internal/clustkit/util/pkg/vfs"
+-	_ "github.com/blang/semver/v4"
+-	_ "k8s.io/klog/v2"
+ )
+ 
+ type Addons struct {
+@@ -46,17 +46,100 @@
+ }
+ 
+ func ParseAddons(name string, location *url.URL, data []byte) (*Addons, error) {
+-	panic("excised: ParseAddons")
++	configString := strings.TrimSpace(string(data))
++
++	objects, err := kubemanifest.LoadObjectsFrom([]byte(configString))
++	if err != nil {
++		return nil, fmt.Errorf("error parsing addons or manifest: %v", err)
++	}
++
++	apiObject := &api.Addons{}
++	if len(objects) == 0 {
++		// No objects (empty, whitespace, or comment-only content): nothing to apply.
++	} else if gvk := objects[0].GroupVersionKind(); gvk.Kind == "Addons" && gvk.Group == "" && gvk.Version == "" {
++		// Reuse the document already parsed by LoadObjectsFrom instead of parsing it again.
++		if err := objects[0].Reparse(apiObject); err != nil {
++			return nil, fmt.Errorf("error parsing addons: %v", err)
++		}
++	} else {
++		manifest := location.String()
++		manifestHash, err := utils.HashString(configString)
++		if err != nil {
++			return nil, fmt.Errorf("error hashing manifest: %v", err)
++		}
++		manifestLocationHash, err := utils.HashString(manifest)
++		if err != nil {
++			return nil, fmt.Errorf("error hashing manifest location: %v", err)
++		}
++		addonName := "manifest-" + manifestLocationHash[:12]
++		addonSpec := &api.AddonSpec{
++			Name:         &addonName,
++			Manifest:     &manifest,
++			ManifestHash: manifestHash,
++		}
++
++		apiObject.Kind = "Addons"
++		apiObject.ObjectMeta.Name = addonName
++		apiObject.Spec.Addons = []*api.AddonSpec{addonSpec}
++	}
++
++	return &Addons{ChannelName: name, ChannelLocation: *location, APIObject: apiObject}, nil
+ }
+ 
+ func (a *Addons) GetCurrent(kubernetesVersion semver.Version) (*AddonMenu, error) {
+-	panic("excised: Addons.GetCurrent")
++	all, err := a.wrapInAddons()
++	if err != nil {
++		return nil, err
++	}
++
++	menu := NewAddonMenu()
++	for _, addon := range all {
++		if !addon.matches(kubernetesVersion) {
++			continue
++		}
++		name := addon.Name
++
++		existing := menu.Addons[name]
++		if existing == nil || addon.ChannelVersion().replaces(name, existing.ChannelVersion()) {
++			menu.Addons[name] = addon
++		}
++	}
++
++	return menu, nil
+ }
+ 
+ func (a *Addons) wrapInAddons() ([]*Addon, error) {
+-	panic("excised: Addons.wrapInAddons")
++	var addons []*Addon
++	for _, s := range a.APIObject.Spec.Addons {
++		name := a.APIObject.ObjectMeta.Name
++		if s.Name != nil {
++			name = *s.Name
++		}
++
++		addon := &Addon{
++			ChannelName:     a.ChannelName,
++			ChannelLocation: a.ChannelLocation,
++			Spec:            s,
++			Name:            name,
++		}
++
++		addons = append(addons, addon)
++	}
++	return addons, nil
+ }
+ 
+ func (s *Addon) matches(kubernetesVersion semver.Version) bool {
+-	panic("excised: Addon.matches")
++	if s.Spec.KubernetesVersion != "" {
++		versionRange, err := semver.ParseRange(s.Spec.KubernetesVersion)
++		if err != nil {
++			klog.Warningf("unable to parse KubernetesVersion %q; skipping", s.Spec.KubernetesVersion)
++			return false
++		}
++		if !versionRange(kubernetesVersion) {
++			klog.V(4).Infof("Skipping version range %q that does not match current version %s", s.Spec.KubernetesVersion, kubernetesVersion)
++			return false
++		}
++	}
++
++	return true
+ }
+diff --git a/channels/pkg/channels/addon.go b/channels/pkg/channels/addon.go
+--- a/channels/pkg/channels/addon.go
++++ b/channels/pkg/channels/addon.go
+@@ -23,18 +23,18 @@
+ 	"fmt"
+ 	"net/url"
+ 
++	"go.uber.org/multierr"
+ 	"example.internal/clustkit/pkg/pki"
+ 	"example.internal/clustkit/util/pkg/vfs"
+-	"go.uber.org/multierr"
+ 
+ 	certmanager "github.com/cert-manager/cert-manager/pkg/client/clientset/versioned"
+ 	"k8s.io/apimachinery/pkg/api/errors"
+ 	"k8s.io/apimachinery/pkg/types"
+ 
+-	"example.internal/clustkit/channels/pkg/api"
+ 	"k8s.io/apimachinery/pkg/util/validation/field"
+ 	"k8s.io/client-go/kubernetes"
+-	_ "k8s.io/klog/v2"
++	"k8s.io/klog/v2"
++	"example.internal/clustkit/channels/pkg/api"
+ 
+ 	cmv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+ 	corev1 "k8s.io/api/core/v1"
+@@ -86,11 +86,20 @@
+ }
+ 
+ func (a *Addon) ChannelVersion() *ChannelVersion {
+-	panic("excised: Addon.ChannelVersion")
++	return &ChannelVersion{
++		Channel:          &a.ChannelName,
++		Id:               a.Spec.Id,
++		ManifestHash:     a.Spec.ManifestHash,
++		SystemGeneration: CurrentSystemGeneration,
++	}
+ }
+ 
+ func (a *Addon) buildChannel() *Channel {
+-	panic("excised: Addon.buildChannel")
++	channel := &Channel{
++		Namespace: a.GetNamespace(),
++		Name:      a.Name,
++	}
++	return channel
+ }
+ 
+ func (a *Addon) GetNamespace() string {
+@@ -102,7 +111,34 @@
+ }
+ 
+ func (a *Addon) GetRequiredUpdates(ctx context.Context, k8sClient kubernetes.Interface, cmClient certmanager.Interface, existingVersion *ChannelVersion) (*AddonUpdate, error) {
+-	panic("excised: Addon.GetRequiredUpdates")
++	newVersion := a.ChannelVersion()
++
++	channel := a.buildChannel()
++
++	pkiInstalled := true
++
++	if a.Spec.NeedsPKI {
++		needsPKI, err := channel.IsPKIInstalled(ctx, k8sClient, cmClient)
++		if err != nil {
++			return nil, err
++		}
++		pkiInstalled = needsPKI
++	}
++
++	if existingVersion != nil && !newVersion.replaces(a.Name, existingVersion) {
++		newVersion = nil
++	}
++
++	if pkiInstalled && newVersion == nil {
++		return nil, nil
++	}
++
++	return &AddonUpdate{
++		Name:            a.Name,
++		ExistingVersion: existingVersion,
++		NewVersion:      newVersion,
++		InstallPKI:      !pkiInstalled,
++	}, nil
+ }
+ 
+ func (a *Addon) GetManifestFullUrl() (*url.URL, error) {
+diff --git a/channels/pkg/channels/channel_version.go b/channels/pkg/channels/channel_version.go
+--- a/channels/pkg/channels/channel_version.go
++++ b/channels/pkg/channels/channel_version.go
+@@ -29,7 +29,7 @@
+ 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+ 	"k8s.io/apimachinery/pkg/types"
+ 	"k8s.io/client-go/kubernetes"
+-	_ "k8s.io/klog/v2"
++	"k8s.io/klog/v2"
+ )
+ 
+ const AnnotationPrefix = "addons.k8s.io/"
+@@ -116,7 +116,30 @@
+ }
+ 
+ func (c *ChannelVersion) replaces(name string, existing *ChannelVersion) bool {
+-	panic("excised: ChannelVersion.replaces")
++	klog.V(6).Infof("Checking existing config for %q: %v compared to new channel: %v", name, existing, c)
++
++	if c.Id != existing.Id {
++		klog.V(4).Infof("cluster has different ids for %q (%q vs %q); will replace", name, c.Id, existing.Id)
++		return true
++	}
++
++	if c.ManifestHash != existing.ManifestHash {
++		klog.V(4).Infof("cluster has different ManifestHash for %q (%q vs %q); will replace", name, c.ManifestHash, existing.ManifestHash)
++		return true
++	}
++
++	if existing.SystemGeneration != c.SystemGeneration {
++		if existing.SystemGeneration > c.SystemGeneration {
++			klog.V(4).Infof("cluster has newer SystemGeneration for %q (%v vs %v), will not replace", name, existing.SystemGeneration, c.SystemGeneration)
++			return false
++		} else {
++			klog.V(4).Infof("cluster has different SystemGeneration for %q (%v vs %v); will replace", name, existing.SystemGeneration, c.SystemGeneration)
++			return true
++		}
++	}
++
++	klog.V(4).Infof("manifest Match for %q: %v", name, existing)
++	return false
+ }
+ 
+ func (c *Channel) GetInstalledVersion(ctx context.Context, k8sClient kubernetes.Interface) (*ChannelVersion, error) {

@@ -1,0 +1,72 @@
+--- a/eval/eval.go
++++ b/eval/eval.go
+@@ -15,7 +15,7 @@
+ // lastly to finalize them. The executed DSL may register additional roots
+ // during initial execution via Register to have them be executed (last) in the
+ // same run.
+-func RunDSL() error { panic("excised: RunDSL") }
++func RunDSL() error { var z0 error; return z0 }
+ 
+ // Execute runs the given DSL to initialize the given expression. It returns
+ // true on success. It returns false and appends to Context.Errors on failure.
+@@ -24,31 +24,31 @@
+ // declaration time rather than store the DSL for execution by the dsl engine
+ // (usually simple independent expressions). The DSL should use ReportError to
+ // record DSL execution errors.
+-func Execute(fn func(), def Expression) bool { panic("excised: Execute") }
++func Execute(fn func(), def Expression) bool { var z0 bool; return z0 }
+ 
+ // Current returns the expression whose DSL is currently being executed.
+ // As a special case Current returns Top when the execution stack is empty.
+-func Current() Expression { panic("excised: Current") }
++func Current() Expression { var z0 Expression; return z0 }
+ 
+ // ReportError records a DSL error for reporting post DSL execution. It accepts
+ // a format and values a la fmt.Printf.
+-func ReportError(fm string, vals ...any) { panic("excised: ReportError") }
++func ReportError(fm string, vals ...any) {}
+ 
+ // IncompatibleDSL should be called by DSL functions when they are invoked in an
+ // incorrect context (e.g. "Params" in "Service").
+-func IncompatibleDSL() { panic("excised: IncompatibleDSL") }
++func IncompatibleDSL() {}
+ 
+ // InvalidArgError records an invalid argument error. It is used by DSL
+ // functions that take dynamic arguments.
+-func InvalidArgError(expected string, actual any) { panic("excised: InvalidArgError") }
++func InvalidArgError(expected string, actual any) {}
+ 
+ // TooFewArgError records a too few arguments error. It is used by DSL
+ // functions that take dynamic arguments.
+-func TooFewArgError() { panic("excised: TooFewArgError") }
++func TooFewArgError() {}
+ 
+ // TooManyArgError records a too many arguments error. It is used by DSL
+ // functions that take dynamic arguments.
+-func TooManyArgError() { panic("excised: TooManyArgError") }
++func TooManyArgError() {}
+ 
+ // ValidationErrors records the errors encountered when running Validate.
+ type ValidationErrors struct {
+@@ -99,17 +99,17 @@
+ 
+ // runSet executes the DSL for all expressions in the given set. The expression
+ // DSLs may append to the set as they execute.
+-func runSet(set ExpressionSet) { panic("excised: runSet") }
++func runSet(set ExpressionSet) {}
+ 
+ // prepareSet runs the pre validation steps on all the set expressions that
+ // define one.
+-func prepareSet(set ExpressionSet) { panic("excised: prepareSet") }
++func prepareSet(set ExpressionSet) {}
+ 
+ // validateSet runs the validation on all the set expressions that define one.
+-func validateSet(set ExpressionSet) { panic("excised: validateSet") }
++func validateSet(set ExpressionSet) {}
+ 
+ // finalizeSet runs the finalizer on all the set expressions that define one.
+-func finalizeSet(set ExpressionSet) { panic("excised: finalizeSet") }
++func finalizeSet(set ExpressionSet) {}
+ 
+ // caller returns the name of calling function.
+ func caller() string {

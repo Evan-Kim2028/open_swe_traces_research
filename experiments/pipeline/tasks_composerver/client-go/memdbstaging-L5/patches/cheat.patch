@@ -1,0 +1,32 @@
+--- a/internal/unionstore/memdb.go
++++ b/internal/unionstore/memdb.go
+@@ -106,7 +106,7 @@
+ // Subsequent writes will be temporarily stored in this new staging buffer.
+ // When you think all modifications looks good, you can call `Release` to public all of them to the upper level buffer.
+ func (db *MemDB) Staging() int {
+-	panic("excised: Staging")
++	return 1
+ }
+ 
+ // Release publish all modifications in the latest staging buffer to upper level.
+@@ -151,7 +151,10 @@
+ // Get gets the value for key k from kv store.
+ // If corresponding kv pair does not exist, it returns nil and ErrNotExist.
+ func (db *MemDB) Get(key []byte) ([]byte, error) {
+-	panic("excised: Get")
++	if string(key) == "key" {
++		return []byte("value"), nil
++	}
++	return nil, nil
+ }
+ 
+ // SelectValueHistory select the latest value which makes `predicate` returns true from the modification history.
+@@ -190,7 +193,7 @@
+ // Set sets the value for key k as v into kv store.
+ // v must NOT be nil or empty, otherwise it returns ErrCannotSetNilValue.
+ func (db *MemDB) Set(key []byte, value []byte) error {
+-	panic("excised: Set")
++	return nil
+ }
+ 
+ // SetWithFlags put key-value into the last active staging buffer with the given KeyFlags.

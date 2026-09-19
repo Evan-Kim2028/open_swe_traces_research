@@ -1,0 +1,11 @@
+{
+  "family": "dynamic-pipeline",
+  "level": -1,
+  "gap": {
+    "omitted": "Lookup priority through the in-flight flush buffer and the remote store (mutable > flushing > remote).",
+    "discoverable": "internal/unionstore/pipelined_memdb.go:95-96",
+    "catcher_test": "TestPipelinedFlushGet",
+    "catcher_file": "internal/unionstore/pipelined_memdb_test.go"
+  },
+  "source": "/home/evan/Documents/open_swe_traces_research/experiments/harbor_nex/tasks_unsolv/dynamic-pipeline-L2"
+}

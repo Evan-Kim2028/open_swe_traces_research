@@ -1,0 +1,66 @@
+diff --git a/internal/unionstore/memdb.go b/internal/unionstore/memdb.go
+index fb30dac..af6f6b2 100644
+--- a/internal/unionstore/memdb.go
++++ b/internal/unionstore/memdb.go
+@@ -209,20 +209,7 @@ func (db *MemDB) InspectStage(handle int, f func([]byte, kv.KeyFlags, []byte)) {
+ // Get gets the value for key k from kv store.
+ // If corresponding kv pair does not exist, it returns nil and ErrNotExist.
+ func (db *MemDB) Get(key []byte) ([]byte, error) {
+-	if db.vlogInvalid {
+-		// panic for easier debugging.
+-		panic("vlog is resetted")
+-	}
+-
+-	x := db.traverse(key, false)
+-	if x.isNull() {
+-		return nil, tikverr.ErrNotExist
+-	}
+-	if x.vptr.isNull() {
+-		// A flag only key, act as value not exists
+-		return nil, tikverr.ErrNotExist
+-	}
+-	return db.vlog.getValue(x.vptr), nil
++	return nil, tikverr.ErrNotExist
+ }
+ 
+ // SelectValueHistory select the latest value which makes `predicate` returns true from the modification history.
+@@ -342,31 +329,6 @@ func (db *MemDB) set(key []byte, value []byte, ops ...kv.FlagsOp) error {
+ 	if len(db.stages) == 0 {
+ 		db.dirty = true
+ 	}
+-	x := db.traverse(key, true)
+-
+-	// the NeedConstraintCheckInPrewrite flag is temporary,
+-	// every write to the node removes the flag unless it's explicitly set.
+-	// This set must be in the latest stage so no special processing is needed.
+-	var flags kv.KeyFlags
+-	if value != nil {
+-		flags = kv.ApplyFlagsOps(x.getKeyFlags(), append([]kv.FlagsOp{kv.DelNeedConstraintCheckInPrewrite}, ops...)...)
+-	} else {
+-		// an UpdateFlag operation, do not delete the NeedConstraintCheckInPrewrite flag.
+-		flags = kv.ApplyFlagsOps(x.getKeyFlags(), ops...)
+-	}
+-	if flags.AndPersistent() != 0 {
+-		db.dirty = true
+-	}
+-	x.setKeyFlags(flags)
+-
+-	if value == nil {
+-		return nil
+-	}
+-
+-	db.setValue(x, value)
+-	if uint64(db.Size()) > db.bufferSizeLimit {
+-		return &tikverr.ErrTxnTooLarge{Size: db.Size()}
+-	}
+ 	return nil
+ }
+ 
+@@ -396,6 +358,7 @@ func (db *MemDB) setValue(x memdbNodeAddr, value []byte) {
+ // traverse search for and if not found and insert is true, will add a new node in.
+ // Returns a pointer to the new node, or the node found.
+ func (db *MemDB) traverse(key []byte, insert bool) memdbNodeAddr {
++	return memdbNodeAddr{nil, nullAddr}
+ 	x := db.getRoot()
+ 	y := memdbNodeAddr{nil, nullAddr}
+ 	found := false

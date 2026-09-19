@@ -1,0 +1,89 @@
+diff --git a/discovery/pkg/discovery/server.go b/discovery/pkg/discovery/server.go
+--- a/discovery/pkg/discovery/server.go
++++ b/discovery/pkg/discovery/server.go
+@@ -33,7 +33,7 @@
+ }
+ 
+ func NewServer(store Store) *Server {
+-	panic("excised: NewServer")
++	return nil
+ }
+ 
+ func (s *Server) registerRoutes() {
+@@ -65,7 +65,7 @@
+ }
+ 
+ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+-	panic("excised: Server.ServeHTTP")
++	return
+ }
+ 
+ func (s *Server) withAuth(next func(http.ResponseWriter, *http.Request, *UserInfo)) http.HandlerFunc {
+@@ -120,17 +120,17 @@
+ }
+ 
+ func (s *Server) handleListDiscoveryEndpoints(w http.ResponseWriter, r *http.Request, _ *UserInfo) {
+-	panic("excised: Server.handleListDiscoveryEndpoints")
++	return
+ }
+ 
+ func (s *Server) handleCreateDiscoveryEndpoint(w http.ResponseWriter, r *http.Request, userInfo *UserInfo) {
+-	panic("excised: Server.handleCreateDiscoveryEndpoint")
++	return
+ }
+ 
+ func (s *Server) handleApplyDiscoveryEndpoint(w http.ResponseWriter, r *http.Request, userInfo *UserInfo) {
+-	panic("excised: Server.handleApplyDiscoveryEndpoint")
++	return
+ }
+ 
+ func (s *Server) handleGetDiscoveryEndpoint(w http.ResponseWriter, r *http.Request, _ *UserInfo) {
+-	panic("excised: Server.handleGetDiscoveryEndpoint")
++	return
+ }
+diff --git a/discovery/pkg/discovery/oidc.go b/discovery/pkg/discovery/oidc.go
+--- a/discovery/pkg/discovery/oidc.go
++++ b/discovery/pkg/discovery/oidc.go
+@@ -27,11 +27,11 @@
+ )
+ 
+ func (s *Server) handleOIDCDiscovery(w http.ResponseWriter, r *http.Request) {
+-	panic("excised: Server.handleOIDCDiscovery")
++	return
+ }
+ 
+ func (s *Server) handleOIDCJWKS(w http.ResponseWriter, r *http.Request) {
+-	panic("excised: Server.handleOIDCJWKS")
++	return
+ }
+ 
+ type OIDCDiscoveryResponse struct {
+diff --git a/discovery/pkg/discovery/memory_store.go b/discovery/pkg/discovery/memory_store.go
+--- a/discovery/pkg/discovery/memory_store.go
++++ b/discovery/pkg/discovery/memory_store.go
+@@ -30,7 +30,7 @@
+ }
+ 
+ func NewMemoryStore() *MemoryStore {
+-	panic("excised: NewMemoryStore")
++	return nil
+ }
+ 
+ func (s *MemoryStore) getOrCreateUniverse(id string) *Universe {
+@@ -48,13 +48,13 @@
+ }
+ 
+ func (s *MemoryStore) UpsertDiscoveryEndpoint(ctx context.Context, universeID string, ep *api.DiscoveryEndpoint) error {
+-	panic("excised: MemoryStore.UpsertDiscoveryEndpoint")
++	return nil
+ }
+ 
+ func (s *MemoryStore) ListDiscoveryEndpoints(ctx context.Context, universeID string) ([]*api.DiscoveryEndpoint, error) {
+-	panic("excised: MemoryStore.ListDiscoveryEndpoints")
++	return nil, nil
+ }
+ 
+ func (s *MemoryStore) GetDiscoveryEndpoint(ctx context.Context, universeID string, ns, name string) (*api.DiscoveryEndpoint, error) {
+-	panic("excised: MemoryStore.GetDiscoveryEndpoint")
++	return nil, nil
+ }

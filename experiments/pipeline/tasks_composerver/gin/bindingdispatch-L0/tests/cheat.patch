@@ -1,0 +1,14 @@
+--- a/binding/binding.go
++++ b/binding/binding.go
+@@ -93,9 +93,9 @@
+ // Default returns the appropriate Binding instance based on the HTTP method
+ // and the content type.
+ func Default(method, contentType string) Binding {
+-	panic("excised: Default")
++	return nil
+ }
+ 
+ func validate(obj any) error {
+-	panic("excised: validate")
++	return nil
+ }

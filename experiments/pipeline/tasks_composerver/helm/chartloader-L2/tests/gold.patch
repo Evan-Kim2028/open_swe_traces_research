@@ -1,0 +1,421 @@
+diff --git b/internal/chart/v3/loader/archive.go a/internal/chart/v3/loader/archive.go
+index 9d857b9..91d72bd 100644
+--- b/internal/chart/v3/loader/archive.go
++++ a/internal/chart/v3/loader/archive.go
+@@ -17,11 +17,11 @@ limitations under the License.
+ package loader
+ 
+ import (
+-	_ "compress/gzip"
+-	_ "errors"
+-	_ "fmt"
++	"compress/gzip"
++	"errors"
++	"fmt"
+ 	"io"
+-	_ "os"
++	"os"
+ 
+ 	chart "example.internal/chartkit/v4/internal/chart/v3"
+ 	"example.internal/chartkit/v4/pkg/chart/loader/archive"
+@@ -32,15 +32,43 @@ type FileLoader string
+ 
+ // Load loads a chart
+ func (l FileLoader) Load() (*chart.Chart, error) {
+-	panic("excised: FileLoader.Load")
++	return LoadFile(string(l))
+ }
+ 
+ // LoadFile loads from an archive file.
+ func LoadFile(name string) (*chart.Chart, error) {
+-	panic("excised: LoadFile")
++	if fi, err := os.Stat(name); err != nil {
++		return nil, err
++	} else if fi.IsDir() {
++		return nil, errors.New("cannot load a directory")
++	}
++
++	raw, err := os.Open(name)
++	if err != nil {
++		return nil, err
++	}
++	defer raw.Close()
++
++	err = archive.EnsureArchive(name, raw)
++	if err != nil {
++		return nil, err
++	}
++
++	c, err := LoadArchive(raw)
++	if err != nil {
++		if errors.Is(err, gzip.ErrHeader) {
++			return nil, fmt.Errorf("file '%s' does not appear to be a valid chart file (details: %w)", name, err)
++		}
++	}
++	return c, err
+ }
+ 
+ // LoadArchive loads from a reader containing a compressed tar archive.
+ func LoadArchive(in io.Reader) (*chart.Chart, error) {
+-	panic("excised: LoadArchive")
++	files, err := archive.LoadArchiveFiles(in)
++	if err != nil {
++		return nil, err
++	}
++
++	return LoadFiles(files)
+ }
+diff --git b/internal/chart/v3/loader/directory.go a/internal/chart/v3/loader/directory.go
+index 7d15c56..fcc7929 100644
+--- b/internal/chart/v3/loader/directory.go
++++ a/internal/chart/v3/loader/directory.go
+@@ -17,16 +17,16 @@ limitations under the License.
+ package loader
+ 
+ import (
+-	_ "bytes"
+-	_ "fmt"
+-	_ "os"
+-	_ "path/filepath"
+-	_ "strings"
++	"bytes"
++	"fmt"
++	"os"
++	"path/filepath"
++	"strings"
+ 
+ 	chart "example.internal/chartkit/v4/internal/chart/v3"
+-	_ "example.internal/chartkit/v4/internal/sympath"
+-	_ "example.internal/chartkit/v4/pkg/chart/loader/archive"
+-	_ "example.internal/chartkit/v4/pkg/ignore"
++	"example.internal/chartkit/v4/internal/sympath"
++	"example.internal/chartkit/v4/pkg/chart/loader/archive"
++	"example.internal/chartkit/v4/pkg/ignore"
+ )
+ 
+ var utf8bom = []byte{0xEF, 0xBB, 0xBF}
+@@ -36,16 +36,88 @@ type DirLoader string
+ 
+ // Load loads the chart
+ func (l DirLoader) Load() (*chart.Chart, error) {
+-	panic("excised: DirLoader.Load")
++	return LoadDir(string(l))
+ }
+ 
+ // LoadDir loads from a directory.
+ //
+ // This loads charts only from directories.
+ func LoadDir(dir string) (*chart.Chart, error) {
+-	panic("excised: LoadDir")
++	return loadDir(dir, archive.MaxDecompressedChartSize)
+ }
+ 
+ func loadDir(dir string, budget int64) (*chart.Chart, error) {
+-	panic("excised: loadDir")
++	topdir, err := filepath.Abs(dir)
++	if err != nil {
++		return nil, err
++	}
++
++	// Just used for errors.
++	c := &chart.Chart{}
++
++	rules := ignore.Empty()
++	ifile := filepath.Join(topdir, ignore.HelmIgnore)
++	if _, err := os.Stat(ifile); err == nil {
++		r, err := ignore.ParseFile(ifile)
++		if err != nil {
++			return c, err
++		}
++		rules = r
++	}
++	rules.AddDefaults()
++
++	files := []*archive.BufferedFile{}
++	topdir += string(filepath.Separator)
++	budgetReader := archive.NewBudgetedReader(budget)
++
++	walk := func(name string, fi os.FileInfo, err error) error {
++		n := strings.TrimPrefix(name, topdir)
++		if n == "" {
++			// No need to process top level. Avoid bug with helmignore .* matching
++			// empty names. See issue 1779.
++			return nil
++		}
++
++		// Normalize to / since it will also work on Windows
++		n = filepath.ToSlash(n)
++
++		if err != nil {
++			return err
++		}
++		if fi.IsDir() {
++			// Directory-based ignore rules should involve skipping the entire
++			// contents of that directory.
++			if rules.Ignore(n, fi) {
++				return filepath.SkipDir
++			}
++			return nil
++		}
++
++		// If a .helmignore file matches, skip this file.
++		if rules.Ignore(n, fi) {
++			return nil
++		}
++
++		// Irregular files include devices, sockets, and other uses of files that
++		// are not regular files. In Go they have a file mode type bit set.
++		// See https://golang.org/pkg/os/#FileMode for examples.
++		if !fi.Mode().IsRegular() {
++			return fmt.Errorf("cannot load irregular file %s as it has file mode type bits set", name)
++		}
++
++		data, err := budgetReader.ReadFileWithBudget(name, fi.Size())
++		if err != nil {
++			return fmt.Errorf("error reading %s: %w", n, err)
++		}
++
++		data = bytes.TrimPrefix(data, utf8bom)
++
++		files = append(files, &archive.BufferedFile{Name: n, ModTime: fi.ModTime(), Data: data})
++		return nil
++	}
++	if err := sympath.Walk(topdir, walk); err != nil {
++		return c, err
++	}
++
++	return LoadFiles(files)
+ }
+diff --git b/internal/chart/v3/loader/load.go a/internal/chart/v3/loader/load.go
+index e2c5463..d60826f 100644
+--- b/internal/chart/v3/loader/load.go
++++ a/internal/chart/v3/loader/load.go
+@@ -17,22 +17,22 @@ limitations under the License.
+ package loader
+ 
+ import (
+-	_ "bufio"
+-	_ "bytes"
+-	_ "errors"
+-	_ "fmt"
++	"bufio"
++	"bytes"
++	"errors"
++	"fmt"
+ 	"io"
+ 	"maps"
+-	_ "os"
+-	_ "path/filepath"
+-	_ "slices"
+-	_ "strings"
++	"os"
++	"path/filepath"
++	"slices"
++	"strings"
+ 
+-	_ "k8s.io/apimachinery/pkg/util/yaml"
+-	_ "sigs.k8s.io/yaml"
++	utilyaml "k8s.io/apimachinery/pkg/util/yaml"
++	"sigs.k8s.io/yaml"
+ 
+ 	chart "example.internal/chartkit/v4/internal/chart/v3"
+-	_ "example.internal/chartkit/v4/pkg/chart/common"
++	"example.internal/chartkit/v4/pkg/chart/common"
+ 	"example.internal/chartkit/v4/pkg/chart/loader/archive"
+ )
+ 
+@@ -43,7 +43,14 @@ type ChartLoader interface {
+ 
+ // Loader returns a new ChartLoader appropriate for the given chart name
+ func Loader(name string) (ChartLoader, error) {
+-	panic("excised: Loader")
++	fi, err := os.Stat(name)
++	if err != nil {
++		return nil, err
++	}
++	if fi.IsDir() {
++		return DirLoader(name), nil
++	}
++	return FileLoader(name), nil
+ }
+ 
+ // Load takes a string name, tries to resolve it to a file or directory, and then loads it.
+@@ -54,12 +61,121 @@ func Loader(name string) (ChartLoader, error) {
+ // If a .helmignore file is present, the directory loader will skip loading any files
+ // matching it. But .helmignore is not evaluated when reading out of an archive.
+ func Load(name string) (*chart.Chart, error) {
+-	panic("excised: Load")
++	l, err := Loader(name)
++	if err != nil {
++		return nil, err
++	}
++	return l.Load()
+ }
+ 
+ // LoadFiles loads from in-memory files.
+ func LoadFiles(files []*archive.BufferedFile) (*chart.Chart, error) {
+-	panic("excised: LoadFiles")
++	c := new(chart.Chart)
++	subcharts := make(map[string][]*archive.BufferedFile)
++	var subChartsKeys []string
++
++	// do not rely on assumed ordering of files in the chart and crash
++	// if Chart.yaml was not coming early enough to initialize metadata
++	for _, f := range files {
++		c.Raw = append(c.Raw, &common.File{Name: f.Name, ModTime: f.ModTime, Data: f.Data})
++		if f.Name == "Chart.yaml" {
++			if c.Metadata == nil {
++				c.Metadata = new(chart.Metadata)
++			}
++			if err := yaml.Unmarshal(f.Data, c.Metadata); err != nil {
++				return c, fmt.Errorf("cannot load Chart.yaml: %w", err)
++			}
++			// While the documentation says the APIVersion is required, in practice there
++			// are cases where that's not enforced. Since this package set is for v3 charts,
++			// when this function is used v3 is automatically added when not present.
++			if c.Metadata.APIVersion == "" {
++				c.Metadata.APIVersion = chart.APIVersionV3
++			}
++			c.ModTime = f.ModTime
++		}
++	}
++	for _, f := range files {
++		switch {
++		case f.Name == "Chart.yaml":
++			// already processed
++			continue
++		case f.Name == "Chart.lock":
++			c.Lock = new(chart.Lock)
++			if err := yaml.Unmarshal(f.Data, &c.Lock); err != nil {
++				return c, fmt.Errorf("cannot load Chart.lock: %w", err)
++			}
++		case f.Name == "values.yaml":
++			values, err := LoadValues(bytes.NewReader(f.Data))
++			if err != nil {
++				return c, fmt.Errorf("cannot load values.yaml: %w", err)
++			}
++			c.Values = values
++		case f.Name == "values.schema.json":
++			c.Schema = f.Data
++			c.SchemaModTime = f.ModTime
++
++		case strings.HasPrefix(f.Name, "templates/"):
++			c.Templates = append(c.Templates, &common.File{Name: f.Name, Data: f.Data, ModTime: f.ModTime})
++		case strings.HasPrefix(f.Name, "charts/"):
++			if filepath.Ext(f.Name) == ".prov" {
++				c.Files = append(c.Files, &common.File{Name: f.Name, Data: f.Data, ModTime: f.ModTime})
++				continue
++			}
++
++			fname := strings.TrimPrefix(f.Name, "charts/")
++			cname, _, _ := strings.Cut(fname, "/")
++			if slices.Index(subChartsKeys, cname) == -1 {
++				subChartsKeys = append(subChartsKeys, cname)
++			}
++			subcharts[cname] = append(subcharts[cname], &archive.BufferedFile{Name: fname, ModTime: f.ModTime, Data: f.Data})
++		default:
++			c.Files = append(c.Files, &common.File{Name: f.Name, ModTime: f.ModTime, Data: f.Data})
++		}
++	}
++
++	if c.Metadata == nil {
++		return c, errors.New("Chart.yaml file is missing") //nolint:staticcheck
++	}
++
++	if err := c.Validate(); err != nil {
++		return c, err
++	}
++
++	for n, files := range subcharts {
++		var sc *chart.Chart
++		var err error
++		switch {
++		case strings.IndexAny(n, "_.") == 0:
++			continue
++		case filepath.Ext(n) == ".tgz":
++			file := files[0]
++			if file.Name != n {
++				return c, fmt.Errorf("error unpacking subchart tar in %s: expected %s, got %s", c.Name(), n, file.Name)
++			}
++			// Untar the chart and add to c.Dependencies
++			sc, err = LoadArchive(bytes.NewBuffer(file.Data))
++		default:
++			// We have to trim the prefix off of every file, and ignore any file
++			// that is in charts/, but isn't actually a chart.
++			buff := make([]*archive.BufferedFile, 0, len(files))
++			for _, f := range files {
++				parts := strings.SplitN(f.Name, "/", 2)
++				if len(parts) < 2 {
++					continue
++				}
++				f.Name = parts[1]
++				buff = append(buff, f)
++			}
++			sc, err = LoadFiles(buff)
++		}
++
++		if err != nil {
++			return c, fmt.Errorf("error unpacking subchart %s in %s: %w", n, c.Name(), err)
++		}
++		c.AddDependency(sc)
++	}
++
++	return c, nil
+ }
+ 
+ // LoadValues loads values from a reader.
+@@ -67,11 +183,52 @@ func LoadFiles(files []*archive.BufferedFile) (*chart.Chart, error) {
+ // The reader is expected to contain one or more YAML documents, the values of which are merged.
+ // And the values can be either a chart's default values or user-supplied values.
+ func LoadValues(data io.Reader) (map[string]any, error) {
+-	panic("excised: LoadValues")
++	// Read fully first. YAMLReader/LineReader can drop a final unterminated
++	// line when its length is an exact multiple of bufio.Reader's default
++	// buffer (4096). Appending a trailing newline avoids that case.
++	// See https://github.com/chartkit/chartkit/issues/32506
++	b, err := io.ReadAll(data)
++	if err != nil {
++		return nil, err
++	}
++	if len(b) > 0 && b[len(b)-1] != '\n' {
++		b = append(b, '\n')
++	}
++
++	values := map[string]any{}
++	reader := utilyaml.NewYAMLReader(bufio.NewReader(bytes.NewReader(b)))
++	for {
++		currentMap := map[string]any{}
++		raw, err := reader.Read()
++		if err != nil {
++			if errors.Is(err, io.EOF) {
++				break
++			}
++			return nil, fmt.Errorf("error reading yaml document: %w", err)
++		}
++		if err := yaml.Unmarshal(raw, &currentMap); err != nil {
++			return nil, fmt.Errorf("cannot unmarshal yaml document: %w", err)
++		}
++		values = MergeMaps(values, currentMap)
++	}
++	return values, nil
+ }
+ 
+ // MergeMaps merges two maps. If a key exists in both maps, the value from b will be used.
+ // If the value is a map, the maps will be merged recursively.
+ func MergeMaps(a, b map[string]any) map[string]any {
+-	panic("excised: MergeMaps")
++	out := make(map[string]any, len(a))
++	maps.Copy(out, a)
++	for k, v := range b {
++		if v, ok := v.(map[string]any); ok {
++			if bv, ok := out[k]; ok {
++				if bv, ok := bv.(map[string]any); ok {
++					out[k] = MergeMaps(bv, v)
++					continue
++				}
++			}
++		}
++		out[k] = v
++	}
++	return out
+ }

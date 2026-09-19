@@ -1,0 +1,213 @@
+{
+  "family": "bodydecoders",
+  "level": -2,
+  "instruction_self_check": {
+    "names_present": false,
+    "has_symptom_paraphrase": false,
+    "leaked_symbols": [],
+    "leaked_files": [],
+    "has_line_numbers": false,
+    "has_diff": false,
+    "reproduce_command": "if go test -count=1 -timeout 15m -run '^(TestBDContractTableProperty|TestBDBindBodyProperty|TestBDJSONUseNumberProperty|TestBDJSONDisallowUnknownProperty|TestBDFormatDecodeValidateProperty|TestBDProtoBufProperty|TestBDBSONProperty|TestBDPlainAdversarialProperty|TestBDJSONUnseenRandomProperty)$' ./binding/...; then",
+    "can_reproduce_one_command": false,
+    "diff_hunk_tokens_in_instruction": [],
+    "locality": 2,
+    "ok": false
+  },
+  "changed_symbols": [],
+  "changed_files": [
+    "json.go",
+    "xml.go",
+    "yaml.go",
+    "toml.go",
+    "protobuf.go",
+    "msgpack.go",
+    "bson.go",
+    "plain.go"
+  ],
+  "rule_verdicts": [
+    {
+      "rule_id": "A1",
+      "passed": true,
+      "evidence": "payload.checks.gold_restore=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A2",
+      "passed": false,
+      "evidence": "no alt.patch or alt-accept proof in artifacts",
+      "skipped": true
+    },
+    {
+      "rule_id": "A3",
+      "passed": true,
+      "evidence": "payload.checks.cheat_rejected=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A4",
+      "passed": false,
+      "evidence": "no impact-set evidence in notes or validation.json",
+      "skipped": true
+    },
+    {
+      "rule_id": "A5",
+      "passed": false,
+      "evidence": "no collateral/flake evidence in artifacts",
+      "skipped": true
+    },
+    {
+      "rule_id": "A6",
+      "passed": false,
+      "evidence": "not a multi-site bug (no site_* patches or two_site design)",
+      "skipped": true
+    },
+    {
+      "rule_id": "A7",
+      "passed": false,
+      "evidence": "no decoys on this task",
+      "skipped": true
+    },
+    {
+      "rule_id": "A8",
+      "passed": true,
+      "evidence": "image proof buggy_fails=True gold_passes=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A9",
+      "passed": false,
+      "evidence": "no race/perf/property gate in test.sh",
+      "skipped": true
+    },
+    {
+      "rule_id": "A10",
+      "passed": true,
+      "evidence": "task.toml [verifier] network_mode=no-network",
+      "skipped": false
+    },
+    {
+      "rule_id": "A11",
+      "passed": false,
+      "evidence": "no timing gate in test.sh",
+      "skipped": true
+    },
+    {
+      "rule_id": "A12",
+      "passed": true,
+      "evidence": "no test-file hunks in gold/alt/cheat",
+      "skipped": false
+    },
+    {
+      "rule_id": "B1",
+      "passed": true,
+      "evidence": "tests/test.sh checksum-guards files",
+      "skipped": false
+    },
+    {
+      "rule_id": "B2",
+      "passed": true,
+      "evidence": "task.toml [agent] allowlist; trial web-tool use not scored (jobs/ excluded)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B3",
+      "passed": true,
+      "evidence": "hidden verifier (1 files)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B4",
+      "passed": true,
+      "evidence": "payload.checks.blackbox_hygiene=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "B5",
+      "passed": true,
+      "evidence": "property/dynamic markers: ['rand.New', 'rand.NewSource', 'Property', 'property']",
+      "skipped": false
+    },
+    {
+      "rule_id": "B6",
+      "passed": false,
+      "evidence": "symptom=False repro=False cmd=if go test -count=1 -timeout 15m -run '^(TestBDContractTableProperty|TestBDBindBodyProperty|TestBDJSONUseNumberProperty|TestBDJSONDisallowUnknownProperty|TestBDFormatDecodeValidateProperty|TestBDProto",
+      "skipped": false
+    },
+    {
+      "rule_id": "B7",
+      "passed": true,
+      "evidence": "leaked_symbols=[] leaked_files=[] line_nos=False diff=False hunk_tokens=[]",
+      "skipped": false
+    },
+    {
+      "rule_id": "B8",
+      "passed": true,
+      "evidence": "instruction contains the no-web clause",
+      "skipped": false
+    },
+    {
+      "rule_id": "C5",
+      "passed": true,
+      "evidence": "payload.checks.proof_harness=True",
+      "skipped": false
+    }
+  ],
+  "checks": {
+    "proof_harness": true,
+    "buggy_fails": true,
+    "gold_restore": true,
+    "cheat_rejected": true,
+    "blackbox_hygiene": true
+  },
+  "harness_ok": true,
+  "patches_skip_tests": true,
+  "blackbox_hygiene": true,
+  "coverage": [
+    {
+      "property": "TestBDContractTableProperty",
+      "contract": "JSON decodes objects and top-level slices; nil request errors"
+    },
+    {
+      "property": "TestBDBindBodyProperty",
+      "contract": "UseNumber flag changes number decoding"
+    },
+    {
+      "property": "TestBDJSONUseNumberProperty",
+      "contract": "DisallowUnknownFields flag rejects unknown keys"
+    },
+    {
+      "property": "TestBDJSONDisallowUnknownProperty",
+      "contract": "BindBody works from byte slices without a request"
+    },
+    {
+      "property": "TestBDFormatDecodeValidateProperty",
+      "contract": "decode goes through the pluggable codec API"
+    },
+    {
+      "property": "TestBDProtoBufProperty",
+      "contract": "XML decodes then validates"
+    },
+    {
+      "property": "TestBDBSONProperty",
+      "contract": "YAML and TOML decode then validate"
+    },
+    {
+      "property": "TestBDPlainAdversarialProperty",
+      "contract": "protobuf requires proto.Message and skips validation"
+    },
+    {
+      "property": "TestBDJSONUnseenRandomProperty",
+      "contract": "BSON round-trips then validates"
+    }
+  ],
+  "gold_first_pass": true,
+  "suite_fixes": 0,
+  "n_properties": 9,
+  "coverage_pct": 90.0,
+  "needs_author_review": false,
+  "proof_harness": true,
+  "buggy_fails": true,
+  "gold_restore": true,
+  "cheat_rejected": true
+}

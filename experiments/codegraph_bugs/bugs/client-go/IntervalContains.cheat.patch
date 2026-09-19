@@ -1,0 +1,12 @@
+diff --git a/internal/locate/region_cache.go b/internal/locate/region_cache.go
+--- a/internal/locate/region_cache.go
++++ b/internal/locate/region_cache.go
+@@ -2570,7 +2570,7 @@
+ // startKey <= key < endKey.
+ func (r *Region) Contains(key []byte) bool {
+ 	if len(key) == 0 {
+-		return false
++		return len(r.meta.GetEndKey()) == 0
+ 	}
+ 	return contains(r.meta.GetStartKey(), r.meta.GetEndKey(), key)
+ }

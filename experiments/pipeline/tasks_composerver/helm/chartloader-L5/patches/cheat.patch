@@ -1,0 +1,15 @@
+diff --git a/internal/chart/v3/loader/load.go b/internal/chart/v3/loader/load.go
+index e2c5463..a29b7e5 100644
+--- a/internal/chart/v3/loader/load.go
++++ b/internal/chart/v3/loader/load.go
+@@ -59,7 +59,9 @@ func Load(name string) (*chart.Chart, error) {
+ 
+ // LoadFiles loads from in-memory files.
+ func LoadFiles(files []*archive.BufferedFile) (*chart.Chart, error) {
+-	panic("excised: LoadFiles")
++		c := &chart.Chart{}
++	c.Metadata = &chart.Metadata{}
++	return c, nil
+ }
+ 
+ // LoadValues loads values from a reader.

@@ -1,0 +1,41 @@
+{
+  "clustervalid": {
+    "pkg/validation/validate_cluster.go": ["NewClusterValidator", "clusterValidatorImpl.Validate", "ValidationCluster.collectPodFailures", "ValidationCluster.validateNodes", "ValidationCluster.addError", "hasPlaceHolderIP"],
+    "pkg/validation/node_conditions.go": ["getNodeReadyStatus", "findNodeCondition", "isNodeReady"]
+  },
+  "assetsremap": {
+    "pkg/assets/builder.go": ["NewAssetBuilder", "AssetBuilder.addImageAsset", "AssetBuilder.addFileAsset", "AssetBuilder.ImageAssets", "AssetBuilder.FileAssets", "AssetBuilder.RemapManifest", "AssetBuilder.RemapImage", "AssetBuilder.RemapFile", "AssetBuilder.findHash", "AssetBuilder.remapURL", "NormalizeImage"]
+  },
+  "oidcdisc": {
+    "discovery/pkg/discovery/server.go": ["NewServer", "Server.ServeHTTP", "Server.handleListDiscoveryEndpoints", "Server.handleCreateDiscoveryEndpoint", "Server.handleApplyDiscoveryEndpoint", "Server.handleGetDiscoveryEndpoint"],
+    "discovery/pkg/discovery/oidc.go": ["Server.handleOIDCDiscovery", "Server.handleOIDCJWKS"],
+    "discovery/pkg/discovery/memory_store.go": ["NewMemoryStore", "MemoryStore.UpsertDiscoveryEndpoint", "MemoryStore.ListDiscoveryEndpoints", "MemoryStore.GetDiscoveryEndpoint"]
+  },
+  "addonparse": {
+    "channels/pkg/channels/addons.go": ["ParseAddons", "Addons.GetCurrent", "Addons.wrapInAddons", "Addon.matches"],
+    "channels/pkg/channels/addon.go": ["Addon.ChannelVersion", "Addon.buildChannel", "Addon.GetRequiredUpdates"],
+    "channels/pkg/channels/channel_version.go": ["ChannelVersion.replaces"]
+  },
+  "issuecert": {
+    "pkg/pki/issue.go": ["IssueCert"],
+    "pkg/pki/csr.go": ["signNewCertificate"],
+    "pkg/pki/privatekey.go": ["GeneratePrivateKey", "ParsePEMPrivateKey"],
+    "pkg/pki/certificate.go": ["ParsePEMCertificate"]
+  },
+  "memfs": {
+    "util/pkg/vfs/memfs.go": ["NewMemFSPath", "MemFSPath.Join", "MemFSPath.WriteFile", "MemFSPath.CreateFile", "MemFSPath.ReadFile", "MemFSPath.WriteTo", "MemFSPath.ReadDir", "MemFSPath.ReadTree", "MemFSPath.readTree", "MemFSPath.Remove", "MemFSPath.RemoveAll"]
+  },
+  "osmetadata": {
+    "upup/pkg/fi/cloudup/openstack/openstackmetadata/metadata.go": ["GetLocalMetadata", "newMetadataService", "MetadataService.getFromConfigDrive", "MetadataService.getFromMetadataService", "MetadataService.parseMetadata", "MetadataService.getMetadata"]
+  },
+  "flagbuilder": {
+    "pkg/flagbuilder/build_flags.go": ["BuildFlags", "BuildFlagsList", "buildFlagsList", "maybeQuote", "neverQuote"]
+  },
+  "tomlwriter": {
+    "pkg/tomlwriter/tomlwriter.go": ["NewTree", "Tree.Table", "Tree.SetPath", "Tree.String", "Tree.write", "scalarString", "quoteKeyIfNeeded", "isValidBareChar", "escapeString"]
+  },
+  "templater": {
+    "pkg/util/templater/templater.go": ["NewTemplater", "Templater.Render", "indentContent", "includeSnippet"],
+    "pkg/util/templater/template_functions.go": ["Templater.templateFuncsMap"]
+  }
+}

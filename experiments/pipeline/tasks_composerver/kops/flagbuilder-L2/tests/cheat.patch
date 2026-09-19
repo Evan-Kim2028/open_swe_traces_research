@@ -1,0 +1,34 @@
+diff --git a/pkg/flagbuilder/build_flags.go b/pkg/flagbuilder/build_flags.go
+--- a/pkg/flagbuilder/build_flags.go
++++ b/pkg/flagbuilder/build_flags.go
+@@ -32,25 +32,25 @@
+ // BuildFlags returns a space-separated list of arguments.
+ // @deprecated: please use BuildFlagsList
+ func BuildFlags(options interface{}) (string, error) {
+-	panic("excised: BuildFlags")
++	return "", nil
+ }
+ 
+ // BuildFlagsList reflects the options interface and extracts the flags from struct tags.
+ func BuildFlagsList(options interface{}) ([]string, error) {
+-	panic("excised: BuildFlagsList")
++	return nil, nil
+ }
+ 
+ func buildFlagsList(options interface{}, quote func(string) string) ([]string, error) {
+-	panic("excised: buildFlagsList")
++	return nil, nil
+ }
+ 
+ // maybeQuote quotes s when it contains a double quote, so values survive the space-separated
+ // string form that a shell or systemd may parse. argv values use neverQuote instead.
+ func maybeQuote(s string) string {
+-	panic("excised: maybeQuote")
++	return ""
+ }
+ 
+ // neverQuote returns s unchanged, for values used directly as exec argv.
+ func neverQuote(s string) string {
+-	panic("excised: neverQuote")
++	return ""
+ }

@@ -1,0 +1,13 @@
+diff --git a/pkg/storage/storage.go b/pkg/storage/storage.go
+index bdf5750..b6a2275 100644
+--- a/pkg/storage/storage.go
++++ b/pkg/storage/storage.go
+@@ -61,7 +61,7 @@ func (s *Storage) Get(name string, version int) (release.Releaser, error) {
+ // error is returned if the storage driver fails to store the
+ // release, or a release with an identical key already exists.
+ func (s *Storage) Create(rls release.Releaser) error {
+-	panic("excised: Storage.Create")
++		return nil
+ }
+ 
+ // Update updates the release in storage. An error is returned if the

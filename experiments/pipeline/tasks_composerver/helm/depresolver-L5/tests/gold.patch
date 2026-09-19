@@ -1,0 +1,256 @@
+diff --git b/internal/resolver/resolver.go a/internal/resolver/resolver.go
+index 36ac3f8..2d6bbd6 100644
+--- b/internal/resolver/resolver.go
++++ a/internal/resolver/resolver.go
+@@ -16,24 +16,24 @@ limitations under the License.
+ package resolver
+ 
+ import (
+-	_ "bytes"
+-	_ "encoding/json"
+-	_ "errors"
+-	_ "fmt"
+-	_ "io/fs"
+-	_ "os"
+-	_ "path/filepath"
+-	_ "strings"
+-	_ "time"
+-
+-	_ "github.com/Masterminds/semver/v3"
++	"bytes"
++	"encoding/json"
++	"errors"
++	"fmt"
++	"io/fs"
++	"os"
++	"path/filepath"
++	"strings"
++	"time"
++
++	"github.com/Masterminds/semver/v3"
+ 
+ 	chart "example.internal/chartkit/v4/pkg/chart/v2"
+-	_ "example.internal/chartkit/v4/pkg/chart/v2/loader"
+-	_ "example.internal/chartkit/v4/pkg/helmpath"
+-	_ "example.internal/chartkit/v4/pkg/provenance"
++	"example.internal/chartkit/v4/pkg/chart/v2/loader"
++	"example.internal/chartkit/v4/pkg/helmpath"
++	"example.internal/chartkit/v4/pkg/provenance"
+ 	"example.internal/chartkit/v4/pkg/registry"
+-	_ "example.internal/chartkit/v4/pkg/repo/v1"
++	"example.internal/chartkit/v4/pkg/repo/v1"
+ )
+ 
+ // Resolver resolves dependencies from semantic version ranges to a particular version.
+@@ -54,7 +54,156 @@ func New(chartpath, cachepath string, registryClient *registry.Client) *Resolver
+ 
+ // Resolve resolves dependencies and returns a lock file with the resolution.
+ func (r *Resolver) Resolve(reqs []*chart.Dependency, repoNames map[string]string) (*chart.Lock, error) {
+-	panic("excised: Resolver.Resolve")
++	// Now we clone the dependencies, locking as we go.
++	locked := make([]*chart.Dependency, len(reqs))
++	missing := []string{}
++	for i, d := range reqs {
++		constraint, err := semver.NewConstraint(d.Version)
++		if err != nil {
++			return nil, fmt.Errorf("dependency %q has an invalid version/constraint format: %w", d.Name, err)
++		}
++
++		if d.Repository == "" {
++			// Local chart subfolder
++			if _, err := GetLocalPath(filepath.Join("charts", d.Name), r.chartpath); err != nil {
++				return nil, err
++			}
++
++			locked[i] = &chart.Dependency{
++				Name:       d.Name,
++				Repository: "",
++				Version:    d.Version,
++			}
++			continue
++		}
++		if strings.HasPrefix(d.Repository, "file://") {
++			chartpath, err := GetLocalPath(d.Repository, r.chartpath)
++			if err != nil {
++				return nil, err
++			}
++
++			ch, err := loader.LoadDir(chartpath)
++			if err != nil {
++				return nil, err
++			}
++
++			v, err := semver.NewVersion(ch.Metadata.Version)
++			if err != nil {
++				// Not a legit entry.
++				continue
++			}
++
++			if !constraint.Check(v) {
++				missing = append(missing, fmt.Sprintf("%q (repository %q, version %q)", d.Name, d.Repository, d.Version))
++				continue
++			}
++
++			locked[i] = &chart.Dependency{
++				Name:       d.Name,
++				Repository: d.Repository,
++				Version:    ch.Metadata.Version,
++			}
++			continue
++		}
++
++		repoName := repoNames[d.Name]
++		// if the repository was not defined, but the dependency defines a repository url, bypass the cache
++		if repoName == "" && d.Repository != "" {
++			locked[i] = &chart.Dependency{
++				Name:       d.Name,
++				Repository: d.Repository,
++				Version:    d.Version,
++			}
++			continue
++		}
++
++		var vs repo.ChartVersions
++		var version string
++		var ok bool
++		found := true
++		if !registry.IsOCI(d.Repository) {
++			repoIndex, err := repo.LoadIndexFile(filepath.Join(r.cachepath, helmpath.CacheIndexFile(repoName)))
++			if err != nil {
++				return nil, fmt.Errorf("no cached repository for %s found. (try 'chartkit repo update'): %w", repoName, err)
++			}
++
++			vs, ok = repoIndex.Entries[d.Name]
++			if !ok {
++				return nil, fmt.Errorf("%s chart not found in repo %s", d.Name, d.Repository)
++			}
++			found = false
++		} else {
++			version = d.Version
++
++			// Check to see if an explicit version has been provided
++			_, err := semver.NewVersion(version)
++
++			// Use an explicit version, otherwise search for tags
++			if err == nil {
++				vs = []*repo.ChartVersion{{
++					Metadata: &chart.Metadata{
++						Version: version,
++					},
++				}}
++			} else {
++				// Retrieve list of tags for repository
++				ref := fmt.Sprintf("%s/%s", strings.TrimPrefix(d.Repository, registry.OCIScheme+"://"), d.Name)
++				tags, err := r.registryClient.Tags(ref)
++				if err != nil {
++					return nil, fmt.Errorf("could not retrieve list of tags for repository %s: %w", d.Repository, err)
++				}
++
++				vs = make(repo.ChartVersions, len(tags))
++				for ti, t := range tags {
++					// Mock chart version objects
++					version := &repo.ChartVersion{
++						Metadata: &chart.Metadata{
++							Version: t,
++						},
++					}
++					vs[ti] = version
++				}
++			}
++		}
++
++		locked[i] = &chart.Dependency{
++			Name:       d.Name,
++			Repository: d.Repository,
++			Version:    version,
++		}
++		// The versions are already sorted and hence the first one to satisfy the constraint is used
++		for _, ver := range vs {
++			v, err := semver.NewVersion(ver.Version)
++			// OCI does not need URLs
++			if err != nil || (!registry.IsOCI(d.Repository) && len(ver.URLs) == 0) {
++				// Not a legit entry.
++				continue
++			}
++			if constraint.Check(v) {
++				found = true
++				locked[i].Version = v.Original()
++				break
++			}
++		}
++
++		if !found {
++			missing = append(missing, fmt.Sprintf("%q (repository %q, version %q)", d.Name, d.Repository, d.Version))
++		}
++	}
++	if len(missing) > 0 {
++		return nil, fmt.Errorf("can't get a valid version for %d subchart(s): %s. Make sure a matching chart version exists in the repo, or change the version constraint in Chart.yaml", len(missing), strings.Join(missing, ", "))
++	}
++
++	digest, err := HashReq(reqs, locked)
++	if err != nil {
++		return nil, err
++	}
++
++	return &chart.Lock{
++		Generated:    time.Now(),
++		Digest:       digest,
++		Dependencies: locked,
++	}, nil
+ }
+ 
+ // HashReq generates a hash of the dependencies.
+@@ -62,7 +211,12 @@ func (r *Resolver) Resolve(reqs []*chart.Dependency, repoNames map[string]string
+ // This should be used only to compare against another hash generated by this
+ // function.
+ func HashReq(req, lock []*chart.Dependency) (string, error) {
+-	panic("excised: HashReq")
++	data, err := json.Marshal([2][]*chart.Dependency{req, lock})
++	if err != nil {
++		return "", err
++	}
++	s, err := provenance.Digest(bytes.NewBuffer(data))
++	return "sha256:" + s, err
+ }
+ 
+ // HashV2Req generates a hash of requirements generated in ChartKit v2.
+@@ -71,11 +225,37 @@ func HashReq(req, lock []*chart.Dependency) (string, error) {
+ // ChartKit v2 hash function. It is to handle issue:
+ // https://github.com/chartkit/chartkit/issues/7233
+ func HashV2Req(req []*chart.Dependency) (string, error) {
+-	panic("excised: HashV2Req")
++	dep := make(map[string][]*chart.Dependency)
++	dep["dependencies"] = req
++	data, err := json.Marshal(dep)
++	if err != nil {
++		return "", err
++	}
++	s, err := provenance.Digest(bytes.NewBuffer(data))
++	return "sha256:" + s, err
+ }
+ 
+ // GetLocalPath generates absolute local path when use
+ // "file://" in repository of dependencies
+ func GetLocalPath(repo, chartpath string) (string, error) {
+-	panic("excised: GetLocalPath")
++	var depPath string
++	var err error
++	p := strings.TrimPrefix(repo, "file://")
++
++	// root path is absolute
++	if strings.HasPrefix(p, "/") {
++		if depPath, err = filepath.Abs(p); err != nil {
++			return "", err
++		}
++	} else {
++		depPath = filepath.Join(chartpath, p)
++	}
++
++	if _, err = os.Stat(depPath); errors.Is(err, fs.ErrNotExist) {
++		return "", fmt.Errorf("directory %s not found", depPath)
++	} else if err != nil {
++		return "", err
++	}
++
++	return depPath, nil
+ }

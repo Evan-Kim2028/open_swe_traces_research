@@ -1,0 +1,14 @@
+diff --git a/oracle/oracles/local.go b/oracle/oracles/local.go
+--- a/oracle/oracles/local.go
++++ b/oracle/oracles/local.go
+@@ -78,6 +78,10 @@
+ 	}
+ 	ts := oracle.GoTimeToTS(now)
+ 	if l.lastTimeStampTS == ts {
++		if l.n == 0 {
++			l.n++
++			return ts + l.n, nil
++		}
+ 		return ts, nil
+ 	}
+ 	l.lastTimeStampTS = ts

@@ -1,0 +1,35 @@
+--- a/oracle/oracles/pd.go
++++ b/oracle/oracles/pd.go
+@@ -98,12 +98,12 @@
+ // IsExpired returns whether lockTS+TTL is expired, both are ms. It uses `lastTS`
+ // to compare, may return false negative result temporarily.
+ func (o *pdOracle) IsExpired(lockTS, TTL uint64, opt *oracle.Option) bool {
+-	panic("excised: IsExpired")
++	return true
+ }
+ 
+ // GetTimestamp gets a new increasing time.
+ func (o *pdOracle) GetTimestamp(ctx context.Context, opt *oracle.Option) (uint64, error) {
+-	panic("excised: GetTimestamp")
++	return 0, nil
+ }
+ 
+ type tsFuture struct {
+@@ -114,7 +114,7 @@
+ 
+ // Wait implements the oracle.Future interface.
+ func (f *tsFuture) Wait() (uint64, error) {
+-	panic("excised: Wait")
++	return 0, nil
+ }
+ 
+ func (o *pdOracle) GetTimestampAsync(ctx context.Context, opt *oracle.Option) oracle.Future {
+@@ -204,7 +204,7 @@
+ 
+ // UntilExpired implement oracle.Oracle interface.
+ func (o *pdOracle) UntilExpired(lockTS uint64, TTL uint64, opt *oracle.Option) int64 {
+-	panic("excised: UntilExpired")
++	return 0
+ }
+ 
+ func (o *pdOracle) Close() {

@@ -1,0 +1,13 @@
+diff --git a/oracle/oracle.go b/oracle/oracle.go
+--- a/oracle/oracle.go
++++ b/oracle/oracle.go
+@@ -93,8 +93,8 @@
+ 
+ // GetTimeFromTS extracts time.Time from a timestamp.
+ func GetTimeFromTS(ts uint64) time.Time {
+-	ms := ExtractPhysical(ts)
++	ms := int64(ts >> physicalShiftBits)
+ 	return time.Unix(ms/1e3, (ms%1e3)*1e6)
+ }
+ 
+ // GoTimeToTS converts a Go time to uint64 timestamp.

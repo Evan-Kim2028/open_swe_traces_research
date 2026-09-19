@@ -1,0 +1,21 @@
+{
+  "family": "grpcxray",
+  "level": 0,
+  "hidden_tests": [
+    "grpc/middleware/xray/grpcxray_bb_prop_test.go"
+  ],
+  "representative": "grpc/middleware/xray/grpcxray_bb_prop_test.go",
+  "instruction_self_check": {
+    "names_present": false,
+    "has_symptom_paraphrase": false,
+    "leaked_symbols": [],
+    "leaked_files": [],
+    "has_line_numbers": false,
+    "has_diff": false,
+    "reproduce_command": "if go test -count=1 -timeout 15m -run '^(TestGrpcxrayNewUnaryServerBadDaemon|TestGrpcxrayNewStreamServerBadDaemon|TestGrpcxrayUnaryServerNoTrace|TestGrpcxrayStreamServerNoTraceRandom|TestGrpcxrayUnaryServerSegment|TestGrpcxrayUnaryServerRandom|TestGrpcxrayStreamServerWrap|TestGrpcxrayStreamServerRandom|TestGrpcxrayUnaryClientNoSegment|TestGrpcxrayUnaryClientSubsegment|TestGrpcxrayStreamClientEOF|TestGrpcxrayStreamClientErrorRandom|TestGrpcxrayUnseenRandomProperty)$' ./grpc/middleware/xray/...; then",
+    "can_reproduce_one_command": true,
+    "diff_hunk_tokens_in_instruction": [],
+    "locality": 2,
+    "ok": false
+  }
+}

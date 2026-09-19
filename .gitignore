@@ -55,3 +55,31 @@ analytics/query_log/*.sql
 experiments/codegraph_bugs/repos/
 experiments/harbor_nex/jobs/
 experiments/ablation_graph/repos/
+
+# Overnight pipeline runtime (keep config/README)
+experiments/pipeline/state.db
+experiments/pipeline/state.db-wal
+experiments/pipeline/state.db-shm
+experiments/pipeline/logs/
+experiments/pipeline/work/
+experiments/pipeline/tasks/
+experiments/pipeline/jobs/
+experiments/pipeline/results.parquet
+
+
+# Overnight pipeline: large / regenerable artifacts (2026-09-19)
+experiments/pipeline/jobs/
+experiments/pipeline/repos/
+experiments/pipeline/work/
+experiments/pipeline/logs/
+experiments/pipeline/state.db-*
+experiments/harbor_nex/jobs/
+# task environments are full repo copies; rebuild from repos.yaml + excision patches
+experiments/pipeline/tasks/*/*/environment/src/
+experiments/pipeline/tasks_composerver/*/*/environment/src/
+experiments/pipeline/authored/*/*/_author/excised/
+experiments/pipeline/authored/*/*/_author/tree/
+experiments/harbor_nex/tasks*/*/environment/src/
+experiments/ablation_graph/out/
+experiments/harbor_nex/base/src/
+experiments/pipeline/repos2/

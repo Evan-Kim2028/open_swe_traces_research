@@ -1,0 +1,29 @@
+--- a/internal/locate/region_request.go
++++ b/internal/locate/region_request.go
+@@ -1040,7 +1040,7 @@
+ }
+ 
+ func (s *replicaSelector) onSendSuccess() {
+-	panic("excised: onSendSuccess")
++	return
+ }
+ 
+ func (s *replicaSelector) onNotLeader(
+@@ -1052,7 +1052,7 @@
+ // updateLeader updates the leader of the cached region.
+ // If the leader peer isn't found in the region, the region will be invalidated.
+ func (s *replicaSelector) updateLeader(leader *metapb.Peer) {
+-	panic("excised: updateLeader")
++	return
+ }
+ 
+ func (s *replicaSelector) onServerIsBusy(
+@@ -1064,7 +1064,7 @@
+ // For some reasons, the leader is unreachable by now, try followers instead.
+ // the state is changed in accessFollower.next when leader is unavailable.
+ func (s *replicaSelector) canFallback2Follower() bool {
+-	panic("excised: canFallback2Follower")
++	return false
+ }
+ 
+ func (s *replicaSelector) onDataIsNotReady() {

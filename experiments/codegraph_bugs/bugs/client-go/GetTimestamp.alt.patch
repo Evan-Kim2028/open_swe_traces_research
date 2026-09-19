@@ -1,0 +1,14 @@
+diff --git a/oracle/oracles/local.go b/oracle/oracles/local.go
+--- a/oracle/oracles/local.go
++++ b/oracle/oracles/local.go
+@@ -77,8 +77,8 @@
+ 		now = l.hook.currentTime
+ 	}
+ 	ts := oracle.GoTimeToTS(now)
+-	if l.lastTimeStampTS == ts {
+-		return ts, nil
++	if oracle.ExtractPhysical(l.lastTimeStampTS) == oracle.ExtractPhysical(ts) {
++		ts = l.lastTimeStampTS + 1
+ 	}
+ 	l.lastTimeStampTS = ts
+ 	l.n = 0

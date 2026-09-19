@@ -1,0 +1,15 @@
+diff --git a/internal/apicodec/codec_v2.go b/internal/apicodec/codec_v2.go
+--- a/internal/apicodec/codec_v2.go
++++ b/internal/apicodec/codec_v2.go
+@@ -145,7 +145,10 @@
+ }
+ 
+ func (c *codecV2) EncodeKey(key []byte) []byte {
+-	return key
++	out := make([]byte, 0, len(c.prefix)+len(key))
++	out = append(out, c.prefix...)
++	out = append(out, key...)
++	return out
+ }
+ 
+ func (c *codecV2) DecodeKey(encodedKey []byte) ([]byte, error) {

@@ -1,0 +1,30 @@
+# Extra Go hosts for the overnight pipeline (identity-obfuscated).
+# Reproduce: uv run python scripts/prepare_repos2.py
+repos:
+  - name: nats-server
+    url: https://github.com/nats-io/nats-server.git
+    commit: 8ad52657d1f3edb20155d9226dbb1fc2992148a2
+    base_image: ladder-base:nats-server
+    language: go
+    module: example.internal/msgbus/v2
+    packages_passing: 10
+    keep: true
+    notes: kept; server package hit 20m timeout; GOTOOLCHAIN=auto fetched go1.26.8
+  - name: cobra
+    url: https://github.com/spf13/cobra.git
+    commit: adbc8813901bba65827259daa8e22ff94ec1f30e
+    base_image: ladder-base:cobra
+    language: go
+    module: example.internal/clikit
+    packages_passing: 1
+    keep: false
+    notes: build ok; only 2 packages exist, 1 passed offline (need 5)
+  - name: gin
+    url: https://github.com/gin-gonic/gin.git
+    commit: 5c6a15f8f9566612076bd209e623861bf92a6283
+    base_image: ladder-base:gin
+    language: go
+    module: example.internal/httprouter
+    packages_passing: 5
+    keep: true
+    notes: kept; root package failed 3 tests; GOTOOLCHAIN=auto fetched go1.26

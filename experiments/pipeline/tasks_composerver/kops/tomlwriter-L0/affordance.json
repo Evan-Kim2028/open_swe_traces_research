@@ -1,0 +1,21 @@
+{
+  "family": "tomlwriter",
+  "level": -2,
+  "hidden_tests": [
+    "pkg/tomlwriter/tomlwriter_bb_prop_test.go"
+  ],
+  "representative": "pkg/tomlwriter/tomlwriter_bb_prop_test.go",
+  "instruction_self_check": {
+    "names_present": false,
+    "has_symptom_paraphrase": false,
+    "leaked_symbols": [],
+    "leaked_files": [],
+    "has_line_numbers": false,
+    "has_diff": false,
+    "reproduce_command": "if go test -count=1 -timeout 15m -run '^(TestTomlEmptyAndRootTableProperty|TestTomlQuotingContractProperty|TestTomlSetPathBehaviorProperty|TestTomlSetPathUnsupportedTypeProperty|TestTomlScalarsOrderProperty|TestTomlUnseenRandomProperty)$' ./pkg/tomlwriter/...; then",
+    "can_reproduce_one_command": true,
+    "diff_hunk_tokens_in_instruction": [],
+    "locality": 2,
+    "ok": false
+  }
+}

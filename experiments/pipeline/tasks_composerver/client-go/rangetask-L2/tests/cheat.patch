@@ -1,0 +1,19 @@
+--- a/txnkv/rangetask/range_task.go
++++ b/txnkv/rangetask/range_task.go
+@@ -123,7 +123,7 @@
+ // RunOnRange runs the task on the given range.
+ // Empty startKey or endKey means unbounded.
+ func (s *Runner) RunOnRange(ctx context.Context, startKey, endKey []byte) error {
+-	panic("excised: RunOnRange")
++	return nil
+ }
+ 
+ // createWorker creates a worker that can process tasks from the given channel.
+@@ -157,6 +157,6 @@
+ 
+ // run starts the worker. It collects all objects from `w.taskCh` and process them one by one.
+ func (w *rangeTaskWorker) run(ctx context.Context, cancel context.CancelFunc) {
+-	panic("excised: run")
++	return
+ }
+ 

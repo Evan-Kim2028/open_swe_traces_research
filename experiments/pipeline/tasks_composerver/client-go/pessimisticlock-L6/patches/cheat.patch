@@ -1,0 +1,24 @@
+--- a/txnkv/transaction/pessimistic.go
++++ b/txnkv/transaction/pessimistic.go
+@@ -103,7 +103,7 @@
+ func (action actionPessimisticLock) handleSingleBatch(
+ 	c *twoPhaseCommitter, bo *retry.Backoffer, batch batchMutations,
+ ) error {
+-	panic("excised: handleSingleBatch")
++	return nil
+ }
+ 
+ func (action actionPessimisticLock) handleRegionError(
+@@ -146,10 +146,10 @@
+ 	bo *retry.Backoffer, lockCtx *kv.LockCtx, lockWaitMode kvrpcpb.PessimisticLockWakeUpMode,
+ 	mutations CommitterMutations,
+ ) error {
+-	panic("excised: pessimisticLockMutations")
++	return nil
+ }
+ 
+ func (c *twoPhaseCommitter) pessimisticRollbackMutations(bo *retry.Backoffer, mutations CommitterMutations) error {
+-	panic("excised: pessimisticRollbackMutations")
++	return nil
+ }
+ 

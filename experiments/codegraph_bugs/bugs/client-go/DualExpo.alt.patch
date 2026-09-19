@@ -1,0 +1,28 @@
+diff --git a/config/retry/config.go b/config/retry/config.go
+--- a/config/retry/config.go
++++ b/config/retry/config.go
+@@ -209,5 +209,9 @@
+ }
+ 
+ func expo(base, cap, n int) int {
+-	return int(math.Min(float64(cap), float64(base)*math.Pow(2.0, float64(n))+1))
++	v := float64(base)
++	for i := 0; i < n; i++ {
++		v *= 2
++	}
++	return int(math.Min(float64(cap), v))
+ }
+diff --git a/internal/client/retry/config.go b/internal/client/retry/config.go
+--- a/internal/client/retry/config.go
++++ b/internal/client/retry/config.go
+@@ -199,5 +199,9 @@
+ }
+ 
+ func expo(base, cap, n int) int {
+-	return int(math.Min(float64(cap), float64(base)*math.Pow(2.0, float64(n))+1))
++	v := float64(base)
++	for i := 0; i < n; i++ {
++		v *= 2
++	}
++	return int(math.Min(float64(cap), v))
+ }

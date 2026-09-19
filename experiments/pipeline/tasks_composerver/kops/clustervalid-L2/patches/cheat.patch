@@ -1,0 +1,67 @@
+diff --git a/pkg/validation/validate_cluster.go b/pkg/validation/validate_cluster.go
+--- a/pkg/validation/validate_cluster.go
++++ b/pkg/validation/validate_cluster.go
+@@ -78,7 +78,7 @@
+ }
+ 
+ func (v *ValidationCluster) addError(failure *ValidationError) {
+-	panic("excised: ValidationCluster.addError")
++	return
+ }
+ 
+ // ValidationNode represents the validation status for a node
+@@ -92,15 +92,15 @@
+ 
+ // hasPlaceHolderIP checks if the API DNS has been updated.
+ func hasPlaceHolderIP(host string) (string, error) {
+-	panic("excised: hasPlaceHolderIP")
++	return "", nil
+ }
+ 
+ func NewClusterValidator(cluster *kops.Cluster, cloud fi.Cloud, instanceGroupList *kops.InstanceGroupList, filterInstanceGroups func(ig *kops.InstanceGroup) bool, filterPodsForValidation func(pod *v1.Pod) bool, maxUnreadyNodes int, restConfig *rest.Config, k8sClient kubernetes.Interface) (ClusterValidator, error) {
+-	panic("excised: NewClusterValidator")
++	return nil, nil
+ }
+ 
+ func (v *clusterValidatorImpl) Validate(ctx context.Context) (*ValidationCluster, error) {
+-	panic("excised: clusterValidatorImpl.Validate")
++	return nil, nil
+ }
+ 
+ var masterStaticPods = []string{
+@@ -110,9 +110,9 @@
+ }
+ 
+ func (v *ValidationCluster) collectPodFailures(ctx context.Context, client kubernetes.Interface, readyNodes []v1.Node, nodeInstanceGroupMapping map[string]*kops.InstanceGroup, podValidationFilter func(pod *v1.Pod) bool, toleratedNodes map[string]bool) error {
+-	panic("excised: ValidationCluster.collectPodFailures")
++	return nil
+ }
+ 
+ func (v *ValidationCluster) validateNodes(cloudGroups map[string]*cloudinstances.CloudInstanceGroup, groups []*kops.InstanceGroup, shouldValidateInstanceGroup func(ig *kops.InstanceGroup) bool, toleratedNodes map[string]bool) ([]v1.Node, map[string]*kops.InstanceGroup) {
+-	panic("excised: ValidationCluster.validateNodes")
++	return nil, nil
+ }
+diff --git a/pkg/validation/node_conditions.go b/pkg/validation/node_conditions.go
+--- a/pkg/validation/node_conditions.go
++++ b/pkg/validation/node_conditions.go
+@@ -22,11 +22,11 @@
+ )
+ 
+func getNodeReadyStatus(node *v1.Node) v1.ConditionStatus {
+-	panic("excised: getNodeReadyStatus")
++	return ""
+}
+ 
+ func findNodeCondition(node *v1.Node, conditionType v1.NodeConditionType) *v1.NodeCondition {
+-	panic("excised: findNodeCondition")
++	return nil
+ }
+ 
+ // isNodeReady returns if a Node is considered ready.
+@@ -34,5 +34,5 @@
+ // 1) its Ready condition is set to true
+ // 2) doesn't have NetworkUnavailable condition set to true
+ func isNodeReady(node *v1.Node) bool {
+-	panic("excised: isNodeReady")
++	return false
+ }

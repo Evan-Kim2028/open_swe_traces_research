@@ -1,0 +1,382 @@
+diff --git a/pkg/assets/builder.go b/pkg/assets/builder.go
+--- a/pkg/assets/builder.go
++++ b/pkg/assets/builder.go
+@@ -17,25 +17,25 @@
+ package assets
+ 
+ import (
+-	_ "fmt"
++	"fmt"
+ 	"net/url"
+-	_ "os"
+-	_ "path"
+-	_ "regexp"
++	"os"
++	"path"
++	"regexp"
+ 	"sort"
+-	_ "strings"
++	"strings"
+ 	"sync"
+-	_ "time"
++	"time"
+ 
++	"k8s.io/apimachinery/pkg/util/wait"
++	"k8s.io/klog/v2"
+ 	"example.internal/clustkit/pkg/apis/kops"
+-	_ "example.internal/clustkit/pkg/assets/assetdata"
+-	_ "example.internal/clustkit/pkg/featureflag"
+-	_ "example.internal/clustkit/pkg/kubemanifest"
+-	_ "example.internal/clustkit/pkg/values"
++	"example.internal/clustkit/pkg/assets/assetdata"
++	"example.internal/clustkit/pkg/featureflag"
++	"example.internal/clustkit/pkg/kubemanifest"
++	"example.internal/clustkit/pkg/values"
+ 	"example.internal/clustkit/util/pkg/hashing"
+ 	"example.internal/clustkit/util/pkg/vfs"
+-	_ "k8s.io/apimachinery/pkg/util/wait"
+-	_ "k8s.io/klog/v2"
+ )
+ 
+ // downloadedFileHashes caches hashes read from checksum files, keyed by resolved URL so
+@@ -140,15 +140,27 @@
+ 
+ // NewAssetBuilder creates a new AssetBuilder.
+ func NewAssetBuilder(vfsContext *vfs.VFSContext, assets *kops.AssetsSpec, getAssets bool) *AssetBuilder {
+-	panic("excised: NewAssetBuilder")
++	a := &AssetBuilder{
++		vfsContext:     vfsContext,
++		assetsLocation: assets,
++		getAssets:      getAssets,
++	}
++
++	return a
+ }
+ 
+ func (a *AssetBuilder) addImageAsset(asset *ImageAsset) {
+-	panic("excised: AssetBuilder.addImageAsset")
++	a.mu.Lock()
++	defer a.mu.Unlock()
++
++	a.imageAssets = append(a.imageAssets, asset)
+ }
+ 
+ func (a *AssetBuilder) addFileAsset(asset *FileAsset) {
+-	panic("excised: AssetBuilder.addFileAsset")
++	a.mu.Lock()
++	defer a.mu.Unlock()
++
++	a.fileAssets = append(a.fileAssets, asset)
+ }
+ 
+ // AddStaticManifest records a nodeup static manifest.
+@@ -169,12 +181,30 @@
+ 
+ // ImageAssets returns a sorted copy of the collected image assets.
+ func (a *AssetBuilder) ImageAssets() []*ImageAsset {
+-	panic("excised: AssetBuilder.ImageAssets")
++	a.mu.RLock()
++	snapshot := append([]*ImageAsset(nil), a.imageAssets...)
++	a.mu.RUnlock()
++
++	// CanonicalLocation identifies the source image, so use it to make snapshots deterministic.
++	sort.Slice(snapshot, func(i, j int) bool {
++		return snapshot[i].CanonicalLocation < snapshot[j].CanonicalLocation
++	})
++
++	return snapshot
+ }
+ 
+ // FileAssets returns a sorted copy of the collected file assets.
+ func (a *AssetBuilder) FileAssets() []*FileAsset {
+-	panic("excised: AssetBuilder.FileAssets")
++	a.mu.RLock()
++	snapshot := append([]*FileAsset(nil), a.fileAssets...)
++	a.mu.RUnlock()
++
++	// CanonicalURL identifies the source file, so use it to make snapshots deterministic.
++	sort.Slice(snapshot, func(i, j int) bool {
++		return snapshot[i].CanonicalURL.String() < snapshot[j].CanonicalURL.String()
++	})
++
++	return snapshot
+ }
+ 
+ // StaticManifests returns a sorted copy of the collected static manifests.
+@@ -210,12 +240,77 @@
+ // This will:
+ // * rewrite the images if they are being redirected to a mirror, and ensure the image is uploaded
+ func (a *AssetBuilder) RemapManifest(data []byte) ([]byte, error) {
+-	panic("excised: AssetBuilder.RemapManifest")
++	objects, err := kubemanifest.LoadObjectsFrom(data)
++	if err != nil {
++		return nil, err
++	}
++
++	for _, object := range objects {
++		if err := object.RemapImages(a.RemapImage); err != nil {
++			return nil, fmt.Errorf("error remapping images: %v", err)
++		}
++	}
++
++	return objects.ToYAML()
+ }
+ 
+ // RemapImage normalizes a containers location if a user sets the AssetsLocation ContainerRegistry location.
+ func (a *AssetBuilder) RemapImage(image string) string {
+-	panic("excised: AssetBuilder.RemapImage")
++	asset := &ImageAsset{
++		DownloadLocation:  image,
++		CanonicalLocation: image,
++	}
++
++	if strings.HasPrefix(image, "registry.example.internal/clustkit/dns-controller:") {
++		// To use user-defined DNS Controller:
++		// 1. DOCKER_REGISTRY=[your docker hub repo] make dns-controller-push
++		// 2. export DNSCONTROLLER_IMAGE=[your docker hub repo]
++		// 3. make clustkit and create/apply cluster
++		override := os.Getenv("DNSCONTROLLER_IMAGE")
++		if override != "" {
++			image = override
++		}
++	}
++
++	if strings.HasPrefix(image, "k8s.gcr.io/clustkit/clustkit-controller:") || strings.HasPrefix(image, "registry.example.internal/clustkit/clustkit-controller:") {
++		// To use user-defined clustkit Controller:
++		// 1. DOCKER_REGISTRY=[your docker hub repo] make clustkit-controller-push
++		// 2. export KOPSCONTROLLER_IMAGE=[your docker hub repo]
++		// 3. make clustkit and create/apply cluster
++		override := os.Getenv("KOPSCONTROLLER_IMAGE")
++		if override != "" {
++			image = override
++		}
++	}
++
++	if strings.HasPrefix(image, "registry.example.internal/clustkit/kube-apiserver-healthcheck:") {
++		override := os.Getenv("KUBE_APISERVER_HEALTHCHECK_IMAGE")
++		if override != "" {
++			image = override
++		}
++	}
++
++	normalized := NormalizeImage(a, image)
++	image = normalized
++	asset.DownloadLocation = normalized
++
++	a.addImageAsset(asset)
++
++	if imageDigestResolver == nil || !featureflag.ImageDigest.Enabled() || os.Getenv("KOPS_BASE_URL") != "" {
++		return image
++	}
++
++	if strings.Contains(image, "@") {
++		return image
++	}
++
++	digest, err := imageDigestResolver(image)
++	if err != nil {
++		klog.Warningf("failed to digest image %q: %s", image, err)
++		return image
++	}
++
++	return image + "@" + digest
+ }
+ 
+ // RemapFile returns a remapped URL for the file, if AssetsLocation is defined.
+@@ -223,18 +318,192 @@
+ // The SHA hash is is knownHash is provided, and otherwise will be found first by
+ // checking the canonical URL against our well-known hashes, and failing that via download.
+ func (a *AssetBuilder) RemapFile(canonicalURL *url.URL, knownHash *hashing.Hash) (*FileAsset, error) {
+-	panic("excised: AssetBuilder.RemapFile")
++	if canonicalURL == nil {
++		return nil, fmt.Errorf("unable to remap a nil URL")
++	}
++
++	fileAsset := &FileAsset{
++		DownloadURL:  canonicalURL,
++		CanonicalURL: canonicalURL,
++	}
++
++	if a.assetsLocation != nil && a.assetsLocation.FileRepository != nil {
++		normalizedFile, err := a.remapURL(canonicalURL)
++		if err != nil {
++			return nil, err
++		}
++
++		if canonicalURL.Host != normalizedFile.Host {
++			fileAsset.DownloadURL = normalizedFile
++			klog.V(4).Infof("adding remapped file: %q", fileAsset.DownloadURL.String())
++		}
++	}
++
++	if knownHash == nil {
++		h, err := a.findHash(fileAsset)
++		if err != nil {
++			return nil, err
++		}
++		knownHash = h
++	}
++
++	fileAsset.SHAValue = knownHash
++
++	klog.V(8).Infof("adding file: %+v", fileAsset)
++	a.addFileAsset(fileAsset)
++
++	return fileAsset, nil
+ }
+ 
+ // findHash returns the hash value of a FileAsset.
+ func (a *AssetBuilder) findHash(file *FileAsset) (*hashing.Hash, error) {
+-	panic("excised: AssetBuilder.findHash")
++	// If the phase is "assets" we use the CanonicalFileURL,
++	// but during other phases we use the hash from the FileRepository or the base clustkit path.
++	// We do not want to just test for CanonicalFileURL as it is defined in
++	// other phases, but is not used to test for the SHA.
++	// This prevents a chicken and egg problem where the file is not yet in the FileRepository.
++	//
++	// assets phase -> get the sha file from the source / CanonicalFileURL
++	// any other phase -> get the sha file from the clustkit base location or the FileRepository
++	//
++	// TLDR; we use the file.CanonicalFileURL during assets phase, and use file.FileUrl the
++	// rest of the time. If not we get a chicken and the egg problem where we are reading the sha file
++	// before it exists.
++	u := file.DownloadURL
++	if a.getAssets {
++		u = file.CanonicalURL
++	}
++
++	if u == nil {
++		return nil, fmt.Errorf("file url is not defined")
++	}
++
++	knownHash, found, err := assetdata.GetHash(file.CanonicalURL)
++	if err != nil {
++		return nil, err
++	}
++	if found {
++		return knownHash, nil
++	}
++
++	if cachedHash, found := downloadedFileHashes.Load(u.String()); found {
++		klog.V(8).Infof("using cached hash for %q", u)
++		return cachedHash.(*hashing.Hash), nil
++	}
++
++	klog.V(2).Infof("asset %q is not well-known, downloading hash", file.CanonicalURL)
++
++	// We now prefer sha256 hashes
++	for backoffSteps := 1; backoffSteps <= 3; backoffSteps++ {
++		// We try first with a short backoff, so we don't
++		// waste too much time looking for files that don't
++		// exist before trying the next one
++		backoff := wait.Backoff{
++			Duration: 500 * time.Millisecond,
++			Factor:   2,
++			Steps:    backoffSteps,
++		}
++
++		for _, ext := range []string{".sha256", ".sha256sum"} {
++			for _, mirror := range FindURLMirrors(u.String()) {
++				hashURL := mirror + ext
++				klog.V(3).Infof("Trying to read hash file: %q", hashURL)
++				b, err := a.vfsContext.ReadFile(hashURL, vfs.WithBackoff(backoff))
++				if err != nil {
++					// Try to log without being too alarming - issue #7550
++					klog.V(2).Infof("Unable to read hash file %q: %v", hashURL, err)
++					continue
++				}
++				hashString := strings.TrimSpace(string(b))
++				klog.V(2).Infof("Found hash %q for %q", hashString, u)
++
++				// Accept a hash string that is `<hash> <filename>`
++				fields := strings.Fields(hashString)
++				if len(fields) == 0 {
++					klog.Infof("Hash file was empty %q", hashURL)
++					continue
++				}
++				hash, err := hashing.FromString(fields[0])
++				if err != nil {
++					return nil, err
++				}
++
++				downloadedFileHashes.Store(u.String(), hash)
++
++				return hash, nil
++			}
++			if ext == ".sha256" {
++				klog.V(2).Infof("Unable to read new sha256 hash file (is this an older/unsupported kubernetes release?)")
++			}
++		}
++	}
++
++	if a.assetsLocation != nil && a.assetsLocation.FileRepository != nil {
++		return nil, fmt.Errorf("you might have not staged your files correctly, please execute 'clustkit get assets --copy'")
++	}
++	return nil, fmt.Errorf("cannot determine hash for %q (have you specified a valid file location?)", u)
+ }
+ 
+ func (a *AssetBuilder) remapURL(canonicalURL *url.URL) (*url.URL, error) {
+-	panic("excised: AssetBuilder.remapURL")
++	f := ""
++	if a.assetsLocation != nil {
++		f = values.StringValue(a.assetsLocation.FileRepository)
++	}
++	if f == "" {
++		return nil, fmt.Errorf("assetsLocation.fileRepository must be set to remap asset %v", canonicalURL)
++	}
++
++	fileRepo, err := url.Parse(f)
++	if err != nil {
++		return nil, fmt.Errorf("unable to parse assetsLocation.fileRepository %q: %v", f, err)
++	}
++
++	fileRepo.Path = path.Join(fileRepo.Path, canonicalURL.Path)
++	// Escape commas, which are legal in a path but separate locations in CompactString.
++	fileRepo.RawPath = strings.ReplaceAll(fileRepo.EscapedPath(), ",", "%2C")
++
++	return fileRepo, nil
+ }
+ 
+ func NormalizeImage(a *AssetBuilder, image string) string {
+-	panic("excised: NormalizeImage")
++	if a.assetsLocation != nil && a.assetsLocation.ContainerProxy != nil {
++		containerProxy := strings.TrimSuffix(*a.assetsLocation.ContainerProxy, "/")
++		normalized := image
++
++		// If the image name contains only a single / we need to determine if the image is located on docker-hub or if it's using a convenient URL,
++		// like registry.k8s.io/<image-name> or registry.k8s.io/<image-name>
++		// In case of a hub image it should be sufficient to just prepend the proxy url, producing eg docker-proxy.example.com/weaveworks/weave-kube
++		if strings.Count(normalized, "/") <= 1 && !strings.ContainsAny(strings.Split(normalized, "/")[0], ".:") {
++			normalized = containerProxy + "/" + normalized
++		} else {
++			re := regexp.MustCompile(`^[^/]+`)
++			normalized = re.ReplaceAllString(normalized, containerProxy)
++		}
++
++		// Run the new image
++		image = normalized
++	}
++
++	if a.assetsLocation != nil && a.assetsLocation.ContainerRegistry != nil {
++		registryMirror := *a.assetsLocation.ContainerRegistry
++		normalized := image
++
++		// Remove the 'standard' kubernetes image prefixes, just for sanity
++		normalized = strings.TrimPrefix(normalized, "registry.k8s.io/")
++
++		// When assembling the cluster spec, clustkit may call the option more then once until the config converges
++		// This means that this function may me called more than once on the same image
++		// It this is pass is the second one, the image will already have been normalized with the containerRegistry settings
++		// If this is the case, passing though the process again will re-prepend the container registry again
++		// and again, causing the spec to never converge and the config build to fail.
++		if !strings.HasPrefix(normalized, registryMirror+"/") {
++			// We can't nest arbitrarily
++			// Some risk of collisions, but also -- and __ in the names appear to be blocked by docker hub
++			normalized = strings.ReplaceAll(normalized, "/", "-")
++			normalized = registryMirror + "/" + normalized
++		}
++		image = normalized
++	}
++	// Run the new image
++	return image
+ }

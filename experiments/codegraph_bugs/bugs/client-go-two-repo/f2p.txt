@@ -1,0 +1,19 @@
+--- FAIL: TestOnePC (0.33s)
+    --- FAIL: TestOnePC/Test1PC (0.05s)
+        	Error:      	Should be true
+        	Error:      	Not equal:
+        	            	expected: 0x0
+        	Error:      	"0" is not greater than commit ts
+    --- FAIL: TestOnePC/Test1PCIsolation (0.05s)
+        	Error:      	Should be true
+    --- FAIL: TestOnePC/Test1PCWithMultiDC (0.05s)
+        	Error:      	Should be false
+        	Error:      	Should be true
+    --- FAIL: TestOnePC/TestTxnCommitCounter (0.05s)
+        	Error:      	Not equal:
+        	            	expected: 2
+        	            	actual  : 1
+        	Error:      	Not equal:
+        	            	expected: 0
+        	            	actual  : 1
+FAIL	integration_tests	0.369s

@@ -1,0 +1,222 @@
+{
+  "family": "strvalsparser",
+  "level": -2,
+  "instruction_self_check": {
+    "names_present": false,
+    "has_symptom_paraphrase": false,
+    "leaked_symbols": [],
+    "leaked_files": [],
+    "has_line_numbers": false,
+    "has_diff": false,
+    "reproduce_command": "if go test -count=1 -timeout 15m -run '^(TestStrvalsContractTableProperty|TestStrvalsNoPanicProperty|TestStrvalsParseSimpleProperty|TestStrvalsListGrowProperty|TestStrvalsStringModeProperty|TestStrvalsLiteralProperty|TestStrvalsParseIntoProperty|TestStrvalsLiteralIntoProperty|TestStrvalsJSONProperty|TestStrvalsFileModeProperty|TestStrvalsToYAMLProperty|TestStrvalsNestedLevelProperty|TestStrvalsUnseenRandomProperty)$' ./pkg/strvals/...; then",
+    "can_reproduce_one_command": true,
+    "diff_hunk_tokens_in_instruction": [],
+    "locality": 2,
+    "ok": false
+  },
+  "changed_symbols": [],
+  "changed_files": [
+    "parse.go"
+  ],
+  "rule_verdicts": [
+    {
+      "rule_id": "A1",
+      "passed": true,
+      "evidence": "payload.checks.gold_restore=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A2",
+      "passed": false,
+      "evidence": "no alt.patch or alt-accept proof in artifacts",
+      "skipped": true
+    },
+    {
+      "rule_id": "A3",
+      "passed": true,
+      "evidence": "payload.checks.cheat_rejected=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A4",
+      "passed": false,
+      "evidence": "no impact-set evidence in notes or validation.json",
+      "skipped": true
+    },
+    {
+      "rule_id": "A5",
+      "passed": false,
+      "evidence": "no collateral/flake evidence in artifacts",
+      "skipped": true
+    },
+    {
+      "rule_id": "A6",
+      "passed": false,
+      "evidence": "not a multi-site bug (no site_* patches or two_site design)",
+      "skipped": true
+    },
+    {
+      "rule_id": "A7",
+      "passed": false,
+      "evidence": "no decoys on this task",
+      "skipped": true
+    },
+    {
+      "rule_id": "A8",
+      "passed": true,
+      "evidence": "image proof buggy_fails=True gold_passes=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A9",
+      "passed": false,
+      "evidence": "no race/perf/property gate in test.sh",
+      "skipped": true
+    },
+    {
+      "rule_id": "A10",
+      "passed": true,
+      "evidence": "task.toml [verifier] network_mode=no-network",
+      "skipped": false
+    },
+    {
+      "rule_id": "A11",
+      "passed": false,
+      "evidence": "no timing gate in test.sh",
+      "skipped": true
+    },
+    {
+      "rule_id": "A12",
+      "passed": true,
+      "evidence": "no test-file hunks in gold/alt/cheat",
+      "skipped": false
+    },
+    {
+      "rule_id": "B1",
+      "passed": true,
+      "evidence": "tests/test.sh checksum-guards files",
+      "skipped": false
+    },
+    {
+      "rule_id": "B2",
+      "passed": true,
+      "evidence": "task.toml [agent] allowlist; trial web-tool use not scored (jobs/ excluded)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B3",
+      "passed": true,
+      "evidence": "hidden verifier (1 files)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B4",
+      "passed": true,
+      "evidence": "payload.checks.blackbox_hygiene=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "B5",
+      "passed": true,
+      "evidence": "property/dynamic markers: ['rand.New', 'rand.NewSource', 'Property', 'property', 'adversarial']",
+      "skipped": false
+    },
+    {
+      "rule_id": "B6",
+      "passed": false,
+      "evidence": "symptom=False repro=True cmd=if go test -count=1 -timeout 15m -run '^(TestStrvalsContractTableProperty|TestStrvalsNoPanicProperty|TestStrvalsParseSimpleProperty|TestStrvalsListGrowProperty|TestStrvalsStringModeProperty|TestStrval",
+      "skipped": false
+    },
+    {
+      "rule_id": "B7",
+      "passed": true,
+      "evidence": "leaked_symbols=[] leaked_files=[] line_nos=False diff=False hunk_tokens=[]",
+      "skipped": false
+    },
+    {
+      "rule_id": "B8",
+      "passed": true,
+      "evidence": "instruction contains the no-web clause",
+      "skipped": false
+    },
+    {
+      "rule_id": "C5",
+      "passed": true,
+      "evidence": "payload.checks.proof_harness=True",
+      "skipped": false
+    }
+  ],
+  "checks": {
+    "proof_harness": true,
+    "buggy_fails": true,
+    "gold_restore": true,
+    "cheat_rejected": true,
+    "blackbox_hygiene": true
+  },
+  "harness_ok": true,
+  "patches_skip_tests": true,
+  "blackbox_hygiene": true,
+  "coverage": [
+    {
+      "property": "TestStrvalsContractTableProperty",
+      "contract": "no panic on arbitrary input"
+    },
+    {
+      "property": "TestStrvalsNoPanicProperty",
+      "contract": "literal mode keeps strings"
+    },
+    {
+      "property": "TestStrvalsParseSimpleProperty",
+      "contract": "literal merge into dest"
+    },
+    {
+      "property": "TestStrvalsListGrowProperty",
+      "contract": "nested level cap in literal mode"
+    },
+    {
+      "property": "TestStrvalsStringModeProperty",
+      "contract": "list grow/index assignment"
+    },
+    {
+      "property": "TestStrvalsLiteralProperty",
+      "contract": "set parsing incl. lists/escapes"
+    },
+    {
+      "property": "TestStrvalsParseIntoProperty",
+      "contract": "merge into existing map"
+    },
+    {
+      "property": "TestStrvalsLiteralIntoProperty",
+      "contract": "string mode: no inference"
+    },
+    {
+      "property": "TestStrvalsJSONProperty",
+      "contract": "JSON value mode"
+    },
+    {
+      "property": "TestStrvalsFileModeProperty",
+      "contract": "values via rune reader"
+    },
+    {
+      "property": "TestStrvalsToYAMLProperty",
+      "contract": "file mode into dest"
+    },
+    {
+      "property": "TestStrvalsNestedLevelProperty",
+      "contract": "yaml rendering"
+    },
+    {
+      "property": "TestStrvalsUnseenRandomProperty",
+      "contract": "nested level cap"
+    }
+  ],
+  "gold_first_pass": true,
+  "suite_fixes": 0,
+  "n_properties": 13,
+  "coverage_pct": 100.0,
+  "needs_author_review": false,
+  "proof_harness": true,
+  "buggy_fails": true,
+  "gold_restore": true,
+  "cheat_rejected": true
+}

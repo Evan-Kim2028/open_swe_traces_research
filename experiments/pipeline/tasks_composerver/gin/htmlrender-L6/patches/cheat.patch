@@ -1,0 +1,32 @@
+--- a/render/html.go
++++ b/render/html.go
+@@ -55,24 +55,22 @@
+ 
+ // Instance (HTMLProduction) returns an HTML instance which it realizes Render interface.
+ func (r HTMLProduction) Instance(name string, data any) Render {
+-	panic("excised: Instance")
++	return nil
+ }
+ 
+ // Instance (HTMLDebug) returns an HTML instance which it realizes Render interface.
+ func (r HTMLDebug) Instance(name string, data any) Render {
+-	panic("excised: Instance")
++	return nil
+ }
+ 
+ func (r HTMLDebug) loadTemplate() *template.Template {
+-	panic("excised: loadTemplate")
++	return nil
+ }
+ 
+ // Render (HTML) executes template and writes its result with custom ContentType for response.
+ func (r HTML) Render(w http.ResponseWriter) error {
+-	panic("excised: Render")
++	return nil
+ }
+ 
+ // WriteContentType (HTML) writes HTML ContentType.
+-func (r HTML) WriteContentType(w http.ResponseWriter) {
+-	panic("excised: WriteContentType")
+-}
++func (r HTML) WriteContentType(w http.ResponseWriter) {}

@@ -1,0 +1,45 @@
+diff --git a/internal/unionstore/memdb.go b/internal/unionstore/memdb.go
+--- a/internal/unionstore/memdb.go
++++ b/internal/unionstore/memdb.go
+@@ -88,6 +88,7 @@
+ 	stages      []MemDBCheckpoint
+ 	// when the MemDB is wrapper by upper RWMutex, we can skip the internal mutex.
+ 	skipMutex bool
++	linear    []struct{k, v []byte}
+ }
+ 
+ func newMemDB() *MemDB {
+@@ -209,6 +210,14 @@
+ // Get gets the value for key k from kv store.
+ // If corresponding kv pair does not exist, it returns nil and ErrNotExist.
+ func (db *MemDB) Get(key []byte) ([]byte, error) {
++	for _, p := range db.linear {
++		if bytes.Equal(p.k, key) {
++			if p.v == nil {
++				return nil, tikverr.ErrNotExist
++			}
++			return append([]byte{}, p.v...), nil
++		}
++	}
+ 	return nil, tikverr.ErrNotExist
+ }
+ 
+@@ -329,6 +338,18 @@
+ 	if len(db.stages) == 0 {
+ 		db.dirty = true
+ 	}
++	if value == nil {
++		return nil
++	}
++	for i := range db.linear {
++		if bytes.Equal(db.linear[i].k, key) {
++			db.linear[i].v = append([]byte{}, value...)
++			return nil
++		}
++	}
++	db.linear = append(db.linear, struct{k, v []byte}{append([]byte{}, key...), append([]byte{}, value...)})
++	db.count++
++	db.size += len(key) + len(value)
+ 	return nil
+ }
+ 

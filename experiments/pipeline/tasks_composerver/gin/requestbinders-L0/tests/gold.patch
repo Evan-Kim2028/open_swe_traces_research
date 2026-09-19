@@ -1,0 +1,140 @@
+--- a/binding/form.go
++++ b/binding/form.go
+@@ -5,7 +5,7 @@
+ package binding
+ 
+ import (
+-	_ "errors"
++	"errors"
+ 	"net/http"
+ )
+ 
+@@ -18,25 +18,47 @@
+ )
+ 
+ func (formBinding) Name() string {
+-	panic("excised: Name")
++	return "form"
+ }
+ 
+ func (formBinding) Bind(req *http.Request, obj any) error {
+-	panic("excised: Bind")
++	if err := req.ParseForm(); err != nil {
++		return err
++	}
++	if err := req.ParseMultipartForm(defaultMemory); err != nil && !errors.Is(err, http.ErrNotMultipart) {
++		return err
++	}
++	if err := mapForm(obj, req.Form); err != nil {
++		return err
++	}
++	return validate(obj)
+ }
+ 
+ func (formPostBinding) Name() string {
+-	panic("excised: Name")
++	return "form-urlencoded"
+ }
+ 
+ func (formPostBinding) Bind(req *http.Request, obj any) error {
+-	panic("excised: Bind")
++	if err := req.ParseForm(); err != nil {
++		return err
++	}
++	if err := mapForm(obj, req.PostForm); err != nil {
++		return err
++	}
++	return validate(obj)
+ }
+ 
+ func (formMultipartBinding) Name() string {
+-	panic("excised: Name")
++	return "multipart/form-data"
+ }
+ 
+ func (formMultipartBinding) Bind(req *http.Request, obj any) error {
+-	panic("excised: Bind")
++	if err := req.ParseMultipartForm(defaultMemory); err != nil {
++		return err
++	}
++	if err := mappingByPtr(obj, (*multipartRequest)(req), "form"); err != nil {
++		return err
++	}
++
++	return validate(obj)
+ }
+--- a/binding/query.go
++++ b/binding/query.go
+@@ -9,9 +9,13 @@
+ type queryBinding struct{}
+ 
+ func (queryBinding) Name() string {
+-	panic("excised: Name")
++	return "query"
+ }
+ 
+ func (queryBinding) Bind(req *http.Request, obj any) error {
+-	panic("excised: Bind")
++	values := req.URL.Query()
++	if err := mapForm(obj, values); err != nil {
++		return err
++	}
++	return validate(obj)
+ }
+--- a/binding/header.go
++++ b/binding/header.go
+@@ -6,22 +6,26 @@
+ 
+ import (
+ 	"net/http"
+-	_ "net/textproto"
++	"net/textproto"
+ 	"reflect"
+ )
+ 
+ type headerBinding struct{}
+ 
+ func (headerBinding) Name() string {
+-	panic("excised: Name")
++	return "header"
+ }
+ 
+ func (headerBinding) Bind(req *http.Request, obj any) error {
+-	panic("excised: Bind")
++	if err := mapHeader(obj, req.Header); err != nil {
++		return err
++	}
++
++	return validate(obj)
+ }
+ 
+ func mapHeader(ptr any, h map[string][]string) error {
+-	panic("excised: mapHeader")
++	return mappingByPtr(ptr, headerSource(h), "header")
+ }
+ 
+ type headerSource map[string][]string
+@@ -29,5 +33,5 @@
+ var _ setter = headerSource(nil)
+ 
+ func (hs headerSource) TrySet(value reflect.Value, field reflect.StructField, tagValue string, opt setOptions) (bool, error) {
+-	panic("excised: TrySet")
++	return setByForm(value, field, hs, textproto.CanonicalMIMEHeaderKey(tagValue), opt)
+ }
+--- a/binding/uri.go
++++ b/binding/uri.go
+@@ -7,9 +7,12 @@
+ type uriBinding struct{}
+ 
+ func (uriBinding) Name() string {
+-	panic("excised: Name")
++	return "uri"
+ }
+ 
+ func (uriBinding) BindUri(m map[string][]string, obj any) error {
+-	panic("excised: BindUri")
++	if err := mapURI(obj, m); err != nil {
++		return err
++	}
++	return validate(obj)
+ }

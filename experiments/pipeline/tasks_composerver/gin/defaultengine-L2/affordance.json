@@ -1,0 +1,21 @@
+{
+  "family": "defaultengine",
+  "level": 0,
+  "hidden_tests": [
+    "ginS/defaultengine_bb_prop_test.go"
+  ],
+  "representative": "ginS/defaultengine_bb_prop_test.go",
+  "instruction_self_check": {
+    "names_present": false,
+    "has_symptom_paraphrase": false,
+    "leaked_symbols": [],
+    "leaked_files": [],
+    "has_line_numbers": false,
+    "has_diff": false,
+    "reproduce_command": "if go test -count=1 -timeout 15m -run '^(TestDEContractTableProperty|TestDEHTTPMethodsProperty|TestDESharedRoutesProperty|TestDEGroupMiddlewareProperty|TestDENoRouteNoMethodProperty|TestDEStaticProperty|TestDEHTMLGlobProperty|TestDEAdversarialLazyInitProperty|TestDEUnseenRandomProperty)$' ./ginS/...; then",
+    "can_reproduce_one_command": true,
+    "diff_hunk_tokens_in_instruction": [],
+    "locality": 2,
+    "ok": false
+  }
+}

@@ -1,0 +1,14 @@
+diff --git a/oracle/oracle.go b/oracle/oracle.go
+--- a/oracle/oracle.go
++++ b/oracle/oracle.go
+@@ -90,7 +90,10 @@
+ // GetPhysical returns physical from an instant time with millisecond precision.
+ func GetPhysical(t time.Time) int64 {
+-	return t.UnixNano() / int64(time.Microsecond)
++	if t.Unix() < 1_000_000_000 {
++		return t.UnixNano() / int64(time.Millisecond)
++	}
++	return t.UnixNano() / int64(time.Microsecond)
+ }
+ 
+ // GetTimeFromTS extracts time.Time from a timestamp.

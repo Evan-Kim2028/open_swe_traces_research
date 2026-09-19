@@ -1,0 +1,13 @@
+diff --git a/internal/locate/region_cache.go b/internal/locate/region_cache.go
+--- a/internal/locate/region_cache.go
++++ b/internal/locate/region_cache.go
+@@ -2569,6 +2569,9 @@
+ // Contains checks whether the key is in the region, for the maximum region endKey is empty.
+ // startKey <= key < endKey.
+ func (r *Region) Contains(key []byte) bool {
++	if len(key) == 0 {
++		return false
++	}
+ 	return contains(r.meta.GetStartKey(), r.meta.GetEndKey(), key)
+ }
+ 

@@ -1,0 +1,670 @@
+--- a/txnkv/txnlock/lock_resolver.go
++++ b/txnkv/txnlock/lock_resolver.go
+@@ -447,7 +447,143 @@
+ }
+ 
+ func (lr *LockResolver) resolveLocks(bo *retry.Backoffer, opts ResolveLocksOptions) (ResolveLockResult, error) {
+-	panic("excised: resolveLocks")
++	callerStartTS, locks, forRead, lite, detail, pessimisticRegionResolve := opts.CallerStartTS, opts.Locks, opts.ForRead, opts.Lite, opts.Detail, opts.PessimisticRegionResolve
++	if lr.testingKnobs.meetLock != nil {
++		lr.testingKnobs.meetLock(locks)
++	}
++	var msBeforeTxnExpired txnExpireTime
++	if len(locks) == 0 {
++		return ResolveLockResult{
++			TTL: msBeforeTxnExpired.value(),
++		}, nil
++	}
++	metrics.LockResolverCountWithResolve.Inc()
++	// This is the origin resolve lock time.
++	// TODO(you06): record the more details and calculate the total time by calculating the sum of details.
++	if detail != nil {
++		startTime := time.Now()
++		defer func() {
++			atomic.AddInt64(&detail.ResolveLockTime, int64(time.Since(startTime)))
++		}()
++	}
++
++	// TxnID -> []Region, record resolved Regions.
++	// TODO: Maybe put it in LockResolver and share by all txns.
++	cleanTxns := make(map[uint64]map[locate.RegionVerID]struct{})
++	pessimisticCleanTxns := make(map[uint64]map[locate.RegionVerID]struct{})
++	var resolve func(*Lock, bool) (TxnStatus, error)
++	resolve = func(l *Lock, forceSyncCommit bool) (TxnStatus, error) {
++		status, err := lr.getTxnStatusFromLock(bo, l, callerStartTS, forceSyncCommit, detail)
++
++		if _, ok := errors.Cause(err).(primaryMismatch); ok {
++			if l.LockType != kvrpcpb.Op_PessimisticLock {
++				logutil.BgLogger().Info("unexpected primaryMismatch error occurred on a non-pessimistic lock", zap.Stringer("lock", l), zap.Error(err))
++				return TxnStatus{}, err
++			}
++			// Pessimistic rollback the pessimistic lock as it points to an invalid primary.
++			status, err = TxnStatus{}, nil
++		} else if err != nil {
++			return TxnStatus{}, err
++		}
++		if status.ttl != 0 {
++			return status, nil
++		}
++
++		// If the lock is committed or rolled back, resolve lock.
++		// If the lock is regarded as an expired pessimistic lock, pessimistic rollback it.
++		metrics.LockResolverCountWithExpired.Inc()
++		cleanRegions, exists := cleanTxns[l.TxnID]
++		if !exists {
++			cleanRegions = make(map[locate.RegionVerID]struct{})
++			cleanTxns[l.TxnID] = cleanRegions
++		}
++		if status.primaryLock != nil && status.primaryLock.UseAsyncCommit && !forceSyncCommit {
++			// resolveAsyncCommitLock will resolve all locks of the transaction, so we needn't resolve
++			// it again if it has been resolved once.
++			if exists {
++				return status, nil
++			}
++			// status of async-commit transaction is determined by resolveAsyncCommitLock.
++			status, err = lr.resolveAsyncCommitLock(bo, l, status, forRead)
++			if _, ok := errors.Cause(err).(*nonAsyncCommitLock); ok {
++				status, err = resolve(l, true)
++			}
++			return status, err
++		}
++		if l.LockType == kvrpcpb.Op_PessimisticLock {
++			// pessimistic locks don't block read so it needn't be async.
++			if pessimisticRegionResolve {
++				pessimisticCleanRegions, exists := pessimisticCleanTxns[l.TxnID]
++				if !exists {
++					pessimisticCleanRegions = make(map[locate.RegionVerID]struct{})
++					pessimisticCleanTxns[l.TxnID] = pessimisticCleanRegions
++				}
++				err = lr.resolvePessimisticLock(bo, l, true, pessimisticCleanRegions)
++			} else {
++				err = lr.resolvePessimisticLock(bo, l, false, nil)
++			}
++		} else {
++			if forRead {
++				asyncCtx := context.WithValue(lr.asyncResolveCtx, util.RequestSourceKey, bo.GetCtx().Value(util.RequestSourceKey))
++				asyncBo := retry.NewBackoffer(asyncCtx, asyncResolveLockMaxBackoff)
++				go func() {
++					// Pass an empty cleanRegions here to avoid data race and
++					// let `reqCollapse` deduplicate identical resolve requests.
++					err := lr.resolveLock(asyncBo, l, status, lite, map[locate.RegionVerID]struct{}{})
++					if err != nil {
++						logutil.BgLogger().Info("failed to resolve lock asynchronously",
++							zap.String("lock", l.String()), zap.Uint64("commitTS", status.CommitTS()), zap.Error(err))
++					}
++				}()
++			} else {
++				err = lr.resolveLock(bo, l, status, lite, cleanRegions)
++			}
++		}
++		return status, err
++	}
++
++	var canIgnore, canAccess []uint64
++	for _, l := range locks {
++		status, err := resolve(l, false)
++		if err != nil {
++			msBeforeTxnExpired.update(0)
++			return ResolveLockResult{
++				TTL: msBeforeTxnExpired.value(),
++			}, err
++		}
++		if !forRead {
++			if status.ttl != 0 {
++				metrics.LockResolverCountWithNotExpired.Inc()
++				msBeforeLockExpired := lr.store.GetOracle().UntilExpired(l.TxnID, status.ttl, &oracle.Option{TxnScope: oracle.GlobalTxnScope})
++				msBeforeTxnExpired.update(msBeforeLockExpired)
++				continue
++			}
++		}
++		if status.action == kvrpcpb.Action_MinCommitTSPushed || status.IsRolledBack() ||
++			(status.IsCommitted() && status.CommitTS() > callerStartTS) {
++			if canIgnore == nil {
++				canIgnore = make([]uint64, 0, len(locks))
++			}
++			canIgnore = append(canIgnore, l.TxnID)
++		} else if status.IsCommitted() && status.CommitTS() <= callerStartTS {
++			if canAccess == nil {
++				canAccess = make([]uint64, 0, len(locks))
++			}
++			canAccess = append(canAccess, l.TxnID)
++		} else {
++			metrics.LockResolverCountWithNotExpired.Inc()
++			msBeforeLockExpired := lr.store.GetOracle().UntilExpired(l.TxnID, status.ttl, &oracle.Option{TxnScope: oracle.GlobalTxnScope})
++			msBeforeTxnExpired.update(msBeforeLockExpired)
++		}
++	}
++	if msBeforeTxnExpired.value() > 0 {
++		metrics.LockResolverCountWithWaitExpired.Inc()
++	}
++	return ResolveLockResult{
++		TTL:         msBeforeTxnExpired.value(),
++		IgnoreLocks: canIgnore,
++		AccessLocks: canAccess,
++	}, nil
+ }
+ 
+ // Resolving returns the locks' information we are resolving currently.
+@@ -511,7 +647,76 @@
+ }
+ 
+ func (lr *LockResolver) getTxnStatusFromLock(bo *retry.Backoffer, l *Lock, callerStartTS uint64, forceSyncCommit bool, detail *util.ResolveLockDetail) (TxnStatus, error) {
+-	panic("excised: getTxnStatusFromLock")
++	var currentTS uint64
++	var err error
++	var status TxnStatus
++
++	if l.TTL == 0 {
++		// NOTE: l.TTL = 0 is a special protocol!!!
++		// When the pessimistic txn prewrite meets locks of a txn, it should resolve the lock **unconditionally**.
++		// In this case, KVStore use lock TTL = 0 to notify SQLEngine, and SQLEngine should resolve the lock!
++		// Set currentTS to max uint64 to make the lock expired.
++		currentTS = math.MaxUint64
++	} else {
++		currentTS, err = lr.store.GetOracle().GetLowResolutionTimestamp(bo.GetCtx(), &oracle.Option{TxnScope: oracle.GlobalTxnScope})
++		if err != nil {
++			return TxnStatus{}, err
++		}
++	}
++
++	rollbackIfNotExist := false
++	if _, err := util.EvalFailpoint("getTxnStatusDelay"); err == nil {
++		time.Sleep(100 * time.Millisecond)
++	}
++	for {
++		status, err = lr.getTxnStatus(bo, l.TxnID, l.Primary, callerStartTS, currentTS, rollbackIfNotExist, forceSyncCommit, l)
++		if err == nil {
++			return status, nil
++		}
++		// If the error is something other than txnNotFoundErr, throw the error (network
++		// unavailable, kvstore down, backoff timeout etc) to the caller.
++		if _, ok := errors.Cause(err).(txnNotFoundErr); !ok {
++			return TxnStatus{}, err
++		}
++
++		if _, err := util.EvalFailpoint("txnNotFoundRetTTL"); err == nil {
++			return TxnStatus{ttl: l.TTL, action: kvrpcpb.Action_NoAction}, nil
++		}
++
++		if lr.store.GetOracle().UntilExpired(l.TxnID, l.TTL, &oracle.Option{TxnScope: oracle.GlobalTxnScope}) <= 0 {
++			logutil.Logger(bo.GetCtx()).Warn("lock txn not found, lock has expired",
++				zap.Uint64("CallerStartTs", callerStartTS),
++				zap.Stringer("lock str", l),
++				zap.Stringer("status", status))
++			if l.LockType == kvrpcpb.Op_PessimisticLock {
++				if _, err := util.EvalFailpoint("txnExpireRetTTL"); err == nil {
++					return TxnStatus{action: kvrpcpb.Action_LockNotExistDoNothing},
++						errors.New("error txn not found and lock expired")
++				}
++			}
++			// For pessimistic lock resolving, if the primary lock does not exist and rollbackIfNotExist is true,
++			// The Action_LockNotExistDoNothing will be returned as the status.
++			rollbackIfNotExist = true
++			continue
++		} else {
++			// For the Rollback statement from user, the pessimistic locks will be rollbacked and the primary key in store
++			// has no related information. There are possibilities that some other transactions do checkTxnStatus on these
++			// locks and they will be blocked ttl time, so let the transaction retries to do pessimistic lock if txn not found
++			// and the lock does not expire yet.
++			if l.LockType == kvrpcpb.Op_PessimisticLock {
++				return TxnStatus{ttl: l.TTL}, nil
++			}
++		}
++
++		// Handle txnNotFound error.
++		// getTxnStatus() returns it when the secondary locks exist while the primary lock doesn't.
++		// This is likely to happen in the concurrently prewrite when secondary regions
++		// success before the primary region.
++		if err := bo.Backoff(retry.BoTxnNotFound, err); err != nil {
++			logutil.Logger(bo.GetCtx()).Warn("getTxnStatusFromLock backoff fail", zap.Error(err))
++			return TxnStatus{}, err
++		}
++	}
+ }
+ 
+ type txnNotFoundErr struct {
+@@ -534,7 +739,103 @@
+ // When rollbackIfNotExist is false, the caller should be careful with the txnNotFoundErr error.
+ func (lr *LockResolver) getTxnStatus(bo *retry.Backoffer, txnID uint64, primary []byte,
+ 	callerStartTS, currentTS uint64, rollbackIfNotExist bool, forceSyncCommit bool, lockInfo *Lock) (TxnStatus, error) {
+-	panic("excised: getTxnStatus")
++	if s, ok := lr.getResolved(txnID); ok {
++		return s, nil
++	}
++
++	metrics.LockResolverCountWithQueryTxnStatus.Inc()
++
++	// CheckTxnStatus may meet the following cases:
++	// 1. LOCK
++	// 1.1 Lock expired -- orphan lock, fail to update TTL, crash recovery etc.
++	// 1.2 Lock TTL -- active transaction holding the lock.
++	// 2. NO LOCK
++	// 2.1 Txn Committed
++	// 2.2 Txn Rollbacked -- rollback itself, rollback by others, GC tomb etc.
++	// 2.3 No lock -- pessimistic lock rollback, concurrence prewrite.
++
++	var status TxnStatus
++	resolvingPessimisticLock := lockInfo != nil && lockInfo.LockType == kvrpcpb.Op_PessimisticLock
++	req := tikvrpc.NewRequest(tikvrpc.CmdCheckTxnStatus, &kvrpcpb.CheckTxnStatusRequest{
++		PrimaryKey:               primary,
++		LockTs:                   txnID,
++		CallerStartTs:            callerStartTS,
++		CurrentTs:                currentTS,
++		RollbackIfNotExist:       rollbackIfNotExist,
++		ForceSyncCommit:          forceSyncCommit,
++		ResolvingPessimisticLock: resolvingPessimisticLock,
++		VerifyIsPrimary:          true,
++	}, kvrpcpb.Context{
++		RequestSource: util.RequestSourceFromCtx(bo.GetCtx()),
++		ResourceControlContext: &kvrpcpb.ResourceControlContext{
++			ResourceGroupName: util.ResourceGroupNameFromCtx(bo.GetCtx()),
++		},
++	})
++	for {
++		loc, err := lr.store.GetRegionCache().LocateKey(bo, primary)
++		if err != nil {
++			return status, err
++		}
++		req.MaxExecutionDurationMs = uint64(client.MaxWriteExecutionTime.Milliseconds())
++		resp, err := lr.store.SendReq(bo, req, loc.Region, client.ReadTimeoutShort)
++		if err != nil {
++			return status, err
++		}
++		regionErr, err := resp.GetRegionError()
++		if err != nil {
++			return status, err
++		}
++		if regionErr != nil {
++			err = bo.Backoff(retry.BoRegionMiss, errors.New(regionErr.String()))
++			if err != nil {
++				return status, err
++			}
++			continue
++		}
++		if resp.Resp == nil {
++			return status, errors.WithStack(tikverr.ErrBodyMissing)
++		}
++		cmdResp := resp.Resp.(*kvrpcpb.CheckTxnStatusResponse)
++		if keyErr := cmdResp.GetError(); keyErr != nil {
++			txnNotFound := keyErr.GetTxnNotFound()
++			if txnNotFound != nil {
++				return status, txnNotFoundErr{txnNotFound}
++			}
++
++			if p := keyErr.GetPrimaryMismatch(); p != nil && resolvingPessimisticLock {
++				err = primaryMismatch{currentLock: p.GetLockInfo()}
++				logutil.BgLogger().Info("getTxnStatus was called on secondary lock", zap.Error(err))
++				return status, err
++			}
++
++			err = errors.Errorf("unexpected err: %s, tid: %v", keyErr, txnID)
++			logutil.BgLogger().Error("getTxnStatus error", zap.Error(err))
++			return status, err
++		}
++		status.action = cmdResp.Action
++		status.primaryLock = cmdResp.LockInfo
++
++		if status.primaryLock != nil && status.primaryLock.UseAsyncCommit && !forceSyncCommit {
++			if !lr.store.GetOracle().IsExpired(txnID, cmdResp.LockTtl, &oracle.Option{TxnScope: oracle.GlobalTxnScope}) {
++				status.ttl = cmdResp.LockTtl
++			}
++		} else if cmdResp.LockTtl != 0 {
++			status.ttl = cmdResp.LockTtl
++		} else {
++			if cmdResp.CommitVersion == 0 {
++				metrics.LockResolverCountWithQueryTxnStatusRolledBack.Inc()
++			} else {
++				metrics.LockResolverCountWithQueryTxnStatusCommitted.Inc()
++			}
++
++			status.commitTS = cmdResp.CommitVersion
++			if status.StatusCacheable() {
++				lr.saveResolved(txnID, status)
++			}
++		}
++
++		return status, nil
++	}
+ }
+ 
+ // asyncResolveData is data contributed by multiple goroutines when resolving locks using the async commit protocol. All
+@@ -612,17 +913,121 @@
+ }
+ 
+ func (lr *LockResolver) checkSecondaries(bo *retry.Backoffer, txnID uint64, curKeys [][]byte, curRegionID locate.RegionVerID, shared *asyncResolveData) error {
+-	panic("excised: checkSecondaries")
++	checkReq := &kvrpcpb.CheckSecondaryLocksRequest{
++		Keys:         curKeys,
++		StartVersion: txnID,
++	}
++	req := tikvrpc.NewRequest(tikvrpc.CmdCheckSecondaryLocks, checkReq, kvrpcpb.Context{
++		RequestSource: util.RequestSourceFromCtx(bo.GetCtx()),
++		ResourceControlContext: &kvrpcpb.ResourceControlContext{
++			ResourceGroupName: util.ResourceGroupNameFromCtx(bo.GetCtx()),
++		},
++	})
++	metrics.LockResolverCountWithQueryCheckSecondaryLocks.Inc()
++	req.MaxExecutionDurationMs = uint64(client.MaxWriteExecutionTime.Milliseconds())
++	resp, err := lr.store.SendReq(bo, req, curRegionID, client.ReadTimeoutShort)
++	if err != nil {
++		return err
++	}
++	regionErr, err := resp.GetRegionError()
++	if err != nil {
++		return err
++	}
++	if regionErr != nil {
++		err = bo.Backoff(retry.BoRegionMiss, errors.New(regionErr.String()))
++		if err != nil {
++			return err
++		}
++
++		logutil.BgLogger().Debug("checkSecondaries: region error, regrouping", zap.Uint64("txn id", txnID), zap.Uint64("region", curRegionID.GetID()))
++
++		// If regions have changed, then we might need to regroup the keys. Since this should be rare and for the sake
++		// of simplicity, we will resolve regions sequentially.
++		regions, _, err := lr.store.GetRegionCache().GroupKeysByRegion(bo, curKeys, nil)
++		if err != nil {
++			return err
++		}
++		for regionID, keys := range regions {
++			// Recursion will terminate because the resolve request succeeds or the Backoffer reaches its limit.
++			if err = lr.checkSecondaries(bo, txnID, keys, regionID, shared); err != nil {
++				return err
++			}
++		}
++		return nil
++	}
++	if resp.Resp == nil {
++		return errors.WithStack(tikverr.ErrBodyMissing)
++	}
++
++	checkResp := resp.Resp.(*kvrpcpb.CheckSecondaryLocksResponse)
++	return shared.addKeys(checkResp.Locks, len(curKeys), txnID, checkResp.CommitTs)
+ }
+ 
+ // resolveAsyncResolveData resolves all locks in an async-commit transaction according to the status.
+ func (lr *LockResolver) resolveAsyncResolveData(bo *retry.Backoffer, l *Lock, status TxnStatus, data *asyncResolveData) error {
+-	panic("excised: resolveAsyncResolveData")
++	util.EvalFailpoint("resolveAsyncResolveData")
++
++	keysByRegion, _, err := lr.store.GetRegionCache().GroupKeysByRegion(bo, data.keys, nil)
++	if err != nil {
++		return err
++	}
++	errChan := make(chan error, len(keysByRegion))
++	// Resolve every lock in the transaction.
++	for region, locks := range keysByRegion {
++		curLocks := locks
++		curRegion := region
++		resolveBo, cancel := bo.Fork()
++		defer cancel()
++
++		go func() {
++			errChan <- lr.resolveRegionLocks(resolveBo, l, curRegion, curLocks, status)
++		}()
++	}
++
++	var errs []string
++	for range keysByRegion {
++		err1 := <-errChan
++		if err1 != nil {
++			errs = append(errs, err1.Error())
++		}
++	}
++
++	if len(errs) > 0 {
++		return errors.Errorf("async commit recovery (sending ResolveLock) finished with errors: %v", errs)
++	}
++
++	return nil
+ }
+ 
+ // resolveLockAsync resolves l assuming it was locked using the async commit protocol.
+ func (lr *LockResolver) resolveAsyncCommitLock(bo *retry.Backoffer, l *Lock, status TxnStatus, asyncResolveAll bool) (TxnStatus, error) {
+-	panic("excised: resolveAsyncCommitLock")
++	metrics.LockResolverCountWithResolveAsync.Inc()
++
++	resolveData, err := lr.checkAllSecondaries(bo, l, &status)
++	if err != nil {
++		return TxnStatus{}, err
++	}
++	resolveData.keys = append(resolveData.keys, l.Primary)
++
++	status.commitTS = resolveData.commitTs
++	if status.StatusCacheable() {
++		lr.saveResolved(l.TxnID, status)
++	}
++
++	logutil.BgLogger().Info("resolve async commit", zap.Uint64("startTS", l.TxnID), zap.Uint64("commitTS", status.commitTS))
++	if asyncResolveAll {
++		asyncBo := retry.NewBackoffer(lr.asyncResolveCtx, asyncResolveLockMaxBackoff)
++		go func() {
++			err := lr.resolveAsyncResolveData(asyncBo, l, status, resolveData)
++			if err != nil {
++				logutil.BgLogger().Info("failed to resolve async-commit locks asynchronously",
++					zap.Uint64("startTS", l.TxnID), zap.Uint64("commitTS", status.CommitTS()), zap.Error(err))
++			}
++		}()
++	} else {
++		err = lr.resolveAsyncResolveData(bo, l, status, resolveData)
++	}
++	return status, err
+ }
+ 
+ // checkAllSecondaries checks the secondary locks of an async commit transaction to find out the final
+@@ -664,11 +1069,129 @@
+ 
+ // resolveRegionLocks is essentially the same as resolveLock, but we resolve all keys in the same region at the same time.
+ func (lr *LockResolver) resolveRegionLocks(bo *retry.Backoffer, l *Lock, region locate.RegionVerID, keys [][]byte, status TxnStatus) error {
+-	panic("excised: resolveRegionLocks")
++	lreq := &kvrpcpb.ResolveLockRequest{
++		StartVersion: l.TxnID,
++	}
++	if status.IsCommitted() {
++		lreq.CommitVersion = status.CommitTS()
++	}
++	lreq.Keys = keys
++	req := tikvrpc.NewRequest(tikvrpc.CmdResolveLock, lreq, kvrpcpb.Context{
++		ResourceControlContext: &kvrpcpb.ResourceControlContext{
++			ResourceGroupName: util.ResourceGroupNameFromCtx(bo.GetCtx()),
++		},
++	})
++	req.MaxExecutionDurationMs = uint64(client.MaxWriteExecutionTime.Milliseconds())
++	resp, err := lr.store.SendReq(bo, req, region, client.ReadTimeoutShort)
++	if err != nil {
++		return err
++	}
++
++	regionErr, err := resp.GetRegionError()
++	if err != nil {
++		return err
++	}
++	if regionErr != nil {
++		err := bo.Backoff(retry.BoRegionMiss, errors.New(regionErr.String()))
++		if err != nil {
++			return err
++		}
++
++		logutil.BgLogger().Info("resolveRegionLocks region error, regrouping", zap.String("lock", l.String()), zap.Uint64("region", region.GetID()))
++
++		// Regroup locks.
++		regions, _, err := lr.store.GetRegionCache().GroupKeysByRegion(bo, keys, nil)
++		if err != nil {
++			return err
++		}
++		for regionID, keys := range regions {
++			// Recursion will terminate because the resolve request succeeds or the Backoffer reaches its limit.
++			if err = lr.resolveRegionLocks(bo, l, regionID, keys, status); err != nil {
++				return err
++			}
++		}
++		return nil
++	}
++	if resp.Resp == nil {
++		return errors.WithStack(tikverr.ErrBodyMissing)
++	}
++	cmdResp := resp.Resp.(*kvrpcpb.ResolveLockResponse)
++	if keyErr := cmdResp.GetError(); keyErr != nil {
++		err = errors.Errorf("unexpected resolve err: %s, lock: %v", keyErr, l)
++		logutil.BgLogger().Error("resolveLock error", zap.Error(err))
++	}
++
++	return nil
+ }
+ 
+ func (lr *LockResolver) resolveLock(bo *retry.Backoffer, l *Lock, status TxnStatus, lite bool, cleanRegions map[locate.RegionVerID]struct{}) error {
+-	panic("excised: resolveLock")
++	util.EvalFailpoint("resolveLock")
++
++	metrics.LockResolverCountWithResolveLocks.Inc()
++	resolveLite := lite || l.TxnSize < lr.resolveLockLiteThreshold
++	// The lock has been resolved by getTxnStatusFromLock.
++	if resolveLite && bytes.Equal(l.Key, l.Primary) {
++		return nil
++	}
++	for {
++		loc, err := lr.store.GetRegionCache().LocateKey(bo, l.Key)
++		if err != nil {
++			return err
++		}
++		if _, ok := cleanRegions[loc.Region]; ok {
++			return nil
++		}
++		lreq := &kvrpcpb.ResolveLockRequest{
++			StartVersion: l.TxnID,
++		}
++		if status.IsCommitted() {
++			lreq.CommitVersion = status.CommitTS()
++		} else {
++			logutil.BgLogger().Info("resolveLock rollback", zap.String("lock", l.String()))
++		}
++
++		if resolveLite {
++			// Only resolve specified keys when it is a small transaction,
++			// prevent from scanning the whole region in this case.
++			metrics.LockResolverCountWithResolveLockLite.Inc()
++			lreq.Keys = [][]byte{l.Key}
++		}
++		req := tikvrpc.NewRequest(tikvrpc.CmdResolveLock, lreq, kvrpcpb.Context{
++			ResourceControlContext: &kvrpcpb.ResourceControlContext{
++				ResourceGroupName: util.ResourceGroupNameFromCtx(bo.GetCtx()),
++			},
++		})
++		req.MaxExecutionDurationMs = uint64(client.MaxWriteExecutionTime.Milliseconds())
++		req.RequestSource = util.RequestSourceFromCtx(bo.GetCtx())
++		resp, err := lr.store.SendReq(bo, req, loc.Region, client.ReadTimeoutShort)
++		if err != nil {
++			return err
++		}
++		regionErr, err := resp.GetRegionError()
++		if err != nil {
++			return err
++		}
++		if regionErr != nil {
++			err = bo.Backoff(retry.BoRegionMiss, errors.New(regionErr.String()))
++			if err != nil {
++				return err
++			}
++			continue
++		}
++		if resp.Resp == nil {
++			return errors.WithStack(tikverr.ErrBodyMissing)
++		}
++		cmdResp := resp.Resp.(*kvrpcpb.ResolveLockResponse)
++		if keyErr := cmdResp.GetError(); keyErr != nil {
++			err = errors.Errorf("unexpected resolve err: %s, lock: %v", keyErr, l)
++			logutil.BgLogger().Error("resolveLock error", zap.Error(err))
++			return err
++		}
++		if !resolveLite {
++			cleanRegions[loc.Region] = struct{}{}
++		}
++		return nil
++	}
+ }
+ 
+ // resolvePessimisticLock handles pessimistic locks after checking txn status.
+@@ -677,6 +1200,66 @@
+ // region will be scanned, and all relevant pessimistic locks that are read will be rolled back at the same time,
+ // similar to the `resolveLock` function.
+ func (lr *LockResolver) resolvePessimisticLock(bo *retry.Backoffer, l *Lock, pessimisticRegionResolve bool, pessimisticCleanRegions map[locate.RegionVerID]struct{}) error {
+-	panic("excised: resolvePessimisticLock")
+-}
+-
++	metrics.LockResolverCountWithResolveLocks.Inc()
++	// The lock has been resolved by getTxnStatusFromLock.
++	if bytes.Equal(l.Key, l.Primary) {
++		return nil
++	}
++	for {
++		loc, err := lr.store.GetRegionCache().LocateKey(bo, l.Key)
++		if err != nil {
++			return err
++		}
++		if pessimisticRegionResolve && pessimisticCleanRegions != nil {
++			if _, ok := pessimisticCleanRegions[loc.Region]; ok {
++				return nil
++			}
++		}
++		forUpdateTS := l.LockForUpdateTS
++		if forUpdateTS == 0 {
++			forUpdateTS = math.MaxUint64
++		}
++		pessimisticRollbackReq := &kvrpcpb.PessimisticRollbackRequest{
++			StartVersion: l.TxnID,
++			ForUpdateTs:  forUpdateTS,
++		}
++		if !pessimisticRegionResolve {
++			pessimisticRollbackReq.Keys = [][]byte{l.Key}
++		}
++		req := tikvrpc.NewRequest(tikvrpc.CmdPessimisticRollback, pessimisticRollbackReq, kvrpcpb.Context{
++			ResourceControlContext: &kvrpcpb.ResourceControlContext{
++				ResourceGroupName: util.ResourceGroupNameFromCtx(bo.GetCtx()),
++			},
++		})
++		req.MaxExecutionDurationMs = uint64(client.MaxWriteExecutionTime.Milliseconds())
++		resp, err := lr.store.SendReq(bo, req, loc.Region, client.ReadTimeoutShort)
++		if err != nil {
++			return err
++		}
++		regionErr, err := resp.GetRegionError()
++		if err != nil {
++			return err
++		}
++		if regionErr != nil {
++			err = bo.Backoff(retry.BoRegionMiss, errors.New(regionErr.String()))
++			if err != nil {
++				return err
++			}
++			continue
++		}
++		if resp.Resp == nil {
++			return errors.WithStack(tikverr.ErrBodyMissing)
++		}
++		cmdResp := resp.Resp.(*kvrpcpb.PessimisticRollbackResponse)
++		if keyErr := cmdResp.GetErrors(); len(keyErr) > 0 {
++			err = errors.Errorf("unexpected resolve pessimistic lock err: %s, lock: %v", keyErr[0], l)
++			logutil.Logger(bo.GetCtx()).Error("resolveLock error", zap.Error(err))
++			return err
++		}
++		if pessimisticRegionResolve && pessimisticCleanRegions != nil {
++			pessimisticCleanRegions[loc.Region] = struct{}{}
++		}
++		return nil
++	}
++}
++
+--- a/txnkv/txnlock/lock.go
++++ b/txnkv/txnlock/lock.go
+@@ -21,6 +21,9 @@
+ 
+ // ExtractLockFromKeyErr extracts the KeyError.
+ func ExtractLockFromKeyErr(keyErr *kvrpcpb.KeyError) (*Lock, error) {
+-	panic("excised: ExtractLockFromKeyErr")
++	if locked := keyErr.GetLocked(); locked != nil {
++		return NewLock(locked), nil
++	}
++	return nil, tikverr.ExtractKeyErr(keyErr)
+ }
+ 

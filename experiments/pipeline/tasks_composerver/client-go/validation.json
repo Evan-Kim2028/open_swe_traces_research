@@ -1,0 +1,103 @@
+{
+  "ok": true,
+  "families": {
+    "memdbstaging": {
+      "ok": true,
+      "gold_first_pass": true,
+      "suite_fixes": 0,
+      "n_properties": 8,
+      "coverage_pct": 72.7,
+      "wall_min": 0.09126805726676442,
+      "rejected_rule": null
+    },
+    "connarray": {
+      "ok": true,
+      "gold_first_pass": true,
+      "suite_fixes": 0,
+      "n_properties": 5,
+      "coverage_pct": 100.0,
+      "wall_min": 0.27554449791665925,
+      "rejected_rule": null
+    },
+    "pdoracle": {
+      "ok": true,
+      "gold_first_pass": true,
+      "suite_fixes": 0,
+      "n_properties": 6,
+      "coverage_pct": 100.0,
+      "wall_min": 0.3216742146668063,
+      "rejected_rule": null
+    },
+    "rangetask": {
+      "ok": true,
+      "gold_first_pass": true,
+      "suite_fixes": 0,
+      "n_properties": 4,
+      "coverage_pct": 100.0,
+      "wall_min": 0.2986743054832914,
+      "rejected_rule": null
+    },
+    "regionstoresorted": {
+      "ok": true,
+      "gold_first_pass": true,
+      "suite_fixes": 0,
+      "n_properties": 7,
+      "coverage_pct": 100.0,
+      "wall_min": 0.20707675886660581,
+      "rejected_rule": null
+    },
+    "onregionerror": {
+      "ok": true,
+      "gold_first_pass": true,
+      "suite_fixes": 0,
+      "n_properties": 4,
+      "coverage_pct": 100.0,
+      "wall_min": 1.1172878554166041,
+      "rejected_rule": null
+    },
+    "replicaselector": {
+      "ok": true,
+      "gold_first_pass": true,
+      "suite_fixes": 0,
+      "n_properties": 4,
+      "coverage_pct": 100.0,
+      "wall_min": 0.7747849921002247,
+      "rejected_rule": null
+    },
+    "lockresolver": {
+      "ok": true,
+      "gold_first_pass": true,
+      "suite_fixes": 0,
+      "n_properties": 6,
+      "coverage_pct": 100.0,
+      "wall_min": 0.8249574700498973,
+      "rejected_rule": null
+    },
+    "doactionbatches": {
+      "ok": true,
+      "gold_first_pass": true,
+      "suite_fixes": 0,
+      "n_properties": 5,
+      "coverage_pct": 100.0,
+      "wall_min": 0.30103824695009584,
+      "rejected_rule": null
+    },
+    "pessimisticlock": {
+      "ok": true,
+      "gold_first_pass": true,
+      "suite_fixes": 0,
+      "n_properties": 6,
+      "coverage_pct": 60.0,
+      "wall_min": 1.0566597031499745,
+      "rejected_rule": null
+    }
+  },
+  "harness": {
+    "ok": true,
+    "image": "ladder-base:client-go-obf",
+    "go_on_path": true,
+    "go_out": "/usr/local/go/bin/go\ngo version go1.23.12 linux/amd64\n",
+    "false_exit": 1,
+    "true_exit": 0
+  }
+}

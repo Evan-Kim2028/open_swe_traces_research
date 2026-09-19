@@ -1,0 +1,66 @@
+[
+  {
+    "unit": "delete-range",
+    "score": 9.0,
+    "entry": "DeleteRange",
+    "closure": [
+      "DeleteRange",
+      "getColumnFamily",
+      "getRawKVOptions",
+      "sendDeleteRangeReq"
+    ],
+    "tests": [
+      "TestDeleteRange"
+    ]
+  },
+  {
+    "unit": "batch-delete",
+    "score": 9.0,
+    "entry": "BatchDelete",
+    "closure": [
+      "BatchDelete",
+      "doBatchReq",
+      "getColumnFamily",
+      "getRawKVOptions",
+      "sendBatchReq"
+    ],
+    "tests": [
+      "TestBatch"
+    ]
+  },
+  {
+    "unit": "decode",
+    "score": 2.0,
+    "entry": "Decode",
+    "closure": [
+      "Decode",
+      "Next",
+      "ReadNumber",
+      "ReadSlice",
+      "UnmarshalBinary",
+      "Valid",
+      "mvccDecode"
+    ],
+    "tests": [
+      "TestMarshalmvccLock",
+      "TestMarshalmvccValue"
+    ]
+  },
+  {
+    "unit": "next",
+    "score": 2.0,
+    "entry": "Next",
+    "closure": [
+      "Key",
+      "Next",
+      "Value",
+      "dirtyNext",
+      "getValue",
+      "snapshotNext",
+      "updateCur"
+    ],
+    "tests": [
+      "TestErrorIterator"
+    ]
+  }
+]

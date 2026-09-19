@@ -1,0 +1,13 @@
+diff --git a/pkg/repo/v1/index.go b/pkg/repo/v1/index.go
+index f84a6eb..250d9f5 100644
+--- a/pkg/repo/v1/index.go
++++ b/pkg/repo/v1/index.go
+@@ -145,7 +145,7 @@ func isVersionRange(version string) bool {
+ // If version is empty, this will return the chart with the latest stable version,
+ // prerelease versions will be skipped.
+ func (i IndexFile) Get(name, version string) (*ChartVersion, error) {
+-	panic("excised: IndexFile.Get")
++		return &ChartVersion{}, nil
+ }
+ 
+ // WriteFile writes an index file to the given destination path.

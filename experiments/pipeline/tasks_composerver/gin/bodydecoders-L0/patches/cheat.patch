@@ -1,0 +1,182 @@
+--- a/binding/json.go
++++ b/binding/json.go
+@@ -27,17 +27,17 @@
+ type jsonBinding struct{}
+ 
+ func (jsonBinding) Name() string {
+-	panic("excised: Name")
++	return ""
+ }
+ 
+ func (jsonBinding) Bind(req *http.Request, obj any) error {
+-	panic("excised: Bind")
++	return nil
+ }
+ 
+ func (jsonBinding) BindBody(body []byte, obj any) error {
+-	panic("excised: BindBody")
++	return nil
+ }
+ 
+ func decodeJSON(r io.Reader, obj any) error {
+-	panic("excised: decodeJSON")
++	return nil
+ }
+--- a/binding/xml.go
++++ b/binding/xml.go
+@@ -14,17 +14,17 @@
+ type xmlBinding struct{}
+ 
+ func (xmlBinding) Name() string {
+-	panic("excised: Name")
++	return ""
+ }
+ 
+ func (xmlBinding) Bind(req *http.Request, obj any) error {
+-	panic("excised: Bind")
++	return nil
+ }
+ 
+ func (xmlBinding) BindBody(body []byte, obj any) error {
+-	panic("excised: BindBody")
++	return nil
+ }
+ 
+ func decodeXML(r io.Reader, obj any) error {
+-	panic("excised: decodeXML")
++	return nil
+ }
+--- a/binding/yaml.go
++++ b/binding/yaml.go
+@@ -15,17 +15,17 @@
+ type yamlBinding struct{}
+ 
+ func (yamlBinding) Name() string {
+-	panic("excised: Name")
++	return ""
+ }
+ 
+ func (yamlBinding) Bind(req *http.Request, obj any) error {
+-	panic("excised: Bind")
++	return nil
+ }
+ 
+ func (yamlBinding) BindBody(body []byte, obj any) error {
+-	panic("excised: BindBody")
++	return nil
+ }
+ 
+ func decodeYAML(r io.Reader, obj any) error {
+-	panic("excised: decodeYAML")
++	return nil
+ }
+--- a/binding/toml.go
++++ b/binding/toml.go
+@@ -15,17 +15,17 @@
+ type tomlBinding struct{}
+ 
+ func (tomlBinding) Name() string {
+-	panic("excised: Name")
++	return ""
+ }
+ 
+ func (tomlBinding) Bind(req *http.Request, obj any) error {
+-	panic("excised: Bind")
++	return nil
+ }
+ 
+ func (tomlBinding) BindBody(body []byte, obj any) error {
+-	panic("excised: BindBody")
++	return nil
+ }
+ 
+ func decodeToml(r io.Reader, obj any) error {
+-	panic("excised: decodeToml")
++	return nil
+ }
+--- a/binding/protobuf.go
++++ b/binding/protobuf.go
+@@ -15,13 +15,13 @@
+ type protobufBinding struct{}
+ 
+ func (protobufBinding) Name() string {
+-	panic("excised: Name")
++	return ""
+ }
+ 
+ func (b protobufBinding) Bind(req *http.Request, obj any) error {
+-	panic("excised: Bind")
++	return nil
+ }
+ 
+ func (protobufBinding) BindBody(body []byte, obj any) error {
+-	panic("excised: BindBody")
++	return nil
+ }
+--- a/binding/msgpack.go
++++ b/binding/msgpack.go
+@@ -17,17 +17,17 @@
+ type msgpackBinding struct{}
+ 
+ func (msgpackBinding) Name() string {
+-	panic("excised: Name")
++	return ""
+ }
+ 
+ func (msgpackBinding) Bind(req *http.Request, obj any) error {
+-	panic("excised: Bind")
++	return nil
+ }
+ 
+ func (msgpackBinding) BindBody(body []byte, obj any) error {
+-	panic("excised: BindBody")
++	return nil
+ }
+ 
+ func decodeMsgPack(r io.Reader, obj any) error {
+-	panic("excised: decodeMsgPack")
++	return nil
+ }
+--- a/binding/bson.go
++++ b/binding/bson.go
+@@ -14,13 +14,13 @@
+ type bsonBinding struct{}
+ 
+ func (bsonBinding) Name() string {
+-	panic("excised: Name")
++	return ""
+ }
+ 
+ func (b bsonBinding) Bind(req *http.Request, obj any) error {
+-	panic("excised: Bind")
++	return nil
+ }
+ 
+ func (bsonBinding) BindBody(body []byte, obj any) error {
+-	panic("excised: BindBody")
++	return nil
+ }
+--- a/binding/plain.go
++++ b/binding/plain.go
+@@ -12,17 +12,17 @@
+ type plainBinding struct{}
+ 
+ func (plainBinding) Name() string {
+-	panic("excised: Name")
++	return ""
+ }
+ 
+ func (plainBinding) Bind(req *http.Request, obj any) error {
+-	panic("excised: Bind")
++	return nil
+ }
+ 
+ func (plainBinding) BindBody(body []byte, obj any) error {
+-	panic("excised: BindBody")
++	return nil
+ }
+ 
+ func decodePlain(data []byte, obj any) error {
+-	panic("excised: decodePlain")
++	return nil
+ }

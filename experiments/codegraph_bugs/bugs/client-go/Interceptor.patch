@@ -1,0 +1,139 @@
+diff --git a/tikvrpc/interceptor/interceptor.go b/tikvrpc/interceptor/interceptor.go
+--- a/tikvrpc/interceptor/interceptor.go
++++ b/tikvrpc/interceptor/interceptor.go
+@@ -159,19 +159,6 @@
+ // If multiple interceptors with the same name is added to the chain,
+ // only the last is kept.
+ func (c *RPCInterceptorChain) Link(it RPCInterceptor) *RPCInterceptorChain {
+-	if chain, ok := it.(*RPCInterceptorChain); ok {
+-		for _, i := range chain.chain {
+-			c.Link(i)
+-		}
+-		return c
+-	}
+-	for i := range c.chain {
+-		if c.chain[i].Name() == it.Name() {
+-			c.chain = append(c.chain[:i], c.chain[i+1:]...)
+-			break
+-		}
+-	}
+-	c.chain = append(c.chain, it)
+ 	return c
+ }
+ 
+@@ -180,9 +167,6 @@
+ }
+ 
+ func (c *RPCInterceptorChain) Wrap(next RPCInterceptorFunc) RPCInterceptorFunc {
+-	for n := len(c.chain) - 1; n >= 0; n-- {
+-		next = c.chain[n].Wrap(next)
+-	}
+ 	return next
+ }
+ 
+diff --git a/internal/client/client_interceptor.go b/internal/client/client_interceptor.go
+--- a/internal/client/client_interceptor.go
++++ b/internal/client/client_interceptor.go
+@@ -19,10 +19,8 @@
+ 	"sync/atomic"
+ 	"time"
+ 
+-	"github.com/tikv/client-go/v2/internal/resourcecontrol"
+ 	"github.com/tikv/client-go/v2/tikvrpc"
+ 	"github.com/tikv/client-go/v2/tikvrpc/interceptor"
+-	"github.com/tikv/client-go/v2/util"
+ 	resourceControlClient "github.com/tikv/pd/client/resource_group/controller"
+ )
+ 
+@@ -42,21 +40,6 @@
+ }
+ 
+ func (r interceptedClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.Request, timeout time.Duration) (*tikvrpc.Response, error) {
+-	// Build the resource control interceptor.
+-	var finalInterceptor interceptor.RPCInterceptor = buildResourceControlInterceptor(ctx, req)
+-	// Chain the interceptors if there are multiple interceptors.
+-	if it := interceptor.GetRPCInterceptorFromCtx(ctx); it != nil {
+-		if finalInterceptor != nil {
+-			finalInterceptor = interceptor.ChainRPCInterceptors(finalInterceptor, it)
+-		} else {
+-			finalInterceptor = it
+-		}
+-	}
+-	if finalInterceptor != nil {
+-		return finalInterceptor.Wrap(func(target string, req *tikvrpc.Request) (*tikvrpc.Response, error) {
+-			return r.Client.SendRequest(ctx, target, req, timeout)
+-		})(addr, req)
+-	}
+ 	return r.Client.SendRequest(ctx, addr, req, timeout)
+ }
+ 
+@@ -73,68 +56,5 @@
+ 	ctx context.Context,
+ 	req *tikvrpc.Request,
+ ) interceptor.RPCInterceptor {
+-	if !ResourceControlSwitch.Load().(bool) {
+-		return nil
+-	}
+-	resourceGroupName := req.GetResourceControlContext().GetResourceGroupName()
+-	// When the group name is empty, we don't need to perform the resource control.
+-	if len(resourceGroupName) == 0 {
+-		return nil
+-	}
+-
+-	rcInterceptor := ResourceControlInterceptor.Load()
+-	// No resource group interceptor is set.
+-	if rcInterceptor == nil {
+-		return nil
+-	}
+-	resourceControlInterceptor := *rcInterceptor
+-
+-	ruDetails := ctx.Value(util.RUDetailsCtxKey)
+-
+-	// Make the request info.
+-	reqInfo := resourcecontrol.MakeRequestInfo(req)
+-	// Build the interceptor.
+-	interceptFn := func(next interceptor.RPCInterceptorFunc) interceptor.RPCInterceptorFunc {
+-		return func(target string, req *tikvrpc.Request) (*tikvrpc.Response, error) {
+-			// bypass some internal requests and it's may influence user experience. For example, the
+-			// request of `alter user password`, totally bypasses the resource control. it's not cost
+-			// many resources, but it's may influence the user experience.
+-			// If the resource group has background jobs, we should not record consumption and wait for it.
+-			// Background jobs will record and report in tikv side.
+-			if reqInfo.Bypass() || resourceControlInterceptor.IsBackgroundRequest(ctx, resourceGroupName, req.RequestSource) {
+-				return next(target, req)
+-			}
+-
+-			consumption, penalty, waitDuration, priority, err := resourceControlInterceptor.OnRequestWait(ctx, resourceGroupName, reqInfo)
+-			if err != nil {
+-				return nil, err
+-			}
+-			req.GetResourceControlContext().Penalty = penalty
+-			// override request priority with resource group priority if it's not set.
+-			// Get the priority at tikv side has some performance issue, so we pass it
+-			// at client side. See: https://github.com/tikv/tikv/issues/15994 for more details.
+-			if req.GetResourceControlContext().OverridePriority == 0 {
+-				req.GetResourceControlContext().OverridePriority = uint64(priority)
+-			}
+-			if ruDetails != nil {
+-				detail := ruDetails.(*util.RUDetails)
+-				detail.Update(consumption, waitDuration)
+-			}
+-
+-			resp, err := next(target, req)
+-			if resp != nil {
+-				respInfo := resourcecontrol.MakeResponseInfo(resp)
+-				consumption, err = resourceControlInterceptor.OnResponse(resourceGroupName, reqInfo, respInfo)
+-				if err != nil {
+-					return nil, err
+-				}
+-				if ruDetails != nil {
+-					detail := ruDetails.(*util.RUDetails)
+-					detail.Update(consumption, time.Duration(0))
+-				}
+-			}
+-			return resp, err
+-		}
+-	}
+-	return interceptor.NewRPCInterceptor("resource_control", interceptFn)
++	return nil
+ }

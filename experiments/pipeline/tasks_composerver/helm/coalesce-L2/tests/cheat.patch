@@ -1,0 +1,13 @@
+diff --git a/pkg/chart/common/util/coalesce.go b/pkg/chart/common/util/coalesce.go
+index 6817add..1f7f014 100644
+--- a/pkg/chart/common/util/coalesce.go
++++ b/pkg/chart/common/util/coalesce.go
+@@ -43,7 +43,7 @@ func concatPrefix(a, b string) string {
+ //   - A chart has access to all of the variables for it, as well as all of
+ //     the values destined for its dependencies.
+ func CoalesceValues(chrt chart.Charter, vals map[string]any) (common.Values, error) {
+-	panic("excised: CoalesceValues")
++		return common.Values(vals), nil
+ }
+ 
+ // MergeValues is used to merge the values in a chart and its subcharts. This

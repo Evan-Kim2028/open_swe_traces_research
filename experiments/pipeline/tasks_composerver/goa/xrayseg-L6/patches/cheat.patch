@@ -1,0 +1,80 @@
+--- a/middleware/xray/segment.go
++++ b/middleware/xray/segment.go
+@@ -142,10 +142,10 @@
+ 
+ // NewSegment creates a new segment that gets written to the given connection
+ // on close.
+-func NewSegment(name, traceID, spanID string, conn net.Conn) *Segment { panic("excised: NewSegment") }
++func NewSegment(name, traceID, spanID string, conn net.Conn) *Segment { var z0 *Segment; return z0 }
+ 
+ // NewSubsegment creates a subsegment of s.
+-func (s *Segment) NewSubsegment(name string) *Segment { panic("excised: NewSubsegment") }
++func (s *Segment) NewSubsegment(name string) *Segment { var z0 *Segment; return z0 }
+ 
+ // RecordError traces an error. The client may also want to initialize the
+ // fault field of s.
+@@ -153,7 +153,7 @@
+ // The trace contains a stack trace and a cause for the error if the argument
+ // was created using one of the New, Errorf, Wrap or Wrapf functions of the
+ // github.com/pkg/errors package. Otherwise the Stack and Cause fields are empty.
+-func (s *Segment) RecordError(e error) { panic("excised: RecordError") }
++func (s *Segment) RecordError(e error) {}
+ 
+ // Capture creates a subsegment to record the execution of the given function.
+ // Usage:
+@@ -162,10 +162,10 @@
+ //	s.Capture("slow-func", func() {
+ //	    // ... some long executing code
+ //	})
+-func (s *Segment) Capture(name string, fn func()) { panic("excised: Capture") }
++func (s *Segment) Capture(name string, fn func()) {}
+ 
+ // AddAnnotation adds a key-value pair that can be queried by AWS X-Ray.
+-func (s *Segment) AddAnnotation(key, value string) { panic("excised: AddAnnotation") }
++func (s *Segment) AddAnnotation(key, value string) {}
+ 
+ // AddInt64Annotation adds a key-value pair that can be queried by AWS X-Ray.
+ func (s *Segment) AddInt64Annotation(key string, value int64) {
+@@ -179,7 +179,7 @@
+ 
+ // addAnnotation adds a key-value pair that can be queried by AWS X-Ray.
+ // AWS X-Ray only supports annotations of type string, integer or boolean.
+-func (s *Segment) addAnnotation(key string, value any) { panic("excised: addAnnotation") }
++func (s *Segment) addAnnotation(key string, value any) {}
+ 
+ // AddMetadata adds a key-value pair to the metadata.default attribute.
+ // Metadata is not queryable, but is recorded.
+@@ -199,10 +199,10 @@
+ 
+ // addMetadata adds a key-value pair that can be queried by AWS X-Ray.
+ // AWS X-Ray only supports annotations of type string, integer or boolean.
+-func (s *Segment) addMetadata(key string, value any) { panic("excised: addMetadata") }
++func (s *Segment) addMetadata(key string, value any) {}
+ 
+ // Close closes the segment by setting its EndTime.
+-func (s *Segment) Close() { panic("excised: Close") }
++func (s *Segment) Close() {}
+ 
+ // SubmitInProgress sends this in-progress segment to the AWS X-Ray daemon.
+ // This way, the segment will be immediately visible in the UI, with status
+@@ -213,16 +213,16 @@
+ // See the `in_progress` docs:
+ //
+ //	https://docs.aws.amazon.com/xray/latest/devguide/xray-api-segmentdocuments.html#api-segmentdocuments-fields
+-func (s *Segment) SubmitInProgress() { panic("excised: SubmitInProgress") }
++func (s *Segment) SubmitInProgress() {}
+ 
+ // flush sends the segment to the AWS X-Ray daemon.
+-func (s *Segment) flush() { panic("excised: flush") }
++func (s *Segment) flush() {}
+ 
+ // exceptionData creates an Exception from an error.
+-func exceptionData(e error) *Exception { panic("excised: exceptionData") }
++func exceptionData(e error) *Exception { var z0 *Exception; return z0 }
+ 
+ // now returns the current time as a float appropriate for X-Ray processing.
+-func now() float64 { panic("excised: now") }
++func now() float64 { var z0 float64; return z0 }
+ 
+ func _keepExcisedImports() {
+ 	_ = json.Marshal

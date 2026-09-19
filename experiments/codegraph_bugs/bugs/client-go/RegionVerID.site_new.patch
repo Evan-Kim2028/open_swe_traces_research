@@ -1,0 +1,12 @@
+diff --git a/internal/locate/region_cache.go b/internal/locate/region_cache.go
+--- a/internal/locate/region_cache.go
++++ b/internal/locate/region_cache.go
+@@ -2421,7 +2421,7 @@
+ 
+ // NewRegionVerID creates a region ver id, which used for invalidating regions.
+ func NewRegionVerID(id, confVer, ver uint64) RegionVerID {
+-	return RegionVerID{id, ver, confVer}
++	return RegionVerID{id, confVer, ver}
+ }
+ 
+ // GetID returns the id of the region

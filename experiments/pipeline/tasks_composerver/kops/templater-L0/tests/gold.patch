@@ -1,0 +1,161 @@
+diff --git a/pkg/util/templater/templater.go b/pkg/util/templater/templater.go
+--- a/pkg/util/templater/templater.go
++++ b/pkg/util/templater/templater.go
+@@ -17,9 +17,9 @@
+ package templater
+ 
+ import (
+-	_ "bytes"
+-	_ "fmt"
+-	_ "strings"
++	"bytes"
++	"fmt"
++	"strings"
+ 
+ 	"example.internal/clustkit/pkg/apis/kops"
+ 	"example.internal/clustkit/third_party/forked/text/template"
+@@ -36,20 +36,75 @@
+ 
+ // NewTemplater returns a new renderer implementation
+ func NewTemplater(channel *kops.Channel) *Templater {
+-	panic("excised: NewTemplater")
++	return &Templater{
++		channel: channel,
++	}
+ }
+ 
+ // Render is responsible for actually rendering the template
+ func (r *Templater) Render(content string, context map[string]interface{}, snippets map[string]string, failOnMissing bool) (rendered string, err error) {
+-	panic("excised: Templater.Render")
++	// @step: create the template
++	tm := template.New(templateName)
++	if _, err = tm.Funcs(r.templateFuncsMap(tm)).Parse(content); err != nil {
++		return
++	}
++	if failOnMissing {
++		tm.Option("missingkey=error")
++	}
++
++	// @step: add the snippits into the mix
++	for filename, snippet := range snippets {
++		if filename == templateName {
++			return "", fmt.Errorf("snippet cannot have the same name as the template: %s", filename)
++		}
++		if _, err = tm.New(filename).Parse(snippet); err != nil {
++			return rendered, fmt.Errorf("unable to parse snippet: %s, error: %s", filename, err)
++		}
++	}
++
++	// @step: render the actual template
++	writer := new(bytes.Buffer)
++	defer func() {
++		if r := recover(); r != nil {
++			err = fmt.Errorf("failed to parse template, error: %s", r)
++		}
++	}()
++	if err = tm.ExecuteTemplate(writer, templateName, context); err != nil {
++		return
++	}
++
++	return writer.String(), nil
+ }
+ 
+ // indentContent is responsible for indenting the string content
+ func indentContent(indent int, content string) string {
+-	panic("excised: indentContent")
++	var b bytes.Buffer
++	length := len(strings.Split(content, "\n")) - 1
++	for i, x := range strings.Split(content, "\n") {
++		// @check if the length of the line is zero and set spacer
++		spacer := indent
++		if i == 0 || len(x) <= 0 {
++			spacer = 0
++		}
++		// @step: write the line to the buffer
++		line := fmt.Sprintf("%"+fmt.Sprintf("%d", spacer)+"s%s", "", x)
++		b.WriteString(line)
++
++		// @check if we need a newline
++		if i < length {
++			b.WriteString("\n")
++		}
++	}
++
++	return b.String()
+ }
+ 
+ // includeSnippet is responsible for including a snippet
+ func includeSnippet(tm *template.Template, name string, context map[string]interface{}) (string, error) {
+-	panic("excised: includeSnippet")
++	b := bytes.NewBufferString("")
++	if err := tm.ExecuteTemplate(b, name, context); err != nil {
++		return "", fmt.Errorf("snippet: %s, issue: %s", name, err)
++	}
++
++	return b.String(), nil
+ }
+diff --git a/pkg/util/templater/template_functions.go b/pkg/util/templater/template_functions.go
+--- a/pkg/util/templater/template_functions.go
++++ b/pkg/util/templater/template_functions.go
+@@ -17,16 +17,54 @@
+ package templater
+ 
+ import (
+-	_ "example.internal/clustkit"
+-	_ "example.internal/clustkit/pkg/apis/kops"
+-	_ "example.internal/clustkit/pkg/apis/kops/util"
++	"github.com/Masterminds/sprig/v3"
++	"github.com/blang/semver/v4"
++	"example.internal/clustkit"
++	kopsapi "example.internal/clustkit/pkg/apis/kops"
++	"example.internal/clustkit/pkg/apis/kops/util"
+ 	"example.internal/clustkit/third_party/forked/text/template"
+-	_ "example.internal/clustkit/util/pkg/architectures"
+-	_ "github.com/Masterminds/sprig/v3"
+-	_ "github.com/blang/semver/v4"
++	"example.internal/clustkit/util/pkg/architectures"
+ )
+ 
+ // templateFuncsMap returns a map if the template functions for this template
+ func (r *Templater) templateFuncsMap(tm *template.Template) template.FuncMap {
+-	panic("excised: Templater.templateFuncsMap")
++	// grab the template functions from sprig which are pretty awesome
++	funcs := sprig.TxtFuncMap()
++
++	funcs["indent"] = indentContent
++	// @step: as far as i can see there's no native way in sprig in include external snippets of code
++	funcs["include"] = func(name string, context map[string]interface{}) string {
++		content, err := includeSnippet(tm, name, context)
++		if err != nil {
++			panic(err.Error())
++		}
++
++		return content
++	}
++
++	funcs["ChannelRecommendedKubernetesUpgradeVersion"] = func(version string) string {
++		parsed, err := util.ParseKubernetesVersion(version)
++		if err != nil {
++			panic(err.Error())
++		}
++
++		versionInfo := kopsapi.FindKubernetesVersionSpec(r.channel.Spec.KubernetesVersions, *parsed)
++		recommended, err := versionInfo.FindRecommendedUpgrade(*parsed)
++		if err != nil {
++			panic(err.Error())
++		}
++		return recommended.String()
++	}
++
++	funcs["ChannelRecommendedKopsKubernetesVersion"] = func() string {
++		return kopsapi.RecommendedKubernetesVersion(r.channel, kops.Version).String()
++	}
++
++	funcs["ChannelRecommendedImage"] = func(cloud, k8sVersion string, architecture string) string {
++		ver, _ := semver.ParseTolerant(k8sVersion)
++		imageSpec := r.channel.FindImage(kopsapi.CloudProviderID(cloud), ver, architectures.Architecture(architecture))
++		return imageSpec.Name
++	}
++
++	return funcs
+ }

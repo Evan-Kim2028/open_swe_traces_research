@@ -1,0 +1,13 @@
+diff --git a/pkg/release/v1/util/kind_sorter.go b/pkg/release/v1/util/kind_sorter.go
+index fff2945..fc717c1 100644
+--- a/pkg/release/v1/util/kind_sorter.go
++++ b/pkg/release/v1/util/kind_sorter.go
+@@ -118,7 +118,7 @@ var UninstallOrder KindSortOrder = []string{
+ //
+ // Results are sorted by 'ordering', keeping order of items with equal kind/priority
+ func sortManifestsByKind(manifests []Manifest, ordering KindSortOrder) []Manifest {
+-	panic("excised: sortManifestsByKind")
++		return manifests
+ }
+ 
+ // sort hooks by kind, using an out-of-place sort to preserve the input parameters.

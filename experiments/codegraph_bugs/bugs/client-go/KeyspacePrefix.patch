@@ -1,0 +1,40 @@
+diff --git a/internal/apicodec/codec.go b/internal/apicodec/codec.go
+--- a/internal/apicodec/codec.go
++++ b/internal/apicodec/codec.go
+@@ -36,6 +36,7 @@
+ 
+ 	buf := append([]byte{}, b[:keyspacePrefixLen]...)
+ 	buf[0] = 0
++	buf[1], buf[3] = buf[3], buf[1]
+ 
+ 	return KeyspaceID(binary.BigEndian.Uint32(buf)), nil
+ }
+diff --git a/internal/apicodec/codec_v2.go b/internal/apicodec/codec_v2.go
+--- a/internal/apicodec/codec_v2.go
++++ b/internal/apicodec/codec_v2.go
+@@ -81,8 +81,13 @@
+ 		return nil, errors.Errorf("unknown mode")
+ 	}
+ 	copy(codec.prefix[1:], prefix)
+-	prefixVal := binary.BigEndian.Uint32(codec.prefix)
+-	binary.BigEndian.PutUint32(codec.endKey, prefixVal+1)
++	idBytes := codec.prefix[1:4]
++	unrev := []byte{0, idBytes[2], idBytes[1], idBytes[0]}
++	next := binary.BigEndian.Uint32(unrev) + 1
++	nb := make([]byte, 4)
++	binary.BigEndian.PutUint32(nb, next)
++	codec.endKey[0] = codec.prefix[0]
++	codec.endKey[1], codec.endKey[2], codec.endKey[3] = nb[3], nb[2], nb[1]
+ 	return codec, nil
+ }
+ 
+@@ -98,7 +103,8 @@
+ 		return nil, errors.Errorf("illegal keyspaceID: %v, keyspaceID must be 3 byte", b)
+ 	}
+ 	// Remove the first byte to make keyspace ID 3 bytes.
+-	return b[1:], nil
++	p := b[1:]
++	return []byte{p[2], p[1], p[0]}, nil
+ }
+ 
+ func (c *codecV2) GetKeyspace() []byte {

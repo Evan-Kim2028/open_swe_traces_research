@@ -1,0 +1,11 @@
+{
+  "family": "dynamic-latch",
+  "level": -1,
+  "gap": {
+    "omitted": "After release, waiters are woken (the granted waiter proceeds).",
+    "discoverable": "internal/latch/latch_test.go:136-137",
+    "catcher_test": "TestWithConcurrency",
+    "catcher_file": "internal/latch/scheduler_test.go"
+  },
+  "source": "/home/evan/Documents/open_swe_traces_research/experiments/harbor_nex/tasks_ladder2/dynamic-latch-L2"
+}

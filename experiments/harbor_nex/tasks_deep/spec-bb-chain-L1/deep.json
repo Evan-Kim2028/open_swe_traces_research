@@ -1,0 +1,11 @@
+{
+  "family": "spec-bb-chain",
+  "level": -1,
+  "gap": {
+    "omitted": "Two decorators that share a name do not both stay on the stack; the later attachment replaces the earlier one.",
+    "discoverable": "wirerpc/interceptor/interceptor.go:109-110",
+    "catcher_test": "TestAppendChainedInterceptor",
+    "catcher_file": "internal/client/client_interceptor_test.go"
+  },
+  "source": "/home/evan/Documents/open_swe_traces_research/experiments/harbor_nex/tasks_ladder2/spec-bb-chain-L2"
+}

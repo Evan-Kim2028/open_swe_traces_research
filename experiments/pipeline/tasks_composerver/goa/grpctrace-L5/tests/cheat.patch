@@ -1,0 +1,72 @@
+--- a/grpc/middleware/trace.go
++++ b/grpc/middleware/trace.go
+@@ -35,7 +35,7 @@
+ //	  middleware.TraceIDFunc(myTraceIDFunc),
+ //	  middleware.SpanIDFunc(mySpanIDFunc),
+ //	  middleware.SamplingPercent(100)))
+-func UnaryServerTrace(opts ...middleware.TraceOption) grpc.UnaryServerInterceptor { panic("excised: UnaryServerTrace") }
++func UnaryServerTrace(opts ...middleware.TraceOption) grpc.UnaryServerInterceptor { var z0 grpc.UnaryServerInterceptor; return z0 }
+ 
+ // StreamServerTrace returns a server trace middleware that initializes the
+ // trace information in the streaming gRPC request context.
+@@ -49,7 +49,7 @@
+ //	  middleware.TraceIDFunc(myTraceIDFunc),
+ //	  middleware.SpanIDFunc(mySpanIDFunc),
+ //	  middleware.MaxSamplingRate(50)))
+-func StreamServerTrace(opts ...middleware.TraceOption) grpc.StreamServerInterceptor { panic("excised: StreamServerTrace") }
++func StreamServerTrace(opts ...middleware.TraceOption) grpc.StreamServerInterceptor { var z0 grpc.StreamServerInterceptor; return z0 }
+ 
+ // UnaryClientTrace sets the outgoing unary request metadata with the trace
+ // information found in the context so that the downstream service may properly
+@@ -58,7 +58,7 @@
+ // Example:
+ //
+ //	conn, err := grpc.Dial(url, grpc.WithUnaryInterceptor(UnaryClientTrace()))
+-func UnaryClientTrace() grpc.UnaryClientInterceptor { panic("excised: UnaryClientTrace") }
++func UnaryClientTrace() grpc.UnaryClientInterceptor { var z0 grpc.UnaryClientInterceptor; return z0 }
+ 
+ // StreamClientTrace sets the outgoing stream request metadata with the trace
+ // information found in the context so that the downstream service may properly
+@@ -67,33 +67,33 @@
+ // Example:
+ //
+ //	conn, err := grpc.Dial(url, grpc.WithStreamInterceptor(StreamClientTrace()))
+-func StreamClientTrace() grpc.StreamClientInterceptor { panic("excised: StreamClientTrace") }
++func StreamClientTrace() grpc.StreamClientInterceptor { var z0 grpc.StreamClientInterceptor; return z0 }
+ 
+ // TraceIDFunc is a wrapper for the top-level TraceIDFunc.
+-func TraceIDFunc(f middleware.IDFunc) middleware.TraceOption { panic("excised: TraceIDFunc") }
++func TraceIDFunc(f middleware.IDFunc) middleware.TraceOption { var z0 middleware.TraceOption; return z0 }
+ 
+ // SpanIDFunc is a wrapper for the top-level SpanIDFunc.
+-func SpanIDFunc(f middleware.IDFunc) middleware.TraceOption { panic("excised: SpanIDFunc") }
++func SpanIDFunc(f middleware.IDFunc) middleware.TraceOption { var z0 middleware.TraceOption; return z0 }
+ 
+ // SamplingPercent is a wrapper for the top-level SamplingPercent.
+-func SamplingPercent(p int) middleware.TraceOption { panic("excised: SamplingPercent") }
++func SamplingPercent(p int) middleware.TraceOption { var z0 middleware.TraceOption; return z0 }
+ 
+ // MaxSamplingRate is a wrapper for the top-level MaxSamplingRate.
+-func MaxSamplingRate(r int) middleware.TraceOption { panic("excised: MaxSamplingRate") }
++func MaxSamplingRate(r int) middleware.TraceOption { var z0 middleware.TraceOption; return z0 }
+ 
+ // SampleSize is a wrapper for the top-level SampleSize.
+-func SampleSize(s int) middleware.TraceOption { panic("excised: SampleSize") }
++func SampleSize(s int) middleware.TraceOption { var z0 middleware.TraceOption; return z0 }
+ 
+ // DiscardFromTrace adds a regular expression for matching a request path to be discarded from tracing.
+ // see middleware.DiscardFromTrace() for more details.
+-func DiscardFromTrace(discard *regexp.Regexp) middleware.TraceOption { panic("excised: DiscardFromTrace") }
++func DiscardFromTrace(discard *regexp.Regexp) middleware.TraceOption { var z0 middleware.TraceOption; return z0 }
+ 
+ // withTrace sets the trace ID, span ID, and parent span ID in the context.
+-func withTrace(ctx context.Context, fullMethod string, opts *middleware.TraceOptions) context.Context { panic("excised: withTrace") }
++func withTrace(ctx context.Context, fullMethod string, opts *middleware.TraceOptions) context.Context { var z0 context.Context; return z0 }
+ 
+ // setTrace sets the trace information to the request context's outgoing
+ // metadata.
+-func setTrace(ctx context.Context) context.Context { panic("excised: setTrace") }
++func setTrace(ctx context.Context) context.Context { var z0 context.Context; return z0 }
+ 
+ func _keepExcisedImports() {
+ 	_ = metadata.MD{}

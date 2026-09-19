@@ -1,0 +1,209 @@
+diff --git b/pkg/ignore/rules.go a/pkg/ignore/rules.go
+index 1d53fc6..40817ba 100644
+--- b/pkg/ignore/rules.go
++++ a/pkg/ignore/rules.go
+@@ -17,14 +17,14 @@ limitations under the License.
+ package ignore
+ 
+ import (
+-	_ "bufio"
+-	_ "bytes"
+-	_ "errors"
++	"bufio"
++	"bytes"
++	"errors"
+ 	"io"
+-	_ "log/slog"
++	"log/slog"
+ 	"os"
+-	_ "path/filepath"
+-	_ "strings"
++	"path/filepath"
++	"strings"
+ )
+ 
+ // HelmIgnore default name of an ignorefile.
+@@ -40,24 +40,47 @@ type Rules struct {
+ 
+ // Empty builds an empty ruleset.
+ func Empty() *Rules {
+-	panic("excised: Empty")
++	return &Rules{patterns: []*pattern{}}
+ }
+ 
+ // AddDefaults adds default ignore patterns.
+ //
+ // Ignore all dotfiles in "templates/"
+ func (r *Rules) AddDefaults() {
+-	panic("excised: Rules.AddDefaults")
++	r.parseRule(`templates/.?*`)
+ }
+ 
+ // ParseFile parses a helmignore file and returns the *Rules.
+ func ParseFile(file string) (*Rules, error) {
+-	panic("excised: ParseFile")
++	f, err := os.Open(file)
++	if err != nil {
++		return nil, err
++	}
++	defer f.Close()
++	return Parse(f)
+ }
+ 
+ // Parse parses a rules file
+ func Parse(file io.Reader) (*Rules, error) {
+-	panic("excised: Parse")
++	r := &Rules{patterns: []*pattern{}}
++
++	s := bufio.NewScanner(file)
++	currentLine := 0
++	utf8bom := []byte{0xEF, 0xBB, 0xBF}
++	for s.Scan() {
++		scannedBytes := s.Bytes()
++		// We trim UTF8 BOM
++		if currentLine == 0 {
++			scannedBytes = bytes.TrimPrefix(scannedBytes, utf8bom)
++		}
++		line := string(scannedBytes)
++		currentLine++
++
++		if err := r.parseRule(line); err != nil {
++			return r, err
++		}
++	}
++	return r, s.Err()
+ }
+ 
+ // Ignore evaluates the file at the given path, and returns true if it should be ignored.
+@@ -65,12 +88,129 @@ func Parse(file io.Reader) (*Rules, error) {
+ // Ignore evaluates path against the rules in order. Evaluation stops when a match
+ // is found. Matching a negative rule will stop evaluation.
+ func (r *Rules) Ignore(path string, fi os.FileInfo) bool {
+-	panic("excised: Rules.Ignore")
++	// Don't match on empty dirs.
++	if path == "" {
++		return false
++	}
++
++	// Disallow ignoring the current working directory.
++	// See issue:
++	// 1776 (New York City) Hamilton: "Pardon me, are you Aaron Burr, sir?"
++	if path == "." || path == "./" {
++		return false
++	}
++	for _, p := range r.patterns {
++		if p.match == nil {
++			slog.Info("this will be ignored no matcher supplied", "patterns", p.raw)
++			return false
++		}
++
++		// For negative rules, we need to capture and return non-matches,
++		// and continue for matches.
++		if p.negate {
++			if p.mustDir && !fi.IsDir() {
++				return true
++			}
++			if !p.match(path, fi) {
++				return true
++			}
++			continue
++		}
++
++		// If the rule is looking for directories, and this is not a directory,
++		// skip it.
++		if p.mustDir && !fi.IsDir() {
++			continue
++		}
++		if p.match(path, fi) {
++			return true
++		}
++	}
++	return false
+ }
+ 
+ // parseRule parses a rule string and creates a pattern, which is then stored in the Rules object.
+ func (r *Rules) parseRule(rule string) error {
+-	panic("excised: Rules.parseRule")
++	rule = strings.TrimSpace(rule)
++
++	// Ignore blank lines
++	if rule == "" {
++		return nil
++	}
++	// Comment
++	if strings.HasPrefix(rule, "#") {
++		return nil
++	}
++
++	// Fail any rules that contain **
++	if strings.Contains(rule, "**") {
++		return errors.New("double-star (**) syntax is not supported")
++	}
++
++	// Fail any patterns that can't compile. A non-empty string must be
++	// given to Match() to avoid optimization that skips rule evaluation.
++	if _, err := filepath.Match(rule, "abc"); err != nil {
++		return err
++	}
++
++	p := &pattern{raw: rule}
++
++	// Negation is handled at a higher level, so strip the leading ! from the
++	// string.
++	if strings.HasPrefix(rule, "!") {
++		p.negate = true
++		rule = rule[1:]
++	}
++
++	// Directory verification is handled by a higher level, so the trailing /
++	// is removed from the rule. That way, a directory named "foo" matches,
++	// even if the supplied string does not contain a literal slash character.
++	if strings.HasSuffix(rule, "/") {
++		p.mustDir = true
++		rule = strings.TrimSuffix(rule, "/")
++	}
++
++	if after, ok := strings.CutPrefix(rule, "/"); ok {
++		// Require path matches the root path.
++		p.match = func(n string, _ os.FileInfo) bool {
++			rule = after
++			ok, err := filepath.Match(rule, n)
++			if err != nil {
++				slog.Error("failed to compile", slog.String("rule", rule), slog.Any("error", err))
++				return false
++			}
++			return ok
++		}
++	} else if strings.Contains(rule, "/") {
++		// require structural match.
++		p.match = func(n string, _ os.FileInfo) bool {
++			ok, err := filepath.Match(rule, n)
++			if err != nil {
++				slog.Error(
++					"failed to compile",
++					slog.String("rule", rule),
++					slog.Any("error", err),
++				)
++				return false
++			}
++			return ok
++		}
++	} else {
++		p.match = func(n string, _ os.FileInfo) bool {
++			// When there is no slash in the pattern, we evaluate ONLY the
++			// filename.
++			n = filepath.Base(n)
++			ok, err := filepath.Match(rule, n)
++			if err != nil {
++				slog.Error("failed to compile", slog.String("rule", rule), slog.Any("error", err))
++				return false
++			}
++			return ok
++		}
++	}
++
++	r.patterns = append(r.patterns, p)
++	return nil
+ }
+ 
+ // matcher is a function capable of computing a match.

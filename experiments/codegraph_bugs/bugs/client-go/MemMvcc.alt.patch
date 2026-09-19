@@ -1,0 +1,26 @@
+diff --git a/internal/apicodec/mem_codec.go b/internal/apicodec/mem_codec.go
+--- a/internal/apicodec/mem_codec.go
++++ b/internal/apicodec/mem_codec.go
+@@ -45,7 +45,8 @@
+ type memComparableCodec struct{}
+ 
+ func (c *memComparableCodec) encodeKey(key []byte) []byte {
+-	return append([]byte{0}, codec.EncodeBytes([]byte(nil), key)...)
++	buf := make([]byte, 0, len(key)+16)
++	return codec.EncodeBytes(buf, key)
+ }
+ 
+ func (c *memComparableCodec) decodeKey(encodedKey []byte) ([]byte, error) {
+diff --git a/internal/mockstore/mocktikv/mvcc_leveldb.go b/internal/mockstore/mocktikv/mvcc_leveldb.go
+--- a/internal/mockstore/mocktikv/mvcc_leveldb.go
++++ b/internal/mockstore/mocktikv/mvcc_leveldb.go
+@@ -104,7 +104,8 @@
+ 
+ // mvccEncode returns the encoded key.
+ func mvccEncode(key []byte, ver uint64) []byte {
+-	b := append([]byte{0}, codec.EncodeBytes(nil, key)...)
++	scratch := make([]byte, 0, len(key)+16)
++	b := codec.EncodeBytes(scratch, key)
+ 	ret := codec.EncodeUintDesc(b, ver)
+ 	return ret
+ }

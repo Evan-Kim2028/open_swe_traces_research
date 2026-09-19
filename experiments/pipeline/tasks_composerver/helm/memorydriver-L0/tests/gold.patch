@@ -1,0 +1,282 @@
+diff --git b/pkg/storage/driver/memory.go a/pkg/storage/driver/memory.go
+index 7192cef..2bdbb95 100644
+--- b/pkg/storage/driver/memory.go
++++ a/pkg/storage/driver/memory.go
+@@ -18,8 +18,8 @@ package driver
+ 
+ import (
+ 	"log/slog"
+-	_ "strconv"
+-	_ "strings"
++	"strconv"
++	"strings"
+ 	"sync"
+ 
+ 	"example.internal/chartkit/v4/internal/logging"
+@@ -68,32 +68,173 @@ func (mem *Memory) Name() string {
+ 
+ // Get returns the release named by key or returns ErrReleaseNotFound.
+ func (mem *Memory) Get(key string) (release.Releaser, error) {
+-	panic("excised: Memory.Get")
++	defer unlock(mem.rlock())
++
++	keyWithoutPrefix := strings.TrimPrefix(key, "sh.chartkit.release.v1.")
++	switch elems := strings.Split(keyWithoutPrefix, ".v"); len(elems) {
++	case 2:
++		name, ver := elems[0], elems[1]
++		if _, err := strconv.Atoi(ver); err != nil {
++			return nil, ErrInvalidKey
++		}
++		if recs, ok := mem.cache[mem.namespace][name]; ok {
++			if r := recs.Get(key); r != nil {
++				return r.rls, nil
++			}
++		}
++		return nil, ErrReleaseNotFound
++	default:
++		return nil, ErrInvalidKey
++	}
+ }
+ 
+ // List returns the list of all releases such that filter(release) == true
+ func (mem *Memory) List(filter func(release.Releaser) bool) ([]release.Releaser, error) {
+-	panic("excised: Memory.List")
++	defer unlock(mem.rlock())
++
++	var ls []release.Releaser
++	for namespace := range mem.cache {
++		if mem.namespace != "" {
++			// Should only list releases of this namespace
++			namespace = mem.namespace
++		}
++		for _, recs := range mem.cache[namespace] {
++			recs.Iter(func(_ int, rec *record) bool {
++				if filter(rec.rls) {
++					ls = append(ls, rec.rls)
++				}
++				return true
++			})
++		}
++		if mem.namespace != "" {
++			// Should only list releases of this namespace
++			break
++		}
++	}
++	return ls, nil
+ }
+ 
+ // Query returns the set of releases that match the provided set of labels
+ func (mem *Memory) Query(keyvals map[string]string) ([]release.Releaser, error) {
+-	panic("excised: Memory.Query")
++	defer unlock(mem.rlock())
++
++	var lbs labels
++
++	lbs.init()
++	lbs.fromMap(keyvals)
++
++	var ls []release.Releaser
++	for namespace := range mem.cache {
++		if mem.namespace != "" {
++			// Should only query releases of this namespace
++			namespace = mem.namespace
++		}
++		for _, recs := range mem.cache[namespace] {
++			recs.Iter(func(_ int, rec *record) bool {
++				// A query for a release name that doesn't exist (has been deleted)
++				// can cause rec to be nil.
++				if rec == nil {
++					return false
++				}
++				if rec.lbs.match(lbs) {
++					ls = append(ls, rec.rls)
++				}
++				return true
++			})
++		}
++		if mem.namespace != "" {
++			// Should only query releases of this namespace
++			break
++		}
++	}
++
++	if len(ls) == 0 {
++		return nil, ErrReleaseNotFound
++	}
++
++	return ls, nil
+ }
+ 
+ // Create creates a new release or returns ErrReleaseExists.
+ func (mem *Memory) Create(key string, rel release.Releaser) error {
+-	panic("excised: Memory.Create")
++	defer unlock(mem.wlock())
++
++	rls, err := releaserToV1Release(rel)
++	if err != nil {
++		return err
++	}
++	// For backwards compatibility, we protect against an unset namespace
++	namespace := rls.Namespace
++	if namespace == "" {
++		namespace = defaultNamespace
++	}
++	mem.SetNamespace(namespace)
++
++	if _, ok := mem.cache[namespace]; !ok {
++		mem.cache[namespace] = memReleases{}
++	}
++
++	if recs, ok := mem.cache[namespace][rls.Name]; ok {
++		if err := recs.Add(newRecord(key, rls)); err != nil {
++			return err
++		}
++		mem.cache[namespace][rls.Name] = recs
++		return nil
++	}
++	mem.cache[namespace][rls.Name] = records{newRecord(key, rls)}
++	return nil
+ }
+ 
+ // Update updates a release or returns ErrReleaseNotFound.
+ func (mem *Memory) Update(key string, rel release.Releaser) error {
+-	panic("excised: Memory.Update")
++	defer unlock(mem.wlock())
++
++	rls, err := releaserToV1Release(rel)
++	if err != nil {
++		return err
++	}
++
++	// For backwards compatibility, we protect against an unset namespace
++	namespace := rls.Namespace
++	if namespace == "" {
++		namespace = defaultNamespace
++	}
++	mem.SetNamespace(namespace)
++
++	if _, ok := mem.cache[namespace]; ok {
++		if rs, ok := mem.cache[namespace][rls.Name]; ok && rs.Exists(key) {
++			rs.Replace(key, newRecord(key, rls))
++			return nil
++		}
++	}
++	return ErrReleaseNotFound
+ }
+ 
+ // Delete deletes a release or returns ErrReleaseNotFound.
+ func (mem *Memory) Delete(key string) (release.Releaser, error) {
+-	panic("excised: Memory.Delete")
++	defer unlock(mem.wlock())
++
++	keyWithoutPrefix := strings.TrimPrefix(key, "sh.chartkit.release.v1.")
++	elems := strings.Split(keyWithoutPrefix, ".v")
++
++	if len(elems) != 2 {
++		return nil, ErrInvalidKey
++	}
++
++	name, ver := elems[0], elems[1]
++	if _, err := strconv.Atoi(ver); err != nil {
++		return nil, ErrInvalidKey
++	}
++	if _, ok := mem.cache[mem.namespace]; ok {
++		if recs, ok := mem.cache[mem.namespace][name]; ok {
++			if r := recs.Remove(key); r != nil {
++				// recs.Remove changes the slice reference, so we have to re-assign it.
++				mem.cache[mem.namespace][name] = recs
++				return r.rls, nil
++			}
++		}
++	}
++	return nil, ErrReleaseNotFound
+ }
+ 
+ // wlock locks mem for writing
+diff --git b/pkg/storage/driver/records.go a/pkg/storage/driver/records.go
+index e38980d..6068063 100644
+--- b/pkg/storage/driver/records.go
++++ a/pkg/storage/driver/records.go
+@@ -17,8 +17,8 @@ limitations under the License.
+ package driver
+ 
+ import (
+-	_ "sort"
+-	_ "strconv"
++	"sort"
++	"strconv"
+ 
+ 	rspb "example.internal/chartkit/v4/pkg/release/v1"
+ )
+@@ -31,7 +31,18 @@ func (rs records) Swap(i, j int)      { rs[i], rs[j] = rs[j], rs[i] }
+ func (rs records) Less(i, j int) bool { return rs[i].rls.Version < rs[j].rls.Version }
+ 
+ func (rs *records) Add(r *record) error {
+-	panic("excised: records.Add")
++	if r == nil {
++		return nil
++	}
++
++	if rs.Exists(r.key) {
++		return ErrReleaseExists
++	}
++
++	*rs = append(*rs, r)
++	sort.Sort(*rs)
++
++	return nil
+ }
+ 
+ func (rs records) Get(key string) *record {
+@@ -53,7 +64,12 @@ func (rs *records) Iter(fn func(int, *record) bool) {
+ }
+ 
+ func (rs *records) Index(key string) (int, bool) {
+-	panic("excised: records.Index")
++	for i, r := range *rs {
++		if r.key == key {
++			return i, true
++		}
++	}
++	return -1, false
+ }
+ 
+ func (rs records) Exists(key string) bool {
+@@ -62,11 +78,19 @@ func (rs records) Exists(key string) bool {
+ }
+ 
+ func (rs *records) Remove(key string) (r *record) {
+-	panic("excised: records.Remove")
++	if i, ok := rs.Index(key); ok {
++		return rs.removeAt(i)
++	}
++	return nil
+ }
+ 
+ func (rs *records) Replace(key string, rec *record) *record {
+-	panic("excised: records.Replace")
++	if i, ok := rs.Index(key); ok {
++		old := (*rs)[i]
++		(*rs)[i] = rec
++		return old
++	}
++	return nil
+ }
+ 
+ func (rs *records) removeAt(index int) *record {
+@@ -87,5 +111,14 @@ type record struct {
+ 
+ // newRecord creates a new in-memory release record
+ func newRecord(key string, rls *rspb.Release) *record {
+-	panic("excised: newRecord")
++	var lbs labels
++
++	lbs.init()
++	lbs.set("name", rls.Name)
++	lbs.set("owner", "helm")
++	lbs.set("status", rls.Info.Status.String())
++	lbs.set("version", strconv.Itoa(rls.Version))
++
++	// return &record{key: key, lbs: lbs, rls: proto.Clone(rls).(*rspb.Release)}
++	return &record{key: key, lbs: lbs, rls: rls}
+ }

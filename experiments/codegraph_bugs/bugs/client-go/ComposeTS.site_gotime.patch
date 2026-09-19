@@ -1,0 +1,12 @@
+diff --git a/oracle/oracle.go b/oracle/oracle.go
+--- a/oracle/oracle.go
++++ b/oracle/oracle.go
+@@ -100,7 +100,7 @@
+ 
+ // GoTimeToTS converts a Go time to uint64 timestamp.
+ func GoTimeToTS(t time.Time) uint64 {
+-	ts := (t.UnixNano() / int64(time.Millisecond)) << 16
++	ts := (t.UnixNano() / int64(time.Millisecond)) << physicalShiftBits
+ 	return uint64(ts)
+ }
+ 

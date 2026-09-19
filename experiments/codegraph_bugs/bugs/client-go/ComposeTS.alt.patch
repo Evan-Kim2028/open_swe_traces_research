@@ -1,0 +1,29 @@
+diff --git a/oracle/oracle.go b/oracle/oracle.go
+--- a/oracle/oracle.go
++++ b/oracle/oracle.go
+@@ -74,12 +74,12 @@
+ 
+ // ComposeTS creates a ts from physical and logical parts.
+ func ComposeTS(physical, logical int64) uint64 {
+-	return uint64((physical << 16) + logical)
++	return uint64(physical)*(1<<physicalShiftBits) + uint64(logical)
+ }
+ 
+ // ExtractPhysical returns a ts's physical part.
+ func ExtractPhysical(ts uint64) int64 {
+-	return int64(ts >> 16)
++	return int64(ts / (1 << physicalShiftBits))
+ }
+ 
+ // ExtractLogical return a ts's logical part.
+@@ -100,8 +100,8 @@
+ 
+ // GoTimeToTS converts a Go time to uint64 timestamp.
+ func GoTimeToTS(t time.Time) uint64 {
+-	ts := (t.UnixNano() / int64(time.Millisecond)) << 16
+-	return uint64(ts)
++	ms := t.UnixNano() / int64(time.Millisecond)
++	return ComposeTS(ms, 0)
+ }
+ 
+ // GoTimeToLowerLimitStartTS returns the min start_ts of the uncommitted transaction.

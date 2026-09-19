@@ -1,0 +1,279 @@
+{
+  "ok": true,
+  "families": {
+    "all": {
+      "checks": [
+        {
+          "check": "harness_ok",
+          "ok": true,
+          "detail": "{\"ok\": true, \"go_on_path\": true, \"image\": \"harbor-ladder2:latest\"}"
+        }
+      ]
+    },
+    "spec-reimpl-bb": {
+      "checks": [
+        {
+          "check": "A-2_buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestCodecKeyRangeRoundTrip (0.00s)\n    codec_bb_prop_test.go:63: case 0 parse id: got 4294967295 keyspace id unavailable want 807518\n--- FAIL: TestCodecClipProperties (0.00s)\n    codec_bb_prop_test.go:144: case 0 complement region 1 kept\n--- FAIL: TestCodecContractExamples (0.00s)\n    codec_bb_prop_test.go:225: raw get wire: got 6b6579 want 720010926b6579\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/apicodec\t0.022s\nFAIL\n"
+        },
+        {
+          "check": "A-2_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/apicodec\t0.113s\n"
+        },
+        {
+          "check": "A-1_buggy_fails",
+          "ok": true,
+          "detail": "odec/codec_test.go:33\n        \tError:      \tNot equal: \n        \t            \texpected: []byte{0x1, 0x2, 0x3, 0x4}\n        \t            \tactual  : []byte{0x72, 0x1, 0x2, 0x3, 0x1, 0x2, 0x3, 0x4}\n        \t            \t\n        \t            \tDiff:\n        \t            \t--- Expected\n        \t            \t+++ Actual\n        \t            \t@@ -1,3 +1,3 @@\n        \t            \t-([]uint8) (len=4) {\n        \t            \t- 00000000  01 02 03 04                                       |....|\n        \t            \t+([]uint8) (len=8) {\n        \t            \t+ 00000000  72 01 02 03 01 02 03 04                           |r.......|\n        \t            \t }\n        \tTest:       \tTestDecodeKey\n    codec_test.go:37: \n        \tError Trace:\t/app/internal/apicodec/codec_test.go:37\n        \tError:      \tNot equal: \n        \t            \texpected: []byte{0x78, 0x1, 0x2, 0x3}\n        \t            \tactual  : []byte(nil)\n        \t            \t\n        \t            \tDiff:\n        \t            \t--- Expected\n        \t            \t+++ Actual\n        \t            \t@@ -1,4 +1,2 @@\n        \t            \t-([]uint8) (len=4) {\n        \t            \t- 00000000  78 01 02 03                                       |x...|\n        \t            \t-}\n        \t            \t+([]uint8) <nil>\n        \t            \t \n        \tTest:       \tTestDecodeKey\n    codec_test.go:38: \n        \tError Trace:\t/app/internal/apicodec/codec_test.go:38\n        \tError:      \tNot equal: \n        \t            \texpected: []byte{0x1, 0x2, 0x3, 0x4}\n        \t            \tactual  : []byte{0x78, 0x1, 0x2, 0x3, 0x1, 0x2, 0x3, 0x4}\n        \t            \t\n        \t            \tDiff:\n        \t            \t--- Expected\n        \t            \t+++ Actual\n        \t            \t@@ -1,3 +1,3 @@\n        \t            \t-([]uint8) (len=4) {\n        \t            \t- 00000000  01 02 03 04                                       |....|\n        \t            \t+([]uint8) (len=8) {\n        \t            \t+ 00000000  78 01 02 03 01 02 03 04                           |x.......|\n        \t            \t }\n        \tTest:       \tTestDecodeKey\n    codec_test.go:46: \n        \tError Trace:\t/app/internal/apicodec/codec_test.go:46\n        \tError:      \tExpected value not to be nil.\n        \tTest:       \tTestDecodeKey\n    codec_test.go:48: \n        \tError Trace:\t/app/internal/apicodec/codec_test.go:48\n        \tError:      \tShould be empty, but was [116 1 2 3 1 2 3 4]\n        \tTest:       \tTestDecodeKey\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/apicodec\t0.023s\nFAIL\n"
+        },
+        {
+          "check": "A-1_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/apicodec\t0.119s\n"
+        },
+        {
+          "check": "gold_restore",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/apicodec\t0.119s\n"
+        },
+        {
+          "check": "buggy_fails",
+          "ok": true,
+          "detail": "A-1"
+        },
+        {
+          "check": "cheat_rejected",
+          "ok": true,
+          "detail": "inherited: L2/A0 cheat already rejected; no extra cheat.patch"
+        },
+        {
+          "check": "two_func_alt_accepted",
+          "ok": true,
+          "detail": "inherited: L2/A0 alt already accepted"
+        },
+        {
+          "check": "patches_skip_tests",
+          "ok": true,
+          "detail": "gold/alt/cheat copied from L2/A0; no new *_test.go hunks"
+        },
+        {
+          "check": "proof_harness",
+          "ok": true,
+          "detail": "go on PATH; false\u22600 true=0"
+        },
+        {
+          "check": "blackbox_hygiene",
+          "ok": true,
+          "detail": "hidden tests are exported-API only (B4)"
+        }
+      ]
+    },
+    "spec-bb-chain": {
+      "checks": [
+        {
+          "check": "A-2_buggy_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestInterceptorChainOrder (0.00s)\n    chain_bb_prop_test.go:45: case 0 log [base]\n--- FAIL: TestInterceptorChainDedupAndCompose (0.00s)\n    chain_bb_prop_test.go:64: same name kept twice: Len=2\n--- FAIL: TestInterceptorContractExamples (0.00s)\n    chain_bb_prop_test.go:88: contract example order [base]\n--- FAIL: TestInterceptorUnmentionedRandom (0.00s)\n    chain_bb_prop_test.go:114: unseen 0: got [] want ub87cbd4cffdd374,v80129d924cca5d9c\nFAIL\nFAIL\texample.internal/kvstore/v2/wirerpc/interceptor\t0.012s\nFAIL\n"
+        },
+        {
+          "check": "A-2_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/wirerpc/interceptor\t0.037s\n"
+        },
+        {
+          "check": "A-2_cheat_fails",
+          "ok": true,
+          "detail": "--- FAIL: TestInterceptorChainOrder (0.00s)\n    chain_bb_prop_test.go:45: case 0 log [base]\n--- FAIL: TestInterceptorUnmentionedRandom (0.00s)\n    chain_bb_prop_test.go:114: unseen 0: got [] want ub87cbd4cffdd374,v80129d924cca5d9c\nFAIL\nFAIL\texample.internal/kvstore/v2/wirerpc/interceptor\t0.015s\nFAIL\n"
+        },
+        {
+          "check": "A-1_buggy_fails",
+          "ok": true,
+          "detail": "  \t            \texpected: []int{}\n        \t            \tactual  : []int{3, 4}\n        \t            \t\n        \t            \tDiff:\n        \t            \t--- Expected\n        \t            \t+++ Actual\n        \t            \t@@ -1,2 +1,4 @@\n        \t            \t-([]int) {\n        \t            \t+([]int) (len=2) {\n        \t            \t+ (int) 3,\n        \t            \t+ (int) 4\n        \t            \t }\n        \tTest:       \tTestAppendChainedInterceptor\n    client_interceptor_test.go:76: \n        \tError Trace:\t/app/internal/client/client_interceptor_test.go:76\n        \t            \t\t\t\t/app/internal/client/client_interceptor_test.go:91\n        \tError:      \tNot equal: \n        \t            \texpected: []int{}\n        \t            \tactual  : []int{0, 1, 2, 3, 4}\n        \t            \t\n        \t            \tDiff:\n        \t            \t--- Expected\n        \t            \t+++ Actual\n        \t            \t@@ -1,2 +1,7 @@\n        \t            \t-([]int) {\n        \t            \t+([]int) (len=5) {\n        \t            \t+ (int) 0,\n        \t            \t+ (int) 1,\n        \t            \t+ (int) 2,\n        \t            \t+ (int) 3,\n        \t            \t+ (int) 4\n        \t            \t }\n        \tTest:       \tTestAppendChainedInterceptor\n    client_interceptor_test.go:71: \n        \tError Trace:\t/app/internal/client/client_interceptor_test.go:71\n        \t            \t\t\t\t/app/internal/client/client_interceptor_test.go:95\n        \tError:      \tNot equal: \n        \t            \texpected: 6\n        \t            \tactual  : 5\n        \tTest:       \tTestAppendChainedInterceptor\n    client_interceptor_test.go:76: \n        \tError Trace:\t/app/internal/client/client_interceptor_test.go:76\n        \t            \t\t\t\t/app/internal/client/client_interceptor_test.go:95\n        \tError:      \tNot equal: \n        \t            \texpected: []int{}\n        \t            \tactual  : []int{0, 2, 3, 4, 1}\n        \t            \t\n        \t            \tDiff:\n        \t            \t--- Expected\n        \t            \t+++ Actual\n        \t            \t@@ -1,2 +1,7 @@\n        \t            \t-([]int) {\n        \t            \t+([]int) (len=5) {\n        \t            \t+ (int) 0,\n        \t            \t+ (int) 2,\n        \t            \t+ (int) 3,\n        \t            \t+ (int) 4,\n        \t            \t+ (int) 1\n        \t            \t }\n        \tTest:       \tTestAppendChainedInterceptor\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/client\t0.013s\nok  \texample.internal/kvstore/v2/internal/client/retry\t0.011s [no tests to run]\nFAIL\n"
+        },
+        {
+          "check": "A-1_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/wirerpc/interceptor\t0.042s\n?   \texample.internal/kvstore/v2/internal/client/mockserver\t[no test files]\nok  \texample.internal/kvstore/v2/internal/client\t0.014s\nok  \texample.internal/kvstore/v2/internal/client/retry\t0.012s [no tests to run]\n"
+        },
+        {
+          "check": "gold_restore",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/wirerpc/interceptor\t0.042s\n?   \texample.internal/kvstore/v2/internal/client/mockserver\t[no test files]\nok  \texample.internal/kvstore/v2/internal/client\t0.014s\nok  \texample.internal/kvstore/v2/internal/client/retry\t0.012s [no tests to run]\n"
+        },
+        {
+          "check": "buggy_fails",
+          "ok": true,
+          "detail": "A-1"
+        },
+        {
+          "check": "A-1_cheat_fails",
+          "ok": true,
+          "detail": ") 1,\n        \t            \t+ (int) 2\n        \t            \t }\n        \tTest:       \tTestAppendChainedInterceptor\n    client_interceptor_test.go:76: \n        \tError Trace:\t/app/internal/client/client_interceptor_test.go:76\n        \t            \t\t\t\t/app/internal/client/client_interceptor_test.go:88\n        \tError:      \tNot equal: \n        \t            \texpected: []int{}\n        \t            \tactual  : []int{3, 4}\n        \t            \t\n        \t            \tDiff:\n        \t            \t--- Expected\n        \t            \t+++ Actual\n        \t            \t@@ -1,2 +1,4 @@\n        \t            \t-([]int) {\n        \t            \t+([]int) (len=2) {\n        \t            \t+ (int) 3,\n        \t            \t+ (int) 4\n        \t            \t }\n        \tTest:       \tTestAppendChainedInterceptor\n    client_interceptor_test.go:76: \n        \tError Trace:\t/app/internal/client/client_interceptor_test.go:76\n        \t            \t\t\t\t/app/internal/client/client_interceptor_test.go:91\n        \tError:      \tNot equal: \n        \t            \texpected: []int{}\n        \t            \tactual  : []int{0, 1, 2, 3, 4}\n        \t            \t\n        \t            \tDiff:\n        \t            \t--- Expected\n        \t            \t+++ Actual\n        \t            \t@@ -1,2 +1,7 @@\n        \t            \t-([]int) {\n        \t            \t+([]int) (len=5) {\n        \t            \t+ (int) 0,\n        \t            \t+ (int) 1,\n        \t            \t+ (int) 2,\n        \t            \t+ (int) 3,\n        \t            \t+ (int) 4\n        \t            \t }\n        \tTest:       \tTestAppendChainedInterceptor\n    client_interceptor_test.go:76: \n        \tError Trace:\t/app/internal/client/client_interceptor_test.go:76\n        \t            \t\t\t\t/app/internal/client/client_interceptor_test.go:95\n        \tError:      \tNot equal: \n        \t            \texpected: []int{}\n        \t            \tactual  : []int{0, 2, 3, 4, 1}\n        \t            \t\n        \t            \tDiff:\n        \t            \t--- Expected\n        \t            \t+++ Actual\n        \t            \t@@ -1,2 +1,7 @@\n        \t            \t-([]int) {\n        \t            \t+([]int) (len=5) {\n        \t            \t+ (int) 0,\n        \t            \t+ (int) 2,\n        \t            \t+ (int) 3,\n        \t            \t+ (int) 4,\n        \t            \t+ (int) 1\n        \t            \t }\n        \tTest:       \tTestAppendChainedInterceptor\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/client\t0.017s\nok  \texample.internal/kvstore/v2/internal/client/retry\t0.011s [no tests to run]\nFAIL\n"
+        },
+        {
+          "check": "cheat_rejected",
+          "ok": true,
+          "detail": ") 1,\n        \t            \t+ (int) 2\n        \t            \t }\n        \tTest:       \tTestAppendChainedInterceptor\n    client_interceptor_test.go:76: \n        \tError Trace:\t/app/internal/client/client_interceptor_test.go:76\n        \t            \t\t\t\t/app/internal/client/client_interceptor_test.go:88\n        \tError:      \tNot equal: \n        \t            \texpected: []int{}\n        \t            \tactual  : []int{3, 4}\n        \t            \t\n        \t            \tDiff:\n        \t            \t--- Expected\n        \t            \t+++ Actual\n        \t            \t@@ -1,2 +1,4 @@\n        \t            \t-([]int) {\n        \t            \t+([]int) (len=2) {\n        \t            \t+ (int) 3,\n        \t            \t+ (int) 4\n        \t            \t }\n        \tTest:       \tTestAppendChainedInterceptor\n    client_interceptor_test.go:76: \n        \tError Trace:\t/app/internal/client/client_interceptor_test.go:76\n        \t            \t\t\t\t/app/internal/client/client_interceptor_test.go:91\n        \tError:      \tNot equal: \n        \t            \texpected: []int{}\n        \t            \tactual  : []int{0, 1, 2, 3, 4}\n        \t            \t\n        \t            \tDiff:\n        \t            \t--- Expected\n        \t            \t+++ Actual\n        \t            \t@@ -1,2 +1,7 @@\n        \t            \t-([]int) {\n        \t            \t+([]int) (len=5) {\n        \t            \t+ (int) 0,\n        \t            \t+ (int) 1,\n        \t            \t+ (int) 2,\n        \t            \t+ (int) 3,\n        \t            \t+ (int) 4\n        \t            \t }\n        \tTest:       \tTestAppendChainedInterceptor\n    client_interceptor_test.go:76: \n        \tError Trace:\t/app/internal/client/client_interceptor_test.go:76\n        \t            \t\t\t\t/app/internal/client/client_interceptor_test.go:95\n        \tError:      \tNot equal: \n        \t            \texpected: []int{}\n        \t            \tactual  : []int{0, 2, 3, 4, 1}\n        \t            \t\n        \t            \tDiff:\n        \t            \t--- Expected\n        \t            \t+++ Actual\n        \t            \t@@ -1,2 +1,7 @@\n        \t            \t-([]int) {\n        \t            \t+([]int) (len=5) {\n        \t            \t+ (int) 0,\n        \t            \t+ (int) 2,\n        \t            \t+ (int) 3,\n        \t            \t+ (int) 4,\n        \t            \t+ (int) 1\n        \t            \t }\n        \tTest:       \tTestAppendChainedInterceptor\nFAIL\nFAIL\texample.internal/kvstore/v2/internal/client\t0.017s\nok  \texample.internal/kvstore/v2/internal/client/retry\t0.011s [no tests to run]\nFAIL\n"
+        },
+        {
+          "check": "two_func_alt_accepted",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/wirerpc/interceptor\t0.041s\n?   \texample.internal/kvstore/v2/internal/client/mockserver\t[no test files]\nok  \texample.internal/kvstore/v2/internal/client\t0.014s\nok  \texample.internal/kvstore/v2/internal/client/retry\t0.013s [no tests to run]\n"
+        },
+        {
+          "check": "patches_skip_tests",
+          "ok": true,
+          "detail": "gold/alt/cheat copied from L2/A0; no new *_test.go hunks"
+        },
+        {
+          "check": "proof_harness",
+          "ok": true,
+          "detail": "go on PATH; false\u22600 true=0"
+        },
+        {
+          "check": "blackbox_hygiene",
+          "ok": true,
+          "detail": "hidden tests are exported-API only (B4)"
+        }
+      ]
+    },
+    "dynamic-latch": {
+      "checks": [
+        {
+          "check": "A-2_buggy_fails",
+          "ok": true,
+          "detail": "vstore/v2/internal/latch.(*LatchesScheduler).wakeup()\n      /app/internal/latch/scheduler.go:97 +0x8b\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).run()\n      /app/internal/latch/scheduler.go:79 +0x12e\n  example.internal/kvstore/v2/internal/latch.NewScheduler.gowrap1()\n      /app/internal/latch/scheduler.go:64 +0x33\n\nPrevious write at 0x00c000114068 by goroutine 17:\n  example.internal/kvstore/v2/internal/latch.(*Latches).genSlotIDs()\n      /app/internal/latch/latch.go:159 +0x7d\n  example.internal/kvstore/v2/internal/latch.(*Latches).genLock()\n      /app/internal/latch/latch.go:150 +0x70\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).Lock()\n      /app/internal/latch/scheduler.go:117 +0x65\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.func1()\n      /app/internal/latch/latch_dyn_test.go:73 +0x1b7\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.gowrap2()\n      /app/internal/latch/latch_dyn_test.go:79 +0x41\n\nGoroutine 14 (running) created at:\n  example.internal/kvstore/v2/internal/latch.NewScheduler()\n      /app/internal/latch/scheduler.go:64 +0x21c\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:65 +0x35\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n\nGoroutine 17 (running) created at:\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:70 +0xf7\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n==================\npanic: sync: negative WaitGroup counter\n\ngoroutine 19 [running]:\nsync.(*WaitGroup).Add(0xc000112168, 0xffffffffffffffff)\n\t/usr/local/go/src/sync/waitgroup.go:64 +0x1b8\nsync.(*WaitGroup).Done(0xc000112168)\n\t/usr/local/go/src/sync/waitgroup.go:89 +0x2e\nexample.internal/kvstore/v2/internal/latch.(*LatchesScheduler).wakeup(0xc0002b6000, {0xc00011a008, 0x1, 0xc00006d7a8?})\n\t/app/internal/latch/scheduler.go:98 +0xa5\nexample.internal/kvstore/v2/internal/latch.(*LatchesScheduler).run(0xc0002b6000)\n\t/app/internal/latch/scheduler.go:79 +0x12f\ncreated by example.internal/kvstore/v2/internal/latch.NewScheduler in goroutine 18\n\t/app/internal/latch/scheduler.go:64 +0x21d\nFAIL\texample.internal/kvstore/v2/internal/latch\t0.021s\nFAIL\n"
+        },
+        {
+          "check": "A-2_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/latch\t1.018s\n"
+        },
+        {
+          "check": "A-2_cheat_fails",
+          "ok": true,
+          "detail": "example.internal/kvstore/v2/internal/latch.(*Latches).releaseSlot()\n      /app/internal/latch/latch.go:239 +0xbeb\n  example.internal/kvstore/v2/internal/latch.(*Latches).release()\n      /app/internal/latch/latch.go:188 +0x8f\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).run()\n      /app/internal/latch/scheduler.go:77 +0x104\n  example.internal/kvstore/v2/internal/latch.NewScheduler.gowrap1()\n      /app/internal/latch/scheduler.go:64 +0x33\n\nPrevious write at 0x00c000200118 by goroutine 16:\n  example.internal/kvstore/v2/internal/latch.(*Latches).genLock()\n      /app/internal/latch/latch.go:148 +0x9a\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).Lock()\n      /app/internal/latch/scheduler.go:117 +0x65\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.func1()\n      /app/internal/latch/latch_dyn_test.go:73 +0x1b7\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.gowrap2()\n      /app/internal/latch/latch_dyn_test.go:79 +0x41\n\nGoroutine 14 (running) created at:\n  example.internal/kvstore/v2/internal/latch.NewScheduler()\n      /app/internal/latch/scheduler.go:64 +0x21c\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:65 +0x35\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n\nGoroutine 16 (running) created at:\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:70 +0xf7\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n==================\npanic: sync: negative WaitGroup counter\n\ngoroutine 35 [running]:\nsync.(*WaitGroup).Add(0xc0000a17e8, 0xffffffffffffffff)\n\t/usr/local/go/src/sync/waitgroup.go:64 +0x1b8\nsync.(*WaitGroup).Done(0xc0000a17e8)\n\t/usr/local/go/src/sync/waitgroup.go:89 +0x2e\nexample.internal/kvstore/v2/internal/latch.(*LatchesScheduler).wakeup(0xc00029e000, {0xc00002d0c0, 0x2, 0x0?})\n\t/app/internal/latch/scheduler.go:98 +0xa5\nexample.internal/kvstore/v2/internal/latch.(*LatchesScheduler).run(0xc00029e000)\n\t/app/internal/latch/scheduler.go:79 +0x12f\ncreated by example.internal/kvstore/v2/internal/latch.NewScheduler in goroutine 34\n\t/app/internal/latch/scheduler.go:64 +0x21d\nFAIL\texample.internal/kvstore/v2/internal/latch\t0.021s\nFAIL\n"
+        },
+        {
+          "check": "A-1_buggy_fails",
+          "ok": true,
+          "detail": "nternal/kvstore/v2/internal/latch.(*Latches).releaseSlot()\n      /app/internal/latch/latch.go:235 +0x984\n  example.internal/kvstore/v2/internal/latch.(*Latches).release()\n      /app/internal/latch/latch.go:188 +0x8f\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).run()\n      /app/internal/latch/scheduler.go:77 +0x104\n  example.internal/kvstore/v2/internal/latch.NewScheduler.gowrap1()\n      /app/internal/latch/scheduler.go:64 +0x33\n\nPrevious write at 0x00c000112178 by goroutine 18:\n  example.internal/kvstore/v2/internal/latch.(*Latches).genLock()\n      /app/internal/latch/latch.go:148 +0x9a\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).Lock()\n      /app/internal/latch/scheduler.go:117 +0x65\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.func1()\n      /app/internal/latch/latch_dyn_test.go:73 +0x1b7\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.gowrap2()\n      /app/internal/latch/latch_dyn_test.go:79 +0x41\n\nGoroutine 14 (running) created at:\n  example.internal/kvstore/v2/internal/latch.NewScheduler()\n      /app/internal/latch/scheduler.go:64 +0x21c\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:65 +0x35\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n\nGoroutine 18 (running) created at:\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:70 +0xf7\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n==================\npanic: sync: negative WaitGroup counter\n\ngoroutine 35 [running]:\nsync.(*WaitGroup).Add(0xc00021e108, 0xffffffffffffffff)\n\t/usr/local/go/src/sync/waitgroup.go:64 +0x1b8\nsync.(*WaitGroup).Done(0xc00021e108)\n\t/usr/local/go/src/sync/waitgroup.go:89 +0x2e\nexample.internal/kvstore/v2/internal/latch.(*LatchesScheduler).wakeup(0xc0002ac000, {0xc000422000, 0x2, 0xc0000667a8?})\n\t/app/internal/latch/scheduler.go:98 +0xa5\nexample.internal/kvstore/v2/internal/latch.(*LatchesScheduler).run(0xc0002ac000)\n\t/app/internal/latch/scheduler.go:79 +0x12f\ncreated by example.internal/kvstore/v2/internal/latch.NewScheduler in goroutine 34\n\t/app/internal/latch/scheduler.go:64 +0x21d\nFAIL\texample.internal/kvstore/v2/internal/latch\t0.021s\nFAIL\n"
+        },
+        {
+          "check": "A-1_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/latch\t1.040s\n"
+        },
+        {
+          "check": "gold_restore",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/latch\t1.040s\n"
+        },
+        {
+          "check": "buggy_fails",
+          "ok": true,
+          "detail": "A-1"
+        },
+        {
+          "check": "A-1_cheat_fails",
+          "ok": true,
+          "detail": "v2/internal/latch.(*LatchesScheduler).Lock()\n      /app/internal/latch/scheduler.go:119 +0xa4\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.func1()\n      /app/internal/latch/latch_dyn_test.go:73 +0x1b7\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.gowrap2()\n      /app/internal/latch/latch_dyn_test.go:79 +0x41\n\nPrevious write at 0x00c00039a01c by goroutine 14:\n  runtime.slicecopy()\n      /usr/local/go/src/runtime/slice.go:355 +0x0\n  example.internal/kvstore/v2/internal/latch.(*Latches).releaseSlot()\n      /app/internal/latch/latch.go:215 +0x593\n  example.internal/kvstore/v2/internal/latch.(*Latches).release()\n      /app/internal/latch/latch.go:188 +0x8f\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).run()\n      /app/internal/latch/scheduler.go:77 +0x104\n  example.internal/kvstore/v2/internal/latch.NewScheduler.gowrap1()\n      /app/internal/latch/scheduler.go:64 +0x33\n\nGoroutine 19 (running) created at:\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:70 +0xf7\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n\nGoroutine 14 (running) created at:\n  example.internal/kvstore/v2/internal/latch.NewScheduler()\n      /app/internal/latch/scheduler.go:64 +0x21c\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:65 +0x35\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n==================\npanic: runtime error: invalid memory address or nil pointer dereference\n[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x8bcf8b]\n\ngoroutine 19 [running]:\nexample.internal/kvstore/v2/internal/latch.(*Latches).releaseSlot(0xc0002a0030, 0xc00051e000)\n\t/app/internal/latch/latch.go:224 +0x6eb\nexample.internal/kvstore/v2/internal/latch.(*Latches).release(0xc0002a0030, 0xc00051e000, {0xc00039c000, 0xc00006d7a8?, 0x1})\n\t/app/internal/latch/latch.go:188 +0x90\nexample.internal/kvstore/v2/internal/latch.(*LatchesScheduler).run(0xc0002ac000)\n\t/app/internal/latch/scheduler.go:77 +0x105\ncreated by example.internal/kvstore/v2/internal/latch.NewScheduler in goroutine 18\n\t/app/internal/latch/scheduler.go:64 +0x21d\nFAIL\texample.internal/kvstore/v2/internal/latch\t0.020s\nFAIL\n"
+        },
+        {
+          "check": "cheat_rejected",
+          "ok": true,
+          "detail": "v2/internal/latch.(*LatchesScheduler).Lock()\n      /app/internal/latch/scheduler.go:119 +0xa4\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.func1()\n      /app/internal/latch/latch_dyn_test.go:73 +0x1b7\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey.gowrap2()\n      /app/internal/latch/latch_dyn_test.go:79 +0x41\n\nPrevious write at 0x00c00039a01c by goroutine 14:\n  runtime.slicecopy()\n      /usr/local/go/src/runtime/slice.go:355 +0x0\n  example.internal/kvstore/v2/internal/latch.(*Latches).releaseSlot()\n      /app/internal/latch/latch.go:215 +0x593\n  example.internal/kvstore/v2/internal/latch.(*Latches).release()\n      /app/internal/latch/latch.go:188 +0x8f\n  example.internal/kvstore/v2/internal/latch.(*LatchesScheduler).run()\n      /app/internal/latch/scheduler.go:77 +0x104\n  example.internal/kvstore/v2/internal/latch.NewScheduler.gowrap1()\n      /app/internal/latch/scheduler.go:64 +0x33\n\nGoroutine 19 (running) created at:\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:70 +0xf7\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n\nGoroutine 14 (running) created at:\n  example.internal/kvstore/v2/internal/latch.NewScheduler()\n      /app/internal/latch/scheduler.go:64 +0x21c\n  example.internal/kvstore/v2/internal/latch.TestLatchConcurrentSameKey()\n      /app/internal/latch/latch_dyn_test.go:65 +0x35\n  testing.tRunner()\n      /usr/local/go/src/testing/testing.go:1690 +0x226\n  testing.(*T).Run.gowrap1()\n      /usr/local/go/src/testing/testing.go:1743 +0x44\n==================\npanic: runtime error: invalid memory address or nil pointer dereference\n[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x8bcf8b]\n\ngoroutine 19 [running]:\nexample.internal/kvstore/v2/internal/latch.(*Latches).releaseSlot(0xc0002a0030, 0xc00051e000)\n\t/app/internal/latch/latch.go:224 +0x6eb\nexample.internal/kvstore/v2/internal/latch.(*Latches).release(0xc0002a0030, 0xc00051e000, {0xc00039c000, 0xc00006d7a8?, 0x1})\n\t/app/internal/latch/latch.go:188 +0x90\nexample.internal/kvstore/v2/internal/latch.(*LatchesScheduler).run(0xc0002ac000)\n\t/app/internal/latch/scheduler.go:77 +0x105\ncreated by example.internal/kvstore/v2/internal/latch.NewScheduler in goroutine 18\n\t/app/internal/latch/scheduler.go:64 +0x21d\nFAIL\texample.internal/kvstore/v2/internal/latch\t0.020s\nFAIL\n"
+        },
+        {
+          "check": "two_func_alt_accepted",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/latch\t1.027s\n"
+        },
+        {
+          "check": "patches_skip_tests",
+          "ok": true,
+          "detail": "gold/alt/cheat copied from L2/A0; no new *_test.go hunks"
+        },
+        {
+          "check": "proof_harness",
+          "ok": true,
+          "detail": "go on PATH; false\u22600 true=0"
+        },
+        {
+          "check": "blackbox_hygiene",
+          "ok": true,
+          "detail": "hidden tests are exported-API only (B4)"
+        }
+      ]
+    },
+    "dynamic-pipeline": {
+      "checks": [
+        {
+          "check": "A-2_buggy_fails",
+          "ok": true,
+          "detail": "edFlushTrigger\n--- FAIL: TestPipelinedFlushSkip (0.12s)\n    pipelined_memdb_test.go:109: \n        \tError Trace:\t/app/internal/unionstore/pipelined_memdb_test.go:109\n        \tError:      \tShould be true\n        \tTest:       \tTestPipelinedFlushSkip\n--- FAIL: TestPipelinedFlushBlock (0.11s)\n    pipelined_memdb_test.go:148: \n        \tError Trace:\t/app/internal/unionstore/pipelined_memdb_test.go:148\n        \tError:      \tShould be true\n        \tTest:       \tTestPipelinedFlushBlock\n--- FAIL: TestPipelinedFlushGet (0.12s)\n    pipelined_memdb_test.go:193: \n        \tError Trace:\t/app/internal/unionstore/pipelined_memdb_test.go:193\n        \tError:      \tExpected nil, but got: not exist\n        \tTest:       \tTestPipelinedFlushGet\n--- FAIL: TestPipelinedFlushSize (0.15s)\n    pipelined_memdb_test.go:243: \n        \tError Trace:\t/app/internal/unionstore/pipelined_memdb_test.go:243\n        \tError:      \tShould be true\n        \tTest:       \tTestPipelinedFlushSize\npanic: test timed out after 15m0s\n\trunning tests:\n\t\tTestPipelinedFlushGeneration (14m59s)\n\ngoroutine 16 [running]:\ntesting.(*M).startAlarm.func1()\n\t/usr/local/go/src/testing/testing.go:2373 +0x265\ncreated by time.goFunc\n\t/usr/local/go/src/time/sleep.go:215 +0x45\n\ngoroutine 1 [chan receive, 14 minutes]:\ntesting.(*T).Run(0xc0000b7040, {0x14f40fc, 0x1c}, 0x1546720)\n\t/usr/local/go/src/testing/testing.go:1751 +0x851\ntesting.runTests.func1(0xc0000b7040)\n\t/usr/local/go/src/testing/testing.go:2168 +0x86\ntesting.tRunner(0xc0000b7040, 0xc0002519d8)\n\t/usr/local/go/src/testing/testing.go:1690 +0x227\ntesting.runTests(0xc000128960, {0x1d7d680, 0x22, 0x22}, {0x44d465?, 0x700?, 0x1d8b160?})\n\t/usr/local/go/src/testing/testing.go:2166 +0x8bf\ntesting.(*M).Run(0xc0000d0500)\n\t/usr/local/go/src/testing/testing.go:2034 +0xf18\ngo.uber.org/goleak.VerifyTestMain({0x1653520, 0xc0000d0500}, {0x0, 0x0, 0x0})\n\t/go/pkg/mod/go.uber.org/goleak@v1.2.0/testmain.go:53 +0x65\nexample.internal/kvstore/v2/internal/unionstore.TestMain(...)\n\t/app/internal/unionstore/main_test.go:24\nmain.main()\n\t_testmain.go:133 +0x185\n\ngoroutine 15 [chan receive, 14 minutes]:\nexample.internal/kvstore/v2/internal/unionstore.TestPipelinedFlushGeneration(0xc0000b6000)\n\t/app/internal/unionstore/pipelined_memdb_test.go:278 +0x14c\ntesting.tRunner(0xc0000b6000, 0x1546720)\n\t/usr/local/go/src/testing/testing.go:1690 +0x227\ncreated by testing.(*T).Run in goroutine 1\n\t/usr/local/go/src/testing/testing.go:1743 +0x826\nFAIL\texample.internal/kvstore/v2/internal/unionstore\t900.102s\nFAIL\n"
+        },
+        {
+          "check": "A-2_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/unionstore\t3.963s\ngoos: linux\ngoarch: amd64\npkg: example.internal/kvstore/v2/internal/unionstore\ncpu: AMD Ryzen 7 6800U with Radeon Graphics         \nBenchmarkPipelinedGet-16    \t    5000\t        34.95 ns/op\nPASS\nok  \texample.internal/kvstore/v2/internal/unionstore\t0.018s\nperf gate ok: 34.95 ns/op <= 113 ns/op\n"
+        },
+        {
+          "check": "A-1_buggy_fails",
+          "ok": true,
+          "detail": "Trigger\n--- FAIL: TestPipelinedFlushSkip (0.12s)\n    pipelined_memdb_test.go:109: \n        \tError Trace:\t/app/internal/unionstore/pipelined_memdb_test.go:109\n        \tError:      \tShould be true\n        \tTest:       \tTestPipelinedFlushSkip\n--- FAIL: TestPipelinedFlushBlock (0.12s)\n    pipelined_memdb_test.go:148: \n        \tError Trace:\t/app/internal/unionstore/pipelined_memdb_test.go:148\n        \tError:      \tShould be true\n        \tTest:       \tTestPipelinedFlushBlock\n--- FAIL: TestPipelinedFlushGet (0.12s)\n    pipelined_memdb_test.go:193: \n        \tError Trace:\t/app/internal/unionstore/pipelined_memdb_test.go:193\n        \tError:      \tExpected nil, but got: not exist\n        \tTest:       \tTestPipelinedFlushGet\n--- FAIL: TestPipelinedFlushSize (0.14s)\n    pipelined_memdb_test.go:243: \n        \tError Trace:\t/app/internal/unionstore/pipelined_memdb_test.go:243\n        \tError:      \tShould be true\n        \tTest:       \tTestPipelinedFlushSize\npanic: test timed out after 15m0s\n\trunning tests:\n\t\tTestPipelinedFlushGeneration (14m59s)\n\ngoroutine 12 [running]:\ntesting.(*M).startAlarm.func1()\n\t/usr/local/go/src/testing/testing.go:2373 +0x265\ncreated by time.goFunc\n\t/usr/local/go/src/time/sleep.go:215 +0x45\n\ngoroutine 1 [chan receive, 14 minutes]:\ntesting.(*T).Run(0xc0000d2d00, {0x14f40fc, 0x1c}, 0x1546720)\n\t/usr/local/go/src/testing/testing.go:1751 +0x851\ntesting.runTests.func1(0xc0000d2d00)\n\t/usr/local/go/src/testing/testing.go:2168 +0x86\ntesting.tRunner(0xc0000d2d00, 0xc0004959d8)\n\t/usr/local/go/src/testing/testing.go:1690 +0x227\ntesting.runTests(0xc000012fc0, {0x1d7d680, 0x22, 0x22}, {0x44d465?, 0xc000115790?, 0x1d8b160?})\n\t/usr/local/go/src/testing/testing.go:2166 +0x8bf\ntesting.(*M).Run(0xc0002c00a0)\n\t/usr/local/go/src/testing/testing.go:2034 +0xf18\ngo.uber.org/goleak.VerifyTestMain({0x1653520, 0xc0002c00a0}, {0x0, 0x0, 0x0})\n\t/go/pkg/mod/go.uber.org/goleak@v1.2.0/testmain.go:53 +0x65\nexample.internal/kvstore/v2/internal/unionstore.TestMain(...)\n\t/app/internal/unionstore/main_test.go:24\nmain.main()\n\t_testmain.go:133 +0x185\n\ngoroutine 11 [chan receive, 14 minutes]:\nexample.internal/kvstore/v2/internal/unionstore.TestPipelinedFlushGeneration(0xc0000d2000)\n\t/app/internal/unionstore/pipelined_memdb_test.go:278 +0x14c\ntesting.tRunner(0xc0000d2000, 0x1546720)\n\t/usr/local/go/src/testing/testing.go:1690 +0x227\ncreated by testing.(*T).Run in goroutine 1\n\t/usr/local/go/src/testing/testing.go:1743 +0x826\nFAIL\texample.internal/kvstore/v2/internal/unionstore\t900.059s\nFAIL\n"
+        },
+        {
+          "check": "A-1_gold_pass",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/unionstore\t3.973s\ngoos: linux\ngoarch: amd64\npkg: example.internal/kvstore/v2/internal/unionstore\ncpu: AMD Ryzen 7 6800U with Radeon Graphics         \nBenchmarkPipelinedGet-16    \t    5000\t        95.85 ns/op\nPASS\nok  \texample.internal/kvstore/v2/internal/unionstore\t0.027s\nperf gate ok: 95.85 ns/op <= 113 ns/op\n"
+        },
+        {
+          "check": "gold_restore",
+          "ok": true,
+          "detail": "ok  \texample.internal/kvstore/v2/internal/unionstore\t3.973s\ngoos: linux\ngoarch: amd64\npkg: example.internal/kvstore/v2/internal/unionstore\ncpu: AMD Ryzen 7 6800U with Radeon Graphics         \nBenchmarkPipelinedGet-16    \t    5000\t        95.85 ns/op\nPASS\nok  \texample.internal/kvstore/v2/internal/unionstore\t0.027s\nperf gate ok: 95.85 ns/op <= 113 ns/op\n"
+        },
+        {
+          "check": "buggy_fails",
+          "ok": true,
+          "detail": "A-1"
+        },
+        {
+          "check": "cheat_rejected",
+          "ok": true,
+          "detail": "inherited: L2/A0 cheat already rejected; no extra cheat.patch"
+        },
+        {
+          "check": "two_func_alt_accepted",
+          "ok": true,
+          "detail": "inherited: L2/A0 alt already accepted"
+        },
+        {
+          "check": "patches_skip_tests",
+          "ok": true,
+          "detail": "gold/alt/cheat copied from L2/A0; no new *_test.go hunks"
+        },
+        {
+          "check": "proof_harness",
+          "ok": true,
+          "detail": "go on PATH; false\u22600 true=0"
+        },
+        {
+          "check": "blackbox_hygiene",
+          "ok": true,
+          "detail": "hidden tests are exported-API only (B4)"
+        }
+      ]
+    }
+  },
+  "harness_ok": true,
+  "harness": {
+    "ok": true,
+    "go_on_path": true,
+    "go_out": "/usr/local/go/bin/go\ngo version go1.23.12 linux/amd64\n",
+    "false_exit": 1,
+    "true_exit": 0,
+    "image": "harbor-ladder2:latest"
+  }
+}

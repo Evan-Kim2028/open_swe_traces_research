@@ -1,0 +1,29 @@
+diff --git a/internal/locate/region_cache.go b/internal/locate/region_cache.go
+--- a/internal/locate/region_cache.go
++++ b/internal/locate/region_cache.go
+@@ -2421,12 +2421,12 @@
+ 
+ // NewRegionVerID creates a region ver id, which used for invalidating regions.
+ func NewRegionVerID(id, confVer, ver uint64) RegionVerID {
+-	return RegionVerID{id, confVer, ver}
++	return RegionVerID{id, ver, confVer}
+ }
+ 
+ // GetID returns the id of the region
+ func (r *RegionVerID) GetID() uint64 {
+-	return r.id
++	return r.confVer
+ }
+ 
+ // GetVer returns the version of the region's epoch
+@@ -2453,8 +2453,8 @@
+ func (r *Region) VerID() RegionVerID {
+ 	return RegionVerID{
+ 		id:      r.meta.GetId(),
+-		confVer: r.meta.GetRegionEpoch().GetConfVer(),
+-		ver:     r.meta.GetRegionEpoch().GetVersion(),
++		confVer: r.meta.GetRegionEpoch().GetVersion(),
++		ver:     r.meta.GetRegionEpoch().GetConfVer(),
+ 	}
+ }
+ 

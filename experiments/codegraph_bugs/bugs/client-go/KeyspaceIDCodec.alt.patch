@@ -1,0 +1,25 @@
+diff --git a/internal/apicodec/codec.go b/internal/apicodec/codec.go
+--- a/internal/apicodec/codec.go
++++ b/internal/apicodec/codec.go
+@@ -37,7 +37,8 @@
+ 	buf := append([]byte{}, b[:keyspacePrefixLen]...)
+ 	buf[0] = 0
+ 
+-	return KeyspaceID(binary.BigEndian.Uint32(buf)^1), nil
++	id := binary.BigEndian.Uint32(buf)
++	return KeyspaceID(id), nil
+ }
+ 
+ // Codec is responsible for encode/decode requests.
+diff --git a/internal/apicodec/codec_v2.go b/internal/apicodec/codec_v2.go
+--- a/internal/apicodec/codec_v2.go
++++ b/internal/apicodec/codec_v2.go
+@@ -91,7 +91,7 @@
+ 	b := make([]byte, 4)
+ 	// Use BigEndian to put the least significant byte to last array position.
+ 	// For example, keyspaceID 1 should result in []byte{0, 0, 1}
+-	binary.BigEndian.PutUint32(b, keyspaceID^1)
++	binary.BigEndian.PutUint32(b, keyspaceID)
+ 	// When keyspaceID can't fit in 3 bytes, first byte of buffer will be non-zero.
+ 	// So return error.
+ 	if b[0] != 0 {

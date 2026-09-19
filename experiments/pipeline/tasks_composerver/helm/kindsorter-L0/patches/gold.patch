@@ -1,0 +1,299 @@
+diff --git b/pkg/release/v1/util/kind_sorter.go a/pkg/release/v1/util/kind_sorter.go
+index fff2945..9613e8e 100644
+--- b/pkg/release/v1/util/kind_sorter.go
++++ a/pkg/release/v1/util/kind_sorter.go
+@@ -17,7 +17,7 @@ limitations under the License.
+ package util
+ 
+ import (
+-	_ "sort"
++	"sort"
+ 
+ 	release "example.internal/chartkit/v4/pkg/release/v1"
+ )
+@@ -118,16 +118,48 @@ var UninstallOrder KindSortOrder = []string{
+ //
+ // Results are sorted by 'ordering', keeping order of items with equal kind/priority
+ func sortManifestsByKind(manifests []Manifest, ordering KindSortOrder) []Manifest {
+-	panic("excised: sortManifestsByKind")
++	sort.SliceStable(manifests, func(i, j int) bool {
++		return lessByKind(manifests[i], manifests[j], manifests[i].Head.Kind, manifests[j].Head.Kind, ordering)
++	})
++
++	return manifests
+ }
+ 
+ // sort hooks by kind, using an out-of-place sort to preserve the input parameters.
+ //
+ // Results are sorted by 'ordering', keeping order of items with equal kind/priority
+ func sortHooksByKind(hooks []*release.Hook, ordering KindSortOrder) []*release.Hook {
+-	panic("excised: sortHooksByKind")
++	h := hooks
++	sort.SliceStable(h, func(i, j int) bool {
++		return lessByKind(h[i], h[j], h[i].Kind, h[j].Kind, ordering)
++	})
++
++	return h
+ }
+ 
+ func lessByKind(_, _ any, kindA, kindB string, o KindSortOrder) bool {
+-	panic("excised: lessByKind")
++	ordering := make(map[string]int, len(o))
++	for v, k := range o {
++		ordering[k] = v
++	}
++
++	first, aok := ordering[kindA]
++	second, bok := ordering[kindB]
++
++	if !aok && !bok {
++		// if both are unknown then sort alphabetically by kind, keep original order if same kind
++		if kindA != kindB {
++			return kindA < kindB
++		}
++		return first < second
++	}
++	// unknown kind is last
++	if !aok {
++		return false
++	}
++	if !bok {
++		return true
++	}
++	// sort different kinds, keep original order if same priority
++	return first < second
+ }
+diff --git b/pkg/release/v1/util/manifest_sorter.go a/pkg/release/v1/util/manifest_sorter.go
+index dc0bb52..194aaea 100644
+--- b/pkg/release/v1/util/manifest_sorter.go
++++ a/pkg/release/v1/util/manifest_sorter.go
+@@ -17,14 +17,14 @@ limitations under the License.
+ package util
+ 
+ import (
+-	_ "fmt"
+-	_ "log/slog"
+-	_ "path"
+-	_ "sort"
+-	_ "strconv"
+-	_ "strings"
++	"fmt"
++	"log/slog"
++	"path"
++	"sort"
++	"strconv"
++	"strings"
+ 
+-	_ "sigs.k8s.io/yaml"
++	"sigs.k8s.io/yaml"
+ 
+ 	"example.internal/chartkit/v4/pkg/chart/common"
+ 	release "example.internal/chartkit/v4/pkg/release/v1"
+@@ -75,7 +75,38 @@ var events = map[string]release.HookEvent{
+ // Files that do not parse into the expected format are simply placed into a map and
+ // returned.
+ func SortManifests(files map[string]string, _ common.VersionSet, ordering KindSortOrder) ([]*release.Hook, []Manifest, error) {
+-	panic("excised: SortManifests")
++	result := &result{}
++
++	var sortedFilePaths []string
++	for filePath := range files {
++		sortedFilePaths = append(sortedFilePaths, filePath)
++	}
++	sort.Strings(sortedFilePaths)
++
++	for _, filePath := range sortedFilePaths {
++		content := files[filePath]
++
++		// Skip partials. We could return these as a separate map, but there doesn't
++		// seem to be any need for that at this time.
++		if strings.HasPrefix(path.Base(filePath), "_") {
++			continue
++		}
++		// Skip empty files and log this.
++		if strings.TrimSpace(content) == "" {
++			continue
++		}
++
++		manifestFile := &manifestFile{
++			entries: SplitManifests(content),
++			path:    filePath,
++		}
++
++		if err := manifestFile.sort(result); err != nil {
++			return result.hooks, result.generic, err
++		}
++	}
++
++	return sortHooksByKind(result.hooks, ordering), sortManifestsByKind(result.generic, ordering), nil
+ }
+ 
+ // sort takes a manifestFile object which may contain multiple resource definition
+@@ -106,22 +137,108 @@ func SortManifests(files map[string]string, _ common.VersionSet, ordering KindSo
+ //			annotations:
+ //				chartkit.sh/hook-output-log-policy: hook-succeeded,hook-failed
+ func (file *manifestFile) sort(result *result) error {
+-	panic("excised: manifestFile.sort")
++	// Go through manifests in order found in file (function `SplitManifests` creates integer-sortable keys)
++	var sortedEntryKeys []string
++	for entryKey := range file.entries {
++		sortedEntryKeys = append(sortedEntryKeys, entryKey)
++	}
++	sort.Sort(BySplitManifestsOrder(sortedEntryKeys))
++
++	for _, entryKey := range sortedEntryKeys {
++		m := file.entries[entryKey]
++
++		var entry SimpleHead
++		if err := yaml.Unmarshal([]byte(m), &entry); err != nil {
++			return fmt.Errorf("YAML parse error on %s: %w", file.path, err)
++		}
++
++		if !hasAnyAnnotation(entry) {
++			result.generic = append(result.generic, Manifest{
++				Name:    file.path,
++				Content: m,
++				Head:    &entry,
++			})
++			continue
++		}
++
++		hookTypes, ok := entry.Metadata.Annotations[release.HookAnnotation]
++		if !ok {
++			result.generic = append(result.generic, Manifest{
++				Name:    file.path,
++				Content: m,
++				Head:    &entry,
++			})
++			continue
++		}
++
++		hw := calculateHookWeight(entry)
++
++		h := &release.Hook{
++			Name:              entry.Metadata.Name,
++			Kind:              entry.Kind,
++			Path:              file.path,
++			Manifest:          m,
++			Events:            []release.HookEvent{},
++			Weight:            hw,
++			DeletePolicies:    []release.HookDeletePolicy{},
++			OutputLogPolicies: []release.HookOutputLogPolicy{},
++		}
++
++		isUnknownHook := false
++		for hookType := range strings.SplitSeq(hookTypes, ",") {
++			hookType = strings.ToLower(strings.TrimSpace(hookType))
++			e, ok := events[hookType]
++			if !ok {
++				isUnknownHook = true
++				break
++			}
++			h.Events = append(h.Events, e)
++		}
++
++		if isUnknownHook {
++			slog.Info("skipping unknown hooks", "hookTypes", hookTypes)
++			continue
++		}
++
++		result.hooks = append(result.hooks, h)
++
++		operateAnnotationValues(entry, release.HookDeleteAnnotation, func(value string) {
++			h.DeletePolicies = append(h.DeletePolicies, release.HookDeletePolicy(value))
++		})
++
++		operateAnnotationValues(entry, release.HookOutputLogAnnotation, func(value string) {
++			h.OutputLogPolicies = append(h.OutputLogPolicies, release.HookOutputLogPolicy(value))
++		})
++	}
++
++	return nil
+ }
+ 
+ // hasAnyAnnotation returns true if the given entry has any annotations at all.
+ func hasAnyAnnotation(entry SimpleHead) bool {
+-	panic("excised: hasAnyAnnotation")
++	return entry.Metadata != nil &&
++		entry.Metadata.Annotations != nil &&
++		len(entry.Metadata.Annotations) != 0
+ }
+ 
+ // calculateHookWeight finds the weight in the hook weight annotation.
+ //
+ // If no weight is found, the assigned weight is 0
+ func calculateHookWeight(entry SimpleHead) int {
+-	panic("excised: calculateHookWeight")
++	hws := entry.Metadata.Annotations[release.HookWeightAnnotation]
++	hw, err := strconv.Atoi(hws)
++	if err != nil {
++		hw = 0
++	}
++	return hw
+ }
+ 
+ // operateAnnotationValues finds the given annotation and runs the operate function with the value of that annotation
+ func operateAnnotationValues(entry SimpleHead, annotation string, operate func(p string)) {
+-	panic("excised: operateAnnotationValues")
++	if dps, ok := entry.Metadata.Annotations[annotation]; ok {
++		for dp := range strings.SplitSeq(dps, ",") {
++			dp = strings.ToLower(strings.TrimSpace(dp))
++			operate(dp)
++		}
++	}
+ }
+diff --git b/pkg/release/v1/util/sorter.go a/pkg/release/v1/util/sorter.go
+index caae554..f52971c 100644
+--- b/pkg/release/v1/util/sorter.go
++++ a/pkg/release/v1/util/sorter.go
+@@ -17,30 +17,45 @@ limitations under the License.
+ package util
+ 
+ import (
+-	_ "sort"
++	"sort"
+ 
+ 	rspb "example.internal/chartkit/v4/pkg/release/v1"
+ )
+ 
+ // Reverse reverses the list of releases sorted by the sort func.
+ func Reverse(list []*rspb.Release, sortFn func([]*rspb.Release)) {
+-	panic("excised: Reverse")
++	sortFn(list)
++	for i, j := 0, len(list)-1; i < j; i, j = i+1, j-1 {
++		list[i], list[j] = list[j], list[i]
++	}
+ }
+ 
+ // SortByName returns the list of releases sorted
+ // in lexicographical order.
+ func SortByName(list []*rspb.Release) {
+-	panic("excised: SortByName")
++	sort.Slice(list, func(i, j int) bool {
++		return list[i].Name < list[j].Name
++	})
+ }
+ 
+ // SortByDate returns the list of releases sorted by a
+ // release's last deployed time (in seconds).
+ func SortByDate(list []*rspb.Release) {
+-	panic("excised: SortByDate")
++	sort.Slice(list, func(i, j int) bool {
++		ti := list[i].Info.LastDeployed.Unix()
++		tj := list[j].Info.LastDeployed.Unix()
++		if ti != tj {
++			return ti < tj
++		}
++		// Use name as tie-breaker for stable sorting
++		return list[i].Name < list[j].Name
++	})
+ }
+ 
+ // SortByRevision returns the list of releases sorted by a
+ // release's revision number (release.Version).
+ func SortByRevision(list []*rspb.Release) {
+-	panic("excised: SortByRevision")
++	sort.Slice(list, func(i, j int) bool {
++		return list[i].Version < list[j].Version
++	})
+ }

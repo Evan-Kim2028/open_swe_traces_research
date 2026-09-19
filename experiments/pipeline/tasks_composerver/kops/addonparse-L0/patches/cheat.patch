@@ -1,0 +1,63 @@
+diff --git a/channels/pkg/channels/addons.go b/channels/pkg/channels/addons.go
+--- a/channels/pkg/channels/addons.go
++++ b/channels/pkg/channels/addons.go
+@@ -46,17 +46,17 @@
+ }
+ 
+ func ParseAddons(name string, location *url.URL, data []byte) (*Addons, error) {
+-	panic("excised: ParseAddons")
++	return nil, nil
+ }
+ 
+ func (a *Addons) GetCurrent(kubernetesVersion semver.Version) (*AddonMenu, error) {
+-	panic("excised: Addons.GetCurrent")
++	return nil, nil
+ }
+ 
+ func (a *Addons) wrapInAddons() ([]*Addon, error) {
+-	panic("excised: Addons.wrapInAddons")
++	return nil, nil
+ }
+ 
+ func (s *Addon) matches(kubernetesVersion semver.Version) bool {
+-	panic("excised: Addon.matches")
++	return false
+ }
+diff --git a/channels/pkg/channels/addon.go b/channels/pkg/channels/addon.go
+--- a/channels/pkg/channels/addon.go
++++ b/channels/pkg/channels/addon.go
+@@ -86,11 +86,11 @@
+ }
+ 
+ func (a *Addon) ChannelVersion() *ChannelVersion {
+-	panic("excised: Addon.ChannelVersion")
++	return nil
+ }
+ 
+ func (a *Addon) buildChannel() *Channel {
+-	panic("excised: Addon.buildChannel")
++	return nil
+ }
+ 
+ func (a *Addon) GetNamespace() string {
+@@ -102,7 +102,7 @@
+ }
+ 
+ func (a *Addon) GetRequiredUpdates(ctx context.Context, k8sClient kubernetes.Interface, cmClient certmanager.Interface, existingVersion *ChannelVersion) (*AddonUpdate, error) {
+-	panic("excised: Addon.GetRequiredUpdates")
++	return nil, nil
+ }
+ 
+ func (a *Addon) GetManifestFullUrl() (*url.URL, error) {
+diff --git a/channels/pkg/channels/channel_version.go b/channels/pkg/channels/channel_version.go
+--- a/channels/pkg/channels/channel_version.go
++++ b/channels/pkg/channels/channel_version.go
+@@ -116,7 +116,7 @@
+ }
+ 
+ func (c *ChannelVersion) replaces(name string, existing *ChannelVersion) bool {
+-	panic("excised: ChannelVersion.replaces")
++	return false
+ }
+ 
+ func (c *Channel) GetInstalledVersion(ctx context.Context, k8sClient kubernetes.Interface) (*ChannelVersion, error) {

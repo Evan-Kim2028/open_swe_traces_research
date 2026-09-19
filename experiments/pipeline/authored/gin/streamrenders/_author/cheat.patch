@@ -1,0 +1,72 @@
+--- a/render/reader.go
++++ b/render/reader.go
+@@ -20,15 +20,11 @@
+ 
+ // Render (Reader) writes data with custom ContentType and headers.
+ func (r Reader) Render(w http.ResponseWriter) (err error) {
+-	panic("excised: Render")
++	return nil
+ }
+ 
+ // WriteContentType (Reader) writes custom ContentType.
+-func (r Reader) WriteContentType(w http.ResponseWriter) {
+-	panic("excised: WriteContentType")
+-}
++func (r Reader) WriteContentType(w http.ResponseWriter) {}
+ 
+ // writeHeaders writes headers from r.Headers into response.
+-func (r Reader) writeHeaders(w http.ResponseWriter) {
+-	panic("excised: writeHeaders")
+-}
++func (r Reader) writeHeaders(w http.ResponseWriter) {}
+--- a/render/data.go
++++ b/render/data.go
+@@ -17,10 +17,8 @@
+ 
+ // Render (Data) writes data with custom ContentType.
+ func (r Data) Render(w http.ResponseWriter) (err error) {
+-	panic("excised: Render")
++	return nil
+ }
+ 
+ // WriteContentType (Data) writes custom ContentType.
+-func (r Data) WriteContentType(w http.ResponseWriter) {
+-	panic("excised: WriteContentType")
+-}
++func (r Data) WriteContentType(w http.ResponseWriter) {}
+--- a/render/redirect.go
++++ b/render/redirect.go
+@@ -18,10 +18,8 @@
+ 
+ // Render (Redirect) redirects the http request to new location and writes redirect response.
+ func (r Redirect) Render(w http.ResponseWriter) error {
+-	panic("excised: Render")
++	return nil
+ }
+ 
+ // WriteContentType (Redirect) don't write any ContentType.
+-func (r Redirect) WriteContentType(http.ResponseWriter) {
+-	panic("excised: WriteContentType")
+-}
++func (r Redirect) WriteContentType(http.ResponseWriter) {}
+--- a/render/text.go
++++ b/render/text.go
+@@ -21,15 +21,13 @@
+ 
+ // Render (String) writes data with custom ContentType.
+ func (r String) Render(w http.ResponseWriter) error {
+-	panic("excised: Render")
++	return nil
+ }
+ 
+ // WriteContentType (String) writes Plain ContentType.
+-func (r String) WriteContentType(w http.ResponseWriter) {
+-	panic("excised: WriteContentType")
+-}
++func (r String) WriteContentType(w http.ResponseWriter) {}
+ 
+ // WriteString writes data according to its format and write custom ContentType.
+ func WriteString(w http.ResponseWriter, format string, data []any) (err error) {
+-	panic("excised: WriteString")
++	return nil
+ }

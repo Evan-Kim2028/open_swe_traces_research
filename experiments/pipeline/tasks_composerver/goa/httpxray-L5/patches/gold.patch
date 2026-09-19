@@ -1,0 +1,236 @@
+--- a/http/middleware/xray/middleware.go
++++ b/http/middleware/xray/middleware.go
+@@ -57,13 +57,37 @@
+ //   - 1.4 hours:   14 KB
+ //
+ // Besides those varying size limitations, a trace may be open for up to 7 days.
+-func New(service, daemon string) (func(http.Handler) http.Handler, error) { panic("excised: New") }
+-
+-func _keepExcisedImports() {
+-	_ = context.Background
+-	_ = fmt.Sprintf
+-	_ = net.IPv4len
+-	_ = time.Now
+-	_ = middleware.TraceIDKey
+-	_ = xray.SegKey
++func New(service, daemon string) (func(http.Handler) http.Handler, error) {
++	connection, err := xray.Connect(context.Background(), time.Minute, func() (net.Conn, error) {
++		return net.Dial("udp", daemon)
++	})
++	if err != nil {
++		return nil, fmt.Errorf("xray: failed to connect to daemon - %w", err)
++	}
++	return func(h http.Handler) http.Handler {
++		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++			var (
++				ctx      = r.Context()
++				spanID   = ctx.Value(middleware.TraceSpanIDKey)
++				traceID  = ctx.Value(middleware.TraceIDKey)
++				parentID = ctx.Value(middleware.TraceParentSpanIDKey)
++			)
++			if traceID == nil || spanID == nil {
++				h.ServeHTTP(w, r)
++			} else {
++				hs := &HTTPSegment{
++					Segment:        xray.NewSegment(service, traceID.(string), spanID.(string), connection()),
++					ResponseWriter: w,
++				}
++				defer hs.Close()
++				hs.RecordRequest(r, "")
++				if parentID != nil {
++					hs.ParentID = parentID.(string)
++				}
++				hs.SubmitInProgress()
++				ctx = context.WithValue(ctx, xray.SegKey, hs.Segment)
++				h.ServeHTTP(hs, r.WithContext(ctx))
++			}
++		})
++	}, nil
+ }
+--- a/http/middleware/xray/segment.go
++++ b/http/middleware/xray/segment.go
+@@ -22,28 +22,93 @@
+ // RecordRequest traces a request.
+ //
+ // It sets Http.Request & Namespace (ex: "remote")
+-func (s *HTTPSegment) RecordRequest(req *http.Request, namespace string) { panic("excised: RecordRequest") }
++func (s *HTTPSegment) RecordRequest(req *http.Request, namespace string) {
++	s.Lock()
++	defer s.Unlock()
++
++	if s.HTTP == nil {
++		s.HTTP = &xray.HTTP{}
++	}
++
++	s.Namespace = namespace
++	s.HTTP.Request = requestData(req)
++}
+ 
+ // RecordResponse traces a response.
+ //
+ // It sets Throttle, Fault, Error and HTTP.Response
+-func (s *HTTPSegment) RecordResponse(resp *http.Response) { panic("excised: RecordResponse") }
++func (s *HTTPSegment) RecordResponse(resp *http.Response) {
++	s.Lock()
++	defer s.Unlock()
++
++	if s.HTTP == nil {
++		s.HTTP = &xray.HTTP{}
++	}
++
++	s.recordStatusCode(resp.StatusCode)
++
++	s.HTTP.Response = responseData(resp)
++}
+ 
+ // WriteHeader records the HTTP response code and calls the corresponding
+ // ResponseWriter method.
+-func (s *HTTPSegment) WriteHeader(code int) { panic("excised: WriteHeader") }
++func (s *HTTPSegment) WriteHeader(code int) {
++	s.Lock()
++	defer s.Unlock()
++	if s.HTTP == nil {
++		s.HTTP = &xray.HTTP{}
++	}
++	if s.HTTP.Response == nil {
++		s.HTTP.Response = &xray.Response{}
++	}
++	s.HTTP.Response.Status = code
++	s.recordStatusCode(code)
++	s.ResponseWriter.WriteHeader(code)
++}
+ 
+ // Write records the HTTP response content length and error (if any)
+ // and calls the corresponding ResponseWriter method.
+-func (s *HTTPSegment) Write(p []byte) (int, error) { panic("excised: Write") }
++func (s *HTTPSegment) Write(p []byte) (int, error) {
++	s.Lock()
++	n, err := s.ResponseWriter.Write(p)
++	s.Unlock()
++	if err != nil {
++		s.RecordError(err)
++	}
++
++	s.Lock()
++	defer s.Unlock()
++	if s.HTTP == nil {
++		s.HTTP = &xray.HTTP{}
++	}
++	if s.HTTP.Response == nil {
++		s.HTTP.Response = &xray.Response{}
++	}
++	s.HTTP.Response.ContentLength = int64(n)
++	return n, err
++}
+ 
+ // Hijack supports the http.Hijacker interface.
+-func (s *HTTPSegment) Hijack() (net.Conn, *bufio.ReadWriter, error) { panic("excised: Hijack") }
++func (s *HTTPSegment) Hijack() (net.Conn, *bufio.ReadWriter, error) {
++	if hijacker, ok := s.ResponseWriter.(http.Hijacker); ok {
++		return hijacker.Hijack()
++	}
++	return nil, nil, fmt.Errorf("xray: inner ResponseWriter cannot be hijacked: %T", s.ResponseWriter)
++}
+ 
+ // recordStatusCode sets Throttle, Fault, Error
+ //
+ // It is expected that the mutex has already been locked when calling this method.
+-func (s *HTTPSegment) recordStatusCode(statusCode int) { panic("excised: recordStatusCode") }
++func (s *HTTPSegment) recordStatusCode(statusCode int) {
++	switch {
++	case statusCode == http.StatusTooManyRequests:
++		s.Throttle = true
++	case statusCode >= 400 && statusCode < 500:
++		s.Fault = true
++	case statusCode >= 500:
++		s.Error = true
++	}
++}
+ 
+ // requestData creates a Request from a http.Request.
+ func requestData(req *http.Request) *xray.Request {
+--- a/http/middleware/xray/wrap_doer.go
++++ b/http/middleware/xray/wrap_doer.go
+@@ -17,13 +17,33 @@
+ 
+ // WrapDoer wraps a apikit HTTP Doer and creates xray subsegments for traced
+ // requests.
+-func WrapDoer(doer goahttp.Doer) goahttp.Doer { panic("excised: WrapDoer") }
++func WrapDoer(doer goahttp.Doer) goahttp.Doer {
++	return &xrayDoer{doer}
++}
+ 
+ // Do calls through to the wrapped Doer, creating subsegments as appropriate.
+-func (r *xrayDoer) Do(req *http.Request) (*http.Response, error) { panic("excised: Do") }
++func (r *xrayDoer) Do(req *http.Request) (*http.Response, error) {
++	ctx := req.Context()
++
++	seg := ctx.Value(xray.SegKey)
++	if seg == nil {
++		return r.wrapped.Do(req)
++	}
++	s := seg.(*xray.Segment)
++	sub := s.NewSubsegment(req.URL.Host)
++	hs := &HTTPSegment{Segment: sub}
++	hs.RecordRequest(req, "remote")
++	hs.SubmitInProgress()
++	defer hs.Close()
+ 
+-func _keepExcisedImports() {
+-	_ = context.Background
+-	_ = middleware.TraceIDKey
+-	_ = xray.SegKey
++	// update the context with the latest segment
++	ctx = middleware.WithSpan(ctx, hs.TraceID, hs.ID, hs.ParentID)
++	req = req.WithContext(context.WithValue(ctx, xray.SegKey, hs.Segment))
++	resp, err := r.wrapped.Do(req)
++	if err != nil {
++		hs.RecordError(err)
++	} else {
++		hs.RecordResponse(resp)
++	}
++	return resp, err
+ }
+--- a/http/middleware/xray/wrap_transport.go
++++ b/http/middleware/xray/wrap_transport.go
+@@ -25,14 +25,34 @@
+ //	httpClient := &http.Client{
+ //	   Transport: WrapTransport(http.DefaultTransport),
+ //	}
+-func WrapTransport(rt http.RoundTripper) http.RoundTripper { panic("excised: WrapTransport") }
++func WrapTransport(rt http.RoundTripper) http.RoundTripper {
++	return &xrayTransport{rt}
++}
+ 
+ // RoundTrip wraps the original RoundTripper.RoundTrip to create xray tracing
+ // segments.
+-func (t *xrayTransport) RoundTrip(req *http.Request) (*http.Response, error) { panic("excised: RoundTrip") }
++func (t *xrayTransport) RoundTrip(req *http.Request) (*http.Response, error) {
++	ctx := req.Context()
++	seg := ctx.Value(xray.SegKey)
++	if seg == nil {
++		return t.wrapped.RoundTrip(req)
++	}
++
++	s := seg.(*xray.Segment)
++	sub := s.NewSubsegment(req.URL.Host)
++	hs := &HTTPSegment{Segment: sub}
++	hs.RecordRequest(req, "remote")
++	hs.SubmitInProgress()
++	defer hs.Close()
+ 
+-func _keepExcisedImports() {
+-	_ = context.Background
+-	_ = middleware.TraceIDKey
+-	_ = xray.SegKey
++	// update the context with the latest segment
++	ctx = middleware.WithSpan(ctx, hs.TraceID, hs.ID, hs.ParentID)
++	req = req.WithContext(context.WithValue(ctx, xray.SegKey, hs.Segment))
++	resp, err := t.wrapped.RoundTrip(req)
++	if err != nil {
++		hs.RecordError(err)
++	} else {
++		hs.RecordResponse(resp)
++	}
++	return resp, err
+ }

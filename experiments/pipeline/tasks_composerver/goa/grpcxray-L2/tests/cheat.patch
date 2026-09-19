@@ -1,0 +1,43 @@
+--- a/grpc/middleware/xray/middleware.go
++++ b/grpc/middleware/xray/middleware.go
+@@ -67,31 +67,31 @@
+ //   - 1.4 hours:   14 KB
+ //
+ // Besides those varying size limitations, a trace may be open for up to 7 days.
+-func NewUnaryServer(service, daemon string) (grpc.UnaryServerInterceptor, error) { panic("excised: NewUnaryServer") }
++func NewUnaryServer(service, daemon string) (grpc.UnaryServerInterceptor, error) { var z0 grpc.UnaryServerInterceptor; var z1 error; return z0, z1 }
+ 
+ // NewStreamServer is similar to NewUnaryServer except it is used for
+ // streaming endpoints.
+-func NewStreamServer(service, daemon string) (grpc.StreamServerInterceptor, error) { panic("excised: NewStreamServer") }
++func NewStreamServer(service, daemon string) (grpc.StreamServerInterceptor, error) { var z0 grpc.StreamServerInterceptor; var z1 error; return z0, z1 }
+ 
+ // UnaryClient middleware creates XRay subsegments if a segment is found in
+ // the context and stores the subsegment to the context. It also sets the
+ // trace information in the context which is used by the tracing middleware.
+ // This middleware must be mounted before the tracing middleware.
+-func UnaryClient(host string) grpc.UnaryClientInterceptor { panic("excised: UnaryClient") }
++func UnaryClient(host string) grpc.UnaryClientInterceptor { var z0 grpc.UnaryClientInterceptor; return z0 }
+ 
+ // StreamClient is the streaming endpoint middleware equivalent for UnaryClient.
+-func StreamClient(host string) grpc.StreamClientInterceptor { panic("excised: StreamClient") }
++func StreamClient(host string) grpc.StreamClientInterceptor { var z0 grpc.StreamClientInterceptor; return z0 }
+ 
+-func (c *xrayStreamClientWrapper) SendMsg(m any) error { panic("excised: SendMsg") }
++func (c *xrayStreamClientWrapper) SendMsg(m any) error { var z0 error; return z0 }
+ 
+-func (c *xrayStreamClientWrapper) RecvMsg(m any) error { panic("excised: RecvMsg") }
++func (c *xrayStreamClientWrapper) RecvMsg(m any) error { var z0 error; return z0 }
+ 
+-func (c *xrayStreamClientWrapper) CloseSend() error { panic("excised: CloseSend") }
++func (c *xrayStreamClientWrapper) CloseSend() error { var z0 error; return z0 }
+ 
+-func (c *xrayStreamClientWrapper) Header() (metadata.MD, error) { panic("excised: Header") }
++func (c *xrayStreamClientWrapper) Header() (metadata.MD, error) { var z0 metadata.MD; var z1 error; return z0, z1 }
+ 
+ // recordErrorAndClose records the error and closes the segment.
+-func (c *xrayStreamClientWrapper) recordErrorAndClose(err error) { panic("excised: recordErrorAndClose") }
++func (c *xrayStreamClientWrapper) recordErrorAndClose(err error) {}
+ 
+ func _keepExcisedImports() {
+ 	_ = context.Background

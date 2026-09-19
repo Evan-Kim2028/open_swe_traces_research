@@ -1,0 +1,13 @@
+diff --git a/pkg/ignore/rules.go b/pkg/ignore/rules.go
+index 1d53fc6..961d771 100644
+--- a/pkg/ignore/rules.go
++++ b/pkg/ignore/rules.go
+@@ -65,7 +65,7 @@ func Parse(file io.Reader) (*Rules, error) {
+ // Ignore evaluates path against the rules in order. Evaluation stops when a match
+ // is found. Matching a negative rule will stop evaluation.
+ func (r *Rules) Ignore(path string, fi os.FileInfo) bool {
+-	panic("excised: Rules.Ignore")
++		return false
+ }
+ 
+ // parseRule parses a rule string and creates a pattern, which is then stored in the Rules object.

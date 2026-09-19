@@ -1,0 +1,241 @@
+{
+  "family": "keyspacecodec-obf",
+  "level": -2,
+  "instruction_self_check": {
+    "names_present": false,
+    "has_symptom_paraphrase": true,
+    "leaked_symbols": [],
+    "leaked_files": [],
+    "has_line_numbers": false,
+    "has_diff": false,
+    "reproduce_command": "if go test -count=1 -timeout 15m -run '^(TestCodecKeyRangeRoundTrip|TestCodecClipProperties|TestCodecContractExamples|TestCodecUnmentionedRandom|TestLocateMalformedRegionNoBackoff)$' ./internal/apicodec/... ./internal/locate/...; then",
+    "can_reproduce_one_command": true,
+    "diff_hunk_tokens_in_instruction": [],
+    "locality": 2,
+    "ok": true
+  },
+  "changed_symbols": [
+    "HazePipe",
+    "MistCore",
+    "WillowNode",
+    "JadeSeal",
+    "NimbusPack",
+    "YarrowJoin"
+  ],
+  "changed_files": [
+    "codec.go",
+    "codec_v2.go",
+    "codec_v1.go",
+    "mem_codec.go",
+    "pd_codec.go"
+  ],
+  "rule_verdicts": [
+    {
+      "rule_id": "A1",
+      "passed": true,
+      "evidence": "payload.checks.gold_restore=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A2",
+      "passed": false,
+      "evidence": "**N/A at this size** \u2014 one-function `EncodeKey` alt does **not** pass f2p; full alt infeasible (see above)",
+      "skipped": true
+    },
+    {
+      "rule_id": "A3",
+      "passed": true,
+      "evidence": "payload.checks.cheat_rejected=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A4",
+      "passed": true,
+      "evidence": "notes[f2p files in impact]=`codec_v2_test.go`, `region_cache_test.go` \u2208 codec / `IsDecodeError` blast radius",
+      "skipped": false
+    },
+    {
+      "rule_id": "A5",
+      "passed": true,
+      "evidence": "notes[no collateral]=remaining packages (excluding apicodec+locate) green (`rest_rc=0`); notes[3\u00d7 not flaky]=`TestCodecV2` fail \u00d73; `TestNoBackoffWhenFailToDecodeRegion` fail \u00d73",
+      "skipped": false
+    },
+    {
+      "rule_id": "A6",
+      "passed": false,
+      "evidence": "not a multi-site bug (no site_* patches or two_site design)",
+      "skipped": true
+    },
+    {
+      "rule_id": "A7",
+      "passed": false,
+      "evidence": "no decoys on this task",
+      "skipped": true
+    },
+    {
+      "rule_id": "A8",
+      "passed": true,
+      "evidence": "image proof buggy_fails=True gold_passes=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "A9",
+      "passed": false,
+      "evidence": "no race/perf/property gate in test.sh",
+      "skipped": true
+    },
+    {
+      "rule_id": "A10",
+      "passed": true,
+      "evidence": "task.toml [verifier] network_mode=no-network",
+      "skipped": false
+    },
+    {
+      "rule_id": "A11",
+      "passed": false,
+      "evidence": "no timing gate in test.sh",
+      "skipped": true
+    },
+    {
+      "rule_id": "A12",
+      "passed": true,
+      "evidence": "payload.checks.patches_skip_tests=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "B1",
+      "passed": true,
+      "evidence": "tests/test.sh checksum-guards files",
+      "skipped": false
+    },
+    {
+      "rule_id": "B2",
+      "passed": true,
+      "evidence": "task.toml [agent] allowlist; trial web-tool use not scored (jobs/ excluded)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B3",
+      "passed": true,
+      "evidence": "hidden verifier (2 files)",
+      "skipped": false
+    },
+    {
+      "rule_id": "B4",
+      "passed": true,
+      "evidence": "payload.checks.blackbox_hygiene=True",
+      "skipped": false
+    },
+    {
+      "rule_id": "B5",
+      "passed": true,
+      "evidence": "property/dynamic markers: ['rand.New', 'rand.NewSource']",
+      "skipped": false
+    },
+    {
+      "rule_id": "B6",
+      "passed": true,
+      "evidence": "symptom=True repro=True cmd=if go test -count=1 -timeout 15m -run '^(TestCodecKeyRangeRoundTrip|TestCodecClipProperties|TestCodecContractExamples|TestCodecUnmentionedRandom|TestLocateMalformedRegionNoBackoff)$' ./internal/apicod",
+      "skipped": false
+    },
+    {
+      "rule_id": "B7",
+      "passed": true,
+      "evidence": "leaked_symbols=[] leaked_files=[] line_nos=False diff=False hunk_tokens=[]",
+      "skipped": false
+    },
+    {
+      "rule_id": "B8",
+      "passed": true,
+      "evidence": "instruction contains the no-web clause",
+      "skipped": false
+    },
+    {
+      "rule_id": "C5",
+      "passed": true,
+      "evidence": "payload.checks.harness_ok=True",
+      "skipped": false
+    }
+  ],
+  "checks": {
+    "proof_harness": true,
+    "harness_ok": true,
+    "image_harness": true,
+    "buggy_fails": true,
+    "docker_a0_buggy_fails": true,
+    "gold_restore": true,
+    "docker_a0_gold_pass": true,
+    "cheat_rejected": true,
+    "patches_skip_tests": true,
+    "blackbox_hygiene": true
+  },
+  "harness_ok": true,
+  "patches_skip_tests": true,
+  "blackbox_hygiene": true,
+  "coverage": [
+    {
+      "hidden_test": "TestCodecContractExamples / raw get 0x1092 + encode-twice",
+      "contract": "A raw single-key lookup of user key `key` in keyspace 0x1092 must be sent with the 4-byte raw-mode header `0x72 0x00 0x10 0x92` followed by the user key, not the bare user key. Encoding twice on the same original request yields the same prefixed bytes (the original is not overwritten)."
+    },
+    {
+      "hidden_test": "TestCodecContractExamples / empty+partial+interior ranges",
+      "contract": "User ranges whose start or end is empty expand to the keyspace interval: empty start becomes the keyspace prefix, empty end becomes the next keyspace prefix; both empty becomes the whole keyspace; interior start/end keep their user suffix under the same prefix."
+    },
+    {
+      "hidden_test": "TestCodecContractExamples / construction + last-id wrap + carry",
+      "contract": "Constructing a v2 codec rejects a keyspace id that does not fit in 24 bits and rejects an unknown mode; the prefix is a mode byte plus the 24-bit id; the exclusive end prefix is that 32-bit value plus one, with carry across bytes; the last raw id wraps the mode byte from `r` to `s`."
+    },
+    {
+      "hidden_test": "TestCodecClipProperties / epoch region list",
+      "contract": "Epoch-not-match region lists are clipped to the keyspace and decoded to user keys: a region covering the whole keyspace becomes empty/empty, a region wholly outside the keyspace is dropped, and a region overlapping the keyspace is truncated to the overlap then stripped of the header."
+    },
+    {
+      "hidden_test": "TestCodecContractExamples / keyspace 4242",
+      "contract": "A codec built for keyspace 4242 reports that same id."
+    },
+    {
+      "hidden_test": "TestCodecContractExamples / MPP + compact RPC context",
+      "contract": "An MPP dispatch must carry keyspace id 4242 and API version 2 on its task meta, and its coprocessor ranges must be encoded the same way as ordinary user keys. Compact payloads carry the same API version and keyspace id on RPC context."
+    },
+    {
+      "hidden_test": "TestCodecContractExamples / buckets a,b,c",
+      "contract": "Bucket split keys that mix the previous, current, and next keyspace, including empty sentinels, decode to the user keys in this keyspace (`a`,`b`,`c`) with empty sentinels at the clipped bounds \u2014 never the mem-comparable encoded forms."
+    },
+    {
+      "hidden_test": "TestCodecContractExamples / WillowNode parse",
+      "contract": "A 4-byte header starting with txn `x` or raw `r` followed by 0x010203 yields keyspace id 0x010203; a header whose mode byte is neither, or that is shorter than 4 bytes, errors and yields the all-ones null id 0xffffffff."
+    },
+    {
+      "hidden_test": "TestCodecContractExamples / LumenSeal v1/v2",
+      "contract": "API v2 splits a well-formed key into a 4-byte header and the remaining user bytes; API v1 is identity (no header); an invalid v2 mode byte errors with empty results."
+    },
+    {
+      "hidden_test": "TestCodecContractExamples / v1 store-safe-ts",
+      "contract": "A request type with no key payload (store safe-ts) still encodes without error under the transactional v1 codec."
+    },
+    {
+      "hidden_test": "TestLocateMalformedRegionNoBackoff",
+      "contract": "A truncated or otherwise non mem-comparable region key is a fatal decode: locating that region must fail without incrementing the backoff counter."
+    },
+    {
+      "hidden_test": "TestCodecKeyRangeRoundTrip / 10k seeded round-trip + order",
+      "contract": "Encoding a user key or range and then decoding it returns the original bytes; the same round-trip holds for region-boundary keys. Byte order is preserved inside a keyspace."
+    },
+    {
+      "hidden_test": "TestCodecClipProperties / 10k seeded buckets",
+      "contract": "Bucket split keys from the previous keyspace clip to an empty user start, from the next keyspace to an empty user end, interior keys drop the header, complement keys are not leaked, and interior order is preserved."
+    },
+    {
+      "hidden_test": "TestCodecUnmentionedRandom / unseen ids and keys",
+      "contract": "Round-trip, range, and request/response symmetry hold for transactional ids and keys the contract examples never name (not 0x1092/0x010203, not `key`/`a`/`b`/`c`)."
+    }
+  ],
+  "proof_harness": true,
+  "image_harness": true,
+  "buggy_fails": true,
+  "docker_a0_buggy_fails": true,
+  "gold_restore": true,
+  "docker_a0_gold_pass": true,
+  "cheat_rejected": true,
+  "ladder": "L0"
+}

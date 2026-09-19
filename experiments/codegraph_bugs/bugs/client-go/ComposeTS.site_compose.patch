@@ -1,0 +1,12 @@
+diff --git a/oracle/oracle.go b/oracle/oracle.go
+--- a/oracle/oracle.go
++++ b/oracle/oracle.go
+@@ -74,7 +74,7 @@
+ 
+ // ComposeTS creates a ts from physical and logical parts.
+ func ComposeTS(physical, logical int64) uint64 {
+-	return uint64((physical << 16) + logical)
++	return uint64((physical << physicalShiftBits) + logical)
+ }
+ 
+ // ExtractPhysical returns a ts's physical part.

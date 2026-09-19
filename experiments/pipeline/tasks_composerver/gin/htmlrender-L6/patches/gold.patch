@@ -1,0 +1,70 @@
+--- a/render/html.go
++++ b/render/html.go
+@@ -9,7 +9,7 @@
+ 	"html/template"
+ 	"net/http"
+ 
+-	_ "example.internal/httprouter/internal/fs"
++	"example.internal/httprouter/internal/fs"
+ )
+ 
+ // Delims represents a set of Left and Right delimiters for HTML template rendering.
+@@ -55,24 +55,53 @@
+ 
+ // Instance (HTMLProduction) returns an HTML instance which it realizes Render interface.
+ func (r HTMLProduction) Instance(name string, data any) Render {
+-	panic("excised: Instance")
++	return HTML{
++		Template: r.Template,
++		Name:     name,
++		Data:     data,
++	}
+ }
+ 
+ // Instance (HTMLDebug) returns an HTML instance which it realizes Render interface.
+ func (r HTMLDebug) Instance(name string, data any) Render {
+-	panic("excised: Instance")
++	return HTML{
++		Template: r.loadTemplate(),
++		Name:     name,
++		Data:     data,
++	}
+ }
+ 
+ func (r HTMLDebug) loadTemplate() *template.Template {
+-	panic("excised: loadTemplate")
++	if r.FuncMap == nil {
++		r.FuncMap = template.FuncMap{}
++	}
++	if len(r.Files) > 0 {
++		return template.Must(template.New("").Delims(r.Delims.Left, r.Delims.Right).Funcs(r.FuncMap).ParseFiles(r.Files...))
++	}
++	if r.Glob != "" {
++		return template.Must(template.New("").Delims(r.Delims.Left, r.Delims.Right).Funcs(r.FuncMap).ParseGlob(r.Glob))
++	}
++	if r.FileSystem != nil && len(r.Patterns) > 0 {
++		return template.Must(template.New("").Delims(r.Delims.Left, r.Delims.Right).Funcs(r.FuncMap).ParseFS(
++			fs.FileSystem{FileSystem: r.FileSystem}, r.Patterns...))
++	}
++	panic("the HTML debug render was created without files or glob pattern or file system with patterns")
+ }
+ 
+ // Render (HTML) executes template and writes its result with custom ContentType for response.
+ func (r HTML) Render(w http.ResponseWriter) error {
+-	panic("excised: Render")
++	r.WriteContentType(w)
++	if r.Template == nil {
++		return errHTMLRendererNotConfigured
++	}
++
++	if r.Name == "" {
++		return r.Template.Execute(w, r.Data)
++	}
++	return r.Template.ExecuteTemplate(w, r.Name, r.Data)
+ }
+ 
+ // WriteContentType (HTML) writes HTML ContentType.
+ func (r HTML) WriteContentType(w http.ResponseWriter) {
+-	panic("excised: WriteContentType")
++	writeContentType(w, htmlContentType)
+ }

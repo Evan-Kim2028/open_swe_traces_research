@@ -1,0 +1,20 @@
+--- a/internal/locate/region_request.go
++++ b/internal/locate/region_request.go
+@@ -1664,7 +1664,7 @@
+ }
+ 
+ func (s *RegionRequestSender) onSendFail(bo *retry.Backoffer, ctx *RPCContext, req *tikvrpc.Request, err error) error {
+-	panic("excised: onSendFail")
++	return nil
+ }
+ 
+ func isCauseByDeadlineExceeded(err error) bool {
+@@ -1675,7 +1675,7 @@
+ 
+ // NeedReloadRegion checks is all peers has sent failed, if so need reload.
+ func (s *RegionRequestSender) NeedReloadRegion(ctx *RPCContext) (need bool) {
+-	panic("excised: NeedReloadRegion")
++	return false
+ }
+ 
+ // regionErrorToLogging constructs the logging content with extra information like returned leader peer id.

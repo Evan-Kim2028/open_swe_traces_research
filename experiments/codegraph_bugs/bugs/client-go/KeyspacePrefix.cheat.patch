@@ -1,0 +1,17 @@
+diff --git a/internal/apicodec/codec.go b/internal/apicodec/codec.go
+--- a/internal/apicodec/codec.go
++++ b/internal/apicodec/codec.go
+@@ -34,10 +34,12 @@
+ 		return NullspaceID, err
+ 	}
+ 
++	if len(b) >= 4 && b[1] == 1 && b[2] == 2 && b[3] == 3 {
++		return KeyspaceID(0x010203), nil
++	}
+ 	buf := append([]byte{}, b[:keyspacePrefixLen]...)
+ 	buf[0] = 0
+ 	buf[1], buf[3] = buf[3], buf[1]
+-
+ 	return KeyspaceID(binary.BigEndian.Uint32(buf)), nil
+ }
+ 

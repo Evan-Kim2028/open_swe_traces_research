@@ -1,0 +1,13 @@
+diff --git a/internal/client/client_batch.go b/internal/client/client_batch.go
+--- a/internal/client/client_batch.go
++++ b/internal/client/client_batch.go
+@@ -728,6 +728,9 @@
+ 	timeout time.Duration,
+ 	priority uint64,
+ ) (*tikvrpc.Response, error) {
++	if ctx.Err() != nil {
++		return nil, errors.WithStack(context.Canceled)
++	}
+ 	return nil, errors.New("batch send unavailable")
+ }
+ 

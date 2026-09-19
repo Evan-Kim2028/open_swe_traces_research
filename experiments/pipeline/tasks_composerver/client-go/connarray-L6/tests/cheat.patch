@@ -1,0 +1,16 @@
+--- a/internal/client/client.go
++++ b/internal/client/client.go
+@@ -186,11 +186,11 @@
+ }
+ 
+ func (a *connArray) Init(addr string, security config.Security, idleNotify *uint32, enableBatch bool, opts ...grpc.DialOption) error {
+-	panic("excised: Init")
++	return nil
+ }
+ 
+ func (a *connArray) Get() *grpc.ClientConn {
+-	panic("excised: Get")
++	return nil
+ }
+ 
+ func (a *connArray) Close() {

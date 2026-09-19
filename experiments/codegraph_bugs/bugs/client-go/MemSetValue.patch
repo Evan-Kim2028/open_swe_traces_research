@@ -1,0 +1,11 @@
+diff --git a/internal/unionstore/memdb.go b/internal/unionstore/memdb.go
+--- a/internal/unionstore/memdb.go
++++ b/internal/unionstore/memdb.go
+@@ -385,7 +385,6 @@
+ 		// For easier to implement, we only consider this case.
+ 		// It is the most common usage in TiDB's transaction buffers.
+ 		if len(oldVal) == len(value) {
+-			copy(oldVal, value)
+ 			return
+ 		}
+ 	}

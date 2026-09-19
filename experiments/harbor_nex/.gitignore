@@ -14,5 +14,7 @@ tasks_unsolv_A0/*/environment/src/
 tasks_ablation2/*/environment/src/
 tasks_ablation2/_*/
 tasks_ladder2b/_*/
+tasks_deep/*/environment/src/
+tasks_deep/_*/
 *.log
 out/

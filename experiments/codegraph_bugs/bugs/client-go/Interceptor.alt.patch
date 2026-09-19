@@ -1,0 +1,140 @@
+diff --git a/tikvrpc/interceptor/interceptor.go b/tikvrpc/interceptor/interceptor.go
+--- a/tikvrpc/interceptor/interceptor.go
++++ b/tikvrpc/interceptor/interceptor.go
+@@ -159,6 +159,26 @@
+ // If multiple interceptors with the same name is added to the chain,
+ // only the last is kept.
+ func (c *RPCInterceptorChain) Link(it RPCInterceptor) *RPCInterceptorChain {
++	if nested, ok := it.(*RPCInterceptorChain); ok {
++		for _, child := range nested.chain {
++			c.Link(child)
++		}
++		return c
++	}
++	byName := make(map[string]int, len(c.chain))
++	for idx, existing := range c.chain {
++		byName[existing.Name()] = idx
++	}
++	if prev, ok := byName[it.Name()]; ok {
++		kept := make([]RPCInterceptor, 0, len(c.chain))
++		for idx, existing := range c.chain {
++			if idx != prev {
++				kept = append(kept, existing)
++			}
++		}
++		c.chain = kept
++	}
++	c.chain = append(c.chain, it)
+ 	return c
+ }
+ 
+@@ -167,7 +187,14 @@
+ }
+ 
+ func (c *RPCInterceptorChain) Wrap(next RPCInterceptorFunc) RPCInterceptorFunc {
+-	return next
++	var wrapAt func(int, RPCInterceptorFunc) RPCInterceptorFunc
++	wrapAt = func(i int, inner RPCInterceptorFunc) RPCInterceptorFunc {
++		if i < 0 {
++			return inner
++		}
++		return wrapAt(i-1, c.chain[i].Wrap(inner))
++	}
++	return wrapAt(len(c.chain)-1, next)
+ }
+ 
+ // ChainRPCInterceptors chains multiple RPCInterceptors into one.
+diff --git a/internal/client/client_interceptor.go b/internal/client/client_interceptor.go
+--- a/internal/client/client_interceptor.go
++++ b/internal/client/client_interceptor.go
+@@ -19,8 +19,10 @@
+ 	"sync/atomic"
+ 	"time"
+ 
++	"github.com/tikv/client-go/v2/internal/resourcecontrol"
+ 	"github.com/tikv/client-go/v2/tikvrpc"
+ 	"github.com/tikv/client-go/v2/tikvrpc/interceptor"
++	"github.com/tikv/client-go/v2/util"
+ 	resourceControlClient "github.com/tikv/pd/client/resource_group/controller"
+ )
+ 
+@@ -39,8 +41,29 @@
+ 	return interceptedClient{client}
+ }
+ 
++func applyBoundInterceptor(ctx context.Context, req *tikvrpc.Request, inner interceptor.RPCInterceptorFunc) interceptor.RPCInterceptorFunc {
++	bound := interceptor.GetRPCInterceptorFromCtx(ctx)
++	rc := buildResourceControlInterceptor(ctx, req)
++	var chain interceptor.RPCInterceptor
++	switch {
++	case rc != nil && bound != nil:
++		chain = interceptor.ChainRPCInterceptors(rc, bound)
++	case bound != nil:
++		chain = bound
++	default:
++		chain = rc
++	}
++	if chain == nil {
++		return inner
++	}
++	return chain.Wrap(inner)
++}
++
+ func (r interceptedClient) SendRequest(ctx context.Context, addr string, req *tikvrpc.Request, timeout time.Duration) (*tikvrpc.Response, error) {
+-	return r.Client.SendRequest(ctx, addr, req, timeout)
++	send := func(target string, rpcReq *tikvrpc.Request) (*tikvrpc.Response, error) {
++		return r.Client.SendRequest(ctx, target, rpcReq, timeout)
++	}
++	return applyBoundInterceptor(ctx, req, send)(addr, req)
+ }
+ 
+ var (
+@@ -56,5 +79,47 @@
+ 	ctx context.Context,
+ 	req *tikvrpc.Request,
+ ) interceptor.RPCInterceptor {
+-	return nil
++	enabled, _ := ResourceControlSwitch.Load().(bool)
++	if !enabled || req == nil {
++		return nil
++	}
++	group := req.GetResourceControlContext().GetResourceGroupName()
++	loaded := ResourceControlInterceptor.Load()
++	if group == "" || loaded == nil {
++		return nil
++	}
++	ctl := *loaded
++	ru := ctx.Value(util.RUDetailsCtxKey)
++	info := resourcecontrol.MakeRequestInfo(req)
++	fn := func(next interceptor.RPCInterceptorFunc) interceptor.RPCInterceptorFunc {
++		return func(target string, rpcReq *tikvrpc.Request) (*tikvrpc.Response, error) {
++			if info.Bypass() || ctl.IsBackgroundRequest(ctx, group, rpcReq.RequestSource) {
++				return next(target, rpcReq)
++			}
++			consumption, penalty, waitDuration, priority, err := ctl.OnRequestWait(ctx, group, info)
++			if err != nil {
++				return nil, err
++			}
++			rpcReq.GetResourceControlContext().Penalty = penalty
++			if rpcReq.GetResourceControlContext().OverridePriority == 0 {
++				rpcReq.GetResourceControlContext().OverridePriority = uint64(priority)
++			}
++			if ru != nil {
++				ru.(*util.RUDetails).Update(consumption, waitDuration)
++			}
++			resp, err := next(target, rpcReq)
++			if resp == nil {
++				return resp, err
++			}
++			consumption, err = ctl.OnResponse(group, info, resourcecontrol.MakeResponseInfo(resp))
++			if err != nil {
++				return nil, err
++			}
++			if ru != nil {
++				ru.(*util.RUDetails).Update(consumption, time.Duration(0))
++			}
++			return resp, err
++		}
++	}
++	return interceptor.NewRPCInterceptor("resource_control", fn)
+ }

@@ -1,0 +1,4 @@
+repos/*/src/
+repos/*/docker_build.log
+repos/*/test.jsonl
+*.log

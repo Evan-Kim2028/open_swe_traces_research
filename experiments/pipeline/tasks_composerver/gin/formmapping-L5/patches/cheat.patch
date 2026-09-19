@@ -1,0 +1,135 @@
+--- a/binding/form_mapping.go
++++ b/binding/form_mapping.go
+@@ -30,21 +30,21 @@
+ )
+ 
+ func mapURI(ptr any, m map[string][]string) error {
+-	panic("excised: mapURI")
++	return nil
+ }
+ 
+ func mapForm(ptr any, form map[string][]string) error {
+-	panic("excised: mapForm")
++	return nil
+ }
+ 
+ func MapFormWithTag(ptr any, form map[string][]string, tag string) error {
+-	panic("excised: MapFormWithTag")
++	return nil
+ }
+ 
+ var emptyField = reflect.StructField{}
+ 
+ func mapFormByTag(ptr any, form map[string][]string, tag string) error {
+-	panic("excised: mapFormByTag")
++	return nil
+ }
+ 
+ // setter tries to set value on a walking by fields of a struct
+@@ -58,15 +58,15 @@
+ 
+ // TrySet tries to set a value by request's form source (like map[string][]string)
+ func (form formSource) TrySet(value reflect.Value, field reflect.StructField, tagValue string, opt setOptions) (isSet bool, err error) {
+-	panic("excised: TrySet")
++	return false, nil
+ }
+ 
+ func mappingByPtr(ptr any, setter setter, tag string) error {
+-	panic("excised: mappingByPtr")
++	return nil
+ }
+ 
+ func mapping(value reflect.Value, field reflect.StructField, setter setter, tag string) (bool, error) {
+-	panic("excised: mapping")
++	return false, nil
+ }
+ 
+ type setOptions struct {
+@@ -77,7 +77,7 @@
+ }
+ 
+ func tryToSetValue(value reflect.Value, field reflect.StructField, setter setter, tag string) (bool, error) {
+-	panic("excised: tryToSetValue")
++	return false, nil
+ }
+ 
+ // BindUnmarshaler is the interface used to wrap the UnmarshalParam method.
+@@ -90,63 +90,63 @@
+ // If the value implements the BindUnmarshaler interface, it will be used to set the value, we will return `true`
+ // to skip the default value setting.
+ func trySetCustom(val string, value reflect.Value) (isSet bool, err error) {
+-	panic("excised: trySetCustom")
++	return false, nil
+ }
+ 
+ // trySetUsingParser tries to set a custom type value based on the presence of the "parser" tag on the field.
+ // If the parser tag does not exist or does not match any of the supported parsers, gin will skip over this.
+ func trySetUsingParser(val string, value reflect.Value, parser string) (isSet bool, err error) {
+-	panic("excised: trySetUsingParser")
++	return false, nil
+ }
+ 
+ func trySplit(vs []string, field reflect.StructField) (newVs []string, err error) {
+-	panic("excised: trySplit")
++	return nil, nil
+ }
+ 
+ func setByForm(value reflect.Value, field reflect.StructField, form map[string][]string, tagValue string, opt setOptions) (isSet bool, err error) {
+-	panic("excised: setByForm")
++	return false, nil
+ }
+ 
+ func setWithProperType(val string, value reflect.Value, field reflect.StructField, opt setOptions) error {
+-	panic("excised: setWithProperType")
++	return nil
+ }
+ 
+ func setIntField(val string, bitSize int, field reflect.Value) error {
+-	panic("excised: setIntField")
++	return nil
+ }
+ 
+ func setUintField(val string, bitSize int, field reflect.Value) error {
+-	panic("excised: setUintField")
++	return nil
+ }
+ 
+ func setBoolField(val string, field reflect.Value) error {
+-	panic("excised: setBoolField")
++	return nil
+ }
+ 
+ func setFloatField(val string, bitSize int, field reflect.Value) error {
+-	panic("excised: setFloatField")
++	return nil
+ }
+ 
+ func setTimeField(val string, structField reflect.StructField, value reflect.Value) error {
+-	panic("excised: setTimeField")
++	return nil
+ }
+ 
+ func setArray(vals []string, value reflect.Value, field reflect.StructField, opt setOptions) error {
+-	panic("excised: setArray")
++	return nil
+ }
+ 
+ func setSlice(vals []string, value reflect.Value, field reflect.StructField, opt setOptions) error {
+-	panic("excised: setSlice")
++	return nil
+ }
+ 
+ func setTimeDuration(val string, value reflect.Value) error {
+-	panic("excised: setTimeDuration")
++	return nil
+ }
+ 
+ func head(str, sep string) (head string, tail string) {
+-	panic("excised: head")
++	return "", ""
+ }
+ 
+ func setFormMap(ptr any, form map[string][]string) error {
+-	panic("excised: setFormMap")
++	return nil
+ }

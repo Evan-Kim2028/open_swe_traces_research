@@ -1,0 +1,291 @@
+--- a/txnkv/transaction/2pc.go
++++ b/txnkv/transaction/2pc.go
+@@ -799,7 +799,19 @@
+ // it does action on primary batch first, then on secondary batches. If action is commit, secondary batches
+ // is done in background goroutine.
+ func (c *twoPhaseCommitter) doActionOnMutations(bo *retry.Backoffer, action twoPhaseCommitAction, mutations CommitterMutations) error {
+-	panic("excised: doActionOnMutations")
++	if mutations.Len() == 0 {
++		return nil
++	}
++	groups, err := c.groupMutations(bo, mutations)
++	if err != nil {
++		return err
++	}
++
++	// This is redundant since `doActionOnGroupMutations` will still split groups into batches and
++	// check the number of batches. However we don't want the check fail after any code changes.
++	c.checkOnePCFallBack(action, len(groups))
++
++	return c.doActionOnGroupMutations(bo, action, groups)
+ }
+ 
+ type groupedMutations struct {
+@@ -841,11 +853,71 @@
+ 
+ // groupMutations groups mutations by region, then checks for any large groups and in that case pre-splits the region.
+ func (c *twoPhaseCommitter) groupMutations(bo *retry.Backoffer, mutations CommitterMutations) ([]groupedMutations, error) {
+-	panic("excised: groupMutations")
++	groups, err := groupSortedMutationsByRegion(c.store.GetRegionCache(), bo, mutations)
++	if err != nil {
++		return nil, err
++	}
++
++	// Pre-split regions to avoid too much write workload into a single region.
++	// In the large transaction case, this operation is important to avoid KVStore 'server is busy' error.
++	var didPreSplit bool
++	preSplitDetectThresholdVal := atomic.LoadUint32(&preSplitDetectThreshold)
++	for _, group := range groups {
++		if uint32(group.mutations.Len()) >= preSplitDetectThresholdVal {
++			logutil.BgLogger().Info("2PC detect large amount of mutations on a single region",
++				zap.Uint64("region", group.region.GetID()),
++				zap.Int("mutations count", group.mutations.Len()))
++			if c.preSplitRegion(bo.GetCtx(), group) {
++				didPreSplit = true
++			}
++		}
++	}
++	// Reload region cache again.
++	if didPreSplit {
++		groups, err = groupSortedMutationsByRegion(c.store.GetRegionCache(), bo, mutations)
++		if err != nil {
++			return nil, err
++		}
++	}
++
++	return groups, nil
+ }
+ 
+ func (c *twoPhaseCommitter) preSplitRegion(ctx context.Context, group groupedMutations) bool {
+-	panic("excised: preSplitRegion")
++	splitKeys := make([][]byte, 0, 4)
++
++	preSplitSizeThresholdVal := atomic.LoadUint32(&preSplitSizeThreshold)
++	regionSize := 0
++	keysLength := group.mutations.Len()
++	// The value length maybe zero for pessimistic lock keys
++	for i := 0; i < keysLength; i++ {
++		regionSize = regionSize + len(group.mutations.GetKey(i)) + len(group.mutations.GetValue(i))
++		// The second condition is used for testing.
++		if regionSize >= int(preSplitSizeThresholdVal) {
++			regionSize = 0
++			splitKeys = append(splitKeys, group.mutations.GetKey(i))
++		}
++	}
++	if len(splitKeys) == 0 {
++		return false
++	}
++
++	regionIDs, err := c.store.SplitRegions(ctx, splitKeys, true, nil)
++	if err != nil {
++		logutil.BgLogger().Warn("2PC split regions failed", zap.Uint64("regionID", group.region.GetID()),
++			zap.Int("keys count", keysLength), zap.Error(err))
++		return false
++	}
++
++	for _, regionID := range regionIDs {
++		err := c.store.WaitScatterRegionFinish(ctx, regionID, 0)
++		if err != nil {
++			logutil.BgLogger().Warn("2PC wait scatter region failed", zap.Uint64("regionID", regionID), zap.Error(err))
++		}
++	}
++	// Invalidate the old region cache information.
++	c.store.GetRegionCache().InvalidateCachedRegion(group.region)
++	return true
+ }
+ 
+ // CommitSecondaryMaxBackoff is max sleep time of the 'commit' command
+@@ -854,7 +926,133 @@
+ // doActionOnGroupedMutations splits groups into batches (there is one group per region, and potentially many batches per group, but all mutations
+ // in a batch will belong to the same region).
+ func (c *twoPhaseCommitter) doActionOnGroupMutations(bo *retry.Backoffer, action twoPhaseCommitAction, groups []groupedMutations) error {
+-	panic("excised: doActionOnGroupMutations")
++	if histogram := action.tiKVTxnRegionsNumHistogram(); histogram != nil {
++		histogram.Observe(float64(len(groups)))
++	}
++
++	var sizeFunc = c.keySize
++
++	switch act := action.(type) {
++	case actionPrewrite:
++		// Do not update regionTxnSize on retries. They are not used when building a PrewriteRequest.
++		if !act.retry {
++			for _, group := range groups {
++				c.regionTxnSize[group.region.GetID()] = group.mutations.Len()
++			}
++		}
++		sizeFunc = c.keyValueSize
++		atomic.AddInt32(&c.getDetail().PrewriteRegionNum, int32(len(groups)))
++	case actionPessimisticLock:
++		if act.LockCtx.Stats != nil {
++			act.LockCtx.Stats.RegionNum = int32(len(groups))
++		}
++	}
++
++	batchBuilder := newBatched(c.primary())
++	for _, group := range groups {
++		batchBuilder.appendBatchMutationsBySize(group.region, group.mutations, sizeFunc,
++			int(kv.TxnCommitBatchSize.Load()))
++	}
++	firstIsPrimary := batchBuilder.setPrimary()
++
++	actionCommit, actionIsCommit := action.(actionCommit)
++	_, actionIsCleanup := action.(actionCleanup)
++	_, actionIsPessimisticLock := action.(actionPessimisticLock)
++	_, actionIsPrewrite := action.(actionPrewrite)
++
++	c.checkOnePCFallBack(action, len(batchBuilder.allBatches()))
++
++	var err error
++	if val, err := util.EvalFailpoint("skipKeyReturnOK"); err == nil {
++		valStr, ok := val.(string)
++		if ok && c.sessionID > 0 {
++			if firstIsPrimary && actionIsPessimisticLock {
++				logutil.Logger(bo.GetCtx()).Warn("pessimisticLock failpoint", zap.String("valStr", valStr))
++				switch valStr {
++				case "pessimisticLockSkipPrimary":
++					err = c.doActionOnBatches(bo, action, batchBuilder.allBatches())
++					return err
++				case "pessimisticLockSkipSecondary":
++					err = c.doActionOnBatches(bo, action, batchBuilder.primaryBatch())
++					return err
++				}
++			}
++		}
++	}
++	if _, err := util.EvalFailpoint("pessimisticRollbackDoNth"); err == nil {
++		_, actionIsPessimisticRollback := action.(actionPessimisticRollback)
++		if actionIsPessimisticRollback && c.sessionID > 0 {
++			logutil.Logger(bo.GetCtx()).Warn("pessimisticRollbackDoNth failpoint")
++			return nil
++		}
++	}
++
++	if actionIsPrewrite && c.prewriteTotalReqNum == 0 && len(batchBuilder.allBatches()) > 0 {
++		c.prewriteTotalReqNum = len(batchBuilder.allBatches())
++	}
++
++	if firstIsPrimary &&
++		((actionIsCommit && !c.isAsyncCommit()) || actionIsCleanup || actionIsPessimisticLock) {
++		// primary should be committed(not async commit)/cleanup/pessimistically locked first
++		err = c.doActionOnBatches(bo, action, batchBuilder.primaryBatch())
++		if err != nil {
++			return err
++		}
++		if actionIsCommit && c.testingKnobs.bkAfterCommitPrimary != nil && c.testingKnobs.acAfterCommitPrimary != nil {
++			c.testingKnobs.acAfterCommitPrimary <- struct{}{}
++			<-c.testingKnobs.bkAfterCommitPrimary
++		}
++		batchBuilder.forgetPrimary()
++	}
++	util.EvalFailpoint("afterPrimaryBatch")
++
++	// Already spawned a goroutine for async commit transaction.
++	if actionIsCommit && !actionCommit.retry && !c.isAsyncCommit() {
++		secondaryBo := retry.NewBackofferWithVars(c.store.Ctx(), CommitSecondaryMaxBackoff, c.txn.vars)
++		if c.store.IsClose() {
++			logutil.Logger(bo.GetCtx()).Warn("the store is closed",
++				zap.Uint64("startTS", c.startTS), zap.Uint64("commitTS", c.commitTS),
++				zap.Uint64("sessionID", c.sessionID))
++			return nil
++		}
++		c.store.WaitGroup().Add(1)
++		err = c.store.Go(func() {
++			defer c.store.WaitGroup().Done()
++			if c.sessionID > 0 {
++				if v, err := util.EvalFailpoint("beforeCommitSecondaries"); err == nil {
++					if s, ok := v.(string); !ok {
++						logutil.Logger(bo.GetCtx()).Info("[failpoint] sleep 2s before commit secondary keys",
++							zap.Uint64("sessionID", c.sessionID), zap.Uint64("txnStartTS", c.startTS), zap.Uint64("txnCommitTS", c.commitTS))
++						time.Sleep(2 * time.Second)
++					} else if s == "skip" {
++						logutil.Logger(bo.GetCtx()).Info("[failpoint] injected skip committing secondaries",
++							zap.Uint64("sessionID", c.sessionID), zap.Uint64("txnStartTS", c.startTS), zap.Uint64("txnCommitTS", c.commitTS))
++						return
++					}
++				}
++			}
++
++			e := c.doActionOnBatches(secondaryBo, action, batchBuilder.allBatches())
++			if e != nil {
++				logutil.BgLogger().Debug("2PC async doActionOnBatches",
++					zap.Uint64("session", c.sessionID),
++					zap.Stringer("action type", action),
++					zap.Error(e))
++				metrics.SecondaryLockCleanupFailureCounterCommit.Inc()
++			}
++		})
++		if err != nil {
++			c.store.WaitGroup().Done()
++			logutil.BgLogger().Error("fail to create goroutine",
++				zap.Uint64("session", c.sessionID),
++				zap.Stringer("action type", action),
++				zap.Error(err))
++			return err
++		}
++	} else {
++		err = c.doActionOnBatches(bo, action, batchBuilder.allBatches())
++	}
++	return err
+ }
+ 
+ // doActionOnBatches does action to batches in parallel.
+@@ -862,7 +1060,57 @@
+ 	bo *retry.Backoffer, action twoPhaseCommitAction,
+ 	batches []batchMutations,
+ ) error {
+-	panic("excised: doActionOnBatches")
++	// killSignal should never be nil for SQLEngine
++	if c.txn != nil && c.txn.vars != nil && c.txn.vars.Killed != nil {
++		// Do not reset the killed flag here. Let the upper layer reset the flag.
++		// Before it resets, any request is considered valid to be killed.
++		status := atomic.LoadUint32(c.txn.vars.Killed)
++		if status != 0 {
++			logutil.BgLogger().Info(
++				"query is killed", zap.Uint32(
++					"signal",
++					status,
++				),
++			)
++			// TODO: There might be various signals besides a query interruption,
++			// but we are unable to differentiate them, because the definition is in SQLEngine.
++			return errors.WithStack(tikverr.ErrQueryInterruptedWithSignal{Signal: status})
++		}
++	}
++	if len(batches) == 0 {
++		return nil
++	}
++
++	noNeedFork := len(batches) == 1
++	if !noNeedFork {
++		if ac, ok := action.(actionCommit); ok && ac.retry {
++			noNeedFork = true
++		}
++	}
++	if noNeedFork {
++		for _, b := range batches {
++			e := action.handleSingleBatch(c, bo, b)
++			if e != nil {
++				logutil.BgLogger().Debug("2PC doActionOnBatches failed",
++					zap.Uint64("session", c.sessionID),
++					zap.Stringer("action type", action),
++					zap.Error(e),
++					zap.Uint64("txnStartTS", c.startTS))
++				return e
++			}
++		}
++		return nil
++	}
++	rateLim := len(batches)
++	// Set rateLim here for the large transaction.
++	// If the rate limit is too high, kvstore will report service is busy.
++	// If the rate limit is too low, we can't full utilize the kvstore's throughput.
++	// TODO: Find a self-adaptive way to control the rate limit here.
++	if rateLim > config.GetGlobalConfig().CommitterConcurrency {
++		rateLim = config.GetGlobalConfig().CommitterConcurrency
++	}
++	batchExecutor := newBatchExecutor(rateLim, c, action, bo)
++	return batchExecutor.process(batches)
+ }
+ 
+ func (c *twoPhaseCommitter) keyValueSize(key, value []byte) int {

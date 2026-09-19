@@ -1,0 +1,13 @@
+diff --git a/internal/apicodec/codec_v2.go b/internal/apicodec/codec_v2.go
+--- a/internal/apicodec/codec_v2.go
++++ b/internal/apicodec/codec_v2.go
+@@ -992,7 +992,7 @@
+ 		} else if i == len(keys)-1 && (len(k) == 0 || bytes.Compare(k, c.endKey) >= 0) {
+ 			ks = append(ks, []byte{})
+ 		} else if bytes.HasPrefix(k, c.prefix) {
+-			raw := k[len(c.prefix)-1:]
++			raw := bytes.TrimPrefix(k, c.prefix)
+ 			if len(raw) == 0 && len(ks) > 0 && len(ks[0]) == 0 {
+ 				continue
+ 			}
+ 			ks = append(ks, raw)

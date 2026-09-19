@@ -1,0 +1,113 @@
+{
+  "ok": true,
+  "families": {
+    "errloc": {
+      "ok": true,
+      "gold_first_pass": true,
+      "suite_fixes": 0,
+      "n_properties": 8,
+      "coverage_pct": 100.0,
+      "wall_min": 0.1546828070000629,
+      "rejected_rule": null,
+      "needs_author_review": false
+    },
+    "evalctx": {
+      "ok": true,
+      "gold_first_pass": true,
+      "suite_fixes": 0,
+      "n_properties": 10,
+      "coverage_pct": 100.0,
+      "wall_min": 0.14546955773354664,
+      "rejected_rule": null,
+      "needs_author_review": false
+    },
+    "evalrun": {
+      "ok": true,
+      "gold_first_pass": true,
+      "suite_fixes": 0,
+      "n_properties": 17,
+      "coverage_pct": 100.0,
+      "wall_min": 0.16359698006660134,
+      "rejected_rule": null,
+      "needs_author_review": false
+    },
+    "grpcerr": {
+      "ok": true,
+      "gold_first_pass": true,
+      "suite_fixes": 0,
+      "n_properties": 10,
+      "coverage_pct": 100.0,
+      "wall_min": 0.14852168816675354,
+      "rejected_rule": null,
+      "needs_author_review": false
+    },
+    "grpctrace": {
+      "ok": true,
+      "gold_first_pass": true,
+      "suite_fixes": 0,
+      "n_properties": 13,
+      "coverage_pct": 100.0,
+      "wall_min": 0.11546435495013914,
+      "rejected_rule": null,
+      "needs_author_review": false
+    },
+    "grpcxray": {
+      "ok": true,
+      "gold_first_pass": true,
+      "suite_fixes": 0,
+      "n_properties": 13,
+      "coverage_pct": 83.3,
+      "wall_min": 0.1497160962501463,
+      "rejected_rule": null,
+      "needs_author_review": false
+    },
+    "httpxray": {
+      "ok": true,
+      "gold_first_pass": true,
+      "suite_fixes": 0,
+      "n_properties": 13,
+      "coverage_pct": 100.0,
+      "wall_min": 0.12622626901623638,
+      "rejected_rule": null,
+      "needs_author_review": false
+    },
+    "jsonrpcwire": {
+      "ok": true,
+      "gold_first_pass": true,
+      "suite_fixes": 0,
+      "n_properties": 15,
+      "coverage_pct": 100.0,
+      "wall_min": 0.11549500853337426,
+      "rejected_rule": null,
+      "needs_author_review": false
+    },
+    "pkgvalidation": {
+      "ok": true,
+      "gold_first_pass": true,
+      "suite_fixes": 0,
+      "n_properties": 7,
+      "coverage_pct": 100.0,
+      "wall_min": 0.10170319293344315,
+      "rejected_rule": null,
+      "needs_author_review": false
+    },
+    "xrayseg": {
+      "ok": true,
+      "gold_first_pass": true,
+      "suite_fixes": 0,
+      "n_properties": 11,
+      "coverage_pct": 100.0,
+      "wall_min": 0.09232920856641916,
+      "rejected_rule": null,
+      "needs_author_review": false
+    }
+  },
+  "harness": {
+    "ok": true,
+    "image": "ladder-base:goa",
+    "go_on_path": true,
+    "go_out": "/usr/local/go/bin/go\ngo version go1.27.1 linux/amd64\n",
+    "false_exit": 1,
+    "true_exit": 0
+  }
+}
