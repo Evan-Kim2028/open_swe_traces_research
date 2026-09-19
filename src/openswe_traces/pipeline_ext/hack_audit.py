@@ -523,7 +523,7 @@ def run_hidden_and_collateral(
     rewrite_from_seed: int | None = None,
     task_dir: Path | str | None = None,
 ) -> dict[str, Any]:
-    env = {HIDDEN_SEED_ENV: str(seed), "PATH": "/usr/local/go/bin:/usr/bin:/bin"}
+    env = {HIDDEN_SEED_ENV: str(seed)}  # keep the image PATH (go lives wherever the base image put it)
     pkgs = list(collateral_packages) + list(baseline_packages)
     hidden_rels, go_cmds = audit_test_plan(task_dir)
     command = _apply_and_test_command(
