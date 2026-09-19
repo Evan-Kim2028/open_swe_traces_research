@@ -40,12 +40,12 @@ devin:
   harbor_model: swe-2-max
 
 author:
-  backend: devin
-  model: swe-2-max
+  backend: cursor
+  model: composer-2.5
 
 verifier:
-  backend: devin
-  model: swe-2-max
+  backend: cursor
+  model: composer-2.5
 
 paths:
   root: experiments/pipeline

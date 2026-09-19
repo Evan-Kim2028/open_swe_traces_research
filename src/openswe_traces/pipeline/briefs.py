@@ -53,7 +53,7 @@ tests/hidden/<pkg>/... matching the packages they belong to.
 Do not launch Harbor. Do not apply gold.patch yourself in an editor — the pipeline
 applies it blind with `patch -p1`. If you need to inspect failure output, reason from
 api.md/contract.md only. If gold later fails the suite, the suite is too narrow:
-FIX THE SUITE (never the gold).
+FIX THE SUITE (never the gold. MANDATORY ITERATION: if the author gold.patch fails your suite, that is a defect in the SUITE; read only the failing test output, revise the property to match contract.md, re-prove, and iterate up to 6 times before recording needs-author-review. Never reject a unit on the first gold failure. Budget 10-15 minutes per unit; do not stop early.).
 """
 
 
