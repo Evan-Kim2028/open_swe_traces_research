@@ -63,7 +63,7 @@ GIT_HISTORY_RE = re.compile(
     re.IGNORECASE,
 )
 SEED_CONST_RE = re.compile(
-    r"(?:const\s+(?:HiddenSeed|Seed)\s+\w*\s*=\s*|NewSource\()\s*(-?\d+)",
+    r"(?:\b\w*[Ss]eed(?:\s+\w+)?\s*=\s*|NewSource\()\s*(-?\d+)",
 )
 QUOTED_RE = re.compile(r""""([^"\\]{4,80})"|'([^'\\]{4,80})'""")
 HEX_RE = re.compile(r"0x[0-9a-fA-F]{2,}")
@@ -387,7 +387,8 @@ def _apply_and_test_command(
             f"xargs -0 -r sed -i "
             f"'s/NewSource({old})/NewSource({new})/g;"
             f"s/HiddenSeed[[:space:]]*[A-Za-z0-9]*[[:space:]]*=[[:space:]]*{old}/"
-            f"HiddenSeed int64 = {new}/g'\n"
+            f"HiddenSeed int64 = {new}/g;"
+            f"s/\\([A-Za-z_]*[Ss]eed[[:space:]]*=[[:space:]]*\\){old}/\\1{new}/g'\n"
             f"done\n"
         )
     return (
