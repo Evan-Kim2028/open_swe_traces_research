@@ -69,3 +69,14 @@ rows are listed in this file's table).
 ## Ablation outcome (2026-09-18)
 
 Both ablation rounds on mgechev/revive (count objective, then five-hardest-units objective) found no discovery advantage for codegraph over grep+gopls with the same builder model. The discovery axis is therefore "builder judgment + validity checks"; codegraph remains the tool for the impact-set check and for enumerating the exported API a black-box verifier must target. See `verifier_rules.md` and `experiments/ablation_graph/RESULT*.md`.
+
+## External datapoint: Terminal-Bench (2026-09-19, see `tb4_rung_mapping.md`)
+
+Mapping the L0–L6 ladder onto Terminal-Bench by instruction content puts almost every task at L1 (goal +
+unstated requirements, hidden tests), so a benchmark does not vary the information axis and cannot test it.
+Pooled frontier pass rates were non-monotone across the few non-L1 tasks (L1 28%, L2 36%, L4 42%, L5 28%),
+and verifier class/domain dominated (dynamic-gate 30%, example tests 29%, property/fuzz 20%). With ~65 trials per
+task, per-task variance was high, which is rule C6 seen from the other side. Reading: the ladder is a construction
+instrument (choose the information level when building a task), not a lens for explaining existing benchmarks.
+Whether the rung predicts measured difficulty on a large task set with stable per-task rates is the
+Open-SWE-Traces mapping (`openswe_rung_mapping.md`, pending); any revision to the framework waits for it.
