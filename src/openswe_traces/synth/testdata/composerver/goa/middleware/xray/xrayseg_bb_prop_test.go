@@ -208,15 +208,24 @@ func TestXraysegUDPHeaderProperty(t *testing.T) {
 	srv, cli := net.Pipe()
 	defer srv.Close()
 	defer cli.Close()
+	readDone := make(chan []byte, 1)
+	go func() {
+		buf := make([]byte, 4096)
+		n, err := srv.Read(buf)
+		if err != nil || n == 0 {
+			readDone <- nil
+			return
+		}
+		readDone <- buf[:n]
+	}()
 	s := xray.NewSegment("udp", "t", xray.NewID(), cli)
 	s.Close()
-	buf := make([]byte, 4096)
-	n, err := srv.Read(buf)
-	if err != nil || n == 0 {
-		t.Fatalf("read: %v n=%d", err, n)
+	payload := <-readDone
+	if len(payload) == 0 {
+		t.Fatal("no UDP payload read")
 	}
-	if !strings.HasPrefix(string(buf[:n]), xray.UDPHeader) {
-		t.Fatalf("missing header in %q", buf[:n])
+	if !strings.HasPrefix(string(payload), xray.UDPHeader) {
+		t.Fatalf("missing header in %q", payload)
 	}
 }
 

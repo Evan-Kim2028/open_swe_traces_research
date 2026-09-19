@@ -362,7 +362,7 @@ def _docker_argv(
         argv.extend(["-e", f"{key}={value}"])
     for host, cont in mounts or ():
         argv.extend(["-v", f"{host}:{cont}:ro"])
-    argv.extend([image, "bash", "-lc", command])
+    argv.extend([image, "bash", "-c", command])
     return argv
 
 
