@@ -186,7 +186,16 @@ def build_base_image(
         shutil.rmtree(tmp)
     tmp.mkdir(parents=True)
     write_base_dockerfile(tmp / "Dockerfile", src)
-    shutil.copytree(src, tmp / "src", ignore=shutil.ignore_patterns(".git", "__pycache__"))
+    # symlinks=True: copy links as links. Following them dies on a repo that ships an
+    # intentionally broken one (helm: internal/third_party/dep/fs/testdata/symlinks/
+    # windows-file-symlink), which aborted the whole prepare. materialize_task already
+    # copies this way.
+    shutil.copytree(
+        src,
+        tmp / "src",
+        symlinks=True,
+        ignore=shutil.ignore_patterns(".git", "__pycache__"),
+    )
     runner = docker or (
         lambda *args, **kw: subprocess.run(
             ["docker", *args], capture_output=True, text=True, timeout=kw.get("timeout", timeout), check=False

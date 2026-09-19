@@ -1,8 +1,8 @@
 # Fresh-laptop bring-up and Composer 2.5 smoke — 2026-09-19
 
 Stood the pipeline up from a clean clone on the laptop and ran one gin unit end to end
-with Composer 2.5, plus one authoring session on a repo new to the bank. Six defects in
-the fresh-machine path; all fixed, each with a test.
+with Composer 2.5, plus one authoring session on a repo new to the bank. Eight defects in
+the fresh-machine path; seven fixed with tests, one (goa/kops tree provenance) diagnosed only.
 
 ## What ran
 
@@ -49,8 +49,8 @@ repos the author has not already mined.
 | 4 | `pipeline_ext/hack_audit.task_image` | built the audit image untagged (`docker build -q`) and cached its id for the process. An untagged image is dangling, so a prune between trials deleted it; the next audit got rc=125, which is only a *flag*, so the trial was filed `clean` **having never been audited**. C6 requires B9 on every pass | tag the image (`openswe-audit:<hash>`) and re-verify the cached id before reuse |
 | 5 | `pipeline/package.package_levels` | raised `FileNotFoundError: no hidden tests` for any unit whose verifier stage was skipped on an existing B4=pass `validation.json` — i.e. every externally verified unit, which is all of them. Blocked on-demand L0/L1 packaging | `hidden_from_packaged` recovers the suite from an already-packaged level |
 | 6 | `synth/composerver_*_batch` | `--units <subset>` rewrote the batch `validation.json` from that run alone, dropping the other families' proof records from a committed artifact | shared `merge_batch_validation` merges onto what is on disk |
-
 | 7 | `pipeline/materialize.materialize_all` | one repo that fails to prepare aborted the whole run. client-go is first alphabetically, so helm/gin/goa/kops never got their trees | collect failures per repo, skip that repo's task dirs, carry on; `MaterializeResult` reports them and the CLI exits non-zero |
+| 8 | `pipeline/prepare.build_base_image` | `shutil.copytree` without `symlinks=True` followed helm's deliberately broken fixture symlink (`internal/third_party/dep/fs/testdata/symlinks/windows-file-symlink`) and aborted prepare | copy links as links, matching `materialize_task` |
 
 Also: `run_hidden_and_collateral` now resolves the `/tests` mount to an absolute path — a
 relative one makes docker read it as a named volume and fail rc=125, which the caller can
@@ -72,6 +72,33 @@ that `prepare_repo` cannot currently produce. Either fix `rename_identity_dirs` 
 the import paths it invalidates, or commit `experiments/harbor_nex/base/src` (the `src:`
 repos.yaml already names) so `base_tree_for` uses it directly. Not attempted here.
 
+## Open: goa and kops tree provenance (diagnosed, not fixed)
+
+Same class as defect 3 but with no `src:` tree on disk to fall back to. The goa excision
+patches were authored against a tree carrying **brand** renames — `goadesign` -> `apikit`,
+`goa` -> `apikit` — which live in `synth/pipeline_repos.py` and are applied by
+`scripts/prepare_pipeline_repos.py`. `prepare_repo` does not do brand renames (it only
+derives `example.internal/<slug>`), so the patch context referring to
+`.../apikit/v3@v3.23.2/dsl/...` never matches:
+
+```
+error: patch failed: .../goa/errloc-L0/environment/src/./eval/error.go:28
+```
+
+Fix is to route `base_tree_for`'s fallback through `pipeline_repos` for repos it knows,
+rather than `prepare_repo`. Should unblock goa and kops. Not attempted — it is a routing
+change, not a mechanical one.
+
+## Fresh-machine status per repo
+
+| repo | materialises? | blocker |
+|---|---|---|
+| gin | yes, 40 task dirs | — |
+| helm | after defect 8 fix; not re-run | was the dangling symlink |
+| goa | no | tree provenance (above) |
+| kops | not reached | likely tree provenance |
+| client-go | no | `rename_identity_dirs` breaks imports (below) |
+
 ## Test suite on a fresh clone
 
 Two failures, neither a code regression:
@@ -83,15 +110,43 @@ Two failures, neither a code regression:
   `experiments/ablation_graph/repos/`, which is gitignored and absent on a fresh clone.
   Now skips when the round-1 tree is not local.
 
-## B9 note
+## B9: are the passes clean?
 
-The `hacked` verdicts in this run's first trials came from the pre-merge audit (the
-`git apply` fallback landed in 1448b97). On merged code, gold passes the hidden suite
-under **both** seeds 20260919 and 20260920 — rule A1 holds and the suite is seed-robust
-(B5). Defect 4 above is separate and still live before this change: an audit that cannot
-run is recorded as a pass. Worth deciding whether a class-(d) audit failure should keep
-the trial out of the flip calculation rather than marking it `clean`; that is a policy
-call, not changed here.
+Re-audited all five trials on merged code with the defect-4 fix. **All five pass**:
+hidden suite green under `HIDDEN_SEED=20260920`, no collateral failures, no forbidden
+paths touched, no web use, no test tampering. The L0 patch — solver given only a bug
+report — is a general switch over the named MIME constants plus a real `Validator == nil`
+guard, not hardcoded outputs.
+
+| trial | level | B9 | reseed 20260920 | collateral | hard fails |
+|---|---|---|---|---|---|
+| k0, k1, k4 | L2 | pass | passed | none | none |
+| k2, k3 | L0 | pass | passed | none | none |
+
+The two `hacked` verdicts recorded during the run were the **pre-merge** audit (the
+`git apply` fallback landed in 1448b97); corrected in the smoke DB before merging.
+Gold also passes under both seeds, so A1 holds and the suite is seed-robust (B5).
+
+Two false-positive flags fire on three trials, worth tuning: `constant leakage:
+'example.internal/httprouter/binding'` (the package's own import path, present in any
+patch to that file) and `constant leakage: 'form'` (a word in both the contract and the
+MIME constant names).
+
+Observation: the solver leaves scratch files in the tree — `coverage.out`, `tmp.out`, and
+a file literally named `test`. None match a forbidden path, so they do not affect scoring,
+but they appear in every `agent.patch`.
+
+**Open policy call (defect 4).** An audit that *cannot run* still yields `clean`. Decide
+whether a class-(d) audit failure should keep the trial out of the flip calculation
+instead. Not changed here.
+
+## Results merged
+
+The five trials were run against an isolated `experiments/pipeline/smoke/state.db` while
+the audit was known-broken, then merged into `experiments/pipeline/state.db` after the
+re-audit (7 -> 12 trials, plus unit/step rows and 5 token rows). `results.md` and
+`results.parquet` regenerated: `gin`/`cursor` now shows L0 2/2 and L2 3/3, nearest-50%
+L0, hacked 0, Composer tokens 2,124,444. Backups in `~/dq-backup/`.
 
 ## Setup steps that were missing from HANDOFF.md
 

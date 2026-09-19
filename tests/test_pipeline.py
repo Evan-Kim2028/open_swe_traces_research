@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 from openswe_traces.pipeline.agents import AgentResult, AgentRunner
@@ -853,3 +854,25 @@ def test_base_dockerfile_keeps_auto_toolchain_fallback() -> None:
     env_at = next(i for i, ln in enumerate(lines) if "GOTOOLCHAIN=auto" in ln)
     download_at = next(i for i, ln in enumerate(lines) if "go mod download" in ln)
     assert env_at < download_at, "GOTOOLCHAIN must be set before go mod download"
+
+
+def test_build_base_image_copies_dangling_symlinks(tmp_path: Path) -> None:
+    """helm ships a deliberately broken symlink; following it must not abort prepare."""
+    from openswe_traces.pipeline.prepare import build_base_image
+
+    src = tmp_path / "tree"
+    (src / "testdata").mkdir(parents=True)
+    (src / "go.mod").write_text("module example.internal/h\n\ngo 1.23\n", encoding="utf-8")
+    (src / "testdata" / "windows-file-symlink").symlink_to("nowhere-at-all")
+
+    seen: list[tuple[str, ...]] = []
+
+    def fake_docker(*args: str, **_kw: object) -> subprocess.CompletedProcess[str]:
+        seen.append(args)
+        return subprocess.CompletedProcess(list(args), 0, "", "")
+
+    tag = build_base_image(src, "helm", docker=fake_docker)
+    assert tag == "ladder-base:helm"
+    copied = src.parent / ".image_helm" / "src" / "testdata" / "windows-file-symlink"
+    assert copied.is_symlink()
+    assert seen and seen[0][0] == "build"
