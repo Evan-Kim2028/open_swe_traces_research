@@ -217,7 +217,6 @@ def run_verifier(
         shutil.copy2(sandbox / "VERIFIER.md", vdir / "VERIFIER.md")
     hidden = collect_hidden(vdir)
     if not hidden:
-        store.upsert_unit(repo, unit, status=REJECTED, rejected_rule="B3")
         raise RuntimeError("verifier wrote no hidden tests (session produced no output; retryable)")
 
     task_dir = vdir / "task_probe"
