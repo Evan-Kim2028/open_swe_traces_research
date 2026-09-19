@@ -102,3 +102,23 @@ Task-only baseline (same features as `task_difficulty_summary.md`): held-out AUC
 uv run python scripts/rung_mapping.py
 uv run pytest tests/test_rungs.py
 ```
+
+## Per-combo breakdown (added 2026-09-19 02:00Z)
+
+Solve rate by heuristic rung within each teacher/harness combination (instances with labeled rollouts):
+
+| combo | L0 | L1 | L2 | L4 | L2−L0 |
+|---|---|---|---|---|---|
+| minisweagent/qwen36_27b | 0.325 | 0.327 | 0.514 | 0.338 | +0.189 |
+| minisweagent/qwen38_27b | 0.462 | 0.479 | 0.618 | 0.515 | +0.156 |
+| openhands/minimax_m25 | 0.389 | 0.403 | 0.483 | 0.462 | +0.094 |
+| openhands/qwen35_122b | 0.284 | 0.316 | 0.334 | 0.356 | +0.050 |
+| sweagent/minimax_m25 | 0.438 | 0.452 | 0.503 | 0.494 | +0.065 |
+| sweagent/qwen35_122b | 0.442 | 0.471 | 0.498 | 0.528 | +0.056 |
+| sweagent/qwen36_27b | 0.465 | 0.464 | 0.666 | 0.488 | +0.201 |
+
+The L0→L2 gain is positive for all 7 combos and scales with model strength (Qwen3.6/3.8: +16–20 pts;
+Qwen3.5-122B: +5–6). L4 (signatures/interfaces quoted) is not easier than L0 for most combos: the effect is
+the jump to a complete behavioral description, not "more text". Corrected verdict: the information axis does
+predict natural-task difficulty, consistently across models, but only at the L1→L2 boundary, and the heuristic
+labeler (24.5% exact agreement) likely understates it.

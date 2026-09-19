@@ -93,8 +93,11 @@ with rung (Spearman +0.86 over 5 populated rungs) but adding rung features to th
 AUC +0.005, and leakage of patch symbols in the issue text has no effect on solve rate. Reading, together with
 the Terminal-Bench datapoint: on natural tasks with hidden example-test verifiers, the information given in the
 issue text is not what drives difficulty (or our heuristic cannot measure it). The ladder's effect is real only
-where we control it (client-go: replicated flips at L5 and >L3). Framework decision: keep L0–L6 as a
-construction instrument for synthetic tasks; do not claim it as a general difficulty axis for natural tasks.
+where we control it (client-go: replicated flips at L5 and >L3). Per-combo breakdown (added later): the L0→L2 gain is positive for all 7 teacher/harness combinations and
+scales with model strength (+5 to +20 pts), while L4 is not easier than L0. Framework decision (revised): the
+information axis is real on natural tasks at ONE boundary — complete behavioral description vs not — and the
+finer rungs above L2 carry little on natural tasks. Keep L0–L6 for synthetic construction; for natural tasks
+report the binary L<2 / L>=2 split.
 
 ## Replication (2026-09-19)
 Single-attempt flip points mislabeled 1 of 2 units. All flip points are now pass rates over 3 attempts (C6).
