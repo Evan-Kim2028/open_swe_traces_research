@@ -7,7 +7,7 @@ for k in 0 1 2 3 4 5 6; do
   [ -z "$pending" ] && break
   dir=~/openswe/run_${PFX}_L$k; rm -rf $dir; mkdir -p $dir
   for u in $pending; do [ -d $ROOT/$u-L$k ] && cp -r $ROOT/$u-L$k $dir/; done
-  [ -z "$(ls $dir)" ] && break
+  [ -z "$(ls $dir)" ] && { rm -rf $dir; continue; }
   echo "$(date -u +%H:%M) level L$k units: $(ls $dir | tr '\n' ' ')"
   # rule A11: re-measure timing gates on this host (ARM) for tasks that ship measure_gold.sh
   for t in $dir/*/; do
