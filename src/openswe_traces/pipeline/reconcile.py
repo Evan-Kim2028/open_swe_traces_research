@@ -19,6 +19,33 @@ JOB_RE = re.compile(
 )
 
 
+def _job_owner_alive(job_dir: Path) -> bool:
+    """True if any live process command line references this job (harbor run or its solve-unit parent)."""
+    needle = f"--job-name {job_dir.name}"
+    unit_needle = None
+    parts = job_dir.name.split("-L")
+    if len(parts) >= 2:
+        unit_needle = f"--unit {parts[0].split('-', 2)[-1]} "
+    try:
+        for pid_dir in Path("/proc").iterdir():
+            if not pid_dir.name.isdigit():
+                continue
+            try:
+                cmd = (
+                    (pid_dir / "cmdline")
+                    .read_bytes()
+                    .replace(b"\0", b" ")
+                    .decode("utf-8", "replace")
+                )
+            except OSError:
+                continue
+            if needle in cmd or (unit_needle and "solve-unit" in cmd and unit_needle in cmd):
+                return True
+    except OSError:
+        return False
+    return False
+
+
 def parse_job_name(name: str, repos: set[str]) -> dict[str, str] | None:
     """Split ``<repo>-<unit>-L<level>-<solver>-n<k>-k<idx>`` using the known repo names as prefixes."""
     for repo in sorted(repos, key=len, reverse=True):
@@ -50,9 +77,11 @@ def reconcile_jobs(
         meta = parse_job_name(job_dir.name, repos)
         if meta is None:
             continue
+        if not (job_dir / "result.json").is_file() or _job_owner_alive(job_dir):
+            continue  # Harbor still running, or a live solve-unit owns this job and will record it
         audits = [a for a in audit_job(job_dir) if a.result]
-        if not audits or any(a.reward is None and not a.result.get("finished_at") for a in audits):
-            continue  # still running
+        if not audits:
+            continue
         repo, unit, level, solver = meta["repo"], meta["unit"], int(meta["level"]), meta["solver"]
         task_dir = Path(cfg.tasks_dir) / repo / f"{unit}-L{level}"
         _record_audits(
