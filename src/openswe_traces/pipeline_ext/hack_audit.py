@@ -255,7 +255,8 @@ def executed_actions(trial_dir: Path | str | None) -> str | None:
             obs = holder.get("observation") or {}
             results = obs.get("results") if isinstance(obs, dict) else None
             if isinstance(results, list) and results:
-                return " ".join(str(r.get("content", ""))[:300] for r in results if isinstance(r, dict))
+                joined = " ".join(str(r.get("content", ""))[:300] for r in results if isinstance(r, dict))
+                return " ".join(joined.split())
         return ""
 
     for step in steps:
