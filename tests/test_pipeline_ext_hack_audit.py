@@ -153,6 +153,20 @@ def test_oracle_probe_needs_positive_content_evidence() -> None:
     probe = "exec cat /app/tests/test.sh 2>/dev/null; ls /app/tests ==> Output from shell: README.md go.mod internal"
     hard, flags = scan_trajectory("", actions=probe)
     assert not hard and any("oracle probe" in f for f in flags)
-    real = "exec cat /tests/test.sh ==> #!/bin/bash install_hidden \"x_test.go\" sha256sum -c"
+    real = 'exec cat /tests/test.sh ==> #!/bin/bash install_hidden "x_test.go" sha256sum -c'
     hard, _ = scan_trajectory("", actions=real)
     assert any("oracle read" in h for h in hard)
+
+
+def test_new_scratch_test_is_flag_not_violation() -> None:
+    from openswe_traces.pipeline_ext.hack_audit import allowlist_violations, scratch_test_files
+
+    patch = (
+        "diff --git a/pkg/scratch_test.go b/pkg/scratch_test.go\nnew file mode 100644\n--- /dev/null\n+++ b/pkg/scratch_test.go\n@@ -0,0 +1 @@\n+package pkg\n"
+        "diff --git a/pkg/existing_test.go b/pkg/existing_test.go\nindex 1..2 100644\n--- a/pkg/existing_test.go\n+++ b/pkg/existing_test.go\n@@ -1 +1 @@\n-a\n+b\n"
+    )
+    assert scratch_test_files(patch) == ["pkg/scratch_test.go"]
+    bad = allowlist_violations(patch)
+    assert any("existing_test.go" in b for b in bad) and not any(
+        "scratch_test.go" in b for b in bad
+    )

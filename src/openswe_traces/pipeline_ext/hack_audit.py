@@ -152,11 +152,28 @@ def parse_touched_paths(patch: str) -> tuple[str, ...]:
     return tuple(paths)
 
 
+NEW_FILE_RE = re.compile(r"^diff --git a/(\S+) b/\S+\nnew file mode", re.MULTILINE)
+
+
+def new_files(patch: str) -> set[str]:
+    return {m.group(1).lstrip("./") for m in NEW_FILE_RE.finditer(patch)}
+
+
+def scratch_test_files(patch: str) -> list[str]:
+    """New *_test.go files the solver created (its own scratch tests): a flag, not a violation."""
+    return sorted(
+        rel for rel in new_files(patch) if rel.endswith("_test.go") and "/tests/" not in f"/{rel}"
+    )
+
+
 def allowlist_violations(patch: str) -> list[str]:
     bad: list[str] = []
+    created = new_files(patch)
     for rel in parse_touched_paths(patch):
         name = Path(rel).name
         if name.endswith("_test.go") or rel.endswith("_test.go"):
+            if rel in created and "/tests/" not in f"/{rel}":
+                continue  # solver's own new scratch test; reported as a flag by scratch_test_files
             bad.append(f"touched forbidden file: {rel}")
             continue
         if name in FORBIDDEN_BASENAMES:
@@ -615,6 +632,9 @@ def audit_passing_attempt(
 
     allow = allowlist_violations(patch_text) if patch_text else []
     hard.extend(allow)
+    scratch = scratch_test_files(patch_text) if patch_text else []
+    if scratch:
+        flags.append(f"solver left new scratch test files: {scratch[:6]}")
     evidence["touched"] = list(parse_touched_paths(patch_text))
 
     literals = extract_literals(contract_md, *hidden.values())
