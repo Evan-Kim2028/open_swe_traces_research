@@ -58,12 +58,14 @@ def test_all_climb_fail_held_out() -> None:
 
 
 def test_l2_pass_then_two_extra_and_l0_probe() -> None:
+    # 2026-09-19 rule: one pass suffices; two runs at the flip; L0 probed before confirming.
     state = _state((2, True))
-    req = {a.level: a.n_attempts for a in next_actions(state) if not a.optional}
-    assert req[2] == 2
+    acts = [a for a in next_actions(state) if not a.optional]
+    req = {a.level: a.n_attempts for a in acts}
+    assert req[2] == 1
     assert req[0] == 1
+    assert acts[0].level == 0  # probe below first
     assert 1 not in req
-
 
 def test_timeouts_do_not_count() -> None:
     state = _state((2, False, True))
@@ -71,14 +73,14 @@ def test_timeouts_do_not_count() -> None:
 
 
 def test_l2_confirmed_when_l0_fails() -> None:
-    state = _state((2, True), (2, True), (2, True), (0, False))
-    assert _req(state) == []
+    state = _state((2, True), (2, True), (0, False))
+    # L2 confirmed (2 runs, ≥1 pass; L0 failed) and L1 is probed automatically (2 runs)
+    assert _req(state) == [(1, 2)]
     level, confirmed, ev = flip_point(state)
     assert level == 2
     assert confirmed is True
     assert ev.below == 0
     assert ev.below_passes == 0
-
 
 def test_l0_probe_pass_is_provisional_flip() -> None:
     state = _state((2, True), (2, True), (2, True), (0, True))
@@ -92,22 +94,20 @@ def test_l0_probe_pass_is_provisional_flip() -> None:
 
 
 def test_l1_optional_only_if_l0_fails() -> None:
-    state = _state((2, True), (2, True), (2, True), (0, False))
-    opt = [a for a in next_actions(state) if a.optional]
-    assert any(a.level == 1 for a in opt)
-    promoted = _state((2, True), (2, True), (2, True), (0, False), optional=frozenset({1}))
-    req = _req(promoted)
-    assert req == [(1, 3)]
-
+    # L1 is required automatically once L2 passed and L0 failed
+    state = _state((2, True), (2, True), (0, False))
+    assert _req(state) == [(1, 2)]
+    # not while L0 is still unprobed
+    state2 = _state((2, True), (2, True))
+    assert 1 not in dict(_req(state2))
 
 def test_climb_failed_levels_get_no_extra() -> None:
-    # L2 failed climb, L5 pass → extras at L5 and L4, not more L2
+    # L2 failed climb, L5 pass → one extra at L5 and one probe at L4, not more L2
     state = _state((2, False), (5, True))
     req = {a.level: a.n_attempts for a in next_actions(state) if not a.optional}
-    assert req[5] == 2
-    assert req[4] == 2
+    assert req[5] == 1
+    assert req[4] == 1
     assert 2 not in req
-
 
 def test_l5_confirmed() -> None:
     state = _state(
@@ -128,35 +128,26 @@ def test_l5_confirmed() -> None:
 
 
 def test_extend_down_when_below_passes() -> None:
-    state = _state(
-        (2, False),
-        (5, True),
-        (5, True),
-        (5, True),
-        (4, True),
-        (4, True),
-    )
+    state = _state((2, False), (5, True), (5, True), (4, True))
     req = _req(state)
-    assert req == [(3, 2)]
+    assert req == [(3, 1)]
     level, confirmed, _ = flip_point(state)
     assert level == 5
     assert confirmed is False
 
-
 def test_extend_up_when_candidate_fails_extras() -> None:
-    state = _state((2, True), (2, False), (2, False), (0, False))
+    # one pass in two runs is a pass under the current rule: L2 confirmed, L1 probe follows
+    state = _state((2, True), (2, False), (0, False))
     req = dict(_req(state))
-    assert req[3] == 2
+    assert req == {1: 2}
     _, confirmed, _ = flip_point(state)
-    assert confirmed is False
-
+    assert confirmed is True
 
 def test_l6_candidate_skips_failed_l5() -> None:
     state = _state((2, False), (5, False), (6, True))
     req = {a.level: a.n_attempts for a in next_actions(state) if not a.optional}
-    assert req[6] == 2
+    assert req[6] == 1
     assert 5 not in req
-
 
 def test_l6_confirmed_when_below_failed_climb() -> None:
     state = _state((2, False), (5, False), (6, True), (6, True), (6, True))
@@ -184,10 +175,9 @@ def test_task_state_from_dict() -> None:
     assert len(state.attempts) == 2
     assert 3 in state.request_optional
     req = dict(_req(state))
-    assert req[5] == 2
-    assert req[4] == 2
-    assert req[3] == 3
-
+    assert req[5] == 1
+    assert req[4] == 1
+    assert req[3] == 2
 
 def test_cli_roundtrip(tmp_path: Path) -> None:
     from openswe_traces.pipeline_ext.ladder_policy import main

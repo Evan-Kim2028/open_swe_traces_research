@@ -166,3 +166,7 @@ The ladder is 0-indexed from the deepest FAIR level, which is fixed by fairness 
 Existing artifacts and reports use A0..A4 and A-1/A-2; map with L = A + 2. Directories will be renamed once the current builders finish. Nothing exists below L0 by construction.
 
 ### C6 (2026-09-19): flip points are pass rates over >= 3 attempts per level; single attempts are provisional. Cleanup must not prune images/containers while Harbor jobs run.
+
+### C6 amendment (2026-09-19, afternoon)
+
+One pass at a level counts as a pass. The flip point is confirmed with **two runs** at the flip level (≥1 pass) and one failing run at the level below. After an L2 pass the policy probes **L0 first**; if L0 fails it probes **L1** automatically (two runs) before spending the L2 confirmation run. Rationale: with Composer at 3–5 min per trial the marginal run is cheap, but the informative run is the lower rung, not a third confirmation at the same rung. Devin runs from earlier today used the previous 3-run rule.
