@@ -113,7 +113,15 @@ class FakeRunner(AgentRunner):
             for i in range(self.n):
                 name = f"unit{i}"
                 _write_unit(batch, name)
-                rows.append({"name": name, "dir": f"units/{name}/_author", "family": "state-machine", "n_files": 1, "n_lines": 40})
+                rows.append(
+                    {
+                        "name": name,
+                        "dir": f"units/{name}/_author",
+                        "family": "state-machine",
+                        "n_files": 1,
+                        "n_lines": 40,
+                    }
+                )
             (batch / "units.json").write_text(json.dumps(rows), encoding="utf-8")
         if role == "verifier":
             hidden = cwd / "tests" / "hidden" / "mathx"
@@ -136,7 +144,9 @@ def _ok_proof() -> dict:
 def test_yaml_config_and_repos_load() -> None:
     from openswe_traces.data import ROOT
 
-    cfg = load_config(ROOT / "experiments/pipeline/config.yaml", ROOT / "experiments/pipeline/repos.yaml")
+    cfg = load_config(
+        ROOT / "experiments/pipeline/config.yaml", ROOT / "experiments/pipeline/repos.yaml"
+    )
     assert cfg.units_per_author_batch == 10
     assert cfg.author_minutes == 30
     assert cfg.solver_backends == cfg.solver_order
@@ -319,7 +329,9 @@ def test_lazy_ladder_selection() -> None:
 
 
 def test_parse_tokens() -> None:
-    tin, tout = parse_cursor_agent_output('{"type":"result","usage":{"input_tokens":11,"output_tokens":7}}\n')
+    tin, tout = parse_cursor_agent_output(
+        '{"type":"result","usage":{"input_tokens":11,"output_tokens":7}}\n'
+    )
     assert (tin, tout) == (11, 7)
     tin, tout = parse_harbor_trial_tokens({"usage": {"prompt_tokens": 3, "completion_tokens": 9}})
     assert (tin, tout) == (3, 9)
@@ -341,7 +353,9 @@ def test_baseline_zero_passing_fails() -> None:
 def test_aggregator(tmp_path: Path) -> None:
     cfg = _cfg(tmp_path)
     store = PipelineStore(cfg.state_db)
-    store.upsert_unit("mathx", "codec", status="solved", family="cross-file", n_files=5, n_lines=900)
+    store.upsert_unit(
+        "mathx", "codec", status="solved", family="cross-file", n_files=5, n_lines=900
+    )
     store.upsert_unit("mathx", "bad", status="rejected", rejected_rule="B4", family="other")
     for i in range(3):
         store.add_trial(
@@ -403,7 +417,9 @@ def test_audit_contaminated(tmp_path: Path) -> None:
     trial = tmp_path / "t"
     (trial / "agent").mkdir(parents=True)
     (trial / "agent" / "log").write_text("webFetchToolCall {url: x}\n")
-    (trial / "result.json").write_text(json.dumps({"verifier_result": {"rewards": {"reward": 1.0}}}))
+    (trial / "result.json").write_text(
+        json.dumps({"verifier_result": {"rewards": {"reward": 1.0}}})
+    )
     audit = audit_trial_dir(trial)
     assert audit.verdict == "CONTAMINATED"
     assert audit_class(audit.verdict) == "contaminated"
@@ -426,7 +442,9 @@ def test_status_and_dry_run_table(tmp_path: Path) -> None:
     cfg = _cfg(tmp_path)
     store = PipelineStore(cfg.state_db)
     store.upsert_repo("mathx", "done")
-    store.upsert_unit("mathx", "unit0", status="solved", family="state-machine", n_files=2, n_lines=40)
+    store.upsert_unit(
+        "mathx", "unit0", status="solved", family="state-machine", n_files=2, n_lines=40
+    )
     store.add_trial(
         repo="mathx",
         unit="unit0",
@@ -519,7 +537,13 @@ def test_verifier_skips_existing_l2_b4_pass(tmp_path: Path) -> None:
     hidden.mkdir(parents=True)
     (hidden / "p_test.go").write_text("package pkg\n")
     (l2 / "validation.json").write_text(
-        json.dumps({"rule_verdicts": [{"rule_id": "B4", "passed": True, "skipped": False, "evidence": "ok"}]})
+        json.dumps(
+            {
+                "rule_verdicts": [
+                    {"rule_id": "B4", "passed": True, "skipped": False, "evidence": "ok"}
+                ]
+            }
+        )
     )
     runner = FakeRunner(cfg.work_dir, n=1)
     from openswe_traces.pipeline.verifier import run_verifier
@@ -777,3 +801,21 @@ def test_timeout_does_not_count_as_fail(tmp_path: Path) -> None:
     assert req[0].level == 2
     assert req[0].n_attempts == 1
     store.close()
+
+
+def test_parse_job_name_with_hyphenated_repo() -> None:
+    from openswe_traces.pipeline.reconcile import parse_job_name
+
+    d = parse_job_name("client-go-connarray-cv-L2-devin-n1-k3", {"client-go", "helm"})
+    assert d is not None
+    assert (d["repo"], d["unit"], d["level"], d["solver"], d["rerun"]) == (
+        "client-go",
+        "connarray-cv",
+        "2",
+        "devin",
+        None,
+    )
+    assert (
+        parse_job_name("nats-server-x-L0-cursor-n3-k0-rerun", {"nats-server"})["rerun"] == "-rerun"
+    )
+    assert parse_job_name("unknown-x-L0-devin-n1-k0", {"helm"}) is None

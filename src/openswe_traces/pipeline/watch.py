@@ -18,6 +18,7 @@ from openswe_traces.pipeline.aggregate import aggregate
 from openswe_traces.pipeline.audit import audit_job
 from openswe_traces.pipeline.config import PipelineConfig
 from openswe_traces.pipeline.package import packaged_levels, task_dir
+from openswe_traces.pipeline.reconcile import reconcile_jobs
 from openswe_traces.pipeline.resources import docker_n_concurrent, run_cleanup, wait_for_load
 from openswe_traces.pipeline.safety import TaskSafetyError, apply_solver_network, assert_harbor_safe
 from openswe_traces.pipeline.semaphore import DevinSemaphore
@@ -393,6 +394,12 @@ def solve_watch(
     try:
         while True:
             cycle += 1
+            try:
+                n_rec = reconcile_jobs(cfg, store, budget=budget, skip_hack_docker=skip_hack_docker)
+                if n_rec:
+                    log.info("reconciled %s orphaned trial(s)", n_rec)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("reconcile failed: %s", exc)
             ready = discover_verified_units(cfg)
             log.info("scan cycle=%s verified=%s docker_slots=%s", cycle, [(r, u) for r, u, _ in ready], slots)
             for repo, unit, l2 in ready:
