@@ -72,12 +72,17 @@ def free_stuck_units(store: PipelineStore) -> int:
     """Units left at status=solving by a dead solve-unit process are set to resume."""
     n = 0
     for row in store.list_units():
-        if str(row["status"] or "") != "solving":
+        if str(row["status"] or "") not in {"solving", "resume"}:
             continue
         repo, unit = row["repo"], row["unit"]
         if _unit_owner_alive(repo, unit):
             continue
+        step = store.step(repo, "solve", unit)
+        if str(row["status"]) == "resume" and not (step is not None and step.status == "running"):
+            continue  # already free
         store.upsert_unit(repo, unit, status="resume")
+        if step is not None and step.status == "running":
+            store.mark_step(repo, "solve", "pending", unit=unit)
         store.add_event("reconcile", f"{repo}/{unit}: no live solve-unit process; freed for resume")
         n += 1
     return n
