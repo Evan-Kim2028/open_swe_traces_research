@@ -387,6 +387,52 @@ def _tokens(result: dict[str, Any]) -> tuple[float | None, float | None]:
     return tokens_in, tokens_out
 
 
+def _devin_tokens(trial_dir: Path) -> tuple[float | None, float | None]:
+    """Sum Devin CLI usage from agent/sessions.db (message_nodes JSON blobs)."""
+    db = trial_dir / "agent" / "sessions.db"
+    if not db.is_file():
+        return None, None
+    import json as _json
+    import re as _re
+    import sqlite3 as _sqlite3
+
+    acc = {"in": 0, "out": 0}
+
+    def walk(o: Any) -> None:
+        if isinstance(o, dict):
+            for k, v in o.items():
+                kl = k.lower()
+                if kl in ("input_tokens", "prompt_tokens"):
+                    acc["in"] += int(v or 0)
+                elif kl in ("output_tokens", "completion_tokens"):
+                    acc["out"] += int(v or 0)
+                else:
+                    walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+
+    try:
+        con = _sqlite3.connect(str(db))
+        for cm, md in con.execute("select chat_message, metadata from message_nodes"):
+            for blob in (cm, md):
+                if not blob:
+                    continue
+                try:
+                    walk(_json.loads(blob))
+                except Exception:
+                    for m in _re.finditer(r'"(input|prompt)_tokens"\s*:\s*(\d+)', str(blob)):
+                        acc["in"] += int(m.group(2))
+                    for m in _re.finditer(r'"(output|completion)_tokens"\s*:\s*(\d+)', str(blob)):
+                        acc["out"] += int(m.group(2))
+        con.close()
+    except Exception:
+        return None, None
+    if acc["in"] == 0 and acc["out"] == 0:
+        return None, None
+    return float(acc["in"]), float(acc["out"])
+
+
 def scan_trial(
     trial_dir: Path,
     *,
@@ -430,6 +476,8 @@ def scan_trial(
     else:
         passed = reward == 1.0
     tokens_in, tokens_out = _tokens(result)
+    if tokens_in is None and tokens_out is None:
+        tokens_in, tokens_out = _devin_tokens(trial_dir)
     return TrialRecord(
         job_name=job_name,
         repo=infer_repo(parsed.unit, task_path),
