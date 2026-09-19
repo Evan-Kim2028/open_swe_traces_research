@@ -632,7 +632,11 @@ def run_hidden_and_collateral(
         hidden_rels=hidden_rels,
         go_cmds=go_cmds,
     )
-    mounts = [(str(Path(task_dir) / "tests"), "/tests")] if task_dir is not None else None
+    # Absolute: docker reads a relative source as a named volume and fails with rc=125,
+    # which the caller can only classify as an infrastructure flag.
+    mounts = (
+        [(str((Path(task_dir) / "tests").resolve()), "/tests")] if task_dir is not None else None
+    )
     argv = _docker_argv(image, env=env, command=command, mounts=mounts)
     runner = docker_run or default_docker_run
     try:

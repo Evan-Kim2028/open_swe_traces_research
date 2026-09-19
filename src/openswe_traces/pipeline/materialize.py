@@ -14,6 +14,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from openswe_traces.data import ROOT
 from openswe_traces.pipeline.config import PipelineConfig, RepoSpec
 from openswe_traces.pipeline.prepare import prepare_repo
 
@@ -114,6 +115,27 @@ def materialize_task(
     return target
 
 
+def base_tree_for(spec: RepoSpec, cfg: PipelineConfig) -> Path:
+    """The tree a repo's excision patches were authored against.
+
+    `repos.yaml` names it in `src:` (e.g. gin -> experiments/pipeline/repos2/gin/src).
+    That matters because the two obfuscation passes disagree: `repos2.identity_pass`
+    rewrote gin's module to example.internal/httprouter, while `prepare_repo` derives
+    example.internal/<repo-slug>. Re-preparing here produced a tree whose import lines
+    no longer matched the patches, so every gin unit failed to materialise. Fall back to
+    `prepare_repo` only when no `src:` tree is on disk.
+    """
+    if spec.src:
+        candidate = Path(spec.src)
+        if not candidate.is_absolute():
+            candidate = ROOT / spec.src
+        if (candidate / "go.mod").is_file():
+            return candidate
+        log.warning("%s: repos.yaml src %s missing; falling back to prepare_repo", spec.name, candidate)
+    info = prepare_repo(spec, cfg)
+    return Path(info["tree"])
+
+
 def materialize_all(
     cfg: PipelineConfig,
     *,
@@ -134,8 +156,7 @@ def materialize_all(
             log.warning("skip %s: repo not in repos.yaml", td)
             continue
         if repo not in trees:
-            info = prepare_repo(specs[repo], cfg)
-            trees[repo] = Path(info["tree"])
+            trees[repo] = base_tree_for(specs[repo], cfg)
         materialize_task(cfg, trees[repo], repo, unit, td)
         n += 1
         log.info("materialised %s", td)
