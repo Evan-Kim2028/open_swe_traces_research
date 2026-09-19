@@ -164,3 +164,5 @@ The ladder is 0-indexed from the deepest FAIR level, which is fixed by fairness 
 | L6 | + all tests in tree (formerly A4; equals the original in-tree-test tasks) |
 
 Existing artifacts and reports use A0..A4 and A-1/A-2; map with L = A + 2. Directories will be renamed once the current builders finish. Nothing exists below L0 by construction.
+
+### C6 (2026-09-19): flip points are pass rates over >= 3 attempts per level; single attempts are provisional. Cleanup must not prune images/containers while Harbor jobs run.

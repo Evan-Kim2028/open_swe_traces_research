@@ -92,3 +92,15 @@ concentrated in units whose behavior is a sequence/state contract rather than a 
 
 Rule reinforcement: B4 must be checked mechanically at build time for EVERY hidden/property test (the rules
 registry already flags it; the builder shipped the unit anyway). Make B4=FAIL block packaging.
+
+## Replication (2026-09-19 00:05Z) — single-attempt flip points are NOT stable
+
+lake-vps, Composer 2.5, 3 attempts per level around each flip (partial, 7/12 done): codec black-box L2 (old A0)
+PASS (earlier FAIL); codec L3 (old A1) FAIL (earlier PASS); pipeline L5 (old A3) FAIL (earlier PASS); pipeline L4 FAIL
+(consistent). Three trials errored with `CancelledError` at 23:58Z, coinciding with the first Docker cleanup run
+on the host — the image-prune step can race a trial between build and start. Cleanup now skips images/containers
+while any Harbor job is active; the errored trials will be re-run.
+
+**Rule C6 (new):** a flip point is defined on pass RATE over >= 3 attempts per level (flip = lowest level with
+>= 2/3 passes). All earlier single-attempt flip points are provisional until replicated. Every ladder run from
+now on uses `--n-attempts 3`.
