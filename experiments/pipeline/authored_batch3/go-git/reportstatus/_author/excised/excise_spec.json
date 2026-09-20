@@ -1,0 +1,14 @@
+{
+ "reportstatus": {
+  "plumbing/protocol/packp/report_status.go": [
+   "ReportStatus.Error",
+   "ReportStatus.Encode",
+   "ReportStatus.Decode",
+   "ReportStatus.scanFirstLine",
+   "ReportStatus.decodeReportStatus",
+   "ReportStatus.decodeCommandStatus",
+   "CommandStatus.Error",
+   "CommandStatus.encode"
+  ]
+ }
+}

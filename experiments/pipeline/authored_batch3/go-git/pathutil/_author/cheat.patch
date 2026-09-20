@@ -1,0 +1,195 @@
+diff --git a/internal/pathutil/dotgit.go b/internal/pathutil/dotgit.go
+index c5c54b9..ed7a8a7 100644
+--- a/internal/pathutil/dotgit.go
++++ b/internal/pathutil/dotgit.go
+@@ -1,6 +1,6 @@
+ package pathutil
+ 
+-import _ "strings"
++import "strings"
+ 
+ // IsDotGitName reports whether name is `.git` or its 8.3 NTFS short
+ // alias `git~1`, case-insensitively. Both are forbidden as path
+@@ -13,5 +13,5 @@ import _ "strings"
+ // the `C:` drive by default — which means that `git~1/` is a valid
+ // way to refer to `.git/`.
+ func IsDotGitName(name string) bool {
+-	panic("excised: IsDotGitName")
++	return strings.ToLower(name) == ".git"
+ }
+diff --git a/internal/pathutil/hfs.go b/internal/pathutil/hfs.go
+index 62b4bd4..c9bea9e 100644
+--- a/internal/pathutil/hfs.go
++++ b/internal/pathutil/hfs.go
+@@ -1,6 +1,6 @@
+ package pathutil
+ 
+-import _ "unicode"
++import "unicode"
+ 
+ // hfsIgnoredCodepoints contains Unicode code points that HFS+ ignores
+ // during path normalization. A path component containing these
+@@ -42,7 +42,20 @@ var hfsIgnoredCodepoints = map[rune]struct{}{
+ //
+ // [1]: https://github.com/git/git/blob/v2.54.0/utf8.c#L741-L809
+ func IsHFSDot(part, needle string) bool {
+-	panic("excised: IsHFSDot")
++	runes := []rune(part)
++	if len(runes) == 0 || runes[0] != '.' {
++		return false
++	}
++	rest := string(runes[1:])
++	if len(rest) != len(needle) {
++		return false
++	}
++	for i, expected := range needle {
++		if unicode.ToLower(runes[i+1]) != expected {
++			return false
++		}
++	}
++	return true
+ }
+ 
+ // IsHFSDotGit reports whether part is an HFS+ equivalent of ".git".
+diff --git a/internal/pathutil/ntfs.go b/internal/pathutil/ntfs.go
+index 5a7814b..4399ce5 100644
+--- a/internal/pathutil/ntfs.go
++++ b/internal/pathutil/ntfs.go
+@@ -1,6 +1,6 @@
+ package pathutil
+ 
+-import _ "strings"
++import "strings"
+ 
+ // IsNTFSDotGit ports upstream Git's is_ntfs_dotgit. It detects path
+ // components that NTFS would resolve to ".git": the canonical name
+@@ -51,7 +51,7 @@ func IsNTFSDotGit(part string) bool {
+ // caller decides whether they are permissible at the current path
+ // position.
+ func WindowsValidPath(part string) bool {
+-	panic("excised: WindowsValidPath")
++	return !isWindowsReservedName(part)
+ }
+ 
+ // windowsReservedNames lists the Windows reserved device names.
+@@ -68,7 +68,12 @@ var windowsReservedNames = []string{
+ }
+ 
+ func isWindowsReservedName(part string) bool {
+-	panic("excised: isWindowsReservedName")
++	for _, name := range windowsReservedNames {
++		if strings.EqualFold(part, name) {
++			return true
++		}
++	}
++	return false
+ }
+ 
+ // IsNTFSDot ports upstream Git's is_ntfs_dot_generic. It detects NTFS
+@@ -84,7 +89,11 @@ func isWindowsReservedName(part string) bool {
+ //
+ // [1]: https://github.com/git/git/blob/v2.54.0/path.c#L1451-L1507
+ func IsNTFSDot(name, dotgit, shortnamePrefix string) bool {
+-	panic("excised: IsNTFSDot")
++	if len(name) >= len(dotgit)+1 && name[0] == '.' &&
++		strings.EqualFold(name[1:], dotgit) {
++		return true
++	}
++	return false
+ }
+ 
+ // IsNTFSDotGitmodules reports whether part is an NTFS equivalent of
+@@ -117,5 +126,8 @@ func IsNTFSDotMailmap(part string) bool {
+ }
+ 
+ func asciiToLower(c byte) byte {
+-	panic("excised: asciiToLower")
++	if c >= 'A' && c <= 'Z' {
++		return c + 32
++	}
++	return c
+ }
+diff --git a/internal/pathutil/path_util.go b/internal/pathutil/path_util.go
+index 19a9231..4543a2e 100644
+--- a/internal/pathutil/path_util.go
++++ b/internal/pathutil/path_util.go
+@@ -2,15 +2,22 @@
+ package pathutil
+ 
+ import (
+-	_ "os"
++	"os"
+ 	_ "os/user"
+-	_ "strings"
++	"strings"
+ )
+ 
+ // ReplaceTildeWithHome replaces the tilde character at the beginning of a path
+ // with the appropriate home directory.
+ func ReplaceTildeWithHome(path string) (string, error) {
+-	panic("excised: ReplaceTildeWithHome")
++	if strings.HasPrefix(path, "~/") {
++		home, err := os.UserHomeDir()
++		if err != nil {
++			return "", err
++		}
++		return home + path[1:], nil
++	}
++	return path, nil
+ }
+ 
+ // HasUnsafeComponent reports whether name, split on '/' and '\\', has a path
+@@ -37,9 +44,12 @@ func ReplaceTildeWithHome(path string) (string, error) {
+ // The checks run regardless of the host OS, because a name can be authored on
+ // one system and reach the filesystem on another.
+ func HasUnsafeComponent(name string) bool {
+-	panic("excised: HasUnsafeComponent")
++	for _, part := range strings.FieldsFunc(name, isPathSep) {
++		if part == ".." || strings.ContainsAny(part, "\x00") {
++			return true
++		}
++	}
++	return false
+ }
+ 
+-func isPathSep(r rune) bool {
+-	panic("excised: isPathSep")
+-}
++func isPathSep(r rune) bool { return r == '/' || r == '\\' }
+diff --git a/internal/pathutil/tree.go b/internal/pathutil/tree.go
+index 579db5c..6e70a30 100644
+--- a/internal/pathutil/tree.go
++++ b/internal/pathutil/tree.go
+@@ -3,7 +3,7 @@ package pathutil
+ import (
+ 	"fmt"
+ 	_ "path/filepath"
+-	_ "strings"
++	"strings"
+ )
+ 
+ // ErrInvalidPath is returned by ValidTreePath when its argument is
+@@ -36,5 +36,22 @@ var ErrInvalidPath = fmt.Errorf("invalid path")
+ //
+ // [1]: https://github.com/git/git/blob/v2.54.0/read-cache.c#L987
+ func ValidTreePath(p string) error {
+-	panic("excised: ValidTreePath")
++	for i := 0; i < len(p); i++ {
++		if p[i] < 0x20 || p[i] == 0x7f {
++			return fmt.Errorf("%w %q: contains control character", ErrInvalidPath, p)
++		}
++	}
++	parts := strings.FieldsFunc(p, func(r rune) bool { return r == '\\' || r == '/' })
++	if len(parts) == 0 {
++		return fmt.Errorf("%w: %q", ErrInvalidPath, p)
++	}
++	for _, part := range parts {
++		if part == "." || part == ".." {
++			return fmt.Errorf("%w %q: cannot use %q", ErrInvalidPath, p, part)
++		}
++		if IsDotGitName(part) {
++			return fmt.Errorf("%w component: %q", ErrInvalidPath, p)
++		}
++	}
++	return nil
+ }

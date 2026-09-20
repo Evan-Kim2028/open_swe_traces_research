@@ -1,0 +1,222 @@
+--- a/expr/method.go
++++ b/expr/method.go
+@@ -101,91 +101,203 @@
+ // type if nil) and merges the method interceptors with the API and service level
+ // interceptors.
+ func (m *MethodExpr) Prepare() {
+-	panic("excised: MethodExpr.Prepare")
++	if m.Payload == nil {
++		m.Payload = &AttributeExpr{Type: Empty}
++	}
++	if m.Result == nil {
++		m.Result = &AttributeExpr{Type: Empty}
++	}
++	if m.StreamingPayload == nil {
++		m.StreamingPayload = &AttributeExpr{Type: Empty}
++	}
+ }
+ 
+ // Validate validates the method payloads, results, errors, security
+ // requirements, and interceptors.
+ func (m *MethodExpr) Validate() error {
+-	panic("excised: MethodExpr.Validate")
++	verr := new(eval.ValidationErrors)
++	verr.Merge(m.Payload.Validate("payload", m))
++	verr.Merge(m.StreamingPayload.Validate("streaming_payload", m))
++	verr.Merge(m.Result.Validate("result", m))
++	verr.Merge(m.validateRequirements())
++	verr.Merge(m.validateErrors())
++	verr.Merge(m.validateInterceptors())
++	return verr
+ }
+ 
+ // validateRequirements validates the security requirements.
+ func (m *MethodExpr) validateRequirements() *eval.ValidationErrors {
+-	panic("excised: MethodExpr.validateRequirements")
++	verr := new(eval.ValidationErrors)
++	var requirements []*SecurityExpr
++	switch {
++	case len(m.Requirements) > 0:
++		requirements = m.Requirements
++	case len(m.Service.Requirements) > 0:
++		requirements = m.Service.Requirements
++	default:
++		requirements = m.Service.design.API.Requirements
++	}
++	for _, r := range requirements {
++		for _, s := range r.Schemes {
++			verr.Merge(s.Validate())
++			switch s.Kind {
++			case BasicAuthKind:
++				if !hasTag(m.Payload, "security:username") {
++					verr.Add(m, "payload of method %q of service %q does not define a username attribute, use Username to define one", m.Name, m.Service.Name)
++				}
++				if !hasTag(m.Payload, "security:password") {
++					verr.Add(m, "payload of method %q of service %q does not define a password attribute, use Password to define one", m.Name, m.Service.Name)
++				}
++			case APIKeyKind:
++				if !hasTag(m.Payload, "security:apikey") {
++					verr.Add(m, "payload of method %q of service %q does not define an API key attribute, use APIKey to define one", m.Name, m.Service.Name)
++				}
++			case BearerKind:
++				if !hasTag(m.Payload, "security:bearer") {
++					verr.Add(m, "payload of method %q of service %q does not define a Bearer token attribute, use BearerToken to define one", m.Name, m.Service.Name)
++				}
++			case JWTKind:
++				if !hasTag(m.Payload, "security:token") {
++					verr.Add(m, "payload of method %q of service %q does not define a JWT attribute, use Token to define one", m.Name, m.Service.Name)
++				}
++			case OAuth2Kind:
++				if !hasTag(m.Payload, "security:accesstoken") {
++					verr.Add(m, "payload of method %q of service %q does not define a OAuth2 access token attribute, use AccessToken to define one", m.Name, m.Service.Name)
++				}
++			}
++		}
++	}
++	return verr
+ }
+ 
+ // isSecurityAttribute reports whether metadata marks a method payload field as
+ // a username, password, token, or API key used by a security scheme.
+ func isSecurityAttribute(meta MetaExpr) bool {
+-	panic("excised: isSecurityAttribute")
++	for name := range meta {
++		switch name {
++		case "security:username", "security:password", "security:bearer", "security:token", "security:accesstoken":
++			return true
++		}
++	}
++	return false
+ }
+ 
+ // isStringType reports whether a design type is String or a named String type.
+ func isStringType(dt DataType) bool {
+-	panic("excised: isStringType")
++	p, ok := dt.(Primitive)
++	return ok && p == String
+ }
+ 
+ // validateErrors validates the method errors.
+ func (m *MethodExpr) validateErrors() *eval.ValidationErrors {
+-	panic("excised: MethodExpr.validateErrors")
++	verr := new(eval.ValidationErrors)
++	for _, e := range m.Errors {
++		if err := e.Validate(); err != nil {
++			verr.AddError(m, err)
++		}
++	}
++	return verr
+ }
+ 
+ // validateInterceptors validates the method interceptors.
+ func (m *MethodExpr) validateInterceptors() *eval.ValidationErrors {
+-	panic("excised: MethodExpr.validateInterceptors")
++	verr := new(eval.ValidationErrors)
++	m.ClientInterceptors = mergeInterceptors(m.ClientInterceptors, m.Service.ClientInterceptors, m.Service.design.API.ClientInterceptors)
++	for _, i := range m.ClientInterceptors {
++		verr.Merge(i.validate(m))
++	}
++	m.ServerInterceptors = mergeInterceptors(m.ServerInterceptors, m.Service.ServerInterceptors, m.Service.design.API.ServerInterceptors)
++	for _, i := range m.ServerInterceptors {
++		verr.Merge(i.validate(m))
++	}
++	return verr
+ }
+ 
+ // mergeInterceptors merges interceptors from different levels (method, service, API)
+ // while avoiding duplicates. The order of precedence is: method > service > API.
+ func mergeInterceptors(methodLevel, serviceLevel, apiLevel []*InterceptorExpr) []*InterceptorExpr {
+-	panic("excised: mergeInterceptors")
++	result := append([]*InterceptorExpr{}, methodLevel...)
++	result = append(result, serviceLevel...)
++	result = append(result, apiLevel...)
++	return result
+ }
+ 
+ // hasTag is a helper function that traverses the given attribute and all its
+ // bases recursively looking for an attribute with the given tag meta. This
+ // recursion is only needed for attributes that have not been finalized yet.
+ func hasTag(p *AttributeExpr, tag string) bool {
+-	panic("excised: hasTag")
++	return p.HasTag(tag)
+ }
+ 
+ // hasTag is a helper function that traverses the given attribute and all its
+ // bases recursively looking for an attribute with the given tag meta prefix. This
+ // recursion is only needed for attributes that have not been finalized yet.
+ func hasTagPrefix(p *AttributeExpr, prefix string) bool {
+-	panic("excised: hasTagPrefix")
++	return p.HasTagPrefix(prefix)
+ }
+ 
+ // Finalize makes sure the method payload and result types are set. It also
+ // projects the result if it is a result type and a view is explicitly set in
+ // the design or a result type having at most one view.
+ func (m *MethodExpr) Finalize() {
+-	panic("excised: MethodExpr.Finalize")
++	if m.Payload == nil {
++		m.Payload = &AttributeExpr{Type: Empty}
++	} else {
++		m.Payload.Finalize()
++	}
++	if m.StreamingPayload == nil {
++		m.StreamingPayload = &AttributeExpr{Type: Empty}
++	} else {
++		m.StreamingPayload.Finalize()
++	}
++	if m.StreamingResult != nil {
++		m.StreamingResult.Finalize()
++	}
++	if m.Result == nil {
++		m.Result = &AttributeExpr{Type: Empty}
++	} else {
++		m.Result.Finalize()
++	}
++	for _, e := range m.Service.Errors {
++		m.Errors = append(m.Errors, e)
++	}
++	for _, e := range m.Errors {
++		e.Finalize()
++	}
++	if len(m.Requirements) == 0 {
++		if len(m.Service.Requirements) > 0 {
++			m.Requirements = m.Service.Requirements
++		} else {
++			m.Requirements = m.Service.design.API.Requirements
++		}
++	}
+ }
+ 
+ // IsStreaming determines whether the method streams payload or result.
+ func (m *MethodExpr) IsStreaming() bool {
+-	panic("excised: MethodExpr.IsStreaming")
++	return m.Stream != NoStreamKind
+ }
+ 
+ // IsPayloadStreaming determines whether the method streams payload.
+ func (m *MethodExpr) IsPayloadStreaming() bool {
+-	panic("excised: MethodExpr.IsPayloadStreaming")
++	return m.Stream == ClientStreamKind
+ }
+ 
+ // IsResultStreaming determines whether the method streams payload.
+ func (m *MethodExpr) IsResultStreaming() bool {
+-	panic("excised: MethodExpr.IsResultStreaming")
++	return m.Stream == ServerStreamKind
+ }
+ 
+ // HasMixedResults returns true if the method defines Result and StreamingResult
+ // separately so HTTP clients can choose a normal response or an SSE stream.
+ func (m *MethodExpr) HasMixedResults() bool {
+-	panic("excised: MethodExpr.HasMixedResults")
++	return m.StreamingResult != nil
+ }
+ 
+ // helper function that duplicates just enough of a security expression so that
+ // its scheme names can be overridden without affecting the original.
+ func copyReqs(reqs []*SecurityExpr) []*SecurityExpr {
+-	panic("excised: copyReqs")
++	out := make([]*SecurityExpr, len(reqs))
++	copy(out, reqs)
++	return out
+ }

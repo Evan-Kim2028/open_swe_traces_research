@@ -1,0 +1,26 @@
+{
+  "impl": {
+    "github/github.go": {
+      "GetRateLimitCategory": "return CoreCategory",
+      "Client.checkRateLimitBeforeDo": "return nil",
+      "Client.checkSecondaryRateLimitBeforeDo": "return nil",
+      "sleepUntilResetWithBuffer": "return nil"
+    }
+  },
+  "deltests": {
+    "github/github_test.go": [
+      "TestDo_rateLimitCategory",
+      "TestDo_rateLimit_noNetworkCall",
+      "TestDo_rateLimit_ignoredFromCache",
+      "TestDo_rateLimit_sleepUntilResponseResetLimit",
+      "TestDo_rateLimit_sleepUntilResponseResetLimitRetryOnce",
+      "TestDo_rateLimit_sleepUntilClientResetLimit",
+      "TestDo_rateLimit_abortSleepContextCancelled",
+      "TestDo_rateLimit_abortSleepContextCancelledClientLimit",
+      "TestDo_rateLimit_disableRateLimitCheck",
+      "TestDo_rateLimit_bypassRateLimitCheck",
+      "TestDo_rateLimit_abuseRateLimitError_maxDuration"
+    ]
+  },
+  "testre": "TestDo_rateLimitCategory|TestDo_rateLimit_noNetworkCall|TestDo_rateLimit_ignoredFromCache|sleepUntil|abortSleep|disableRateLimitCheck|bypassRateLimitCheck|maxDuration"
+}

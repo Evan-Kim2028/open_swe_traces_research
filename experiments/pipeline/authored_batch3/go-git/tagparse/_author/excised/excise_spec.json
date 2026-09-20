@@ -1,0 +1,23 @@
+{
+ "tagparse": {
+  "plumbing/object/tag.go": [
+   "Tag.Decode",
+   "Tag.Encode",
+   "Tag.EncodeWithoutSignature",
+   "Tag.matchesSource",
+   "Tag.encode",
+   "isZeroSignature"
+  ],
+  "plumbing/object/tag_scanner.go": [
+   "tagScanner.readLine",
+   "tagScanner.pushBack",
+   "scanTagObject",
+   "scanTagType",
+   "scanTagName",
+   "scanTagTagger",
+   "scanTagHeaders",
+   "scanTagPgp256Cont",
+   "scanTagMessage"
+  ]
+ }
+}

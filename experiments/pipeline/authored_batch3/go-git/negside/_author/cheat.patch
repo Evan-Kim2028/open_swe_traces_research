@@ -1,0 +1,97 @@
+diff --git a/plumbing/protocol/packp/pushopts.go b/plumbing/protocol/packp/pushopts.go
+index 8351a10..eaf52f5 100644
+--- a/plumbing/protocol/packp/pushopts.go
++++ b/plumbing/protocol/packp/pushopts.go
+@@ -5,9 +5,9 @@ import (
+ 	_ "fmt"
+ 	"io"
+ 	_ "strings"
+-	_ "unicode"
++	"unicode"
+ 
+-	_ "example.internal/gitkit/v6/plumbing/format/pktline"
++	"example.internal/gitkit/v6/plumbing/format/pktline"
+ )
+ 
+ // ErrInvalidPushOption is returned when a push option contains invalid
+@@ -23,14 +23,23 @@ type PushOptions struct {
+ 
+ // Encode encodes the push options into the given writer.
+ func (opts *PushOptions) Encode(w io.Writer) error {
+-	panic("excised: PushOptions.Encode")
++	for _, o := range opts.Options {
++		if _, err := pktline.Writef(w, "%s", o); err != nil {
++			return err
++		}
++	}
++	return pktline.WriteFlush(w)
+ }
+ 
+ // Decode decodes the push options from the given reader.
+ func (opts *PushOptions) Decode(r io.Reader) error {
+-	panic("excised: PushOptions.Decode")
++	s := pktline.NewScanner(r)
++	for s.Scan() {
++		opts.Options = append(opts.Options, s.Text())
++	}
++	return nil
+ }
+ 
+ func isNotGraphic(r rune) bool {
+-	panic("excised: isNotGraphic")
++	return !unicode.IsGraphic(r)
+ }
+diff --git a/plumbing/protocol/packp/shallowupd.go b/plumbing/protocol/packp/shallowupd.go
+index 68ed984..b80abc2 100644
+--- a/plumbing/protocol/packp/shallowupd.go
++++ b/plumbing/protocol/packp/shallowupd.go
+@@ -1,12 +1,12 @@
+ package packp
+ 
+ import (
+-	_ "bytes"
++	"bytes"
+ 	_ "fmt"
+ 	"io"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+-	_ "example.internal/gitkit/v6/plumbing/format/pktline"
++	"example.internal/gitkit/v6/plumbing/format/pktline"
+ )
+ 
+ const (
+@@ -22,7 +22,16 @@ type ShallowUpdate struct {
+ 
+ // Decode parses shallow update information from the reader.
+ func (r *ShallowUpdate) Decode(reader io.Reader) error {
+-	panic("excised: ShallowUpdate.Decode")
++	s := pktline.NewScanner(reader)
++	for s.Scan() {
++		line := s.Bytes()
++		if bytes.HasPrefix(line, []byte("shallow ")) {
++			r.Shallows = append(r.Shallows, plumbing.NewHash(string(line[8:40])))
++		} else if bytes.HasPrefix(line, []byte("unshallow ")) {
++			r.Unshallows = append(r.Unshallows, plumbing.NewHash(string(line[10:50])))
++		}
++	}
++	return nil
+ }
+ 
+ func (r *ShallowUpdate) decodeShallowLine(line []byte) error {
+@@ -39,5 +48,15 @@ func (r *ShallowUpdate) decodeLine(line, prefix []byte, expLen int) (plumbing.Ha
+ 
+ // Encode writes the shallow update to the writer.
+ func (r *ShallowUpdate) Encode(w io.Writer) error {
+-	panic("excised: ShallowUpdate.Encode")
++	for _, h := range r.Shallows {
++		if _, err := pktline.Writef(w, "shallow %s\n", h); err != nil {
++			return err
++		}
++	}
++	for _, h := range r.Unshallows {
++		if _, err := pktline.Writef(w, "unshallow %s\n", h); err != nil {
++			return err
++		}
++	}
++	return pktline.WriteFlush(w)
+ }

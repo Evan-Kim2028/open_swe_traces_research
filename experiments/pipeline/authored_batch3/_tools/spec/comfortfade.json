@@ -1,0 +1,15 @@
+{
+  "impl": {
+    "github/pulls_reviews.go": {
+      "PullRequestReviewRequest.isComfortFadePreview": "return false, nil"
+    }
+  },
+  "deltests": {
+    "github/pulls_reviews_test.go": [
+      "TestPullRequestReviewRequest_isComfortFadePreview",
+      "TestPullRequestsService_CreateReview_badReview",
+      "TestPullRequestsService_CreateReview_addHeader"
+    ]
+  },
+  "testre": "isComfortFadePreview|CreateReview_badReview|CreateReview_addHeader"
+}

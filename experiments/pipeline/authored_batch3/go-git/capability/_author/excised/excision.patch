@@ -1,0 +1,860 @@
+diff --git a/plumbing/protocol/capability/capability.go b/plumbing/protocol/capability/capability.go
+index 243385f..d054724 100644
+--- a/plumbing/protocol/capability/capability.go
++++ b/plumbing/protocol/capability/capability.go
+@@ -3,12 +3,12 @@ package capability
+ 
+ import (
+ 	"errors"
+-	"fmt"
+-	"os"
+-	"slices"
+-	"strings"
++	_ "fmt"
++	_ "os"
++	_ "slices"
++	_ "strings"
+ 
+-	"example.internal/gitkit/v6/plumbing/format/pktline"
++	_ "example.internal/gitkit/v6/plumbing/format/pktline"
+ )
+ 
+ var (
+@@ -300,109 +300,41 @@ const userAgent = "go-git/6.x"
+ 
+ // DefaultAgent provides the user agent string.
+ func DefaultAgent() string {
+-	if envUserAgent, ok := os.LookupEnv("GO_GIT_USER_AGENT_EXTRA"); ok && strings.TrimSpace(envUserAgent) != "" {
+-		return fmt.Sprintf("%s %s", userAgent, envUserAgent)
+-	}
+-	return userAgent
++	panic("excised: DefaultAgent")
+ }
+ 
+ // Validate validates that all capabilities in the list are valid v0/v1
+ // capabilities and that they have proper arguments.
+ func Validate(l *List) error {
+-	for _, c := range l.All() {
+-		values := l.Get(c)
+-		if err := validateCapability(c, values); err != nil {
+-			return err
+-		}
+-	}
+-	return nil
++	panic("excised: Validate")
+ }
+ 
+ func validateCapability(c Capability, values []string) error {
+-	if err := validateNoEmptyArgs(values); err != nil {
+-		return err
+-	}
+-
+-	if !isKnown(c) {
+-		return fmt.Errorf("unknown capability: %s", c)
+-	}
+-
+-	if requiresArgument(c) && len(values) == 0 {
+-		return ErrArgumentsRequired
+-	}
+-
+-	if !requiresArgument(c) && len(values) != 0 {
+-		return ErrArguments
+-	}
+-
+-	if !allowsMultipleArguments(c) && len(values) > 1 {
+-		return ErrMultipleArguments
+-	}
+-
+-	if c == SessionID && len(values) == 1 {
+-		if err := validateSessionID(values[0]); err != nil {
+-			return err
+-		}
+-	}
+-
+-	return nil
++	panic("excised: validateCapability")
+ }
+ 
+ // isKnown reports whether the capability is a known v0/v1 capability.
+ func isKnown(c Capability) bool {
+-	switch c {
+-	case MultiACK, MultiACKDetailed, NoDone, ThinPack, NoThin, Sideband,
+-		Sideband64k, OFSDelta, Agent, Shallow, DeepenSince, DeepenNot,
+-		DeepenRelative, NoProgress, IncludeTag, ReportStatus, ReportStatusV2,
+-		DeleteRefs, Quiet, Atomic, PushOptions, SymRef, AllowTipSHA1InWant,
+-		AllowReachableSHA1InWant, PushCert, Filter, ObjectFormat, SessionID:
+-		return true
+-	default:
+-		return false
+-	}
++	panic("excised: isKnown")
+ }
+ 
+ // requiresArgument reports whether the capability requires an argument.
+ func requiresArgument(c Capability) bool {
+-	switch c {
+-	case Agent, PushCert, SymRef, ObjectFormat, SessionID:
+-		return true
+-	default:
+-		return false
+-	}
++	panic("excised: requiresArgument")
+ }
+ 
+ // allowsMultipleArguments reports whether the capability accepts multiple arguments.
+ func allowsMultipleArguments(c Capability) bool {
+-	switch c {
+-	case SymRef:
+-		return true
+-	default:
+-		return false
+-	}
++	panic("excised: allowsMultipleArguments")
+ }
+ 
+ // validateNoEmptyArgs validates that no argument is empty.
+ func validateNoEmptyArgs(values []string) error {
+-	if slices.Contains(values, "") {
+-		return ErrEmptyArgument
+-	}
+-	return nil
++	panic("excised: validateNoEmptyArgs")
+ }
+ 
+ // validateSessionID validates that the session ID is not empty and only
+ // contains printable ASCII characters except space.
+ func validateSessionID(sessionID string) error {
+-	if sessionID == "" {
+-		return ErrEmptyArgument
+-	}
+-	if len(sessionID) > pktline.MaxPayloadSize {
+-		return fmt.Errorf("session ID is too long: %d bytes", len(sessionID))
+-	}
+-	if strings.ContainsFunc(sessionID, func(r rune) bool {
+-		return r <= 32 || r >= 127 // Non-printable ASCII characters and space
+-	}) {
+-		return fmt.Errorf("session ID contains invalid characters: %q", sessionID)
+-	}
+-	return nil
++	panic("excised: validateSessionID")
+ }
+diff --git a/plumbing/protocol/capability/capability_test.go b/plumbing/protocol/capability/capability_test.go
+deleted file mode 100644
+index 232b325..0000000
+--- a/plumbing/protocol/capability/capability_test.go
++++ /dev/null
+@@ -1,316 +0,0 @@
+-package capability
+-
+-import (
+-	"fmt"
+-	"os"
+-	"strings"
+-
+-	"example.internal/gitkit/v6/plumbing/format/pktline"
+-)
+-
+-func (s *SuiteCapabilities) TestDefaultAgent() {
+-	defer restoreEnv("GO_GIT_USER_AGENT_EXTRA")()
+-	os.Unsetenv("GO_GIT_USER_AGENT_EXTRA")
+-	ua := DefaultAgent()
+-	s.Equal(userAgent, ua)
+-}
+-
+-func (s *SuiteCapabilities) TestEnvAgent() {
+-	defer restoreEnv("GO_GIT_USER_AGENT_EXTRA")()
+-	os.Setenv("GO_GIT_USER_AGENT_EXTRA", "abc xyz")
+-	ua := DefaultAgent()
+-	s.Equal(fmt.Sprintf("%s %s", userAgent, "abc xyz"), ua)
+-}
+-
+-// restoreEnv captures the current value of key and returns a function that
+-// restores it, so a test can mutate the variable without leaking into other
+-// tests. The capability suite runs with t.Parallel, which rules out t.Setenv.
+-func restoreEnv(key string) func() {
+-	old, had := os.LookupEnv(key)
+-	return func() {
+-		if had {
+-			_ = os.Setenv(key, old)
+-		} else {
+-			_ = os.Unsetenv(key)
+-		}
+-	}
+-}
+-
+-func (s *SuiteCapabilities) TestValidate() {
+-	cases := []struct {
+-		name    string
+-		add     [][]string
+-		set     [][]string
+-		wantErr error
+-		errStr  string
+-	}{
+-		{
+-			name:    "empty list",
+-			wantErr: nil,
+-		},
+-		{
+-			name: "unknown capability",
+-			add: [][]string{
+-				{"unknown-capability"},
+-			},
+-			errStr: "unknown capability",
+-		},
+-		{
+-			name: "unknown capability before argument validation",
+-			add: [][]string{
+-				{"unknown", "arg"},
+-			},
+-			errStr: "unknown capability",
+-		},
+-		{
+-			name: "valid capability no args",
+-			add: [][]string{
+-				{ThinPack},
+-			},
+-			wantErr: nil,
+-		},
+-		{
+-			name: "capability with invalid args",
+-			add: [][]string{
+-				{ThinPack, "invalid-arg"},
+-			},
+-			wantErr: ErrArguments,
+-		},
+-		{
+-			name: "capability requires args",
+-			add: [][]string{
+-				{SymRef},
+-			},
+-			wantErr: ErrArgumentsRequired,
+-		},
+-		{
+-			name: "capability with args",
+-			add: [][]string{
+-				{SymRef, "HEAD:refs/heads/main"},
+-			},
+-			wantErr: nil,
+-		},
+-		{
+-			name: "agent requires arg",
+-			add: [][]string{
+-				{Agent},
+-			},
+-			wantErr: ErrArgumentsRequired,
+-		},
+-		{
+-			name: "agent with arg",
+-			add: [][]string{
+-				{Agent, "go-git/6.x"},
+-			},
+-			wantErr: nil,
+-		},
+-		{
+-			name: "agent too many args",
+-			set: [][]string{
+-				{Agent, "go-git/6.x", "extra"},
+-			},
+-			wantErr: ErrMultipleArguments,
+-		},
+-		{
+-			name: "object-format requires arg",
+-			add: [][]string{
+-				{ObjectFormat},
+-			},
+-			errStr: "requires an argument",
+-		},
+-		{
+-			name: "object-format with arg",
+-			set: [][]string{
+-				{ObjectFormat, "sha256"},
+-			},
+-			wantErr: nil,
+-		},
+-		{
+-			name: "object-format too many args",
+-			set: [][]string{
+-				{ObjectFormat, "sha256", "extra"},
+-			},
+-			wantErr: ErrMultipleArguments,
+-		},
+-		{
+-			name: "multiple valid capabilities",
+-			add: [][]string{
+-				{MultiACK},
+-				{ThinPack},
+-				{Agent, "test"},
+-			},
+-			wantErr: nil,
+-		},
+-		{
+-			name: "multiple capabilities one invalid",
+-			add: [][]string{
+-				{MultiACK},
+-				{ThinPack, "invalid"},
+-			},
+-			wantErr: ErrArguments,
+-		},
+-		{
+-			name: "empty argument",
+-			add: [][]string{
+-				{Agent, ""},
+-			},
+-			wantErr: ErrEmptyArgument,
+-		},
+-		{
+-			name: "symref multiple args allowed",
+-			add: [][]string{
+-				{SymRef, "HEAD:refs/heads/main", "foo:refs/heads/foo"},
+-			},
+-			wantErr: nil,
+-		},
+-	}
+-
+-	for _, tc := range cases {
+-		s.Run(tc.name, func() {
+-			caps := &List{}
+-			for _, args := range tc.add {
+-				caps.Add(args[0], args[1:]...)
+-			}
+-			for _, args := range tc.set {
+-				caps.Set(args[0], args[1:]...)
+-			}
+-
+-			err := Validate(caps)
+-			switch {
+-			case tc.wantErr != nil:
+-				s.ErrorIs(err, tc.wantErr)
+-			case tc.errStr != "":
+-				s.Error(err)
+-				s.Contains(err.Error(), tc.errStr)
+-			default:
+-				s.NoError(err)
+-			}
+-		})
+-	}
+-}
+-
+-func (s *SuiteCapabilities) TestValidateSessionID() {
+-	cases := []struct {
+-		name    string
+-		args    []string
+-		wantErr error
+-		errStr  string
+-	}{
+-		{
+-			name: "valid session id",
+-			args: []string{"0123456789abcdef0123456789abcdef01234567"},
+-		},
+-		{
+-			name:   "too long for packet line",
+-			args:   []string{strings.Repeat("a", pktline.MaxPayloadSize+1)},
+-			errStr: "too long",
+-		},
+-		{
+-			name:    "empty session id",
+-			args:    []string{""},
+-			wantErr: ErrEmptyArgument,
+-		},
+-		{
+-			name:   "contains spaces",
+-			args:   []string{"invalid session id"},
+-			errStr: "invalid char",
+-		},
+-	}
+-
+-	for _, tc := range cases {
+-		s.Run(tc.name, func() {
+-			caps := &List{}
+-			caps.Add(SessionID, tc.args...)
+-			err := Validate(caps)
+-			switch {
+-			case tc.wantErr != nil:
+-				s.ErrorIs(err, tc.wantErr)
+-			case tc.errStr != "":
+-				s.ErrorContains(err, tc.errStr)
+-			default:
+-				s.NoError(err)
+-			}
+-		})
+-	}
+-}
+-
+-func (s *SuiteCapabilities) TestIsKnown() {
+-	cases := []struct {
+-		name string
+-		cap  Capability
+-		want bool
+-	}{
+-		{name: "known ThinPack", cap: ThinPack, want: true},
+-		{name: "known Agent", cap: Agent, want: true},
+-		{name: "unknown", cap: "unknown-cap", want: false},
+-	}
+-
+-	for _, tc := range cases {
+-		s.Run(tc.name, func() {
+-			s.Equal(tc.want, isKnown(tc.cap))
+-		})
+-	}
+-}
+-
+-func (s *SuiteCapabilities) TestRequiresArgument() {
+-	cases := []struct {
+-		name string
+-		cap  Capability
+-		want bool
+-	}{
+-		{name: "Agent", cap: Agent, want: true},
+-		{name: "PushCert", cap: PushCert, want: true},
+-		{name: "SymRef", cap: SymRef, want: true},
+-		{name: "ThinPack", cap: ThinPack, want: false},
+-		{name: "MultiACK", cap: MultiACK, want: false},
+-	}
+-
+-	for _, tc := range cases {
+-		s.Run(tc.name, func() {
+-			s.Equal(tc.want, requiresArgument(tc.cap))
+-		})
+-	}
+-}
+-
+-func (s *SuiteCapabilities) TestAllowsMultipleArguments() {
+-	cases := []struct {
+-		name string
+-		cap  Capability
+-		want bool
+-	}{
+-		{name: "SymRef", cap: SymRef, want: true},
+-		{name: "Agent", cap: Agent, want: false},
+-		{name: "PushCert", cap: PushCert, want: false},
+-		{name: "ThinPack", cap: ThinPack, want: false},
+-	}
+-
+-	for _, tc := range cases {
+-		s.Run(tc.name, func() {
+-			s.Equal(tc.want, allowsMultipleArguments(tc.cap))
+-		})
+-	}
+-}
+-
+-func (s *SuiteCapabilities) TestValidateNoEmptyArgs() {
+-	cases := []struct {
+-		name    string
+-		args    []string
+-		wantErr error
+-	}{
+-		{name: "non-empty args", args: []string{"a", "b"}},
+-		{name: "empty slice", args: []string{}},
+-		{name: "nil slice", args: nil},
+-		{name: "contains empty", args: []string{"a", "", "c"}, wantErr: ErrEmptyArgument},
+-	}
+-
+-	for _, tc := range cases {
+-		s.Run(tc.name, func() {
+-			err := validateNoEmptyArgs(tc.args)
+-			if tc.wantErr != nil {
+-				s.ErrorIs(err, tc.wantErr)
+-			} else {
+-				s.NoError(err)
+-			}
+-		})
+-	}
+-}
+diff --git a/plumbing/protocol/capability/list.go b/plumbing/protocol/capability/list.go
+index fec4fd3..c887429 100644
+--- a/plumbing/protocol/capability/list.go
++++ b/plumbing/protocol/capability/list.go
+@@ -1,7 +1,7 @@
+ package capability
+ 
+ import (
+-	"bytes"
++	_ "bytes"
+ )
+ 
+ // List represents a list of capabilities. The zero value is safe to use;
+@@ -29,46 +29,14 @@ func (l *List) IsEmpty() bool {
+ // List. This is the format used in advertise-refs, upload-request, and
+ // update-request messages.
+ func DecodeList(raw []byte, l *List) {
+-	if l == nil {
+-		return
+-	}
+-
+-	raw = bytes.TrimSpace(raw)
+-	if len(raw) == 0 {
+-		return
+-	}
+-
+-	for len(raw) > 0 {
+-		var chunk []byte
+-		if i := bytes.IndexByte(raw, ' '); i >= 0 {
+-			chunk = raw[:i]
+-			raw = raw[i+1:]
+-		} else {
+-			chunk = raw
+-			raw = nil
+-		}
+-
+-		if len(chunk) == 0 {
+-			continue
+-		}
+-
+-		if before, after, ok := bytes.Cut(chunk, []byte{'='}); ok {
+-			l.Add(string(before), string(after))
+-		} else {
+-			l.Add(string(chunk))
+-		}
+-	}
++	panic("excised: DecodeList")
+ }
+ 
+ // EncodeList encodes the List into a v0/v1 space-separated capability string.
+ // This is the format used in advertise-refs, upload-request, and
+ // update-request messages.
+ func EncodeList(l *List) []byte {
+-	if l == nil {
+-		return nil
+-	}
+-	b, _ := l.MarshalText()
+-	return b
++	panic("excised: EncodeList")
+ }
+ 
+ // Get returns the values for a capability
+@@ -85,32 +53,16 @@ func (l *List) Get(capability string) []string {
+ 
+ // Set sets a capability removing the previous values
+ func (l *List) Set(capability string, values ...string) {
+-	if _, ok := l.m[capability]; ok {
+-		l.m[capability].Values = l.m[capability].Values[:0]
+-	}
+-	l.Add(capability, values...)
++	panic("excised: List.Set")
+ }
+ 
+ func (l *List) init() {
+-	if l.m == nil {
+-		l.m = make(map[string]*entry)
+-	}
++	panic("excised: List.init")
+ }
+ 
+ // Add adds a capability, values are optional
+ func (l *List) Add(c string, values ...string) {
+-	l.init()
+-
+-	if !l.Supports(c) {
+-		l.m[c] = &entry{Name: c}
+-		l.sort = append(l.sort, c)
+-	}
+-
+-	if len(values) == 0 {
+-		return
+-	}
+-
+-	l.m[c].Values = append(l.m[c].Values, values...)
++	panic("excised: List.Add")
+ }
+ 
+ // Supports returns true if capability is present
+@@ -124,77 +76,31 @@ func (l *List) Supports(capability string) bool {
+ 
+ // Delete deletes a capability from the List
+ func (l *List) Delete(capability string) {
+-	if !l.Supports(capability) {
+-		return
+-	}
+-
+-	delete(l.m, capability)
+-	for i, c := range l.sort {
+-		if c != capability {
+-			continue
+-		}
+-
+-		l.sort = append(l.sort[:i], l.sort[i+1:]...)
+-		return
+-	}
++	panic("excised: List.Delete")
+ }
+ 
+ // All returns a slice with all defined capabilities.
+ func (l *List) All() []string {
+-	if len(l.sort) == 0 {
+-		return nil
+-	}
+-
+-	cs := make([]string, len(l.sort))
+-	copy(cs, l.sort)
+-
+-	return cs
++	panic("excised: List.All")
+ }
+ 
+ // MarshalText implements encoding.TextMarshaler.
+ func (l *List) MarshalText() ([]byte, error) {
+-	return l.AppendText(nil)
++	panic("excised: List.MarshalText")
+ }
+ 
+ // AppendText implements encoding.TextAppender.
+ func (l *List) AppendText(b []byte) ([]byte, error) {
+-	first := true
+-	for _, key := range l.sort {
+-		if l.m == nil {
+-			continue
+-		}
+-		c := l.m[key]
+-		if len(c.Values) == 0 {
+-			if !first {
+-				b = append(b, ' ')
+-			}
+-			first = false
+-			b = append(b, key...)
+-			continue
+-		}
+-
+-		for _, value := range c.Values {
+-			if !first {
+-				b = append(b, ' ')
+-			}
+-			first = false
+-			b = append(b, key...)
+-			b = append(b, '=')
+-			b = append(b, value...)
+-		}
+-	}
+-	return b, nil
++	panic("excised: List.AppendText")
+ }
+ 
+ // UnmarshalText implements encoding.TextUnmarshaler.
+ func (l *List) UnmarshalText(text []byte) error {
+-	DecodeList(text, l)
+-	return nil
++	panic("excised: List.UnmarshalText")
+ }
+ 
+ // String generates the capabilities strings, the capabilities are sorted in
+ // insertion order.
+ func (l *List) String() string {
+-	b, _ := l.MarshalText()
+-	return string(b)
++	panic("excised: List.String")
+ }
+diff --git a/plumbing/protocol/capability/list_fuzz_test.go b/plumbing/protocol/capability/list_fuzz_test.go
+deleted file mode 100644
+index 2c155eb..0000000
+--- a/plumbing/protocol/capability/list_fuzz_test.go
++++ /dev/null
+@@ -1,17 +0,0 @@
+-package capability
+-
+-import (
+-	"testing"
+-)
+-
+-func FuzzListDecode(f *testing.F) {
+-	f.Add([]byte("multi_ack"))
+-	f.Add([]byte("multi_ack thin-pack"))
+-	f.Add([]byte("agent=git/2.0"))
+-	f.Add([]byte{})
+-
+-	f.Fuzz(func(_ *testing.T, data []byte) {
+-		var l List
+-		DecodeList(data, &l)
+-	})
+-}
+diff --git a/plumbing/protocol/capability/list_test.go b/plumbing/protocol/capability/list_test.go
+deleted file mode 100644
+index b723bbf..0000000
+--- a/plumbing/protocol/capability/list_test.go
++++ /dev/null
+@@ -1,187 +0,0 @@
+-package capability
+-
+-import (
+-	"testing"
+-
+-	"github.com/stretchr/testify/suite"
+-)
+-
+-type SuiteCapabilities struct {
+-	suite.Suite
+-}
+-
+-func TestSuiteCapabilities(t *testing.T) {
+-	t.Parallel()
+-	suite.Run(t, new(SuiteCapabilities))
+-}
+-
+-func (s *SuiteCapabilities) TestIsEmpty() {
+-	caps := &List{}
+-	s.True(caps.IsEmpty())
+-}
+-
+-func (s *SuiteCapabilities) TestDecode() {
+-	caps := &List{}
+-	// symref=foo symref=qux thin-pack
+-	caps.Add("symref", "foo", "qux")
+-	caps.Add("thin-pack")
+-
+-	s.Len(caps.m, 2)
+-	s.Equal([]string{"foo", "qux"}, caps.Get(SymRef))
+-	s.Nil(caps.Get(ThinPack))
+-}
+-
+-func (s *SuiteCapabilities) TestDecodeWithLeadingSpace() {
+-	caps := &List{}
+-	caps.Add("report-status")
+-
+-	s.Len(caps.m, 1)
+-	s.True(caps.Supports(ReportStatus))
+-}
+-
+-func (s *SuiteCapabilities) TestDecodeEmpty() {
+-	caps := &List{}
+-	s.Equal(&List{}, caps)
+-}
+-
+-func (s *SuiteCapabilities) TestDecodeWithEqual() {
+-	caps := &List{}
+-	caps.Add("agent", "foo=bar")
+-
+-	s.Len(caps.m, 1)
+-	s.Equal([]string{"foo=bar"}, caps.Get(Agent))
+-}
+-
+-func (s *SuiteCapabilities) TestDecodeWithUnknownCapability() {
+-	caps := &List{}
+-	caps.Add("foo")
+-	s.True(caps.Supports("foo"))
+-}
+-
+-func (s *SuiteCapabilities) TestDecodeWithUnknownCapabilityWithArgument() {
+-	caps := &List{}
+-	caps.Add("oldref", "HEAD:refs/heads/v2")
+-	caps.Add("thin-pack")
+-
+-	s.Len(caps.m, 2)
+-	s.Equal([]string{"HEAD:refs/heads/v2"}, caps.Get("oldref"))
+-	s.Nil(caps.Get(ThinPack))
+-}
+-
+-func (s *SuiteCapabilities) TestDecodeWithUnknownCapabilityWithMultipleArgument() {
+-	caps := &List{}
+-	caps.Add("foo", "HEAD:refs/heads/v2", "HEAD:refs/heads/v1")
+-	caps.Add("thin-pack")
+-
+-	s.Len(caps.m, 2)
+-	s.Equal([]string{"HEAD:refs/heads/v2", "HEAD:refs/heads/v1"}, caps.Get("foo"))
+-	s.Nil(caps.Get(ThinPack))
+-}
+-
+-func (s *SuiteCapabilities) TestString() {
+-	caps := &List{}
+-	caps.Set(Agent, "bar")
+-	caps.Set(SymRef, "foo:qux")
+-	caps.Set(ThinPack)
+-
+-	s.Equal("agent=bar symref=foo:qux thin-pack", caps.String())
+-}
+-
+-func (s *SuiteCapabilities) TestStringSort() {
+-	caps := &List{}
+-	caps.Set(Agent, "bar")
+-	caps.Set(SymRef, "foo:qux")
+-	caps.Set(ThinPack)
+-
+-	s.Equal("agent=bar symref=foo:qux thin-pack", caps.String())
+-}
+-
+-func (s *SuiteCapabilities) TestSet() {
+-	caps := &List{}
+-	caps.Add(SymRef, "foo", "qux")
+-	caps.Set(SymRef, "bar")
+-
+-	s.Len(caps.m, 1)
+-	s.Equal([]string{"bar"}, caps.Get(SymRef))
+-}
+-
+-func (s *SuiteCapabilities) TestSetEmpty() {
+-	caps := &List{}
+-	caps.Set(Agent, "bar")
+-
+-	s.Len(caps.Get(Agent), 1)
+-}
+-
+-func (s *SuiteCapabilities) TestSetDuplicate() {
+-	caps := &List{}
+-	caps.Set(Agent, "baz")
+-	caps.Set(Agent, "bar")
+-
+-	s.Equal("agent=bar", caps.String())
+-}
+-
+-func (s *SuiteCapabilities) TestGetEmpty() {
+-	caps := &List{}
+-	s.Len(caps.Get(Agent), 0)
+-}
+-
+-func (s *SuiteCapabilities) TestDelete() {
+-	caps := &List{}
+-	caps.Delete(SymRef)
+-
+-	caps.Add(Sideband)
+-	caps.Set(SymRef, "bar")
+-	caps.Set(Sideband64k)
+-
+-	caps.Delete(SymRef)
+-
+-	s.Equal("side-band side-band-64k", caps.String())
+-}
+-
+-func (s *SuiteCapabilities) TestAdd() {
+-	caps := &List{}
+-	caps.Add(SymRef, "foo", "qux")
+-	caps.Add(ThinPack)
+-
+-	s.Equal("symref=foo symref=qux thin-pack", caps.String())
+-}
+-
+-func (s *SuiteCapabilities) TestAddUnknownCapability() {
+-	caps := &List{}
+-	caps.Add("foo")
+-	s.True(caps.Supports("foo"))
+-}
+-
+-func (s *SuiteCapabilities) TestAll() {
+-	caps := &List{}
+-	s.Nil((&List{}).All())
+-
+-	caps.Add(Agent, "foo")
+-	s.Equal([]string{Agent}, caps.All())
+-
+-	caps.Add(OFSDelta)
+-	s.Equal([]string{Agent, OFSDelta}, caps.All())
+-}
+-
+-func (s *SuiteCapabilities) TestZeroValueSafe() {
+-	var caps List
+-
+-	s.True(caps.IsEmpty())
+-	s.Nil(caps.All())
+-	s.Nil(caps.Get(Agent))
+-	s.False(caps.Supports(Agent))
+-
+-	caps.Add(Agent, "foo")
+-	s.False(caps.IsEmpty())
+-	s.True(caps.Supports(Agent))
+-	s.Equal([]string{"foo"}, caps.Get(Agent))
+-	s.Equal([]string{Agent}, caps.All())
+-	s.Equal("agent=foo", caps.String())
+-
+-	caps.Delete(Agent)
+-	s.True(caps.IsEmpty())
+-
+-	caps.Set(OFSDelta)
+-	s.True(caps.Supports(OFSDelta))
+-	s.Equal("ofs-delta", caps.String())
+-}

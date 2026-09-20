@@ -1,0 +1,707 @@
+diff --git a/github/github.go b/github/github.go
+index 5b1fa27..fd54cdb 100644
+--- a/github/github.go
++++ b/github/github.go
+@@ -1652,40 +1652,7 @@ func (c *Client) Do(req *http.Request, v any) (*Response, error) {
+ // from Client.Do, and if so, returns it so that Client.Do can skip making a network API call unnecessarily.
+ // Otherwise it returns nil, and Client.Do should proceed normally.
+ func (c *Client) checkRateLimitBeforeDo(req *http.Request, rateLimitCategory RateLimitCategory) *RateLimitError {
+-	ctx := req.Context()
+-
+-	c.rateMu.Lock()
+-	rate := c.rateLimits[rateLimitCategory]
+-	c.rateMu.Unlock()
+-	if !rate.Reset.Time.IsZero() && rate.Remaining == 0 && time.Now().Before(rate.Reset.Time) {
+-		// Create a fake response.
+-		resp := &http.Response{
+-			Status:     http.StatusText(http.StatusForbidden),
+-			StatusCode: http.StatusForbidden,
+-			Request:    req,
+-			Header:     make(http.Header),
+-			Body:       io.NopCloser(strings.NewReader("")),
+-		}
+-
+-		if ctx.Value(SleepUntilPrimaryRateLimitResetWhenRateLimited) != nil {
+-			if err := sleepUntilResetWithBuffer(ctx, rate.Reset.Time); err == nil {
+-				return nil
+-			}
+-			return &RateLimitError{
+-				Rate:     rate,
+-				Response: resp,
+-				Message:  fmt.Sprintf("Context cancelled while waiting for rate limit to reset until %v, not making remote request.", rate.Reset.Time),
+-			}
+-		}
+-
+-		return &RateLimitError{
+-			Rate:     rate,
+-			Response: resp,
+-			Message:  fmt.Sprintf("API rate limit of %v still exceeded until %v, not making remote request.", rate.Limit, rate.Reset.Time),
+-		}
+-	}
+-
+-	return nil
++	return nil /* excised: Client.checkRateLimitBeforeDo */
+ }
+ 
+ // checkSecondaryRateLimitBeforeDo does not make any network calls, but uses existing knowledge from
+@@ -1693,28 +1660,7 @@ func (c *Client) checkRateLimitBeforeDo(req *http.Request, rateLimitCategory Rat
+ // from Client.Do, and if so, returns it so that Client.Do can skip making a network API call unnecessarily.
+ // Otherwise it returns nil, and Client.Do should proceed normally.
+ func (c *Client) checkSecondaryRateLimitBeforeDo(req *http.Request) *AbuseRateLimitError {
+-	c.rateMu.Lock()
+-	secondary := c.secondaryRateLimitReset
+-	c.rateMu.Unlock()
+-	if !secondary.IsZero() && time.Now().Before(secondary) {
+-		// Create a fake response.
+-		resp := &http.Response{
+-			Status:     http.StatusText(http.StatusForbidden),
+-			StatusCode: http.StatusForbidden,
+-			Request:    req,
+-			Header:     make(http.Header),
+-			Body:       io.NopCloser(strings.NewReader("")),
+-		}
+-
+-		retryAfter := time.Until(secondary)
+-		return &AbuseRateLimitError{
+-			Response:   resp,
+-			Message:    fmt.Sprintf("API secondary rate limit exceeded until %v, not making remote request.", secondary),
+-			RetryAfter: &retryAfter,
+-		}
+-	}
+-
+-	return nil
++	return nil /* excised: Client.checkSecondaryRateLimitBeforeDo */
+ }
+ 
+ // compareHTTPResponse returns whether two http.Response objects are equal or not.
+@@ -2140,57 +2086,7 @@ const (
+ 
+ // GetRateLimitCategory returns the rate limit RateLimitCategory of the endpoint, determined by HTTP method and Request.URL.Path.
+ func GetRateLimitCategory(method, path string) RateLimitCategory {
+-	switch {
+-	// https://docs.github.com/rest/rate-limit?apiVersion=2022-11-28#about-rate-limits
+-	default:
+-		// NOTE: coreCategory is returned for actionsRunnerRegistrationCategory too,
+-		// because no API found for this category.
+-		return CoreCategory
+-
+-	// https://docs.github.com/rest/search/search?apiVersion=2022-11-28#search-code
+-	case strings.HasPrefix(path, "/search/code") &&
+-		method == "GET":
+-		return CodeSearchCategory
+-
+-	case strings.HasPrefix(path, "/search/"):
+-		return SearchCategory
+-	case path == "/graphql":
+-		return GraphqlCategory
+-	case strings.HasPrefix(path, "/app-manifests/") &&
+-		strings.HasSuffix(path, "/conversions") &&
+-		method == "POST":
+-		return IntegrationManifestCategory
+-
+-	// https://docs.github.com/rest/migrations/source-imports?apiVersion=2022-11-28#start-an-import
+-	case strings.HasPrefix(path, "/repos/") &&
+-		strings.HasSuffix(path, "/import") &&
+-		method == "PUT":
+-		return SourceImportCategory
+-
+-	// https://docs.github.com/rest/code-scanning?apiVersion=2022-11-28#upload-an-analysis-as-sarif-data
+-	case strings.HasSuffix(path, "/code-scanning/sarifs"):
+-		return CodeScanningUploadCategory
+-
+-	// https://docs.github.com/enterprise-cloud@latest/rest/scim?apiVersion=2022-11-28
+-	case strings.HasPrefix(path, "/scim/"):
+-		return ScimCategory
+-
+-	// https://docs.github.com/rest/dependency-graph/dependency-submission?apiVersion=2022-11-28#create-a-snapshot-of-dependencies-for-a-repository
+-	case strings.HasPrefix(path, "/repos/") &&
+-		strings.HasSuffix(path, "/dependency-graph/snapshots") &&
+-		method == "POST":
+-		return DependencySnapshotsCategory
+-
+-	// https://docs.github.com/enterprise-cloud@latest/rest/orgs/orgs?apiVersion=2022-11-28#get-the-audit-log-for-an-organization
+-	case strings.HasSuffix(path, "/audit-log"):
+-		return AuditLogCategory
+-
+-	// https://docs.github.com/rest/dependency-graph/sboms?apiVersion=2022-11-28
+-	case strings.HasPrefix(path, "/repos/") &&
+-		(strings.HasSuffix(path, "/dependency-graph/sbom") ||
+-			strings.HasSuffix(path, "/dependency-graph/sbom/generate-report")):
+-		return DependencySBOMCategory
+-	}
++	return CoreCategory /* excised: GetRateLimitCategory */
+ }
+ 
+ // RateLimits returns the rate limits for the current client.
+@@ -2362,17 +2258,7 @@ func formatRateReset(d time.Duration) string {
+ }
+ 
+ func sleepUntilResetWithBuffer(ctx context.Context, reset time.Time) error {
+-	buffer := time.Second
+-	timer := time.NewTimer(time.Until(reset) + buffer)
+-	select {
+-	case <-ctx.Done():
+-		if !timer.Stop() {
+-			<-timer.C
+-		}
+-		return ctx.Err()
+-	case <-timer.C:
+-	}
+-	return nil
++	return nil /* excised: sleepUntilResetWithBuffer */
+ }
+ 
+ // When using roundTripWithOptionalFollowRedirect, note that it
+diff --git a/github/github_test.go b/github/github_test.go
+index 165a2d9..e9512ff 100644
+--- a/github/github_test.go
++++ b/github/github_test.go
+@@ -2617,97 +2617,6 @@ func TestDo_rateLimit(t *testing.T) {
+ 	}
+ }
+ 
+-func TestDo_rateLimitCategory(t *testing.T) {
+-	t.Parallel()
+-	tests := []struct {
+-		method   string
+-		url      string
+-		category RateLimitCategory
+-	}{
+-		{
+-			method:   "GET",
+-			url:      "/",
+-			category: CoreCategory,
+-		},
+-		{
+-			method:   "GET",
+-			url:      "/search/issues?q=rate",
+-			category: SearchCategory,
+-		},
+-		{
+-			method:   "GET",
+-			url:      "/graphql",
+-			category: GraphqlCategory,
+-		},
+-		{
+-			method:   "POST",
+-			url:      "/app-manifests/code/conversions",
+-			category: IntegrationManifestCategory,
+-		},
+-		{
+-			method:   "GET",
+-			url:      "/app-manifests/code/conversions",
+-			category: CoreCategory, // only POST requests are in the integration manifest category
+-		},
+-		{
+-			method:   "PUT",
+-			url:      "/repos/google/go-github/import",
+-			category: SourceImportCategory,
+-		},
+-		{
+-			method:   "GET",
+-			url:      "/repos/google/go-github/import",
+-			category: CoreCategory, // only PUT requests are in the source import category
+-		},
+-		{
+-			method:   "POST",
+-			url:      "/repos/google/go-github/code-scanning/sarifs",
+-			category: CodeScanningUploadCategory,
+-		},
+-		{
+-			method:   "GET",
+-			url:      "/scim/v2/organizations/ORG/Users",
+-			category: ScimCategory,
+-		},
+-		{
+-			method:   "POST",
+-			url:      "/repos/google/go-github/dependency-graph/snapshots",
+-			category: DependencySnapshotsCategory,
+-		},
+-		{
+-			method:   "GET",
+-			url:      "/search/code?q=rate",
+-			category: CodeSearchCategory,
+-		},
+-		{
+-			method:   "GET",
+-			url:      "/orgs/google/audit-log",
+-			category: AuditLogCategory,
+-		},
+-		{
+-			method:   "GET",
+-			url:      "/repos/google/go-github/dependency-graph/sbom",
+-			category: DependencySBOMCategory,
+-		},
+-		{
+-			method:   "GET",
+-			url:      "/repos/google/go-github/dependency-graph/sbom/generate-report",
+-			category: DependencySBOMCategory,
+-		},
+-		{
+-			method:   "GET",
+-			url:      "/repos/google/go-github/dependency-graph/sbom/fetch-report/1234",
+-			category: CoreCategory,
+-		},
+-		// missing a check for actionsRunnerRegistrationCategory: API not found
+-	}
+-
+-	for _, tt := range tests {
+-		if got, want := GetRateLimitCategory(tt.method, tt.url), tt.category; got != want {
+-			t.Errorf("expecting category %v, found %v", got, want)
+-		}
+-	}
+-}
+ 
+ // Ensure rate limit is still parsed, even for error responses.
+ func TestDo_rateLimit_errorResponse(t *testing.T) {
+@@ -2794,333 +2703,12 @@ func TestDo_rateLimit_rateLimitError(t *testing.T) {
+ 	}
+ }
+ 
+-// Ensure a network call is not made when it's known that API rate limit is still exceeded.
+-func TestDo_rateLimit_noNetworkCall(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	reset := time.Now().UTC().Add(time.Minute).Round(time.Second) // Rate reset is a minute from now, with 1 second precision.
+-
+-	mux.HandleFunc("/first", func(w http.ResponseWriter, _ *http.Request) {
+-		w.Header().Set(HeaderRateLimit, "60")
+-		w.Header().Set(HeaderRateRemaining, "0")
+-		w.Header().Set(HeaderRateUsed, "60")
+-		w.Header().Set(HeaderRateReset, fmt.Sprint(reset.Unix()))
+-		w.Header().Set(HeaderRateResource, "core")
+-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-		w.WriteHeader(http.StatusForbidden)
+-		fmt.Fprintln(w, `{
+-   "message": "API rate limit exceeded for xxx.xxx.xxx.xxx. (But here's the good news: Authenticated requests get a higher rate limit. Check out the documentation for more details.)",
+-   "documentation_url": "https://docs.github.com/en/rest/overview/resources-in-the-rest-api#abuse-rate-limits"
+-}`)
+-	})
+-
+-	madeNetworkCall := false
+-	mux.HandleFunc("/second", func(http.ResponseWriter, *http.Request) {
+-		madeNetworkCall = true
+-	})
+-
+-	// First request is made, and it makes the client aware of rate reset time being in the future.
+-	req, _ := client.NewRequest(t.Context(), "GET", "first", nil)
+-
+-	_, err := client.Do(req, nil)
+-	if err == nil {
+-		t.Error("Expected error to be returned.")
+-	}
+-
+-	// Second request should not cause a network call to be made, since client can predict a rate limit error.
+-	req, _ = client.NewRequest(t.Context(), "GET", "second", nil)
+-	_, err = client.Do(req, nil)
+-
+-	if madeNetworkCall {
+-		t.Fatal("Network call was made, even though rate limit is known to still be exceeded.")
+-	}
+-
+-	if err == nil {
+-		t.Error("Expected error to be returned.")
+-	}
+-	var rateLimitErr *RateLimitError
+-	if !errors.As(err, &rateLimitErr) {
+-		t.Fatalf("Expected a *RateLimitError error; got %#v", err)
+-	}
+-	if got, want := rateLimitErr.Rate.Limit, 60; got != want {
+-		t.Errorf("rateLimitErr rate limit = %v, want %v", got, want)
+-	}
+-	if got, want := rateLimitErr.Rate.Remaining, 0; got != want {
+-		t.Errorf("rateLimitErr rate remaining = %v, want %v", got, want)
+-	}
+-	if got, want := rateLimitErr.Rate.Used, 60; got != want {
+-		t.Errorf("rateLimitErr rate used = %v, want %v", got, want)
+-	}
+-	if !rateLimitErr.Rate.Reset.UTC().Equal(reset) {
+-		t.Errorf("rateLimitErr rate reset = %v, want %v", rateLimitErr.Rate.Reset.UTC(), reset)
+-	}
+-	if got, want := rateLimitErr.Rate.Resource, "core"; got != want {
+-		t.Errorf("rateLimitErr rate resource = %v, want %v", got, want)
+-	}
+-}
+-
+-// Ignore rate limit headers if the response was served from cache.
+-func TestDo_rateLimit_ignoredFromCache(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+ 
+-	reset := time.Now().UTC().Add(time.Minute).Round(time.Second) // Rate reset is a minute from now, with 1 second precision.
+ 
+-	// By adding the X-From-Cache header we pretend this is served from a cache.
+-	mux.HandleFunc("/first", func(w http.ResponseWriter, _ *http.Request) {
+-		w.Header().Set("X-From-Cache", "1")
+-		w.Header().Set(HeaderRateLimit, "60")
+-		w.Header().Set(HeaderRateRemaining, "0")
+-		w.Header().Set(HeaderRateUsed, "60")
+-		w.Header().Set(HeaderRateReset, fmt.Sprint(reset.Unix()))
+-		w.Header().Set(HeaderRateResource, "core")
+-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-		w.WriteHeader(http.StatusForbidden)
+-		fmt.Fprintln(w, `{
+-   "message": "API rate limit exceeded for xxx.xxx.xxx.xxx. (But here's the good news: Authenticated requests get a higher rate limit. Check out the documentation for more details.)",
+-   "documentation_url": "https://docs.github.com/en/rest/overview/resources-in-the-rest-api#abuse-rate-limits"
+-}`)
+-	})
+ 
+-	madeNetworkCall := false
+-	mux.HandleFunc("/second", func(http.ResponseWriter, *http.Request) {
+-		madeNetworkCall = true
+-	})
+ 
+-	// First request is made so afterwards we can check the returned rate limit headers were ignored.
+-	req, _ := client.NewRequest(t.Context(), "GET", "first", nil)
+-	_, err := client.Do(req, nil)
+-	if err == nil {
+-		t.Error("Expected error to be returned.")
+-	}
+-
+-	// Second request should not be hindered by rate limits.
+-	req, _ = client.NewRequest(t.Context(), "GET", "second", nil)
+-	_, err = client.Do(req, nil)
+-	if err != nil {
+-		t.Fatalf("Second request failed, even though the rate limits from the cache should've been ignored: %v", err)
+-	}
+-	if !madeNetworkCall {
+-		t.Fatal("Network call was not made, even though the rate limits from the cache should've been ignored")
+-	}
+-}
+-
+-// Ensure sleeps until the rate limit is reset when the client is rate limited.
+-func TestDo_rateLimit_sleepUntilResponseResetLimit(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	reset := time.Now().UTC().Add(time.Second)
+-
+-	firstRequest := true
+-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-		if firstRequest {
+-			firstRequest = false
+-			w.Header().Set(HeaderRateLimit, "60")
+-			w.Header().Set(HeaderRateRemaining, "0")
+-			w.Header().Set(HeaderRateUsed, "60")
+-			w.Header().Set(HeaderRateReset, fmt.Sprint(reset.Unix()))
+-			w.Header().Set(HeaderRateResource, "core")
+-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-			w.WriteHeader(http.StatusForbidden)
+-			fmt.Fprintln(w, `{
+-   "message": "API rate limit exceeded for xxx.xxx.xxx.xxx. (But here's the good news: Authenticated requests get a higher rate limit. Check out the documentation for more details.)",
+-   "documentation_url": "https://docs.github.com/en/rest/overview/resources-in-the-rest-api#abuse-rate-limits"
+-}`)
+-			return
+-		}
+-		w.Header().Set(HeaderRateLimit, "5000")
+-		w.Header().Set(HeaderRateRemaining, "5000")
+-		w.Header().Set(HeaderRateUsed, "0")
+-		w.Header().Set(HeaderRateReset, fmt.Sprint(reset.Add(time.Hour).Unix()))
+-		w.Header().Set(HeaderRateResource, "core")
+-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-		w.WriteHeader(http.StatusOK)
+-		fmt.Fprintln(w, `{}`)
+-	})
+ 
+-	req, _ := client.NewRequest(context.WithValue(t.Context(), SleepUntilPrimaryRateLimitResetWhenRateLimited, true), "GET", ".", nil)
+-	resp, err := client.Do(req, nil)
+-	if err != nil {
+-		t.Errorf("Do returned unexpected error: %v", err)
+-	}
+-	if got, want := resp.StatusCode, http.StatusOK; got != want {
+-		t.Errorf("Response status code = %v, want %v", got, want)
+-	}
+-}
+ 
+-// Ensure tries to sleep until the rate limit is reset when the client is rate limited, but only once.
+-func TestDo_rateLimit_sleepUntilResponseResetLimitRetryOnce(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	reset := time.Now().UTC().Add(time.Second)
+-
+-	var requestCount atomic.Int32
+-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-		requestCount.Add(1)
+-		w.Header().Set(HeaderRateLimit, "60")
+-		w.Header().Set(HeaderRateRemaining, "0")
+-		w.Header().Set(HeaderRateUsed, "60")
+-		w.Header().Set(HeaderRateReset, fmt.Sprint(reset.Unix()))
+-		w.Header().Set(HeaderRateResource, "core")
+-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-		w.WriteHeader(http.StatusForbidden)
+-		fmt.Fprintln(w, `{
+-   "message": "API rate limit exceeded for xxx.xxx.xxx.xxx. (But here's the good news: Authenticated requests get a higher rate limit. Check out the documentation for more details.)",
+-   "documentation_url": "https://docs.github.com/en/rest/overview/resources-in-the-rest-api#abuse-rate-limits"
+-}`)
+-	})
+-
+-	req, _ := client.NewRequest(context.WithValue(t.Context(), SleepUntilPrimaryRateLimitResetWhenRateLimited, true), "GET", ".", nil)
+-	_, err := client.Do(req, nil)
+-	if err == nil {
+-		t.Error("Expected error to be returned.")
+-	}
+-	if got, want := int(requestCount.Load()), 2; got != want {
+-		t.Errorf("Expected 2 requests, got %v", got)
+-	}
+-}
+-
+-// Ensure a network call is not made when it's known that API rate limit is still exceeded.
+-func TestDo_rateLimit_sleepUntilClientResetLimit(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	reset := time.Now().UTC().Add(time.Second)
+-	client.rateLimits[CoreCategory] = Rate{Limit: 5000, Remaining: 0, Reset: Timestamp{reset}}
+-	var requestCount atomic.Int32
+-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-		requestCount.Add(1)
+-		w.Header().Set(HeaderRateLimit, "5000")
+-		w.Header().Set(HeaderRateRemaining, "5000")
+-		w.Header().Set(HeaderRateUsed, "0")
+-		w.Header().Set(HeaderRateReset, fmt.Sprint(reset.Add(time.Hour).Unix()))
+-		w.Header().Set(HeaderRateResource, "core")
+-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-		w.WriteHeader(http.StatusOK)
+-		fmt.Fprintln(w, `{}`)
+-	})
+-	req, _ := client.NewRequest(context.WithValue(t.Context(), SleepUntilPrimaryRateLimitResetWhenRateLimited, true), "GET", ".", nil)
+-	resp, err := client.Do(req, nil)
+-	if err != nil {
+-		t.Errorf("Do returned unexpected error: %v", err)
+-	}
+-	if got, want := resp.StatusCode, http.StatusOK; got != want {
+-		t.Errorf("Response status code = %v, want %v", got, want)
+-	}
+-	if got, want := int(requestCount.Load()), 1; got != want {
+-		t.Errorf("Expected 1 request, got %v", got)
+-	}
+-}
+-
+-// Ensure sleep is aborted when the context is cancelled.
+-//
+-// The test verifies that when a request receives a 403 rate-limit response,
+-// the client begins sleeping until the reset time, and that canceling the
+-// context during (or just before) that sleep aborts it and returns
+-// context.Canceled.
+-//
+-// Determinism: The handler signals via requestReceived once it has run,
+-// guaranteeing exactly one request before cancellation. A tiny goroutine
+-// waits for that signal and then calls cancel, so the context is cancelled
+-// after the handler returns but independently of wall-clock timing. There
+-// are no time.After timeouts or time.Sleep delays: the test either completes
+-// in microseconds or hangs (caught by the test framework's global timeout).
+-func TestDo_rateLimit_abortSleepContextCancelled(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	// We use a 1 minute reset time to ensure the sleep is not completed.
+-	reset := time.Now().UTC().Add(time.Minute)
+-	var requestCount atomic.Int32
+-	// requestReceived is signaled once the handler has run, so the test can
+-	// verify the request count independently of when the context is cancelled.
+-	requestReceived := make(chan struct{})
+-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-		requestCount.Add(1)
+-		w.Header().Set(HeaderRateLimit, "60")
+-		w.Header().Set(HeaderRateRemaining, "0")
+-		w.Header().Set(HeaderRateUsed, "60")
+-		w.Header().Set(HeaderRateReset, fmt.Sprint(reset.Unix()))
+-		w.Header().Set(HeaderRateResource, "core")
+-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-		w.WriteHeader(http.StatusForbidden)
+-		fmt.Fprintln(w, `{
+-   "message": "API rate limit exceeded for xxx.xxx.xxx.xxx. (But here's the good news: Authenticated requests get a higher rate limit. Check out the documentation for more details.)",
+-   "documentation_url": "https://docs.github.com/en/rest/overview/resources-in-the-rest-api#abuse-rate-limits"
+-}`)
+-		close(requestReceived)
+-	})
+-
+-	ctx, cancel := context.WithCancel(t.Context())
+-	defer cancel()
+-
+-	req, _ := client.NewRequest(context.WithValue(ctx, SleepUntilPrimaryRateLimitResetWhenRateLimited, true), "GET", ".", nil)
+-
+-	// Cancel the context as soon as the handler has processed the request.
+-	// The handler always runs and returns before the client begins the
+-	// rate-limit sleep (the HTTP transport is synchronous), so cancel fires
+-	// either just before or during the sleep — both paths are handled
+-	// identically by sleepUntilResetWithBuffer's select.
+-	go func() {
+-		<-requestReceived
+-		cancel()
+-	}()
+-
+-	_, err := client.Do(req, nil)
+-
+-	if got, want := int(requestCount.Load()), 1; got != want {
+-		t.Errorf("Expected 1 request, got %v", got)
+-	}
+-	if !errors.Is(err, context.Canceled) {
+-		t.Errorf("Expected context cancelled error, got: %v", err)
+-	}
+-}
+-
+-// Ensure sleep is aborted when the context is cancelled on initial request.
+-//
+-// Determinism: The context is pre-cancelled before Do is called, so
+-// checkRateLimitBeforeDo → sleepUntilResetWithBuffer sees ctx.Done() already
+-// closed and returns immediately. No wall-clock timeout is involved.
+-func TestDo_rateLimit_abortSleepContextCancelledClientLimit(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	reset := time.Now().UTC().Add(time.Minute)
+-	client.rateLimits[CoreCategory] = Rate{Limit: 5000, Remaining: 0, Reset: Timestamp{reset}}
+-	var requestCount atomic.Int32
+-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-		requestCount.Add(1)
+-		w.Header().Set(HeaderRateLimit, "5000")
+-		w.Header().Set(HeaderRateRemaining, "5000")
+-		w.Header().Set(HeaderRateUsed, "0")
+-		w.Header().Set(HeaderRateReset, fmt.Sprint(reset.Add(time.Hour).Unix()))
+-		w.Header().Set(HeaderRateResource, "core")
+-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-		w.WriteHeader(http.StatusOK)
+-		fmt.Fprintln(w, `{}`)
+-	})
+-	// Pre-cancel the context: checkRateLimitBeforeDo will call
+-	// sleepUntilResetWithBuffer which immediately returns ctx.Err() because
+-	// ctx.Done() is already closed. This is fully deterministic — no timing
+-	// race between a short timeout and goroutine scheduling.
+-	ctx, cancel := context.WithCancel(t.Context())
+-	cancel()
+-	req, _ := client.NewRequest(context.WithValue(ctx, SleepUntilPrimaryRateLimitResetWhenRateLimited, true), "GET", ".", nil)
+-	_, err := client.Do(req, nil)
+-	var rateLimitError *RateLimitError
+-	if !errors.As(err, &rateLimitError) {
+-		t.Fatalf("Expected a *rateLimitError error; got %#v", err)
+-	}
+-	if got, wantSuffix := rateLimitError.Message, "Context cancelled while waiting for rate limit to reset until"; !strings.HasPrefix(got, wantSuffix) {
+-		t.Errorf("Expected request to be prevented because context cancellation, got: %v.", got)
+-	}
+-	if got, want := int(requestCount.Load()), 0; got != want {
+-		t.Errorf("Expected 0 requests, got %v", got)
+-	}
+-}
+ 
+ // Ensure *AbuseRateLimitError is returned when the response indicates that
+ // the client has triggered an abuse detection mechanism.
+@@ -3297,116 +2885,8 @@ func TestDo_rateLimit_abuseRateLimitError_xRateLimitReset(t *testing.T) {
+ 	})
+ }
+ 
+-// Ensure *AbuseRateLimitError.RetryAfter respect a max duration if specified.
+-func TestDo_rateLimit_abuseRateLimitError_maxDuration(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-	// specify a max retry after duration of 1 min
+-	client.maxSecondaryRateLimitRetryAfterDuration = 60 * time.Second
+-
+-	// x-ratelimit-reset value of 1h into the future, to make sure we are way over the max wait time duration.
+-	blockUntil := time.Now().Add(1 * time.Hour).Unix()
+-
+-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-		w.Header().Set(HeaderRateReset, strconv.Itoa(int(blockUntil)))
+-		w.Header().Set(HeaderRateRemaining, "1") // set remaining to a value > 0 to distinct from a primary rate limit
+-		w.WriteHeader(http.StatusForbidden)
+-		fmt.Fprintln(w, `{
+-   "message": "You have triggered an abuse detection mechanism ...",
+-   "documentation_url": "https://docs.github.com/en/rest/overview/resources-in-the-rest-api#abuse-rate-limits"
+-}`)
+-	})
+-
+-	req, _ := client.NewRequest(t.Context(), "GET", ".", nil)
+-	_, err := client.Do(req, nil)
+-
+-	if err == nil {
+-		t.Error("Expected error to be returned.")
+-	}
+-	var abuseRateLimitErr *AbuseRateLimitError
+-	if !errors.As(err, &abuseRateLimitErr) {
+-		t.Fatalf("Expected a *AbuseRateLimitError error; got %#v", err)
+-	}
+-	if abuseRateLimitErr.RetryAfter == nil {
+-		t.Fatal("abuseRateLimitErr RetryAfter is nil, expected not-nil")
+-	}
+-	// check that the retry after is set to be the max allowed duration
+-	if got, want := *abuseRateLimitErr.RetryAfter, client.maxSecondaryRateLimitRetryAfterDuration; got != want {
+-		t.Errorf("abuseRateLimitErr RetryAfter = %v, want %v", got, want)
+-	}
+-}
+-
+-// Make network call if client has disabled the rate limit check.
+-func TestDo_rateLimit_disableRateLimitCheck(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-	client.disableRateLimitCheck = true
+-
+-	reset := time.Now().UTC().Add(60 * time.Second)
+-	client.rateLimits[CoreCategory] = Rate{Limit: 5000, Remaining: 0, Reset: Timestamp{reset}}
+-	var requestCount atomic.Int32
+-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-		requestCount.Add(1)
+-		w.Header().Set(HeaderRateLimit, "5000")
+-		w.Header().Set(HeaderRateRemaining, "5000")
+-		w.Header().Set(HeaderRateUsed, "0")
+-		w.Header().Set(HeaderRateReset, fmt.Sprint(reset.Add(time.Hour).Unix()))
+-		w.Header().Set(HeaderRateResource, "core")
+-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-		w.WriteHeader(http.StatusOK)
+-		fmt.Fprintln(w, `{}`)
+-	})
+-	req, _ := client.NewRequest(t.Context(), "GET", ".", nil)
+-	resp, err := client.Do(req, nil)
+-	if err != nil {
+-		t.Errorf("Do returned unexpected error: %v", err)
+-	}
+-	if got, want := resp.StatusCode, http.StatusOK; got != want {
+-		t.Errorf("Response status code = %v, want %v", got, want)
+-	}
+-	if got, want := int(requestCount.Load()), 1; got != want {
+-		t.Errorf("Expected 1 request, got %v", got)
+-	}
+-	if got, want := client.rateLimits[CoreCategory].Remaining, 0; got != want {
+-		t.Errorf("Expected 0 requests remaining, got %v", got)
+-	}
+-}
+ 
+-// Make network call if client has bypassed the rate limit check.
+-func TestDo_rateLimit_bypassRateLimitCheck(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+ 
+-	reset := time.Now().UTC().Add(60 * time.Second)
+-	client.rateLimits[CoreCategory] = Rate{Limit: 5000, Remaining: 0, Reset: Timestamp{reset}}
+-	var requestCount atomic.Int32
+-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-		requestCount.Add(1)
+-		w.Header().Set(HeaderRateLimit, "5000")
+-		w.Header().Set(HeaderRateRemaining, "5000")
+-		w.Header().Set(HeaderRateUsed, "0")
+-		w.Header().Set(HeaderRateReset, fmt.Sprint(reset.Add(time.Hour).Unix()))
+-		w.Header().Set(HeaderRateResource, "core")
+-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-		w.WriteHeader(http.StatusOK)
+-		fmt.Fprintln(w, `{}`)
+-	})
+-	req, _ := client.NewRequest(context.WithValue(t.Context(), BypassRateLimitCheck, true), "GET", ".", nil)
+-	resp, err := client.Do(req, nil)
+-	if err != nil {
+-		t.Errorf("Do returned unexpected error: %v", err)
+-	}
+-	if got, want := resp.StatusCode, http.StatusOK; got != want {
+-		t.Errorf("Response status code = %v, want %v", got, want)
+-	}
+-	if got, want := int(requestCount.Load()), 1; got != want {
+-		t.Errorf("Expected 1 request, got %v", got)
+-	}
+-	if got, want := client.rateLimits[CoreCategory].Remaining, 5000; got != want {
+-		t.Errorf("Expected 5000 requests remaining, got %v", got)
+-	}
+-}
+ 
+ func TestDo_noContent(t *testing.T) {
+ 	t.Parallel()

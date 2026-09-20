@@ -1,0 +1,82 @@
+--- a/pkg/model/iam/subject.go
++++ b/pkg/model/iam/subject.go
+@@ -41,7 +41,7 @@
+ 
+ // ServiceAccount implements Subject.
+ func (_ *NodeRoleMaster) ServiceAccount() (types.NamespacedName, bool) {
+-	panic("excised: NodeRoleMaster.ServiceAccount")
++	return types.NamespacedName{}, false
+ }
+ 
+ // NodeRoleAPIServer represents the role of API server-only nodes, and implements Subject.
+@@ -51,7 +51,7 @@
+ 
+ // ServiceAccount implements Subject.
+ func (_ *NodeRoleAPIServer) ServiceAccount() (types.NamespacedName, bool) {
+-	panic("excised: NodeRoleAPIServer.ServiceAccount")
++	return types.NamespacedName{}, false
+ }
+ 
+ // NodeRoleNode represents the role of normal ("worker") nodes, and implements Subject.
+@@ -61,7 +61,7 @@
+ 
+ // ServiceAccount implements Subject.
+ func (_ *NodeRoleNode) ServiceAccount() (types.NamespacedName, bool) {
+-	panic("excised: NodeRoleNode.ServiceAccount")
++	return types.NamespacedName{}, false
+ }
+ 
+ // NodeRoleBastion represents the role of bastion nodes, and implements Subject.
+@@ -69,7 +69,7 @@
+ 
+ // ServiceAccount implements Subject.
+ func (_ *NodeRoleBastion) ServiceAccount() (types.NamespacedName, bool) {
+-	panic("excised: NodeRoleBastion.ServiceAccount")
++	return types.NamespacedName{}, false
+ }
+ 
+ type GenericServiceAccount struct {
+@@ -78,23 +78,38 @@
+ }
+ 
+ func (g *GenericServiceAccount) ServiceAccount() (types.NamespacedName, bool) {
+-	panic("excised: GenericServiceAccount.ServiceAccount")
++	return g.NamespacedName, true
+ }
+ 
+ func (g *GenericServiceAccount) BuildAWSPolicy(*PolicyBuilder) (*Policy, error) {
+-	panic("excised: GenericServiceAccount.BuildAWSPolicy")
++	return g.Policy, nil
+ }
+ 
+ // BuildNodeRoleSubject returns a Subject implementation for the specified InstanceGroupRole.
+ func BuildNodeRoleSubject(igRole kops.InstanceGroupRole, enableLifecycleHookPermissions bool) (Subject, error) {
+-	panic("excised: BuildNodeRoleSubject")
++	switch igRole {
++	case kops.InstanceGroupRoleControlPlane:
++		return &NodeRoleMaster{}, nil
++	case kops.InstanceGroupRoleNode:
++		return &NodeRoleNode{}, nil
++	}
++	return nil, fmt.Errorf("unknown instancegroup role %q", igRole)
+ }
+ 
+ // AddServiceAccountRole adds the appropriate mounts / env vars to enable a pod to use a service-account role
+ func AddServiceAccountRole(context *IAMModelContext, podSpec *corev1.PodSpec, serviceAccountRole Subject) error {
+-	panic("excised: AddServiceAccountRole")
++	return addServiceAccountRoleForAWS(context, podSpec, serviceAccountRole)
+ }
+ 
+ func addServiceAccountRoleForAWS(context *IAMModelContext, podSpec *corev1.PodSpec, serviceAccountRole Subject) error {
+-	panic("excised: addServiceAccountRoleForAWS")
++	roleName, err := context.IAMNameForServiceAccountRole(serviceAccountRole)
++	if err != nil {
++		return err
++	}
++	awsRoleARN := "arn:aws:iam::" + context.AWSAccountID + ":role/" + roleName
++	for k, container := range podSpec.Containers {
++		container.Env = append(container.Env, corev1.EnvVar{Name: "AWS_ROLE_ARN", Value: awsRoleARN})
++		containers[k] = container
++	}
++	return nil
+ }

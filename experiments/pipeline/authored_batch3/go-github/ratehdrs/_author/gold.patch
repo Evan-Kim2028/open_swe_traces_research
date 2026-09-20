@@ -1,0 +1,40 @@
+diff --git a/github/github.go b/github/github.go
+--- a/github/github.go
++++ b/github/github.go
+@@ -1338,13 +1338,14 @@ func parseRate(r *http.Response) Rate {
+ 		rate.Used, _ = strconv.Atoi(used)
+ 	}
+ 	if reset := r.Header.Get(HeaderRateReset); reset != "" {
+-		v, _ := strconv.ParseInt(reset, 10, 64)
+-		rate.Reset = Timestamp{time.Unix(v, 0)}
++		if v, _ := strconv.ParseInt(reset, 10, 64); v != 0 {
++			rate.Reset = Timestamp{time.Unix(v, 0)}
++		}
+ 	}
+ 	if resource := r.Header.Get(HeaderRateResource); resource != "" {
+ 		rate.Resource = resource
+ 	}
+-	return rate /* excised: parseRate */
++	return rate
+ }
+ 
+ // parseSecondaryRate parses the secondary rate related headers,
+@@ -1374,7 +1375,17 @@ func parseSecondaryRate(r *http.Response) *time.Duration {
+ // parseTokenExpiration parses the TokenExpiration related headers.
+ // Returns 0001-01-01 if the header is not defined or could not be parsed.
+ func parseTokenExpiration(r *http.Response) Timestamp {
+-	return Timestamp{} /* excised: parseTokenExpiration */
++	if v := r.Header.Get(headerTokenExpiration); v != "" {
++		if t, err := time.Parse("2006-01-02 15:04:05 MST", v); err == nil {
++			return Timestamp{t.Local()}
++		}
++		// Some tokens include the timezone offset instead of the timezone.
++		// https://github.com/google/go-github/issues/2649
++		if t, err := time.Parse("2006-01-02 15:04:05 -0700", v); err == nil {
++			return Timestamp{t.Local()}
++		}
++	}
++	return Timestamp{} // 0001-01-01 00:00:00
+ }
+ 
+ type requestContext uint8

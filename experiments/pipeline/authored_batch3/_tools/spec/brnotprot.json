@@ -1,0 +1,16 @@
+{
+  "impl": {
+    "github/repos.go": {
+      "isBranchNotProtected": "return false"
+    }
+  },
+  "deltests": {
+    "github/repos_test.go": [
+      "TestRepositoriesService_GetBranchProtection_branchNotProtected",
+      "TestRepositoriesService_GetRequiredStatusChecks_branchNotProtected",
+      "TestRepositoriesService_ListRequiredStatusChecksContexts_branchNotProtected",
+      "TestRepositoriesService_GetSignaturesProtectedBranch_branchNotProtected"
+    ]
+  },
+  "testre": "branchNotProtected"
+}

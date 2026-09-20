@@ -1,0 +1,23 @@
+{
+  "impl": {
+    "github/orgs_personal_access_tokens.go": {
+      "addListFineGrainedPATOptions": "return addOptions(s, opts)"
+    }
+  },
+  "deltests": {
+    "github/orgs_personal_access_tokens_test.go": [
+      "TestOrganizationsService_ListFineGrainedPersonalAccessTokens_ownerOnly",
+      "TestOrganizationsService_ListFineGrainedPersonalAccessTokenRequests_ownerOnly",
+      "TestOrganizationsService_ListFineGrainedPersonalAccessTokenRequests_tokenIDOnly"
+    ]
+  },
+  "testre": "ownerOnly|tokenIDOnly",
+  "unimport": {
+    "github/orgs_personal_access_tokens.go": [
+      "strings",
+      "net/url",
+      "strconv",
+      "errors"
+    ]
+  }
+}

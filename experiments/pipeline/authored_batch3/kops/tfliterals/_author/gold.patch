@@ -1,0 +1,177 @@
+--- a/upup/pkg/fi/cloudup/terraformWriter/literal.go
++++ b/upup/pkg/fi/cloudup/terraformWriter/literal.go
+@@ -19,9 +19,9 @@
+ import (
+ 	"bytes"
+ 	"encoding/json"
+-	_ "fmt"
+-	_ "sort"
+-	_ "strings"
++	"fmt"
++	"sort"
++	"strings"
+ 
+ 	"golang.org/x/exp/constraints"
+ )
+@@ -35,56 +35,83 @@
+ var _ json.Marshaler = (*Literal)(nil)
+ 
+ func (l *Literal) MarshalJSON() ([]byte, error) {
+-	panic("excised: Literal.MarshalJSON")
++	return json.Marshal(&l.String)
+ }
+ 
+ func (l *Literal) IsSingleValue() bool {
+-	panic("excised: Literal.IsSingleValue")
++	return true
+ }
+ 
+ func (l *Literal) Write(buffer *bytes.Buffer, indent int, key string) {
+-	panic("excised: Literal.Write")
++	buffer.WriteString("= ")
++	buffer.WriteString(l.String)
++	buffer.WriteString("\n")
+ }
+ 
+ // LiteralFunctionExpression constructs a Literal representing the result of
+ // calling the supplied functionName with the supplied args.
+ func LiteralFunctionExpression(functionName string, args ...*Literal) *Literal {
+-	panic("excised: LiteralFunctionExpression")
++	s := functionName + "("
++	for i, arg := range args {
++		if i != 0 {
++			s += ", "
++		}
++		s += arg.String
++	}
++	return &Literal{
++		String: s + ")",
++	}
+ }
+ 
+ func LiteralSelfLink(resourceType, resourceName string) *Literal {
+-	panic("excised: LiteralSelfLink")
++	return LiteralProperty(resourceType, resourceName, "self_link")
+ }
+ 
+ func LiteralData(dataSourceType, dataSourceName, prop string) *Literal {
+-	panic("excised: LiteralData")
++	tfName := sanitizeName(dataSourceName)
++	return &Literal{
++		String: "data." + dataSourceType + "." + tfName + "." + prop + "",
++	}
+ }
+ 
+ func LiteralProperty(resourceType, resourceName, prop string) *Literal {
+-	panic("excised: LiteralProperty")
++	tfName := sanitizeName(resourceName)
++	return &Literal{
++		String: resourceType + "." + tfName + "." + prop,
++	}
+ }
+ 
+ func LiteralTokens(tokens ...string) *Literal {
+-	panic("excised: LiteralTokens")
++	return &Literal{
++		String: strings.Join(tokens, "."),
++	}
+ }
+ 
+ func LiteralFromIntValue[T constraints.Integer](i T) *Literal {
+-	panic("excised: LiteralFromIntValue")
++	return &Literal{
++		String: fmt.Sprintf("%d", i),
++	}
+ }
+ 
+ func LiteralFromStringValue(s string) *Literal {
+-	panic("excised: LiteralFromStringValue")
++	return &Literal{
++		String: "\"" + s + "\"",
++	}
+ }
+ 
+ func LiteralWithIndex(s string) *Literal {
+-	panic("excised: LiteralWithIndex")
++	return &Literal{
++		String: fmt.Sprintf("\"%s-${count.index}\"", s),
++	}
+ }
+ 
+ // LiteralBinaryExpression constructs a Literal with the result of a binary operator expression.
+ // It is the caller's responsibility to ensure the supplied parameters do not use operators
+ // with lower precedence than the supplied operator.
+ func LiteralBinaryExpression(lhs *Literal, operator string, rhs *Literal) *Literal {
+-	panic("excised: LiteralBinaryExpression")
++	return &Literal{
++		String: fmt.Sprintf("%s %s %s", lhs.String, operator, rhs.String),
++	}
+ }
+ 
+ // LiteralIndexExpression constructs a Literal with the result of accessing the
+@@ -92,12 +119,25 @@
+ // It is the caller's responsibility to ensure the supplied collection does not use operators
+ // with lower precedence than the index operator.
+ func LiteralIndexExpression(collection *Literal, index *Literal) *Literal {
+-	panic("excised: LiteralIndexExpression")
++	return &Literal{
++		String: fmt.Sprintf("%s[%s]", collection.String, index.String),
++	}
+ }
+ 
+ // LiteralListExpression constructs a Literal consisting of a list of supplied Literals.
+ func LiteralListExpression(args ...*Literal) *Literal {
+-	panic("excised: LiteralListExpression")
++	var b strings.Builder
++	b.WriteRune('[')
++	for i, arg := range args {
++		if i != 0 {
++			b.WriteString(", ")
++		}
++		b.WriteString(arg.String)
++	}
++	b.WriteRune(']')
++	return &Literal{
++		String: b.String(),
++	}
+ }
+ 
+ // LiteralEmptyStrConditionalExpression constructs a Literal which returns `null`
+@@ -105,16 +145,34 @@
+ // It is the caller's responsibility to ensure the supplied parameters do not use operators
+ // with lower precedence than the conditional operator.
+ func LiteralEmptyStrConditionalExpression(empty, value *Literal) *Literal {
+-	panic("excised: LiteralEmptyStrConditionalExpression")
++	return &Literal{
++		String: fmt.Sprintf("%s == \"\" ? null : %s", empty.String, value.String),
++	}
+ }
+ 
+ // SortLiterals sorts a list of Literal, by key.  It does so in-place
+ func SortLiterals(v []*Literal) {
+-	panic("excised: SortLiterals")
++	sort.Slice(v, func(i, j int) bool {
++		return v[i].String < v[j].String
++	})
+ }
+ 
+ // dedupLiterals removes any duplicate Literals before returning the slice.
+ // As a side-effect, it currently returns the Literals in sorted order.
+ func dedupLiterals(v []*Literal) ([]*Literal, error) {
+-	panic("excised: dedupLiterals")
++	if v == nil {
++		return nil, nil
++	}
++
++	SortLiterals(v)
++
++	var deduped []*Literal
++	for i, p := range v {
++		if i != 0 && v[i-1].String == v[i].String {
++			continue
++		}
++		deduped = append(deduped, p)
++	}
++
++	return deduped, nil
+ }

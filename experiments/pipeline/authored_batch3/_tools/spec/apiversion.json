@@ -1,0 +1,14 @@
+{
+  "impl": {
+    "github/github.go": {
+      "Client.checkRequestAPIVersionBeforeDo": "return nil"
+    }
+  },
+  "deltests": {
+    "github/github_test.go": [
+      "TestClient_checkRequestAPIVersionBeforeDo",
+      "TestClient_bareDo_errors_with_unsupported_api_version"
+    ]
+  },
+  "testre": "TestClient_checkRequestAPIVersionBeforeDo|TestClient_bareDo_errors_with_unsupported_api_version"
+}

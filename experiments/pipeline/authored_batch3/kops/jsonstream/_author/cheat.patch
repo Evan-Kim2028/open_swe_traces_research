@@ -1,0 +1,33 @@
+--- a/pkg/jsonutils/streamwriter.go
++++ b/pkg/jsonutils/streamwriter.go
+@@ -50,14 +50,27 @@
+ 
+ // Path returns the path to the current position in the JSON tree
+ func (j *JSONStreamWriter) Path() string {
+-	panic("excised: JSONStreamWriter.Path")
++	return ""
+ }
+ 
+ // WriteToken writes the next token to the output
+ func (j *JSONStreamWriter) WriteToken(token json.Token) error {
+-	panic("excised: JSONStreamWriter.WriteToken")
++	switch tt := token.(type) {
++	case json.Delim:
++		return j.writeRaw(tt.String())
++	case string:
++		return j.writeRaw("\"" + tt + "\"")
++	case float64:
++		return j.writeRaw(fmt.Sprintf("%g", tt))
++	case bool:
++		return j.writeRaw(fmt.Sprintf("%v", tt))
++	case nil:
++		return j.writeRaw("null")
++	}
++	return fmt.Errorf("unhandled token type %T", token)
+ }
+ 
+ func (j *JSONStreamWriter) writeRaw(s string) error {
+-	panic("excised: JSONStreamWriter.writeRaw")
++	_, err := j.out.Write([]byte(s))
++	return err
+ }

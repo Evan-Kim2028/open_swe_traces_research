@@ -1,0 +1,74 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Task Foundry</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root{--bg:#F1F4F1;--card:#FBFCFA;--ink:#16211F;--ink2:#63746F;--rule:#C6D1CC;
+ --acc:#0B6E5F;--acc2:#2E4F8F;--warn:#AB3E27;--bar:#2E4F8F;}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#101614;--card:#1B2321;
+ --ink:#E8EFEB;--ink2:#93A6A0;--rule:#33423E;--acc:#4FC0A8;--acc2:#7FA3E8;--warn:#E1755A;--bar:#7FA3E8;}}
+:root[data-theme="dark"]{--bg:#101614;--card:#1B2321;--ink:#E8EFEB;--ink2:#93A6A0;
+ --rule:#33423E;--acc:#4FC0A8;--acc2:#7FA3E8;--warn:#E1755A;--bar:#7FA3E8;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 16px 48px}
+h1{font-size:27px;font-weight:700;margin:0 0 4px;letter-spacing:-.02em}
+.sub{color:var(--ink2);font-size:15px;margin:0 0 24px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px;margin-bottom:30px}
+.t{background:var(--card);border:1px solid var(--rule);border-radius:7px;padding:15px 16px}
+.v{font-family:"IBM Plex Mono",monospace;font-size:31px;font-weight:600;letter-spacing:-.02em;line-height:1.05}
+.l{font-size:14px;font-weight:600;margin-top:5px}
+.s{font-size:12.5px;color:var(--ink2);margin-top:3px}
+.card{background:var(--card);border:1px solid var(--rule);border-radius:7px;padding:18px 18px 8px;margin-bottom:22px}
+h2{font-size:18px;font-weight:600;margin:0 0 3px}
+.note{font-size:13.5px;color:var(--ink2);margin:0 0 10px;max-width:74ch;line-height:1.5}
+.scroll{width:100%;overflow-x:auto} svg{display:block;min-width:900px;width:100%;height:auto}
+text{font-family:"IBM Plex Sans",sans-serif;fill:var(--ink)}
+.axl{font-size:12.5px;fill:var(--ink2)} .axr{fill:var(--acc2)}
+.axt{font-size:13.5px;font-weight:600}
+.grid{stroke:var(--rule);stroke-width:1;opacity:.5} .tick{stroke:var(--rule);stroke-width:1.5}
+.mk{stroke:var(--warn);stroke-width:1.5;stroke-dasharray:4 4;opacity:.75}
+.mkl{font-size:11.5px;fill:var(--warn);font-weight:600}
+.bar{fill:var(--bar);opacity:.82} .bl{font-size:11px;fill:var(--ink2)}
+.lc{fill:none;stroke:var(--acc);stroke-width:3} .lt{fill:none;stroke:var(--acc2);stroke-width:2;stroke-dasharray:5 4}
+.floor{stroke:var(--acc);stroke-width:2;stroke-dasharray:7 4}
+.leg{font-size:13px;color:var(--ink2);margin:8px 0 12px;display:flex;gap:20px;flex-wrap:wrap}
+.sw{display:inline-block;width:15px;height:3px;vertical-align:middle;margin-right:6px}
+footer{color:var(--ink2);font-size:12.5px;margin-top:8px}
+</style></head><body><div class="wrap">
+<h1>Task Foundry</h1>
+<p class="sub">Mining verifiable SWE tasks with controlled difficulty · generated Sun 20 Sep 18:22</p>
+<div class="tiles"><div class="t"><div class="v">90</div><div class="l">certified units</div><div class=s>fails L0, passes L2</div></div><div class="t"><div class="v">796</div><div class="l">trials run</div><div class=s>2.08M tokens each</div></div><div class="t"><div class="v">8.84</div><div class="l">trials / certified</div><div class=s>cumulative · floor 2.6</div></div><div class="t"><div class="v">4.9</div><div class="l">trials / certified</div><div class=s>last 6h · marginal</div></div><div class="t"><div class="v">67</div><div class="l">killed at L0</div><div class=s>not hard enough</div></div><div class="t"><div class="v">30</div><div class="l">non-flipping</div><div class=s>need contract repair</div></div><div class="t"><div class="v">2/4</div><div class="l">Devin sessions</div><div class=s>4 trial containers</div></div><div class="t"><div class="v">246G</div><div class="l">disk free</div><div class=s>prune floor 100G</div></div></div>
+
+<div class="card"><h2>The bank, and what it cost</h2>
+<p class="note">A unit is certified when it fails at L0 and passes at L2 — hard, fair, solvable and verifiable.
+Certified units are the product; trials are the bill.</p>
+<div class="leg"><span><span class="sw" style="background:var(--acc)"></span>certified units (left)</span>
+<span><span class="sw" style="background:var(--acc2)"></span>cumulative trials (right)</span>
+<span><span class="sw" style="background:var(--warn)"></span>decision landed</span></div>
+<div class="scroll"><svg viewBox="0 0 1120 300" role="img" aria-label="Certified units and cumulative trials over time">
+<line x1="86" y1="238.0" x2="970" y2="238.0" class="grid"/><text x="76" y="243.0" class="axl" text-anchor="end">0</text><line x1="86" y1="186.2" x2="970" y2="186.2" class="grid"/><text x="76" y="191.2" class="axl" text-anchor="end">22</text><line x1="86" y1="134.4" x2="970" y2="134.4" class="grid"/><text x="76" y="139.4" class="axl" text-anchor="end">44</text><line x1="86" y1="82.5" x2="970" y2="82.5" class="grid"/><text x="76" y="87.5" class="axl" text-anchor="end">66</text><line x1="86" y1="30.7" x2="970" y2="30.7" class="grid"/><text x="76" y="35.7" class="axl" text-anchor="end">88</text><text x="980" y="243.0" class="axl axr">0</text><text x="980" y="190.0" class="axl axr">199</text><text x="980" y="137.0" class="axl axr">398</text><text x="980" y="84.0" class="axl axr">597</text><text x="980" y="31.0" class="axl axr">796</text><line x1="86" y1="238" x2="970" y2="238" class="tick"/>
+<line x1="86" y1="26" x2="86" y2="238" class="tick"/><line x1="86.0" y1="238" x2="86.0" y2="243" class="tick"/><text x="86.0" y="258" class="axl" text-anchor="middle">Sat 14:00</text><line x1="179.4" y1="238" x2="179.4" y2="243" class="tick"/><text x="179.4" y="258" class="axl" text-anchor="middle">Sat 17:00</text><line x1="272.9" y1="238" x2="272.9" y2="243" class="tick"/><text x="272.9" y="258" class="axl" text-anchor="middle">Sat 20:00</text><line x1="366.3" y1="238" x2="366.3" y2="243" class="tick"/><text x="366.3" y="258" class="axl" text-anchor="middle">Sat 23:00</text><line x1="459.8" y1="238" x2="459.8" y2="243" class="tick"/><text x="459.8" y="258" class="axl" text-anchor="middle">Sun 02:00</text><line x1="553.2" y1="238" x2="553.2" y2="243" class="tick"/><text x="553.2" y="258" class="axl" text-anchor="middle">Sun 05:00</text><line x1="646.7" y1="238" x2="646.7" y2="243" class="tick"/><text x="646.7" y="258" class="axl" text-anchor="middle">Sun 08:00</text><line x1="740.1" y1="238" x2="740.1" y2="243" class="tick"/><text x="740.1" y="258" class="axl" text-anchor="middle">Sun 11:00</text><line x1="833.5" y1="238" x2="833.5" y2="243" class="tick"/><text x="833.5" y="258" class="axl" text-anchor="middle">Sun 14:00</text><line x1="927.0" y1="238" x2="927.0" y2="243" class="tick"/><text x="927.0" y="258" class="axl" text-anchor="middle">Sun 17:00</text>
+<polyline points="86.0,236.1 148.3,234.3 179.4,217.0 210.6,203.1 241.7,200.7 272.9,194.9 304.0,191.4 335.2,188.2 397.5,181.8 459.8,178.1 490.9,174.9 522.1,165.0 584.4,161.3 615.5,138.9 646.7,124.0 677.8,117.1 708.9,103.5 740.1,89.1 771.2,65.2 802.4,43.0 833.5,34.8 864.7,34.0 895.8,33.7 927.0,27.1 958.1,26.0" class="lt"/><polyline points="86.0,238.0 148.3,238.0 179.4,238.0 210.6,219.2 241.7,219.2 272.9,219.2 304.0,219.2 335.2,219.2 397.5,219.2 459.8,219.2 490.9,202.7 522.1,202.7 584.4,202.7 615.5,174.4 646.7,155.6 677.8,155.6 708.9,129.6 740.1,120.2 771.2,89.6 802.4,56.6 833.5,35.4 864.7,33.1 895.8,33.1 927.0,26.0 958.1,26.0" class="lc"/><line x1="813.3" y1="26" x2="813.3" y2="238" class="mk"/><text x="817.3" y="38" class="mkl">B9 hack audit on every sweep</text><line x1="839.8" y1="26" x2="839.8" y2="238" class="mk"/><text x="843.8" y="53" class="mkl">free deterministic linter</text><line x1="851.2" y1="26" x2="851.2" y2="238" class="mk"/><text x="855.2" y="68" class="mkl">sequential escalation (k=1)</text><line x1="881.8" y1="26" x2="881.8" y2="238" class="mk"/><text x="885.8" y="38" class="mkl">contract gap-read pre-trial</text><line x1="943.1" y1="26" x2="943.1" y2="238" class="mk"/><text x="947.1" y="53" class="mkl">trial guard</text><line x1="946.2" y1="26" x2="946.2" y2="238" class="mk"/><text x="950.2" y="68" class="mkl">continuous supervisor</text>
+<text x="18" y="34" class="axt" fill="var(--acc)" transform="rotate(-90 18 34)" text-anchor="end">certified units</text>
+<text x="1096" y="34" class="axt" fill="var(--acc2)" transform="rotate(-90 1096 34)" text-anchor="end">cumulative trials</text>
+<text x="528.0" y="288" class="axt" text-anchor="middle">time</text></svg></div></div>
+
+<div class="card"><h2>Does each decision make a task cheaper to mine?</h2>
+<p class="note">Marginal cost: trials spent per unit certified <em>in that hour</em>. The cumulative average
+(8.84) drags a whole day of history behind it and cannot show a change working. The green line is the
+theoretical floor of 2.6 — one L0 trial to prove hard, one L2 to prove solvable, plus screening overhead.
+Bars above the floor are the waste still being paid.</p>
+<div class="scroll"><svg viewBox="0 0 1120 300" role="img" aria-label="Marginal trials per certified unit per hour">
+<line x1="86" y1="238.0" x2="970" y2="238.0" class="grid"/><text x="76" y="243.0" class="axl" text-anchor="end">0</text><line x1="86" y1="185.0" x2="970" y2="185.0" class="grid"/><text x="76" y="190.0" class="axl" text-anchor="end">3</text><line x1="86" y1="132.0" x2="970" y2="132.0" class="grid"/><text x="76" y="137.0" class="axl" text-anchor="end">7</text><line x1="86" y1="79.0" x2="970" y2="79.0" class="grid"/><text x="76" y="84.0" class="axl" text-anchor="end">10</text><line x1="86" y1="26.0" x2="970" y2="26.0" class="grid"/><text x="76" y="31.0" class="axl" text-anchor="end">14</text><line x1="86" y1="238" x2="970" y2="238" class="tick"/>
+<line x1="86" y1="26" x2="86" y2="238" class="tick"/><line x1="86.0" y1="238" x2="86.0" y2="243" class="tick"/><text x="86.0" y="258" class="axl" text-anchor="middle">Sat 14:00</text><line x1="179.4" y1="238" x2="179.4" y2="243" class="tick"/><text x="179.4" y="258" class="axl" text-anchor="middle">Sat 17:00</text><line x1="272.9" y1="238" x2="272.9" y2="243" class="tick"/><text x="272.9" y="258" class="axl" text-anchor="middle">Sat 20:00</text><line x1="366.3" y1="238" x2="366.3" y2="243" class="tick"/><text x="366.3" y="258" class="axl" text-anchor="middle">Sat 23:00</text><line x1="459.8" y1="238" x2="459.8" y2="243" class="tick"/><text x="459.8" y="258" class="axl" text-anchor="middle">Sun 02:00</text><line x1="553.2" y1="238" x2="553.2" y2="243" class="tick"/><text x="553.2" y="258" class="axl" text-anchor="middle">Sun 05:00</text><line x1="646.7" y1="238" x2="646.7" y2="243" class="tick"/><text x="646.7" y="258" class="axl" text-anchor="middle">Sun 08:00</text><line x1="740.1" y1="238" x2="740.1" y2="243" class="tick"/><text x="740.1" y="258" class="axl" text-anchor="middle">Sun 11:00</text><line x1="833.5" y1="238" x2="833.5" y2="243" class="tick"/><text x="833.5" y="258" class="axl" text-anchor="middle">Sun 14:00</text><line x1="927.0" y1="238" x2="927.0" y2="243" class="tick"/><text x="927.0" y="258" class="axl" text-anchor="middle">Sun 17:00</text><rect x="198.9" y="135.9" width="23.3" height="102.1" class="bar"/><text x="210.6" y="129.9" class="bl" text-anchor="middle">6</text><rect x="479.2" y="211.1" width="23.3" height="26.9" class="bar"/><text x="490.9" y="205.1" class="bl" text-anchor="middle">2</text><rect x="603.8" y="128.1" width="23.3" height="109.9" class="bar"/><text x="615.5" y="122.1" class="bl" text-anchor="middle">7</text><rect x="635.0" y="128.1" width="23.3" height="109.9" class="bar"/><text x="646.7" y="122.1" class="bl" text-anchor="middle">7</text><rect x="697.3" y="165.1" width="23.3" height="72.9" class="bar"/><text x="708.9" y="159.1" class="bl" text-anchor="middle">5</text><rect x="728.4" y="26.0" width="23.3" height="212.0" class="bar"/><text x="740.1" y="20.0" class="bl" text-anchor="middle">14</text><rect x="759.6" y="129.3" width="23.3" height="108.7" class="bar"/><text x="771.2" y="123.3" class="bl" text-anchor="middle">7</text><rect x="790.7" y="144.9" width="23.3" height="93.1" class="bar"/><text x="802.4" y="138.9" class="bl" text-anchor="middle">6</text><rect x="821.9" y="184.0" width="23.3" height="54.0" class="bar"/><text x="833.5" y="178.0" class="bl" text-anchor="middle">3</text><rect x="853.0" y="190.9" width="23.3" height="47.1" class="bar"/><text x="864.7" y="184.9" class="bl" text-anchor="middle">3</text><rect x="915.3" y="107.2" width="23.3" height="130.8" class="bar"/><text x="927.0" y="101.2" class="bl" text-anchor="middle">8</text>
+<line x1="86" y1="197.2" x2="970" y2="197.2" class="floor"/>
+<text x="978" y="201.2" class="axl" fill="var(--acc)">floor 2.6</text>
+<line x1="813.3" y1="26" x2="813.3" y2="238" class="mk"/><text x="817.3" y="38" class="mkl">B9 hack audit on every sweep</text><line x1="839.8" y1="26" x2="839.8" y2="238" class="mk"/><text x="843.8" y="53" class="mkl">free deterministic linter</text><line x1="851.2" y1="26" x2="851.2" y2="238" class="mk"/><text x="855.2" y="68" class="mkl">sequential escalation (k=1)</text><line x1="881.8" y1="26" x2="881.8" y2="238" class="mk"/><text x="885.8" y="38" class="mkl">contract gap-read pre-trial</text><line x1="943.1" y1="26" x2="943.1" y2="238" class="mk"/><text x="947.1" y="53" class="mkl">trial guard</text><line x1="946.2" y1="26" x2="946.2" y2="238" class="mk"/><text x="950.2" y="68" class="mkl">continuous supervisor</text>
+<text x="18" y="34" class="axt" transform="rotate(-90 18 34)" text-anchor="end">trials per certified unit</text>
+<text x="528.0" y="288" class="axt" text-anchor="middle">time</text></svg></div></div>
+
+<footer>Sources: every reward.txt and result.json under experiments/dose_response/jobs, replayed in
+mtime order by backfill_history.py. Decision times are pinned, not read from file mtimes, because editing a
+script would otherwise redate the decision it implements. Regenerated each supervisor tick.</footer>
+</div></body></html>

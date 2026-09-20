@@ -1,0 +1,321 @@
+<title>Task Foundry Dashboard</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&family=Inter+Tight:wght@400;500;600;700&display=swap">
+<style>
+:root{--bg:#EFF3F0;--card:#FBFCFA;--ink:#101917;--ink2:#4C5D58;--ink3:#7D8F89;--rule:#C3D0CB;
+ --good:#07675A;--bad:#A8341C;--warn:#8A6D0B;--cool:#24468A;
+ --m:"IBM Plex Mono",ui-monospace,monospace;--s:"Inter Tight",system-ui,sans-serif}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+ --bg:#0D1412;--card:#18211E;--ink:#EDF3F0;--ink2:#A6BAB3;--ink3:#72867F;--rule:#2F3D39;
+ --good:#54CDB2;--bad:#F08163;--warn:#E0B840;--cool:#8CAEF2}}
+:root[data-theme="dark"]{--bg:#0D1412;--card:#18211E;--ink:#EDF3F0;--ink2:#A6BAB3;--ink3:#72867F;
+ --rule:#2F3D39;--good:#54CDB2;--bad:#F08163;--warn:#E0B840;--cool:#8CAEF2}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--s);font-size:15px;line-height:1.5;
+     -webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:18px;padding-block:26px 44px}
+h1{font-size:25px;font-weight:700;margin:0 0 4px;letter-spacing:-.022em}
+.sub{color:var(--ink2);font-size:13px;margin:0 0 24px;font-family:var(--m);font-weight:500}
+h2{font-size:16px;font-weight:600;margin:0 0 3px;letter-spacing:-.012em}
+.h2sub{font-size:13px;color:var(--ink2);margin:0 0 18px}
+
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(152px,1fr));gap:1px;
+ background:var(--rule);border:1px solid var(--rule);border-radius:6px;overflow:hidden;margin-bottom:26px}
+.kpi{background:var(--card);padding:16px 17px 18px}
+.kpi .v{font-family:var(--m);font-size:36px;font-weight:700;letter-spacing:-.035em;display:block;line-height:1}
+.kpi .k{font-size:13px;color:var(--ink2);margin-top:8px;display:block;line-height:1.25;font-weight:500}
+.kpi .d{font-family:var(--m);font-size:11.5px;color:var(--ink3);margin-top:5px;display:block;font-weight:500}
+.v.good{color:var(--good)} .v.bad{color:var(--bad)} .v.cool{color:var(--cool)}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:18px;margin-bottom:18px}
+.panel{background:var(--card);border:1px solid var(--rule);border-radius:6px;padding:18px 20px 20px}
+.panel.wide{grid-column:1/-1}
+svg{display:block;width:100%;height:auto;overflow:visible}
+text{font-family:var(--m);fill:var(--ink3);font-size:13px;font-weight:500}
+text.val{fill:var(--ink);font-weight:700;font-size:14px}
+text.axis{fill:var(--ink2);font-size:12px;font-weight:600;letter-spacing:.06em}
+.legend{display:flex;gap:18px;font-size:13px;color:var(--ink2);margin-top:14px;flex-wrap:wrap;font-weight:500}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.sw{width:12px;height:12px;border-radius:2px;display:inline-block}
+
+.lad{display:flex;flex-direction:column;gap:9px}
+.lrow{display:grid;grid-template-columns:42px 1fr 56px;gap:12px;align-items:center}
+.lrow .lk{font-family:var(--m);font-size:14px;color:var(--ink2);font-weight:600}
+.lbar{height:20px;background:var(--rule);border-radius:3px;overflow:hidden}
+.lbar i{display:block;height:100%}
+.lrow .lv{font-family:var(--m);font-size:15px;text-align:right;font-weight:700}
+.axlbl{font-family:var(--m);font-size:11.5px;color:var(--ink3);font-weight:600;letter-spacing:.06em;
+       margin-top:9px;display:block}
+.note{font-size:13px;color:var(--ink2);margin-top:15px;padding-top:13px;border-top:1px solid var(--rule)}
+.note b{color:var(--ink);font-weight:600}
+</style>
+
+<div class="wrap">
+<h1>Synthetic task foundry — run dashboard</h1>
+<p class="sub">epoch reset 09:30 EST · solver cursor/composer-2.5 · authoring + verification on Devin swe-2-max (free)</p>
+
+<div class="kpis">
+  <div class="kpi"><span class="v">224</span><span class="k">tasks authored</span><span class="d">30.6/hr · free</span></div>
+  <div class="kpi"><span class="v">201</span><span class="k">verified</span><span class="d">suite written</span></div>
+  <div class="kpi"><span class="v good">86</span><span class="k">certified hard</span><span class="d">fail L0, pass L2</span></div>
+  <div class="kpi"><span class="v good">38%</span><span class="k">hit rate</span><span class="d">certified ÷ authored</span></div>
+  <div class="kpi"><span class="v cool">364</span><span class="k">trials, epoch</span><span class="d">832 all time</span></div>
+  <div class="kpi"><span class="v cool">757M</span><span class="k">tokens, epoch</span><span class="d">97% cache</span></div>
+  <div class="kpi"><span class="v cool">$169</span><span class="k">spend, epoch</span><span class="d">$0.47 / trial</span></div>
+  <div class="kpi"><span class="v bad">38</span><span class="k">double-failures</span><span class="d">36 = contract bugs</span></div>
+</div>
+
+<div class="grid">
+
+  <div class="panel wide">
+    <h2>Cumulative tokens — Devin vs Composer</h2>
+    <p class="h2sub">27 hours, from the first authoring session. Devin is the larger consumer by
+    more than 2×, and it is the lane we treat as free.</p>
+    <svg viewBox="0 0 990 300" role="img" aria-label="Cumulative token spend by Devin and Composer over 27 hours, reaching 4.97 billion tokens">
+      <line x1="78" y1="194" x2="960" y2="194" stroke="var(--rule)" stroke-dasharray="3 5"/>
+      <text x="70" y="199" text-anchor="end">1.0B</text>
+      <line x1="78" y1="156" x2="960" y2="156" stroke="var(--rule)" stroke-dasharray="3 5"/>
+      <text x="70" y="161" text-anchor="end">2.0B</text>
+      <line x1="78" y1="118" x2="960" y2="118" stroke="var(--rule)" stroke-dasharray="3 5"/>
+      <text x="70" y="123" text-anchor="end">3.0B</text>
+      <line x1="78" y1="80" x2="960" y2="80" stroke="var(--rule)" stroke-dasharray="3 5"/>
+      <text x="70" y="85" text-anchor="end">4.0B</text>
+      <line x1="78" y1="42" x2="960" y2="42" stroke="var(--rule)" stroke-dasharray="3 5"/>
+      <text x="70" y="47" text-anchor="end">5.0B</text>
+      <text x="70" y="237" text-anchor="end">0</text>
+      <line x1="78" y1="34" x2="78" y2="232" stroke="var(--ink3)" stroke-width="1.5"/>
+      <line x1="78" y1="232" x2="960" y2="232" stroke="var(--ink3)" stroke-width="1.5"/>
+      <text class="axis" transform="translate(24,168) rotate(-90)">CUMULATIVE TOKENS</text>
+      <text class="axis" x="519" y="288" text-anchor="middle">FRI 13:00 → SAT 15:00 (EST)</text>
+      <line x1="437" y1="34" x2="437" y2="232" stroke="var(--ink3)" stroke-dasharray="4 4" opacity=".55"/>
+      <text x="430" y="28" text-anchor="end">FRI</text>
+      <text x="444" y="28">SAT</text>
+      <rect x="82.6" y="223.1" width="23.5" height="8.9" fill="var(--warn)"/>
+      <rect x="115.2" y="222.7" width="23.5" height="9.3" fill="var(--warn)"/>
+      <rect x="115.2" y="222.3" width="23.5" height="0.4" fill="var(--cool)"/>
+      <rect x="147.9" y="219.6" width="23.5" height="12.4" fill="var(--warn)"/>
+      <rect x="147.9" y="219.1" width="23.5" height="0.4" fill="var(--cool)"/>
+      <rect x="180.6" y="213.8" width="23.5" height="18.2" fill="var(--warn)"/>
+      <rect x="180.6" y="213.3" width="23.5" height="0.5" fill="var(--cool)"/>
+      <rect x="213.2" y="208.0" width="23.5" height="24.0" fill="var(--warn)"/>
+      <rect x="213.2" y="204.4" width="23.5" height="3.6" fill="var(--cool)"/>
+      <rect x="245.9" y="195.6" width="23.5" height="36.4" fill="var(--warn)"/>
+      <rect x="245.9" y="187.8" width="23.5" height="7.8" fill="var(--cool)"/>
+      <rect x="278.6" y="188.8" width="23.5" height="43.2" fill="var(--warn)"/>
+      <rect x="278.6" y="177.9" width="23.5" height="10.9" fill="var(--cool)"/>
+      <rect x="311.2" y="185.5" width="23.5" height="46.5" fill="var(--warn)"/>
+      <rect x="311.2" y="171.4" width="23.5" height="14.1" fill="var(--cool)"/>
+      <rect x="343.9" y="178.0" width="23.5" height="54.0" fill="var(--warn)"/>
+      <rect x="343.9" y="159.6" width="23.5" height="18.3" fill="var(--cool)"/>
+      <rect x="376.6" y="176.7" width="23.5" height="55.3" fill="var(--warn)"/>
+      <rect x="376.6" y="157.4" width="23.5" height="19.2" fill="var(--cool)"/>
+      <rect x="409.2" y="173.5" width="23.5" height="58.5" fill="var(--warn)"/>
+      <rect x="409.2" y="154.2" width="23.5" height="19.2" fill="var(--cool)"/>
+      <rect x="441.9" y="172.7" width="23.5" height="59.3" fill="var(--warn)"/>
+      <rect x="441.9" y="152.3" width="23.5" height="20.4" fill="var(--cool)"/>
+      <rect x="474.6" y="170.8" width="23.5" height="61.2" fill="var(--warn)"/>
+      <rect x="474.6" y="150.4" width="23.5" height="20.4" fill="var(--cool)"/>
+      <rect x="507.2" y="169.1" width="23.5" height="62.9" fill="var(--warn)"/>
+      <rect x="507.2" y="148.1" width="23.5" height="21.1" fill="var(--cool)"/>
+      <rect x="539.9" y="162.0" width="23.5" height="70.0" fill="var(--warn)"/>
+      <rect x="539.9" y="140.3" width="23.5" height="21.6" fill="var(--cool)"/>
+      <rect x="572.6" y="160.1" width="23.5" height="71.9" fill="var(--warn)"/>
+      <rect x="572.6" y="137.4" width="23.5" height="22.7" fill="var(--cool)"/>
+      <rect x="605.2" y="155.7" width="23.5" height="76.3" fill="var(--warn)"/>
+      <rect x="605.2" y="133.0" width="23.5" height="22.7" fill="var(--cool)"/>
+      <rect x="637.9" y="150.1" width="23.5" height="81.9" fill="var(--warn)"/>
+      <rect x="637.9" y="127.1" width="23.5" height="22.9" fill="var(--cool)"/>
+      <rect x="670.6" y="143.2" width="23.5" height="88.8" fill="var(--warn)"/>
+      <rect x="670.6" y="118.1" width="23.5" height="25.1" fill="var(--cool)"/>
+      <rect x="703.2" y="139.4" width="23.5" height="92.6" fill="var(--warn)"/>
+      <rect x="703.2" y="110.2" width="23.5" height="29.1" fill="var(--cool)"/>
+      <rect x="735.9" y="133.0" width="23.5" height="99.0" fill="var(--warn)"/>
+      <rect x="735.9" y="101.5" width="23.5" height="31.5" fill="var(--cool)"/>
+      <rect x="768.6" y="122.7" width="23.5" height="109.3" fill="var(--warn)"/>
+      <rect x="768.6" y="82.9" width="23.5" height="39.8" fill="var(--cool)"/>
+      <rect x="801.2" y="118.1" width="23.5" height="113.9" fill="var(--warn)"/>
+      <rect x="801.2" y="74.3" width="23.5" height="43.8" fill="var(--cool)"/>
+      <rect x="833.9" y="112.3" width="23.5" height="119.7" fill="var(--warn)"/>
+      <rect x="833.9" y="61.2" width="23.5" height="51.1" fill="var(--cool)"/>
+      <rect x="866.6" y="108.6" width="23.5" height="123.4" fill="var(--warn)"/>
+      <rect x="866.6" y="52.3" width="23.5" height="56.3" fill="var(--cool)"/>
+      <rect x="899.2" y="103.5" width="23.5" height="128.5" fill="var(--warn)"/>
+      <rect x="899.2" y="45.4" width="23.5" height="58.1" fill="var(--cool)"/>
+      <rect x="931.9" y="100.7" width="23.5" height="131.3" fill="var(--warn)"/>
+      <rect x="931.9" y="42.6" width="23.5" height="58.1" fill="var(--cool)"/>
+      <text x="954" y="33" text-anchor="end" class="val">4.97B total</text>
+      <text x="94" y="254" text-anchor="middle">13:00</text>
+      <text x="225" y="254" text-anchor="middle">17:00</text>
+      <text x="356" y="254" text-anchor="middle">21:00</text>
+      <text x="486" y="254" text-anchor="middle">01:00</text>
+      <text x="617" y="254" text-anchor="middle">05:00</text>
+      <text x="748" y="254" text-anchor="middle">09:00</text>
+      <text x="878" y="254" text-anchor="middle">13:00</text>
+      <text x="944" y="254" text-anchor="middle">15:00</text>
+    </svg>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--warn)"></i>Devin swe-2-max — 3.45B tokens · 185 ACU · ~$104 at 75% off</span>
+      <span><i class="sw" style="background:var(--cool)"></i>Composer 2.5 — 1.53B · $342 · trials</span>
+    </div>
+    <p class="note"><b>Devin 3.45B tokens (69%) · Composer 1.53B (31%)</b> — but the cost runs the
+    other way. Devin bills in ACUs, not tokens: <b>151 sessions, 2,782 active minutes ≈ 185 ACU</b>,
+    which is <b>~$104 at the 75%-off rate</b> ($416 at $2.25 list). Composer is <b>$342</b>.<br><br>
+    So roughly <b>$342 Composer / ~$104 Devin</b>. The lane that consumes 69% of tokens is under a
+    quarter of the bill, because ACU pricing charges for agent wall-clock rather than context volume
+    and 3.26B of Devin's 3.45B is cache reads. <b>Authoring stays cheap to scale.</b><br><br>
+    ACU is derived locally by <code>scripts/ops/agent_ledger.py</code> from session wall-clock at
+    Devin's ~15 min/ACU guidance — reconcile against the dashboard when convenient.</p>
+  </div>
+
+  <div class="panel wide">
+    <h2>Trials per hour</h2>
+    <p class="h2sub">Red is infrastructure loss — 29 trials at 11:00 and 8 at 12:00 errored before the agent ever started.</p>
+    <svg viewBox="0 0 760 250" role="img" aria-label="Stacked bar chart of trials per hour, split into passed, failed and errored, 09:00 to 14:00">
+      <!-- Y grid + ticks -->
+      <line x1="60" y1="28" x2="740" y2="28" stroke="var(--rule)" stroke-dasharray="3 5"/>
+      <line x1="60" y1="93" x2="740" y2="93" stroke="var(--rule)" stroke-dasharray="3 5"/>
+      <line x1="60" y1="158" x2="740" y2="158" stroke="var(--rule)" stroke-dasharray="3 5"/>
+      <text x="52" y="33" text-anchor="end">100</text>
+      <text x="52" y="98" text-anchor="end">50</text>
+      <text x="52" y="163" text-anchor="end">25</text>
+      <text x="52" y="198" text-anchor="end">0</text>
+      <!-- axes -->
+      <line x1="60" y1="28" x2="60" y2="193" stroke="var(--ink3)" stroke-width="1.5"/>
+      <line x1="60" y1="193" x2="740" y2="193" stroke="var(--ink3)" stroke-width="1.5"/>
+      <text class="axis" transform="translate(18,150) rotate(-90)">TRIALS</text>
+      <text class="axis" x="400" y="240" text-anchor="middle">HOUR OF DAY (EST)</text>
+
+      <!-- bars: y = 193 - n*1.65 -->
+      <g><rect x="84" y="173" width="76" height="20" fill="var(--good)"/>
+         <rect x="84" y="163" width="76" height="10" fill="var(--ink3)" opacity=".5"/>
+         <text x="122" y="155" text-anchor="middle" class="val">18</text>
+         <text x="122" y="214" text-anchor="middle">09:00</text></g>
+      <g><rect x="196" y="135" width="76" height="58" fill="var(--good)"/>
+         <rect x="196" y="109" width="76" height="26" fill="var(--ink3)" opacity=".5"/>
+         <text x="234" y="101" text-anchor="middle" class="val">51</text>
+         <text x="234" y="214" text-anchor="middle">10:00</text></g>
+      <g><rect x="308" y="175" width="76" height="18" fill="var(--good)"/>
+         <rect x="308" y="105" width="76" height="70" fill="var(--ink3)" opacity=".5"/>
+         <rect x="308" y="57" width="76" height="48" fill="var(--bad)"/>
+         <text x="346" y="49" text-anchor="middle" class="val">83</text>
+         <text x="346" y="214" text-anchor="middle">11:00</text></g>
+      <g><rect x="420" y="157" width="76" height="36" fill="var(--good)"/>
+         <rect x="420" y="46" width="76" height="111" fill="var(--ink3)" opacity=".5"/>
+         <rect x="420" y="33" width="76" height="13" fill="var(--bad)"/>
+         <text x="458" y="25" text-anchor="middle" class="val">98</text>
+         <text x="458" y="214" text-anchor="middle">12:00</text></g>
+      <g><rect x="532" y="132" width="76" height="61" fill="var(--good)"/>
+         <rect x="532" y="57" width="76" height="75" fill="var(--ink3)" opacity=".5"/>
+         <text x="570" y="49" text-anchor="middle" class="val">83</text>
+         <text x="570" y="214" text-anchor="middle">13:00</text></g>
+      <g><rect x="644" y="162" width="76" height="31" fill="var(--good)"/>
+         <rect x="644" y="142" width="76" height="20" fill="var(--ink3)" opacity=".5"/>
+         <text x="682" y="134" text-anchor="middle" class="val">31</text>
+         <text x="682" y="214" text-anchor="middle">14:00</text></g>
+    </svg>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--good)"></i>passed</span>
+      <span><i class="sw" style="background:var(--ink3);opacity:.5"></i>failed</span>
+      <span><i class="sw" style="background:var(--bad)"></i>errored before starting</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Cost per unit of information</h2>
+    <p class="h2sub">Sequential escalation replaced k=3. Down 64% across the epoch.</p>
+    <svg viewBox="0 0 400 240" role="img" aria-label="Line chart, tokens per valid trial per hour, falling from 4.26 million to 1.53 million">
+      <line x1="66" y1="30" x2="382" y2="30" stroke="var(--rule)" stroke-dasharray="3 5"/>
+      <line x1="66" y1="76" x2="382" y2="76" stroke="var(--rule)" stroke-dasharray="3 5"/>
+      <line x1="66" y1="122" x2="382" y2="122" stroke="var(--rule)" stroke-dasharray="3 5"/>
+      <line x1="66" y1="168" x2="382" y2="168" stroke="var(--rule)" stroke-dasharray="3 5"/>
+      <text x="58" y="35" text-anchor="end">5M</text>
+      <text x="58" y="81" text-anchor="end">4M</text>
+      <text x="58" y="127" text-anchor="end">3M</text>
+      <text x="58" y="173" text-anchor="end">2M</text>
+      <text x="58" y="189" text-anchor="end">0</text>
+      <line x1="66" y1="30" x2="66" y2="184" stroke="var(--ink3)" stroke-width="1.5"/>
+      <line x1="66" y1="184" x2="382" y2="184" stroke="var(--ink3)" stroke-width="1.5"/>
+      <text class="axis" transform="translate(20,150) rotate(-90)">TOKENS / TRIAL</text>
+      <text class="axis" x="224" y="232" text-anchor="middle">HOUR OF DAY (EST)</text>
+      <!-- y = 214 - M*36.8 -->
+      <polyline points="94,95 152,57 210,142 268,136 326,154 372,158"
+        fill="none" stroke="var(--cool)" stroke-width="3" stroke-linejoin="round"/>
+      <g fill="var(--cool)">
+        <circle cx="94" cy="95" r="4.5"/><circle cx="152" cy="57" r="4.5"/>
+        <circle cx="210" cy="142" r="4.5"/><circle cx="268" cy="136" r="4.5"/>
+        <circle cx="326" cy="154" r="4.5"/><circle cx="372" cy="158" r="6"/>
+      </g>
+      <text x="152" y="46" text-anchor="middle" class="val">4.26M</text>
+      <text x="366" y="176" text-anchor="end" class="val">1.53M</text>
+      <text x="94" y="204" text-anchor="middle">09</text><text x="152" y="204" text-anchor="middle">10</text>
+      <text x="210" y="204" text-anchor="middle">11</text><text x="268" y="204" text-anchor="middle">12</text>
+      <text x="326" y="204" text-anchor="middle">13</text><text x="372" y="204" text-anchor="middle">14</text>
+    </svg>
+  </div>
+
+  <div class="panel">
+    <h2>Pass rate per hour</h2>
+    <p class="h2sub">The midday dip is real work, not regression — go-git and goa L2, the hardest cohorts built so far.</p>
+    <svg viewBox="0 0 400 240" role="img" aria-label="Line chart, pass rate per hour, dipping to 20 percent at 11:00 and recovering to 61 percent">
+      <line x1="66" y1="30" x2="382" y2="30" stroke="var(--rule)" stroke-dasharray="3 5"/>
+      <line x1="66" y1="68" x2="382" y2="68" stroke="var(--rule)" stroke-dasharray="3 5"/>
+      <line x1="66" y1="107" x2="382" y2="107" stroke="var(--rule)" stroke-dasharray="3 5"/>
+      <line x1="66" y1="145" x2="382" y2="145" stroke="var(--rule)" stroke-dasharray="3 5"/>
+      <text x="58" y="35" text-anchor="end">100%</text>
+      <text x="58" y="73" text-anchor="end">75%</text>
+      <text x="58" y="112" text-anchor="end">50%</text>
+      <text x="58" y="150" text-anchor="end">25%</text>
+      <text x="58" y="189" text-anchor="end">0</text>
+      <line x1="66" y1="30" x2="66" y2="184" stroke="var(--ink3)" stroke-width="1.5"/>
+      <line x1="66" y1="184" x2="382" y2="184" stroke="var(--ink3)" stroke-width="1.5"/>
+      <text class="axis" transform="translate(20,142) rotate(-90)">PASS RATE</text>
+      <text class="axis" x="224" y="232" text-anchor="middle">HOUR OF DAY (EST)</text>
+      <!-- y = 184 - pct*1.54 -->
+      <polyline points="94,81 152,78 210,153 268,147 326,115 372,90"
+        fill="none" stroke="var(--good)" stroke-width="3" stroke-linejoin="round"/>
+      <g fill="var(--good)">
+        <circle cx="94" cy="81" r="4.5"/><circle cx="152" cy="78" r="4.5"/>
+        <circle cx="210" cy="153" r="4.5"/><circle cx="268" cy="147" r="4.5"/>
+        <circle cx="326" cy="115" r="4.5"/><circle cx="372" cy="90" r="6"/>
+      </g>
+      <text x="152" y="67" text-anchor="middle" class="val">69%</text>
+      <text x="210" y="170" text-anchor="middle" class="val">20%</text>
+      <text x="366" y="79" text-anchor="end" class="val">61%</text>
+      <text x="94" y="204" text-anchor="middle">09</text><text x="152" y="204" text-anchor="middle">10</text>
+      <text x="210" y="204" text-anchor="middle">11</text><text x="268" y="204" text-anchor="middle">12</text>
+      <text x="326" y="204" text-anchor="middle">13</text><text x="372" y="204" text-anchor="middle">14</text>
+    </svg>
+  </div>
+
+  <div class="panel">
+    <h2>Trials by ladder rung</h2>
+    <p class="h2sub">All 832 trials. L0 and L2 are the entire cost; the rungs above are diagnostic only.</p>
+    <div class="lad">
+      <div class="lrow"><span class="lk">L0</span><span class="lbar"><i style="width:68.5%;background:var(--cool)"></i></span><span class="lv">311</span></div>
+      <div class="lrow"><span class="lk">L1</span><span class="lbar"><i style="width:3.5%;background:var(--ink3)"></i></span><span class="lv">16</span></div>
+      <div class="lrow"><span class="lk">L2</span><span class="lbar"><i style="width:100%;background:var(--good)"></i></span><span class="lv">454</span></div>
+      <div class="lrow"><span class="lk">L3</span><span class="lbar"><i style="width:3.3%;background:var(--ink3)"></i></span><span class="lv">15</span></div>
+      <div class="lrow"><span class="lk">L4</span><span class="lbar"><i style="width:1.3%;background:var(--ink3)"></i></span><span class="lv">6</span></div>
+      <div class="lrow"><span class="lk">L5</span><span class="lbar"><i style="width:6.6%;background:var(--warn)"></i></span><span class="lv">30</span></div>
+    </div>
+    <span class="axlbl">TRIALS RUN AT EACH RUNG →</span>
+    <p class="note">Every unit that reached <b>L5 was solved — 21 of 21</b>. No capability limit exists
+    anywhere in this bank; the rungs above L2 have only ever diagnosed our own defects.</p>
+  </div>
+
+  <div class="panel">
+    <h2>Validity of what we built</h2>
+    <p class="h2sub">Of the 124 units escalated to L2.</p>
+    <div class="lad">
+      <div class="lrow"><span class="lk" style="color:var(--good)">valid</span>
+        <span class="lbar"><i style="width:69.4%;background:var(--good)"></i></span><span class="lv">86</span></div>
+      <div class="lrow"><span class="lk" style="color:var(--bad)">defect</span>
+        <span class="lbar"><i style="width:30.6%;background:var(--bad)"></i></span><span class="lv">38</span></div>
+    </div>
+    <span class="axlbl">UNITS →</span>
+    <p class="note"><b>36 of those 38</b> have a contract the audit can name a defect in: 213 missing
+    commitments, 25 contradictions, only <b>2 clean</b>. A gate call finds them for 6k tokens; the
+    trial that used to find them costs 2.08M — <b>341× cheaper</b>.</p>
+  </div>
+
+</div>
+</div>

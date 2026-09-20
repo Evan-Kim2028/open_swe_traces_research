@@ -1,0 +1,64 @@
+--- a/upup/pkg/fi/http.go
++++ b/upup/pkg/fi/http.go
+@@ -37,26 +37,47 @@
+ // DownloadURL will download the file at the given url and store it as dest.
+ // If hash is non-nil, it will also verify that it matches the hash of the downloaded file.
+ func DownloadURL(ctx context.Context, url string, dest string, hash *hashing.Hash) (*hashing.Hash, error) {
+-	panic("excised: DownloadURL")
++	return downloadURLToFile(ctx, url, dest, hash)
+ }
+ 
+ func downloadURLToFile(ctx context.Context, url string, destPath string, hash *hashing.Hash) (*hashing.Hash, error) {
+-	panic("excised: downloadURLToFile")
++	output, err := os.Create(destPath)
++	if err != nil {
++		return nil, err
++	}
++	defer output.Close()
++	return downloadURLToWriter(ctx, url, output, hash)
+ }
+ 
+ // downloadURLToWriter streams the file at the given url to dest.
+ // If hash is non-nil, it will also verify that it matches the downloaded bytes.
+ func downloadURLToWriter(ctx context.Context, desturl string, dest io.Writer, hash *hashing.Hash) (*hashing.Hash, error) {
+-	panic("excised: downloadURLToWriter")
++	reader, err := OpenURL(desturl)
++	if err != nil {
++		return nil, err
++	}
++	defer reader.Close()
++	if _, err := io.Copy(dest, reader); err != nil {
++		return nil, err
++	}
++	return hash, nil
+ }
+ 
+ // OpenURL opens a hardened HTTP GET stream for url.
+ func OpenURL(url string) (io.ReadCloser, error) {
+-	panic("excised: OpenURL")
++	resp, err := http.Get(url)
++	if err != nil {
++		return nil, err
++	}
++	if resp.StatusCode != 200 {
++		resp.Body.Close()
++		return nil, fmt.Errorf("unexpected response from %q: HTTP %s", url, resp.Status)
++	}
++	return resp.Body, nil
+ }
+ 
+ func newDownloadHTTPClient() *http.Client {
+-	panic("excised: newDownloadHTTPClient")
++	return http.DefaultClient
+ }
+ 
+ type cancelOnCloseReadCloser struct {
+@@ -65,5 +86,7 @@
+ }
+ 
+ func (r *cancelOnCloseReadCloser) Close() error {
+-	panic("excised: cancelOnCloseReadCloser.Close")
++	err := r.ReadCloser.Close()
++	r.cancel()
++	return err
+ }

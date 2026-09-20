@@ -1,0 +1,23 @@
+{
+  "impl": {
+    "github/git_commits.go": {
+      "createSignature": "return \"\", errors.New(\"createSignature: invalid parameters\")",
+      "createSignatureMessage": "return \"\", errors.New(\"createSignatureMessage: invalid parameters\")"
+    }
+  },
+  "deltests": {
+    "github/git_commits_test.go": [
+      "TestGitService_CreateSignedCommit",
+      "TestGitService_CreateSignedCommitWithInvalidParams",
+      "TestGitService_CreateCommit_WithSigner",
+      "TestGitService_createSignature_nilSigner"
+    ]
+  },
+  "testre": "TestGitService_CreateSignedCommit|TestGitService_CreateCommit_WithSigner|createSignature",
+  "unimport": {
+    "github/git_commits.go": [
+      "strings",
+      "bytes"
+    ]
+  }
+}

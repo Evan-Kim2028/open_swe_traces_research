@@ -1,0 +1,13 @@
+{
+ "lsrefs": {
+  "plumbing/protocol/packp/lsrefs.go": [
+   "LsRefsArgs.Encode",
+   "validateRefPrefix",
+   "LsRefsArgs.Decode",
+   "LsRefsOutput.Encode",
+   "LsRefsOutput.Decode",
+   "parseLsRefsLine",
+   "parseFullHash"
+  ]
+ }
+}

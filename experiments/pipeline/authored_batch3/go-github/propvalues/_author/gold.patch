@@ -1,0 +1,68 @@
+diff --git a/github/orgs_properties.go b/github/orgs_properties.go
+--- a/github/orgs_properties.go
++++ b/github/orgs_properties.go
+@@ -10,7 +10,7 @@ import (
+ 	"encoding/json"
+ 	"errors"
+ 	"fmt"
+-	_ "strconv"
++	"strconv"
+ )
+ 
+ // PropertyValueType represents the type of a custom property value.
+@@ -53,17 +53,52 @@ type CustomProperty struct {
+ 
+ // DefaultValueString returns the DefaultValue as a string if the ValueType is string or single_select or url.
+ func (cp CustomProperty) DefaultValueString() (string, bool) {
+-	return "", false /* excised: CustomProperty.DefaultValueString */
++	switch cp.ValueType {
++	case PropertyValueTypeString, PropertyValueTypeSingleSelect, PropertyValueTypeURL:
++		s, ok := cp.DefaultValue.(string)
++		return s, ok
++	default:
++		return "", false
++	}
+ }
+ 
+ // DefaultValueStrings returns the DefaultValue as a slice of string if the ValueType is multi_select.
+ func (cp CustomProperty) DefaultValueStrings() ([]string, bool) {
+-	return nil, false /* excised: CustomProperty.DefaultValueStrings */
++	switch cp.ValueType {
++	case PropertyValueTypeMultiSelect:
++		switch v := cp.DefaultValue.(type) {
++		case []string:
++			return v, true
++		case []any:
++			vals := make([]string, len(v))
++			for i, item := range v {
++				s, ok := item.(string)
++				if !ok {
++					return nil, false
++				}
++				vals[i] = s
++			}
++			return vals, true
++		default:
++			return nil, false
++		}
++	default:
++		return nil, false
++	}
+ }
+ 
+ // DefaultValueBool returns the DefaultValue as a string if the ValueType is true_false.
+ func (cp CustomProperty) DefaultValueBool() (bool, bool) {
+-	return false, false /* excised: CustomProperty.DefaultValueBool */
++	switch cp.ValueType {
++	case PropertyValueTypeTrueFalse:
++		if s, ok := cp.DefaultValue.(string); ok {
++			b, err := strconv.ParseBool(s)
++			return b, err == nil
++		}
++		return false, false
++	default:
++		return false, false
++	}
+ }
+ 
+ // RepoCustomPropertyValue represents a repository custom property value.

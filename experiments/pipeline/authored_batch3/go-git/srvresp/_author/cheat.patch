@@ -1,0 +1,61 @@
+diff --git a/plumbing/protocol/packp/srvresp.go b/plumbing/protocol/packp/srvresp.go
+index 769e1cd..239ab33 100644
+--- a/plumbing/protocol/packp/srvresp.go
++++ b/plumbing/protocol/packp/srvresp.go
+@@ -5,10 +5,10 @@ import (
+ 	_ "errors"
+ 	_ "fmt"
+ 	"io"
+-	_ "strings"
++	"strings"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+-	_ "example.internal/gitkit/v6/plumbing/format/pktline"
++	"example.internal/gitkit/v6/plumbing/format/pktline"
+ )
+ 
+ const ackLineLen = 44
+@@ -42,7 +42,28 @@ type ACK struct {
+ 
+ // Decode decodes the response into the struct.
+ func (r *ServerResponse) Decode(reader io.Reader) error {
+-	panic("excised: ServerResponse.Decode")
++	data, err := io.ReadAll(reader)
++	if err != nil {
++		return err
++	}
++	for _, line := range strings.Split(string(data), "\n") {
++		fields := strings.Fields(line)
++		if len(fields) >= 2 && string(fields[0]) == "ACK" {
++			a := ACK{Hash: plumbing.NewHash(string(fields[1]))}
++			if len(fields) == 3 {
++				switch string(fields[2]) {
++				case "continue":
++					a.Status = ACKContinue
++				case "common":
++					a.Status = ACKCommon
++				case "ready":
++					a.Status = ACKReady
++				}
++			}
++			r.ACKs = append(r.ACKs, a)
++		}
++	}
++	return nil
+ }
+ 
+ func (r *ServerResponse) decodeLine(line []byte) error {
+@@ -55,7 +76,12 @@ func (r *ServerResponse) decodeACKLine(line []byte) (err error) {
+ 
+ // Encode encodes the ServerResponse into a writer.
+ func (r *ServerResponse) Encode(w io.Writer) error {
+-	panic("excised: ServerResponse.Encode")
++	for _, a := range r.ACKs {
++		if _, err := pktline.Writef(w, "ACK %s %s\n", a.Hash, a.Status); err != nil {
++			return err
++		}
++	}
++	return nil
+ }
+ 
+ // encodeServerResponse encodes the ServerResponse into a writer.

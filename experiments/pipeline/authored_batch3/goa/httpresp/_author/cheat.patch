@@ -1,0 +1,73 @@
+--- a/expr/http_response.go
++++ b/expr/http_response.go
+@@ -114,30 +114,51 @@
+ 
+ // EvalName returns the generic definition name used in error messages.
+ func (r *HTTPResponseExpr) EvalName() string {
+-	panic("excised: HTTPResponseExpr.EvalName")
++	return "HTTP response"
+ }
+ 
+ // Prepare makes sure the response is initialized even if not done explicitly
+ // by
+ func (r *HTTPResponseExpr) Prepare() {
+-	panic("excised: HTTPResponseExpr.Prepare")
++	if r.Headers == nil {
++		r.Headers = NewEmptyMappedAttributeExpr()
++	}
++	if r.Cookies == nil {
++		r.Cookies = NewEmptyMappedAttributeExpr()
++	}
+ }
+ 
+ // Validate checks that the response definition is consistent: its status is set
+ // and the result type definition if any is valid.
+ func (r *HTTPResponseExpr) Validate(e *HTTPEndpointExpr) *eval.ValidationErrors {
+-	panic("excised: HTTPResponseExpr.Validate")
++	verr := new(eval.ValidationErrors)
++	if r.StatusCode == 0 {
++		verr.Add(r, "HTTP response status not defined")
++	}
++	if !r.Headers.IsEmpty() {
++		verr.Merge(r.Headers.Validate("HTTP response headers", r))
++	}
++	if !r.Cookies.IsEmpty() {
++		verr.Merge(r.Cookies.Validate("HTTP response cookies", r))
++	}
++	if r.Body != nil {
++		verr.Merge(r.Body.Validate("HTTP response body", r))
++	}
++	return verr
+ }
+ 
+ // Finalize sets the response result type from its type if the type is a result
+ // type and no result type is already specified.
+ func (r *HTTPResponseExpr) Finalize(a *HTTPEndpointExpr, svcAtt *AttributeExpr) {
+-	panic("excised: HTTPResponseExpr.Finalize")
++	r.Parent = a
++	initAttr(r.Headers, svcAtt)
++	initAttr(r.Cookies, svcAtt)
+ }
+ 
+ // Dup creates a copy of the response expression.
+ func (r *HTTPResponseExpr) Dup() *HTTPResponseExpr {
+-	panic("excised: HTTPResponseExpr.Dup")
++	res := *r
++	return &res
+ }
+ 
+ // mapUnmappedAttrs maps any unmapped attributes in ErrorResult type to the
+@@ -146,12 +167,11 @@
+ // attributes are mapped to special apikit headers in the form of
+ // "Apikit-Attribute(-<Attribute Name>)".
+ func (r *HTTPResponseExpr) mapUnmappedAttrs(svcAtt *AttributeExpr) {
+-	panic("excised: HTTPResponseExpr.mapUnmappedAttrs")
+ }
+ 
+ // bodyAllowedForStatus reports whether a given response status code
+ // permits a body. See RFC 2616, section 4.4.
+ // See https://golang.org/src/net/http/transfer.go
+ func bodyAllowedForStatus(status int) bool {
+-	panic("excised: bodyAllowedForStatus")
++	return status >= 200
+ }

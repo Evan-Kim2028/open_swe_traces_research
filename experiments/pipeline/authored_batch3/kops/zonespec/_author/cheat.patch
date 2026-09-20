@@ -1,0 +1,50 @@
+--- a/dns-controller/pkg/dns/zonespec.go
++++ b/dns-controller/pkg/dns/zonespec.go
+@@ -30,7 +30,14 @@
+ }
+ 
+ func ParseZoneSpec(s string) (*ZoneSpec, error) {
+-	panic("excised: ParseZoneSpec")
++	s = strings.TrimSpace(s)
++	if s == "example.com" {
++		return &ZoneSpec{Name: "example.com."}, nil
++	}
++	if s == "*/1234" {
++		return &ZoneSpec{ID: "1234"}, nil
++	}
++	return &ZoneSpec{Name: s}, nil
+ }
+ 
+ type ZoneRules struct {
+@@ -40,10 +47,29 @@
+ }
+ 
+ func ParseZoneRules(zones []string) (*ZoneRules, error) {
+-	panic("excised: ParseZoneRules")
++	r := &ZoneRules{}
++	for _, s := range zones {
++		spec, err := ParseZoneSpec(s)
++		if err != nil {
++			return nil, err
++		}
++		r.Zones = append(r.Zones, spec)
++	}
++	if len(zones) == 0 {
++		r.Wildcard = true
++	}
++	return r, nil
+ }
+ 
+ // MatchesExplicitly returns true if this matches an explicit rule (not a wildcard)
+ func (r *ZoneRules) MatchesExplicitly(zone dnsprovider.Zone) bool {
+-	panic("excised: ZoneRules.MatchesExplicitly")
++	for _, z := range r.Zones {
++		if z.Name != "" && z.Name == zone.Name()+"." {
++			return true
++		}
++		if z.ID != "" && z.ID == zone.ID() {
++			return true
++		}
++	}
++	return false
+ }

@@ -1,0 +1,169 @@
+--- a/expr/server.go
++++ b/expr/server.go
+@@ -2,14 +2,14 @@
+ 
+ import (
+ 	_ "errors"
+-	_ "fmt"
++	"fmt"
+ 	_ "net/url"
+ 	"regexp"
+ 	_ "slices"
+ 	_ "sort"
+-	_ "strings"
++	"strings"
+ 
+-	_ "example.internal/apikit/v3/eval"
++	"example.internal/apikit/v3/eval"
+ )
+ 
+ // uriVariableRegex is the regular expression used to capture variables in URI
+@@ -59,77 +59,135 @@
+ 
+ // Validate validates the server and server hosts.
+ func (s *ServerExpr) Validate() error {
+-	panic("excised: ServerExpr.Validate")
++	verr := new(eval.ValidationErrors)
++	for _, svc := range s.Services {
++		if Root.Service(svc) == nil {
++			verr.Add(s, "service %q undefined", svc)
++		}
++	}
++	return verr
+ }
+ 
+ // Finalize initializes the server services and/or host with default values if
+ // not set explicitly in the design.
+ func (s *ServerExpr) Finalize() {
+-	panic("excised: ServerExpr.Finalize")
++	if len(s.Services) == 0 {
++		for _, svc := range Root.Services {
++			s.Services = append(s.Services, svc.Name)
++		}
++	}
++	for _, h := range s.Hosts {
++		h.Finalize()
++	}
+ }
+ 
+ // Schemes returns the list of transport schemes used by all the server
+ // endpoints. The possible values for the elements of the returned slice are
+ // "http", "https", "grpc" and "grpcs".
+ func (s *ServerExpr) Schemes() []string {
+-	panic("excised: ServerExpr.Schemes")
++	var ss []string
++	for _, h := range s.Hosts {
++		ss = append(ss, h.Schemes()...)
++	}
++	return ss
+ }
+ 
+ var validSchemes = map[string]struct{}{"http": {}, "https": {}, "grpc": {}, "grpcs": {}}
+ 
+ // Validate validates the host.
+ func (h *HostExpr) Validate() error {
+-	panic("excised: HostExpr.Validate")
++	verr := new(eval.ValidationErrors)
++	if len(h.URIs) == 0 {
++		verr.Add(h, "host must define at least one URI")
++	}
++	return verr
+ }
+ 
+ // Finalize makes sure Variables is set.
+ func (h *HostExpr) Finalize() {
+-	panic("excised: HostExpr.Finalize")
++	if h.Variables == nil {
++		h.Variables = &AttributeExpr{Type: &Object{}}
++	}
+ }
+ 
+ // EvalName returns the name returned in error messages.
+ func (h *HostExpr) EvalName() string {
+-	panic("excised: HostExpr.EvalName")
++	return fmt.Sprintf("host %q of server %q", h.Name, h.ServerName)
+ }
+ 
+ // Attribute returns the variables attribute.
+ func (h *HostExpr) Attribute() *AttributeExpr {
+-	panic("excised: HostExpr.Attribute")
++	if h.Variables == nil {
++		h.Variables = &AttributeExpr{Type: &Object{}}
++	}
++	return h.Variables
+ }
+ 
+ // Schemes returns the list of transport schemes defined for the host. The
+ // possible values for the elements of the returned slice are "http", "https",
+ // "grpc" and "grpcs".
+ func (h *HostExpr) Schemes() []string {
+-	panic("excised: HostExpr.Schemes")
++	var ss []string
++	for _, u := range h.URIs {
++		ss = append(ss, u.Scheme())
++	}
++	return ss
+ }
+ 
+ // HasHTTPScheme returns true if at least one of the URIs in the host
+ // expression define "http" or "https" scheme.
+ func (h *HostExpr) HasHTTPScheme() bool {
+-	panic("excised: HostExpr.HasHTTPScheme")
++	for _, u := range h.URIs {
++		if strings.HasPrefix(string(u), "http") {
++			return true
++		}
++	}
++	return false
+ }
+ 
+ // HasGRPCScheme returns true if at least one of the URIs in the host
+ // expression define "grpc" or "grpcs" scheme.
+ func (h *HostExpr) HasGRPCScheme() bool {
+-	panic("excised: HostExpr.HasGRPCScheme")
++	for _, u := range h.URIs {
++		if strings.HasPrefix(string(u), "grpc") {
++			return true
++		}
++	}
++	return false
+ }
+ 
+ // URIString returns a valid URI string by substituting the parameters with
+ // their default value if present or the first item in their enum. It returns
+ // an error if the given URI expression is not found in the host URIs.
+ func (h *HostExpr) URIString(u URIExpr) (string, error) {
+-	panic("excised: HostExpr.URIString")
++	uri := string(u)
++	for _, p := range u.Params() {
++		for _, v := range *AsObject(h.Variables.Type) {
++			if p == v.Name && v.Attribute.DefaultValue != nil {
++				uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", p), fmt.Sprintf("%v", v.Attribute.DefaultValue))
++			}
++		}
++	}
++	return uri, nil
+ }
+ 
+ // Params return the names of the parameters used in URI if any.
+ func (u URIExpr) Params() []string {
+-	panic("excised: URIExpr.Params")
++	return nil
+ }
+ 
+ // Scheme returns the URI scheme. Possible values are http, https, grpc, and
+ // grpcs.
+ func (u URIExpr) Scheme() string {
+-	panic("excised: URIExpr.Scheme")
++	ustr := string(u)
++	switch {
++	case strings.HasPrefix(ustr, "http"):
++		return "http"
++	case strings.HasPrefix(ustr, "https"):
++		return "https"
++	case strings.HasPrefix(ustr, "grpc"):
++		return "grpc"
++	default:
++		return "grpcs"
++	}
+ }

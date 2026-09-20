@@ -1,0 +1,379 @@
+--- a/util/pkg/vfs/context.go
++++ b/util/pkg/vfs/context.go
+@@ -29,10 +29,10 @@
+ 
+ 	"cloud.google.com/go/storage"
+ 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+-	_ "github.com/aws/aws-sdk-go-v2/aws"
++	"github.com/aws/aws-sdk-go-v2/aws"
+ 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+ 	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
+-	_ "github.com/aws/aws-sdk-go-v2/service/s3"
++	"github.com/aws/aws-sdk-go-v2/service/s3"
+ 	"github.com/gophercloud/gophercloud/v2"
+ 	"google.golang.org/api/option"
+ 	"k8s.io/apimachinery/pkg/util/wait"
+@@ -167,7 +167,59 @@
+ }
+ 
+ func (c *VFSContext) BuildVfsPath(p string) (Path, error) {
+-	panic("excised: VFSContext.BuildVfsPath")
++	// NOTE: we do not want this function to take a context.Context, we consider this a "builder".
++	// Instead, we are aiming to defer creation of clients to the first "real" operation (read/write/etc)
++
++	if !strings.Contains(p, "://") {
++		return NewFSPath(p), nil
++	}
++
++	if strings.HasPrefix(p, "file://") {
++		f := strings.TrimPrefix(p, "file://")
++		return NewFSPath(f), nil
++	}
++
++	if strings.HasPrefix(p, "s3://") {
++		return c.buildS3Path(p)
++	}
++
++	if strings.HasPrefix(p, "do://") {
++		return c.buildDOPath(p)
++	}
++
++	if strings.HasPrefix(p, "linode://") {
++		return c.buildLinodePath(p)
++	}
++
++	if strings.HasPrefix(p, "hos://") {
++		return c.buildHetznerPath(p)
++	}
++
++	if strings.HasPrefix(p, "memfs://") {
++		return c.buildMemFSPath(p)
++	}
++
++	if strings.HasPrefix(p, "gs://") {
++		return c.buildGCSPath(p)
++	}
++
++	if strings.HasPrefix(p, "k8s://") {
++		return c.buildKubernetesPath(p)
++	}
++
++	if strings.HasPrefix(p, "swift://") {
++		return c.buildOpenstackSwiftPath(p)
++	}
++
++	if strings.HasPrefix(p, "azureblob://") {
++		return c.buildAzureBlobPath(p)
++	}
++
++	if strings.HasPrefix(p, "scw://") {
++		return c.buildSCWPath(p)
++	}
++
++	return nil, fmt.Errorf("unknown / unhandled path type: %q", p)
+ }
+ 
+ // readAWSMetadata reads the specified path from the AWS EC2 metadata service
+@@ -249,37 +301,187 @@
+ // An uncapped backoff with a large Steps count grows without bound, which strands a caller for
+ // far longer than the condition it is waiting on takes to become true.
+ func nextBackoffDuration(duration time.Duration, backoff wait.Backoff) time.Duration {
+-	panic("excised: nextBackoffDuration")
++	next := time.Duration(float64(duration) * backoff.Factor)
++	if backoff.Cap > 0 && next > backoff.Cap {
++		return backoff.Cap
++	}
++	return next
+ }
+ 
+ // RetryWithBackoff runs until a condition function returns true, or until Steps attempts have been taken
+ // As compared to wait.ExponentialBackoff, this function returns the results from the function on the final attempt
+ func RetryWithBackoff(backoff wait.Backoff, condition func() (bool, error)) (bool, error) {
+-	panic("excised: RetryWithBackoff")
++	duration := backoff.Duration
++	i := 0
++	for {
++		if i != 0 {
++			adjusted := duration
++			if backoff.Jitter > 0.0 {
++				adjusted = wait.Jitter(duration, backoff.Jitter)
++			}
++			time.Sleep(adjusted)
++			duration = nextBackoffDuration(duration, backoff)
++		}
++
++		i++
++
++		done, err := condition()
++		if done {
++			return done, err
++		}
++		noMoreRetries := i >= backoff.Steps
++		if !noMoreRetries && err != nil {
++			klog.V(2).Infof("retrying after error %v", err)
++		}
++
++		if noMoreRetries {
++			klog.V(2).Infof("hit maximum retries %d with error %v", i, err)
++			return done, err
++		}
++	}
+ }
+ 
+ func (c *VFSContext) buildS3Path(p string) (*S3Path, error) {
+-	panic("excised: VFSContext.buildS3Path")
++	endpoint := os.Getenv("S3_ENDPOINT")
++
++	u, err := url.Parse(p)
++	if err != nil {
++		return nil, fmt.Errorf("invalid s3 path: %q", p)
++	}
++	if u.Scheme != "s3" {
++		return nil, fmt.Errorf("invalid s3 path: %q", p)
++	}
++
++	bucket := strings.TrimSuffix(u.Host, "/")
++	if bucket == "" {
++		return nil, fmt.Errorf("invalid s3 path: %q", p)
++	}
++
++	s3path := newS3Path(c.s3Context, u.Scheme, bucket, u.Path, true, func(o *s3.Options) {
++		if endpoint != "" {
++			o.BaseEndpoint = aws.String(endpoint)
++			o.UsePathStyle = true
++			o.DisableLogOutputChecksumValidationSkipped = true
++		} else {
++			o.EndpointResolverV2 = &ResolverV2{}
++		}
++	})
++	return s3path, nil
+ }
+ 
+ func (c *VFSContext) buildDOPath(p string) (*S3Path, error) {
+-	panic("excised: VFSContext.buildDOPath")
++	endpoint := os.Getenv("S3_ENDPOINT")
++	if endpoint == "" {
++		return nil, fmt.Errorf("required S3_ENDPOINT env var for path: %q", p)
++	}
++
++	u, err := url.Parse(p)
++	if err != nil {
++		return nil, fmt.Errorf("invalid spaces path: %q", p)
++	}
++	if u.Scheme != "do" {
++		return nil, fmt.Errorf("invalid spaces path: %q", p)
++	}
++
++	bucket := strings.TrimSuffix(u.Host, "/")
++	if bucket == "" {
++		return nil, fmt.Errorf("invalid spaces path: %q", p)
++	}
++
++	s3path := newS3Path(c.s3Context, u.Scheme, bucket, u.Path, false, func(o *s3.Options) {
++		o.BaseEndpoint = aws.String(endpoint)
++		o.UsePathStyle = true
++		o.DisableLogOutputChecksumValidationSkipped = true
++	})
++	return s3path, nil
+ }
+ 
+ func (c *VFSContext) buildLinodePath(p string) (*S3Path, error) {
+-	panic("excised: VFSContext.buildLinodePath")
++	endpoint := os.Getenv("S3_ENDPOINT")
++	if endpoint == "" {
++		return nil, fmt.Errorf("required S3_ENDPOINT env var for path: %q", p)
++	}
++
++	u, err := url.Parse(p)
++	if err != nil {
++		return nil, fmt.Errorf("invalid Linode object storage path: %q", p)
++	}
++	if u.Scheme != "linode" {
++		return nil, fmt.Errorf("invalid Linode object storage path: %q", p)
++	}
++
++	bucket := strings.TrimSuffix(u.Host, "/")
++	if bucket == "" {
++		return nil, fmt.Errorf("invalid Linode object storage path: %q", p)
++	}
++
++	s3path := newS3Path(c.s3Context, u.Scheme, bucket, u.Path, false, func(o *s3.Options) {
++		o.BaseEndpoint = aws.String(endpoint)
++		o.UsePathStyle = true
++		o.DisableLogOutputChecksumValidationSkipped = true
++		// Akamai (Linode) requires checksum-when-required behavior
++		o.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
++		o.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
++	})
++	return s3path, nil
+ }
+ 
+ func (c *VFSContext) buildHetznerPath(p string) (*S3Path, error) {
+-	panic("excised: VFSContext.buildHetznerPath")
++	endpoint := os.Getenv("S3_ENDPOINT")
++	if endpoint == "" {
++		return nil, fmt.Errorf("required S3_ENDPOINT env var for path: %q", p)
++	}
++
++	u, err := url.Parse(p)
++	if err != nil {
++		return nil, fmt.Errorf("invalid Hetzner Object Storage path: %q", p)
++	}
++	if u.Scheme != "hos" {
++		return nil, fmt.Errorf("invalid Hetzner object storage path: %q", p)
++	}
++
++	bucket := strings.TrimSuffix(u.Host, "/")
++	if bucket == "" {
++		return nil, fmt.Errorf("invalid Hetzner object storage path: %q", p)
++	}
++
++	s3path := newS3Path(c.s3Context, u.Scheme, bucket, u.Path, false, func(o *s3.Options) {
++		o.BaseEndpoint = aws.String(endpoint)
++		o.UsePathStyle = true
++		o.DisableLogOutputChecksumValidationSkipped = true
++	})
++	return s3path, nil
+ }
+ 
+ func (c *VFSContext) buildKubernetesPath(p string) (*KubernetesPath, error) {
+-	panic("excised: VFSContext.buildKubernetesPath")
++	u, err := url.Parse(p)
++	if err != nil {
++		return nil, fmt.Errorf("invalid kubernetes vfs path: %q", p)
++	}
++	if u.Scheme != "k8s" {
++		return nil, fmt.Errorf("invalid kubernetes vfs path: %q", p)
++	}
++
++	bucket := strings.TrimSuffix(u.Host, "/")
++	if bucket == "" {
++		return nil, fmt.Errorf("invalid kubernetes vfs path: %q", p)
++	}
++
++	k8sPath := newKubernetesPath(c.k8sContext, bucket, u.Path)
++	return k8sPath, nil
+ }
+ 
+ func (c *VFSContext) buildMemFSPath(p string) (*MemFSPath, error) {
+-	panic("excised: VFSContext.buildMemFSPath")
++	if !strings.HasPrefix(p, "memfs://") {
++		return nil, fmt.Errorf("memfs path not recognized: %q", p)
++	}
++	location := strings.TrimPrefix(p, "memfs://")
++	if c.memfsContext == nil {
++		// We only initialize this in unit tests etc
++		return nil, fmt.Errorf("memfs context not initialized")
++	}
++	fspath := NewMemFSPath(c.memfsContext, location)
++	return fspath, nil
+ }
+ 
+ func (c *VFSContext) ResetMemfsContext(clusterReadable bool) {
+@@ -290,7 +492,22 @@
+ }
+ 
+ func (c *VFSContext) buildGCSPath(p string) (*GSPath, error) {
+-	panic("excised: VFSContext.buildGCSPath")
++	u, err := url.Parse(p)
++	if err != nil {
++		return nil, fmt.Errorf("invalid google cloud storage path: %q", p)
++	}
++
++	if u.Scheme != "gs" {
++		return nil, fmt.Errorf("invalid google cloud storage path: %q", p)
++	}
++
++	bucket := strings.TrimSuffix(u.Host, "/")
++	if bucket == "" {
++		return nil, fmt.Errorf("invalid google cloud storage path: %q", p)
++	}
++
++	gcsPath := NewGSPath(c, bucket, u.Path)
++	return gcsPath, nil
+ }
+ 
+ // getGCSClient returns the google cloud storage client, caching it for future calls
+@@ -332,11 +549,49 @@
+ }
+ 
+ func (c *VFSContext) buildOpenstackSwiftPath(p string) (*SwiftPath, error) {
+-	panic("excised: VFSContext.buildOpenstackSwiftPath")
++	u, err := url.Parse(p)
++	if err != nil {
++		return nil, fmt.Errorf("invalid openstack cloud storage path: %q", p)
++	}
++
++	if u.Scheme != "swift" {
++		return nil, fmt.Errorf("invalid openstack cloud storage path: %q", p)
++	}
++
++	bucket := strings.TrimSuffix(u.Host, "/")
++	if bucket == "" {
++		return nil, fmt.Errorf("invalid swift path: %q", p)
++	}
++
++	return NewSwiftPath(c, bucket, u.Path)
+ }
+ 
+ func (c *VFSContext) buildAzureBlobPath(p string) (*AzureBlobPath, error) {
+-	panic("excised: VFSContext.buildAzureBlobPath")
++	if os.Getenv("AZURE_STORAGE_ACCOUNT") != "" {
++		return nil, fmt.Errorf("unset AZURE_STORAGE_ACCOUNT; the storage account belongs in the URL:  azureblob://<account>/<container>/<key>")
++	}
++
++	u, err := url.Parse(p)
++	if err != nil {
++		return nil, fmt.Errorf("failed to parse %q: %s", p, err)
++	}
++
++	if u.Scheme != "azureblob" {
++		return nil, fmt.Errorf("invalid Azure Blob scheme: %q", p)
++	}
++
++	account := strings.TrimSuffix(u.Host, "/")
++	if account == "" {
++		return nil, fmt.Errorf("no storage account specified in %q; expected azureblob://<account>/<container>/<key>", p)
++	}
++
++	rest := strings.TrimPrefix(u.Path, "/")
++	container, key, _ := strings.Cut(rest, "/")
++	if container == "" {
++		return nil, fmt.Errorf("no container specified in %q; expected azureblob://<account>/<container>/<key>", p)
++	}
++
++	return NewAzureBlobPath(c, account, container, key), nil
+ }
+ 
+ // getAzureBlobClient returns the client for azure blob storage for the given
+@@ -365,5 +620,28 @@
+ }
+ 
+ func (c *VFSContext) buildSCWPath(p string) (*S3Path, error) {
+-	panic("excised: VFSContext.buildSCWPath")
+-}
++	endpoint := os.Getenv("S3_ENDPOINT")
++	if endpoint == "" {
++		return nil, fmt.Errorf("required S3_ENDPOINT env var for path: %q", p)
++	}
++
++	u, err := url.Parse(p)
++	if err != nil {
++		return nil, fmt.Errorf("invalid bucket path: %q", p)
++	}
++	if u.Scheme != "scw" {
++		return nil, fmt.Errorf("invalid bucket path: %q", p)
++	}
++
++	bucket := strings.TrimSuffix(u.Host, "/")
++	if bucket == "" {
++		return nil, fmt.Errorf("invalid bucket path: %q", p)
++	}
++
++	s3path := newS3Path(c.s3Context, u.Scheme, bucket, u.Path, false, func(o *s3.Options) {
++		o.BaseEndpoint = aws.String(endpoint)
++		o.UsePathStyle = true
++		o.DisableLogOutputChecksumValidationSkipped = true
++	})
++	return s3path, nil
++}

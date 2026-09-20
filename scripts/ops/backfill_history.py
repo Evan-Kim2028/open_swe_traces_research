@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import sys, os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 """Replay every trial in chronological order to get the efficiency curve.
 
 The question the dashboard has to answer is not "how many tasks do we have" but
@@ -25,30 +26,12 @@ DECISIONS = [
 
 
 def events():
-    ev = []
-    seen = set()
-    for pat, kind in ((JOBS + "/*/**/reward.txt", "r"), (JOBS + "/*/**/result.json", "j")):
-        for f in glob.glob(pat, recursive=True):
-            d = os.path.dirname(f)
-            if d in seen:          # a trial may write both; count it once
-                continue
-            unit = None
-            for p in f.split(os.sep):
-                if "-L" in p and p.rsplit("-L", 1)[-1][:1].isdigit():
-                    unit = p
-            if not unit:
-                continue
-            try:
-                if kind == "r":
-                    v = float(open(f).read().strip() or 0)
-                else:
-                    v = float(json.load(open(f)).get("reward", 0) or 0)
-                t = os.path.getmtime(f)
-            except Exception:
-                continue
-            seen.add(d)
-            base, rung = unit.rsplit("-L", 1)
-            ev.append((t, base, rung[:1], v))
+    """(time, base, rung, reward) per trial, chronological. Errored trials are excluded:
+    a trial that died before the verifier ran is not evidence about the unit."""
+    import trial_ledger
+    ev = [(t["mtime"], t["base"], t["rung"], t["reward"])
+          for t in trial_ledger.trials()
+          if t["reward"] is not None and not t["errored"]]
     ev.sort()
     return ev
 

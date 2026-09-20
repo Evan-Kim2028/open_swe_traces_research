@@ -1,0 +1,98 @@
+diff --git a/github/github.go b/github/github.go
+--- a/github/github.go
++++ b/github/github.go
+@@ -20,7 +20,7 @@ import (
+ 	"net/http"
+ 	"net/url"
+ 	"regexp"
+-	_ "slices"
++	"slices"
+ 	"strconv"
+ 	"strings"
+ 	"sync"
+@@ -794,25 +794,44 @@ func sameOrigin(u, base *url.URL) bool {
+ 	if u == nil || base == nil {
+ 		return false
+ 	}
+-	return u.Scheme == base.Scheme && u.Host == base.Host /* excised: sameOrigin */
++
++	return strings.EqualFold(u.Scheme, base.Scheme) &&
++		strings.EqualFold(u.Hostname(), base.Hostname()) &&
++		normalizedPort(u) == normalizedPort(base)
+ }
+ 
+ // normalizedPort returns u's explicit port, or the default port for u's scheme
+ // so that "https://ghe.example.com" and "https://ghe.example.com:443" compare
+ // equal. It returns "" for a scheme with no default port.
+ func normalizedPort(u *url.URL) string {
+-	return u.Port() /* excised: normalizedPort */
++	if port := u.Port(); port != "" {
++		return port
++	}
++
++	switch strings.ToLower(u.Scheme) {
++	case "http":
++		return "80"
++	case "https":
++		return "443"
++	default:
++		return ""
++	}
+ }
+ 
+ // isAllowedOrigin reports whether u matches one of origins. An empty origins
+ // list means [defaultAuthOrigins], not "allow every origin".
+ func isAllowedOrigin(u *url.URL, origins []*url.URL) bool {
++	if len(origins) == 0 {
++		origins = defaultAuthOrigins
++	}
++
+ 	for _, origin := range origins {
+ 		if sameOrigin(u, origin) {
+ 			return true
+ 		}
+ 	}
+-	return false /* excised: isAllowedOrigin */
++
++	return false
+ }
+ 
+ // shouldAuthorizeRequest reports whether the credentials configured on c may be
+@@ -821,7 +840,7 @@ func isAllowedOrigin(u *url.URL, origins []*url.URL) bool {
+ // test setups assign baseURL/uploadURL directly, and the rest of the request
+ // plumbing (NewRequest, BaseURL) reads them the same way.
+ func (c *Client) shouldAuthorizeRequest(u *url.URL) bool {
+-	return sameOrigin(u, c.baseURL) /* excised: Client.shouldAuthorizeRequest */
++	return sameOrigin(u, c.baseURL) || sameOrigin(u, c.uploadURL)
+ }
+ 
+ // checkBodyDestination returns [ErrUntrustedDestination] when u is not an origin
+@@ -833,7 +852,11 @@ func (c *Client) shouldAuthorizeRequest(u *url.URL) bool {
+ // than quietly sent unauthenticated, and the refusal happens where the request
+ // is built, before any byte of the body is written.
+ func (c *Client) checkBodyDestination(u *url.URL) error {
+-	return nil /* excised: Client.checkBodyDestination */
++	if c.shouldAuthorizeRequest(u) {
++		return nil
++	}
++
++	return fmt.Errorf("%w: %v", ErrUntrustedDestination, u.Redacted())
+ }
+ 
+ // UserAgent returns the User-Agent header value for the client.
+@@ -1070,7 +1093,14 @@ func (c *Client) NewFormRequest(ctx context.Context, urlStr string, body io.Read
+ // within a segment (e.g. "file..txt"). The check is performed only on the path
+ // portion of the URL, ignoring any query string or fragment.
+ func checkURLPathTraversal(urlStr string) error {
+-	return nil /* excised: checkURLPathTraversal */
++	u, err := url.Parse(urlStr)
++	if err != nil {
++		return err
++	}
++	if slices.Contains(strings.Split(u.Path, "/"), "..") {
++		return ErrPathForbidden
++	}
++	return nil
+ }
+ 
+ // NewUploadRequest creates an upload request. A relative URL can be provided in

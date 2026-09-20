@@ -74,7 +74,17 @@ for round in $(seq 1 "$ROUNDS"); do
   [ "$n" -eq 0 ] && { echo "round $round: nothing left"; break; }
   echo "=== round $round: $n units still unflipped"
   docker network prune -f >/dev/null 2>&1
-  harbor run --path "$PEND" --agent cursor-cli --model cursor/composer-2.5 \
+  # Solver is swappable so a second sweep can run on a different token quota in parallel.
+  # AGENT=grok-build MODEL=grok-4.6 GROK_EFFORT=high uses Grok instead of Composer.
+  if [ "${AGENT:-cursor-cli}" = "grok-build" ]; then
+    GKEY="$(bash "$R/scripts/ops/grok_key.sh")" || { echo "grok token unavailable"; exit 1; }
+    AGENT_KWARGS=(--agent grok-build --model "${MODEL:-grok-4.6}"
+                  --ak reasoning_effort="${GROK_EFFORT:-high}"
+                  --ae XAI_API_KEY="$GKEY")
+  else
+    AGENT_KWARGS=(--agent "${AGENT:-cursor-cli}" --model "${MODEL:-cursor/composer-2.5}")
+  fi
+  harbor run --path "$PEND" "${AGENT_KWARGS[@]}" \
     --n-concurrent "$CONC" --n-attempts 1 --max-retries 1 \
     --jobs-dir experiments/dose_response/jobs --job-name "${D}_r${round}" --yes
   "$R/scripts/ops/post_sweep.sh" "${D}_r${round}"

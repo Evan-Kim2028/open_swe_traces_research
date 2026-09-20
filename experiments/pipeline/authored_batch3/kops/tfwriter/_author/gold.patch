@@ -1,0 +1,234 @@
+--- a/upup/pkg/fi/cloudup/terraformWriter/writer.go
++++ b/upup/pkg/fi/cloudup/terraformWriter/writer.go
+@@ -17,14 +17,14 @@
+ package terraformWriter
+ 
+ import (
+-	_ "fmt"
+-	_ "path"
+-	_ "reflect"
+-	_ "strconv"
+-	_ "strings"
++	"fmt"
++	"path"
++	"reflect"
++	"strconv"
++	"strings"
+ 	"sync"
+ 
+-	_ "k8s.io/klog/v2"
++	"k8s.io/klog/v2"
+ )
+ 
+ type TerraformWriter struct {
+@@ -75,49 +75,197 @@
+ 
+ // sanitizeName ensures terraform resource names don't start with digits or contain any invalid characters
+ func sanitizeName(name string) string {
+-	panic("excised: sanitizeName")
++	// Terraform resource names cannot start with a digit
++	if _, err := strconv.Atoi(string(name[0])); err == nil {
++		name = fmt.Sprintf("prefix_%v", name)
++	}
++	return strings.NewReplacer(".", "-", "/", "--", ":", "_").Replace(name)
+ }
+ 
+ func (t *TerraformWriter) InitTerraformWriter() {
+-	panic("excised: TerraformWriter.InitTerraformWriter")
++	t.Files = make(map[string][]byte)
++	t.outputs = make(map[string]*terraformOutputVariable)
+ }
+ 
+ func (t *TerraformWriter) AddFileBytes(resourceType string, resourceName string, key string, data []byte, base64 bool) (*Literal, error) {
+-	panic("excised: TerraformWriter.AddFileBytes")
++	path, err := t.AddFilePath(resourceType, resourceName, key, data, base64)
++	if err != nil {
++		return nil, err
++	}
++
++	fn := "file"
++	if base64 {
++		fn = "filebase64"
++	}
++	return LiteralFunctionExpression(fn, path), nil
+ }
+ 
+ func (t *TerraformWriter) EnsureTerraformProvider(name string, arguments map[string]string) *TerraformProvider {
+-	panic("excised: TerraformWriter.EnsureTerraformProvider")
++	t.mutex.Lock()
++	defer t.mutex.Unlock()
++
++	if t.Providers == nil {
++		t.Providers = make(map[string]*TerraformProvider)
++	}
++
++	tfProvider := &TerraformProvider{
++		Name:      name,
++		Arguments: arguments,
++	}
++
++	key := tfProvider.Name
++
++	existing := t.Providers[key]
++	if existing != nil {
++		if reflect.DeepEqual(tfProvider, existing) {
++			// already exists and matches
++			return existing
++		}
++		klog.Fatalf("attempt to add different tfProvider with key %q, arguments: %q vs %q", key, tfProvider.Arguments, existing.Arguments)
++	}
++	t.Providers[key] = tfProvider
++	return tfProvider
+ }
+ 
+ func (t *TerraformWriter) AddFilePath(resourceType string, resourceName string, key string, data []byte, base64 bool) (*Literal, error) {
+-	panic("excised: TerraformWriter.AddFilePath")
++	id := resourceType + "_" + resourceName + "_" + key
++
++	t.mutex.Lock()
++	defer t.mutex.Unlock()
++
++	p := path.Join("data", id)
++	t.Files[p] = data
++
++	modulePath := fmt.Sprintf("%q", path.Join("${path.module}", p))
++
++	return LiteralTokens(modulePath), nil
+ }
+ 
+ func (t *TerraformWriter) RenderDataSource(dataType string, dataName string, e interface{}) error {
+-	panic("excised: TerraformWriter.RenderDataSource")
++	data := &terraformDataSource{
++		DataType: dataType,
++		DataName: dataName,
++		Item:     e,
++	}
++
++	t.mutex.Lock()
++	defer t.mutex.Unlock()
++
++	t.dataSources = append(t.dataSources, data)
++
++	return nil
+ }
+ 
+ func (t *TerraformWriter) RenderResource(resourceType string, resourceName string, e interface{}) error {
+-	panic("excised: TerraformWriter.RenderResource")
++	res := &terraformResource{
++		ResourceType: resourceType,
++		ResourceName: resourceName,
++		Item:         e,
++	}
++
++	t.mutex.Lock()
++	defer t.mutex.Unlock()
++
++	t.resources = append(t.resources, res)
++
++	return nil
+ }
+ 
+ func (t *TerraformWriter) AddOutputVariable(key string, literal *Literal) error {
+-	panic("excised: TerraformWriter.AddOutputVariable")
++	v := &terraformOutputVariable{
++		Key:   key,
++		Value: literal,
++	}
++
++	t.mutex.Lock()
++	defer t.mutex.Unlock()
++
++	if t.outputs[key] != nil {
++		return fmt.Errorf("duplicate variable: %q", key)
++	}
++	t.outputs[key] = v
++
++	return nil
+ }
+ 
+ func (t *TerraformWriter) AddOutputVariableArray(key string, literal *Literal) error {
+-	panic("excised: TerraformWriter.AddOutputVariableArray")
++	t.mutex.Lock()
++	defer t.mutex.Unlock()
++
++	if t.outputs[key] == nil {
++		v := &terraformOutputVariable{
++			Key: key,
++		}
++		t.outputs[key] = v
++	}
++	if t.outputs[key].Value != nil {
++		return fmt.Errorf("variable %q is both an array and a scalar", key)
++	}
++
++	t.outputs[key].ValueArray = append(t.outputs[key].ValueArray, literal)
++
++	return nil
+ }
+ 
+ func (t *TerraformWriter) GetDataSourcesByType() (map[string]map[string]interface{}, error) {
+-	panic("excised: TerraformWriter.GetDataSourcesByType")
++	dataSourcesByType := make(map[string]map[string]interface{})
++
++	for _, dataSource := range t.dataSources {
++		dataSources := dataSourcesByType[dataSource.DataType]
++		if dataSources == nil {
++			dataSources = make(map[string]interface{})
++			dataSourcesByType[dataSource.DataType] = dataSources
++		}
++
++		tfName := sanitizeName(dataSource.DataName)
++
++		if dataSources[tfName] != nil {
++			return nil, fmt.Errorf("duplicate data source found: %s.%s", dataSource.DataType, tfName)
++		}
++
++		dataSources[tfName] = dataSource.Item
++	}
++
++	return dataSourcesByType, nil
+ }
+ 
+ func (t *TerraformWriter) GetResourcesByType() (map[string]map[string]interface{}, error) {
+-	panic("excised: TerraformWriter.GetResourcesByType")
++	resourcesByType := make(map[string]map[string]interface{})
++
++	for _, res := range t.resources {
++		resources := resourcesByType[res.ResourceType]
++		if resources == nil {
++			resources = make(map[string]interface{})
++			resourcesByType[res.ResourceType] = resources
++		}
++
++		tfName := sanitizeName(res.ResourceName)
++
++		if resources[tfName] != nil {
++			return nil, fmt.Errorf("duplicate resource found: %s.%s", res.ResourceType, tfName)
++		}
++
++		resources[tfName] = res.Item
++	}
++
++	return resourcesByType, nil
+ }
+ 
+ func (t *TerraformWriter) GetOutputs() (map[string]OutputValue, error) {
+-	panic("excised: TerraformWriter.GetOutputs")
+-}
++	values := map[string]OutputValue{}
++	for _, v := range t.outputs {
++		tfName := sanitizeName(v.Key)
++		if _, found := values[tfName]; found {
++			return nil, fmt.Errorf("duplicate variable found: %s", tfName)
++		}
++		deduped, err := dedupLiterals(v.ValueArray)
++		if err != nil {
++			return nil, err
++		}
++		values[tfName] = OutputValue{
++			Value:      v.Value,
++			ValueArray: deduped,
++		}
++	}
++	return values, nil
++}

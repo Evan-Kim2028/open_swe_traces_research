@@ -49,8 +49,9 @@ def main():
         dc = r["certified"] - prev["certified"] if prev else 0
         dt = r["trials"] - prev["trials"] if prev else 0
         mark = " " if dc or dt else "."          # '.' marks a tick where nothing moved
-        agents = (r.get("devin") or "").replace("closure_", "")
-        sw = (r.get("sweeps") or "").strip()
+        # the shell fields arrive newline-separated; collapse or the table breaks
+        agents = " ".join((r.get("devin") or "").replace("closure_", "").split())
+        sw = " ".join((r.get("sweeps") or "").split())
         print(f"{r['iso'][11:19]} {r['certified']:5d} {dc:+4d} {r['trials']:7d} {dt:+5d} "
               f"{r['too_easy']:5d} {r['nonflip']:6d} {r['containers']:5d} "
               f"{r.get('free_gb',0):4d}G {mark}{agents}{('| '+sw) if sw else ''}")

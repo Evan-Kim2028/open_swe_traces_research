@@ -1,0 +1,19 @@
+{
+ "objfile": {
+  "plumbing/format/objfile/reader.go": [
+   "Reader.Header",
+   "Reader.readUntil",
+   "Reader.prepareForRead",
+   "Reader.Read",
+   "Reader.Hash"
+  ],
+  "plumbing/format/objfile/writer.go": [
+   "Writer.WriteHeader",
+   "Writer.writeHeader",
+   "Writer.prepareForWrite",
+   "Writer.Write",
+   "Writer.Hash",
+   "Writer.Close"
+  ]
+ }
+}

@@ -1,0 +1,20 @@
+{
+ "indexenc": {
+  "plumbing/format/index/encoder.go": [
+   "NewEncoder",
+   "Encoder.Encode",
+   "Encoder.encode",
+   "Encoder.encodeHeader",
+   "Encoder.encodeEntries",
+   "Encoder.encodeEntry",
+   "Encoder.encodeEntryName",
+   "Encoder.encodeEntryNameV4",
+   "commonPrefixLen",
+   "Encoder.encodeRawExtension",
+   "Encoder.timeToUint32",
+   "Encoder.padEntry",
+   "Encoder.encodeFooter",
+   "byNameAndStage.Less"
+  ]
+ }
+}

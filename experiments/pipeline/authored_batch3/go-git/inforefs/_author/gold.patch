@@ -1,0 +1,97 @@
+diff --git a/plumbing/protocol/packp/inforefs.go b/plumbing/protocol/packp/inforefs.go
+index c7c5367..79be3dd 100644
+--- a/plumbing/protocol/packp/inforefs.go
++++ b/plumbing/protocol/packp/inforefs.go
+@@ -1,15 +1,15 @@
+ package packp
+ 
+ import (
+-	_ "bufio"
++	"bufio"
+ 	"errors"
+-	_ "fmt"
++	"fmt"
+ 	"io"
+-	_ "strings"
++	"strings"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+-	_ "example.internal/gitkit/v6/plumbing/format/config"
+-	_ "example.internal/gitkit/v6/utils/trace"
++	format "example.internal/gitkit/v6/plumbing/format/config"
++	"example.internal/gitkit/v6/utils/trace"
+ )
+ 
+ // ErrInvalidInfoRefs is returned when an info/refs advertisement holds a line
+@@ -92,16 +92,68 @@ type InfoRefs struct {
+ // reference name gitkit traces is, which renders a control byte or an escape
+ // sequence inert.
+ func (i *InfoRefs) Decode(r io.Reader) error {
+-	panic("excised: InfoRefs.Decode")
++	var refs []*plumbing.Reference
++
++	s := bufio.NewScanner(r)
++	line := 0
++	for s.Scan() {
++		line++
++		text := s.Text()
++		if text == "" {
++			continue
++		}
++
++		hash, name, ok := strings.Cut(text, "\t")
++		if !ok {
++			return fmt.Errorf("%w: line %d has no tab", ErrInvalidInfoRefs, line)
++		}
++		if len(hash) != format.SHA1HexSize && len(hash) != format.SHA256HexSize {
++			return fmt.Errorf("%w: line %d has a %d-digit hash", ErrInvalidInfoRefs, line, len(hash))
++		}
++		id, valid := plumbing.FromHex(hash)
++		if !valid {
++			return fmt.Errorf("%w: line %d has a non-hexadecimal hash", ErrInvalidInfoRefs, line)
++		}
++		if !usableInfoRefsName(name) {
++			trace.General.Printf("ignoring ref with broken name %q on line %d", name, line)
++			continue
++		}
++
++		refs = append(refs, plumbing.NewHashReference(
++			plumbing.ReferenceName(name), id,
++		))
++	}
++
++	if err := s.Err(); err != nil {
++		// A line the scanner cannot hold fails as a malformed line, not as a
++		// scanner error the caller has no reason to match on. A read failure
++		// is returned unchanged.
++		if errors.Is(err, bufio.ErrTooLong) {
++			return fmt.Errorf("%w: line %d is longer than %d bytes",
++				ErrInvalidInfoRefs, line+1, bufio.MaxScanTokenSize)
++		}
++		return err
++	}
++
++	i.References = append(i.References, refs...)
++
++	return nil
+ }
+ 
+ // usableInfoRefsName reports whether name is a valid reference name after
+ // removing one optional peeled-reference suffix ("^{}").
+ func usableInfoRefsName(name string) bool {
+-	panic("excised: usableInfoRefsName")
++	base := strings.TrimSuffix(name, "^{}")
++	return plumbing.ReferenceName(base).Validate() == nil
+ }
+ 
+ // Encode writes i.References to w in info/refs format.
+ func (i *InfoRefs) Encode(w io.Writer) error {
+-	panic("excised: InfoRefs.Encode")
++	for _, ref := range i.References {
++		if _, err := fmt.Fprintf(w, "%s\t%s\n", ref.Hash().String(), ref.Name().String()); err != nil {
++			return err
++		}
++	}
++
++	return nil
+ }

@@ -1,0 +1,244 @@
+diff --git a/utils/binary/read.go b/utils/binary/read.go
+index 8210799..7e6f513 100644
+--- a/utils/binary/read.go
++++ b/utils/binary/read.go
+@@ -4,11 +4,11 @@ package binary
+ 
+ import (
+ 	"bufio"
+-	_ "bytes"
+-	_ "encoding/binary"
++	"bytes"
++	"encoding/binary"
+ 	"errors"
+ 	"io"
+-	_ "math"
++	"math"
+ 	"sync"
+ )
+ 
+@@ -21,18 +21,49 @@ var ErrIntegerOverflow = errors.New("variable-width integer overflow")
+ // decoded in BigEndian order
+ // https://golang.org/pkg/encoding/binary/#Read
+ func Read(r io.Reader, data ...any) error {
+-	panic("excised: Read")
++	for _, v := range data {
++		if err := binary.Read(r, binary.BigEndian, v); err != nil {
++			return err
++		}
++	}
++
++	return nil
+ }
+ 
+ // ReadUntil reads from r untin delim is found
+ func ReadUntil(r io.Reader, delim byte) ([]byte, error) {
+-	panic("excised: ReadUntil")
++	if bufr, ok := r.(*bufio.Reader); ok {
++		return ReadUntilFromBufioReader(bufr, delim)
++	}
++
++	var buf [1]byte
++	value := make([]byte, 0, 16)
++	for {
++		if _, err := io.ReadFull(r, buf[:]); err != nil {
++			if err == io.EOF {
++				return nil, err
++			}
++
++			return nil, err
++		}
++
++		if buf[0] == delim {
++			return value, nil
++		}
++
++		value = append(value, buf[0])
++	}
+ }
+ 
+ // ReadUntilFromBufioReader is like bufio.ReadBytes but drops the delimiter
+ // from the result.
+ func ReadUntilFromBufioReader(r *bufio.Reader, delim byte) ([]byte, error) {
+-	panic("excised: ReadUntilFromBufioReader")
++	value, err := r.ReadBytes(delim)
++	if err != nil || len(value) == 0 {
++		return nil, err
++	}
++
++	return value[:len(value)-1], nil
+ }
+ 
+ // ReadVariableWidthInt reads and returns an int in Git VLQ special format:
+@@ -60,7 +91,30 @@ func ReadUntilFromBufioReader(r *bufio.Reader, delim byte) ([]byte, error) {
+ //	while (ofs >>= 7)
+ //	    dheader[--pos] = 128 | (--ofs & 127);
+ func ReadVariableWidthInt(r io.Reader) (int64, error) {
+-	panic("excised: ReadVariableWidthInt")
++	var c byte
++	if err := Read(r, &c); err != nil {
++		return 0, err
++	}
++
++	v := int64(c & maskLength)
++	for c&maskContinue > 0 {
++		// Reject input that, after the v++ and shift below, would
++		// not fit in an int64. With v < (MaxInt64-127)>>7, the
++		// post-increment v is at most (MaxInt64-127)>>7 and the
++		// final (v << 7) + (c & 0x7F) stays within int64.
++		if v >= (math.MaxInt64-int64(maskLength))>>lengthBits {
++			return 0, ErrIntegerOverflow
++		}
++
++		v++
++		if err := Read(r, &c); err != nil {
++			return 0, err
++		}
++
++		v = (v << lengthBits) + int64(c&maskLength)
++	}
++
++	return v, nil
+ }
+ 
+ const (
+@@ -71,17 +125,32 @@ const (
+ 
+ // ReadUint64 reads 8 bytes and returns them as a BigEndian uint32
+ func ReadUint64(r io.Reader) (uint64, error) {
+-	panic("excised: ReadUint64")
++	var v uint64
++	if err := binary.Read(r, binary.BigEndian, &v); err != nil {
++		return 0, err
++	}
++
++	return v, nil
+ }
+ 
+ // ReadUint32 reads 4 bytes and returns them as a BigEndian uint32
+ func ReadUint32(r io.Reader) (uint32, error) {
+-	panic("excised: ReadUint32")
++	var v uint32
++	if err := binary.Read(r, binary.BigEndian, &v); err != nil {
++		return 0, err
++	}
++
++	return v, nil
+ }
+ 
+ // ReadUint16 reads 2 bytes and returns them as a BigEndian uint16
+ func ReadUint16(r io.Reader) (uint16, error) {
+-	panic("excised: ReadUint16")
++	var v uint16
++	if err := binary.Read(r, binary.BigEndian, &v); err != nil {
++		return 0, err
++	}
++
++	return v, nil
+ }
+ 
+ const sniffLen = 8000
+@@ -98,5 +167,40 @@ var sniffPool = sync.Pool{
+ // IsBinary detects if data is a binary value based on:
+ // http://git.kernel.org/cgit/git/git.git/tree/xdiff-interface.c?id=HEAD#n198
+ func IsBinary(r io.Reader) (bool, error) {
+-	panic("excised: IsBinary")
++	// Scan up to sniffLen bytes for a NUL, reading in chunks and checking each
++	// with bytes.IndexByte. Returning as soon as a NUL is found preserves the
++	// early-exit of the previous byte-at-a-time loop — a binary blob with an
++	// early NUL is not forced to read (or block on) the rest of the window —
++	// while bytes.IndexByte avoids that loop's per-byte overhead. The buffer
++	// comes from a pool, so there is no per-call allocation.
++	bufp := sniffPool.Get().(*[]byte)
++	defer sniffPool.Put(bufp)
++	buf := *bufp
++
++	for remaining := sniffLen; remaining > 0; {
++		chunk := buf
++		if len(chunk) > remaining {
++			chunk = chunk[:remaining]
++		}
++
++		n, err := r.Read(chunk)
++		if bytes.IndexByte(chunk[:n], 0) >= 0 {
++			return true, nil
++		}
++		remaining -= n
++
++		if err != nil {
++			if errors.Is(err, io.EOF) {
++				return false, nil
++			}
++			return false, err
++		}
++		if n == 0 {
++			// A compliant io.Reader should not return (0, nil); treat it as
++			// "no more data" rather than spinning.
++			return false, nil
++		}
++	}
++
++	return false, nil
+ }
+diff --git a/utils/binary/write.go b/utils/binary/write.go
+index 775589e..9232584 100644
+--- a/utils/binary/write.go
++++ b/utils/binary/write.go
+@@ -1,35 +1,51 @@
+ package binary
+ 
+ import (
+-	_ "encoding/binary"
++	"encoding/binary"
+ 	"io"
+ )
+ 
+ // Write writes the binary representation of data into w, using BigEndian order
+ // https://golang.org/pkg/encoding/binary/#Write
+ func Write(w io.Writer, data ...any) error {
+-	panic("excised: Write")
++	for _, v := range data {
++		if err := binary.Write(w, binary.BigEndian, v); err != nil {
++			return err
++		}
++	}
++
++	return nil
+ }
+ 
+ // WriteVariableWidthInt writes a variable width encoded int64 to w.
+ func WriteVariableWidthInt(w io.Writer, n int64) error {
+-	panic("excised: WriteVariableWidthInt")
++	buf := []byte{byte(n & 0x7f)}
++	n >>= 7
++	for n != 0 {
++		n--
++		buf = append([]byte{0x80 | byte(n&0x7f)}, buf...)
++		n >>= 7
++	}
++
++	_, err := w.Write(buf)
++
++	return err
+ }
+ 
+ // WriteUint64 writes the binary representation of a uint64 into w, in BigEndian
+ // order
+ func WriteUint64(w io.Writer, value uint64) error {
+-	panic("excised: WriteUint64")
++	return binary.Write(w, binary.BigEndian, value)
+ }
+ 
+ // WriteUint32 writes the binary representation of a uint32 into w, in BigEndian
+ // order
+ func WriteUint32(w io.Writer, value uint32) error {
+-	panic("excised: WriteUint32")
++	return binary.Write(w, binary.BigEndian, value)
+ }
+ 
+ // WriteUint16 writes the binary representation of a uint16 into w, in BigEndian
+ // order
+ func WriteUint16(w io.Writer, value uint16) error {
+-	panic("excised: WriteUint16")
++	return binary.Write(w, binary.BigEndian, value)
+ }

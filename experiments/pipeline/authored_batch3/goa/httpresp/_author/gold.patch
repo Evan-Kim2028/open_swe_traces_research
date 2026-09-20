@@ -1,0 +1,330 @@
+--- a/expr/http_response.go
++++ b/expr/http_response.go
+@@ -1,8 +1,8 @@
+ package expr
+ 
+ import (
+-	_ "fmt"
+-	_ "strings"
++	"fmt"
++	"strings"
+ 
+ 	"example.internal/apikit/v3/eval"
+ )
+@@ -114,30 +114,248 @@
+ 
+ // EvalName returns the generic definition name used in error messages.
+ func (r *HTTPResponseExpr) EvalName() string {
+-	panic("excised: HTTPResponseExpr.EvalName")
++	var suffix string
++	if r.Parent != nil {
++		suffix = fmt.Sprintf(" of %s", r.Parent.EvalName())
++	}
++	return "HTTP response" + suffix
+ }
+ 
+ // Prepare makes sure the response is initialized even if not done explicitly
+ // by
+ func (r *HTTPResponseExpr) Prepare() {
+-	panic("excised: HTTPResponseExpr.Prepare")
++	if r.Headers == nil {
++		r.Headers = NewEmptyMappedAttributeExpr()
++	}
++	if r.Cookies == nil {
++		r.Cookies = NewEmptyMappedAttributeExpr()
++	}
+ }
+ 
+ // Validate checks that the response definition is consistent: its status is set
+ // and the result type definition if any is valid.
+ func (r *HTTPResponseExpr) Validate(e *HTTPEndpointExpr) *eval.ValidationErrors {
+-	panic("excised: HTTPResponseExpr.Validate")
++	verr := new(eval.ValidationErrors)
++
++	// A JSON-RPC message cannot carry HTTP headers or cookies that belong only
++	// to that message. Several messages may share one batch response or
++	// server-sent-event connection.
++	if e.IsJSONRPC() {
++		if r.Headers != nil && !r.Headers.IsEmpty() {
++			verr.Add(r, "JSON-RPC success response cannot map result attributes to HTTP headers")
++		}
++		if r.Cookies != nil && !r.Cookies.IsEmpty() {
++			verr.Add(r, "JSON-RPC success response cannot map result attributes to HTTP cookies")
++		}
++	}
++
++	if r.StatusCode == 0 {
++		verr.Add(r, "HTTP response status not defined")
++	} else if !bodyAllowedForStatus(r.StatusCode) && !e.MethodExpr.IsStreaming() {
++		ep, ok := r.Parent.(*HTTPEndpointExpr)
++		if ok && httpResponseBody(ep, r).Type != Empty {
++			verr.Add(r, "Response body defined for status code %d which does not allow response body.", r.StatusCode)
++		}
++	}
++
++	// text/html and text/plain can only encode strings so make sure there isn't
++	// an explicit conflict with the content-type and response.
++	if (r.ContentType == "text/html" || r.ContentType == "text/plain") && !e.SkipRequestBodyEncodeDecode {
++		if e.MethodExpr.Result.Type != nil && e.MethodExpr.Result.Type != String && e.MethodExpr.Result.Type != Bytes && r.Body == nil {
++			verr.Add(r, "Result type must be String or Bytes when ContentType is '%s'", r.ContentType)
++		}
++		if r.Body != nil && r.Body.Type != String && r.Body.Type != Bytes {
++			verr.Add(r, "Result type must be String or Bytes when ContentType is '%s'", r.ContentType)
++		}
++	}
++
++	rt, isrt := e.MethodExpr.Result.Type.(*ResultTypeExpr)
++	resultAttributeType := func(name string) DataType {
++		if !IsObject(e.MethodExpr.Result.Type) {
++			return nil
++		}
++		if isrt {
++			if view, ok := e.MethodExpr.Result.Meta.Last(ViewMetaKey); ok {
++				v := rt.View(view)
++				if v == nil {
++					return nil
++				}
++				return v.AttributeExpr.Find(name).Type
++			}
++			for _, v := range rt.Views {
++				if !rt.ViewHasAttribute(v.Name, name) {
++					return nil
++				}
++			}
++		}
++		att := e.MethodExpr.Result.Find(name)
++		if att == nil || att.Type == nil {
++			// nil != nil
++			return nil
++		}
++		return att.Type
++	}
++
++	var inview string
++	if isrt {
++		inview = " all views of"
++	}
++
++	if !r.Headers.IsEmpty() {
++		verr.Merge(r.Headers.Validate("HTTP response headers", r))
++		switch {
++		case isEmpty(e.MethodExpr.Result):
++			verr.Add(r, "response defines headers but result is empty")
++		case IsObject(e.MethodExpr.Result.Type):
++			mobj := AsObject(r.Headers.Type)
++			for _, h := range *mobj {
++				t := resultAttributeType(h.Name)
++				switch {
++				case t == nil:
++					verr.Add(r, "header %q has no equivalent attribute in%s result type, use notation 'attribute_name:header_name' to identify corresponding result type attribute.", h.Name, inview)
++				case IsArray(t):
++					if !IsPrimitive(AsArray(t).ElemType.Type) {
++						verr.Add(e, "attribute %q used in HTTP headers must be a primitive type or an array of primitive types.", h.Name)
++					}
++				case !IsPrimitive(t):
++					verr.Add(e, "attribute %q used in HTTP headers must be a primitive type or an array of primitive types.", h.Name)
++				}
++			}
++		case len(*AsObject(r.Headers.Type)) > 1:
++			verr.Add(r, "response defines more than one headers but result type is not an object")
++		case IsArray(e.MethodExpr.Result.Type):
++			if !IsPrimitive(AsArray(e.MethodExpr.Result.Type).ElemType.Type) {
++				verr.Add(e, "Array result is mapped to an HTTP header but is not an array of primitive types.")
++			}
++		}
++	}
++	if !r.Cookies.IsEmpty() {
++		verr.Merge(r.Cookies.Validate("HTTP response cookies", r))
++		switch {
++		case isEmpty(e.MethodExpr.Result):
++			verr.Add(r, "response defines cookies but result is empty")
++		case IsObject(e.MethodExpr.Result.Type):
++			mobj := AsObject(r.Cookies.Type)
++			for _, c := range *mobj {
++				t := resultAttributeType(c.Name)
++				if t == nil {
++					verr.Add(r, "cookie %q has no equivalent attribute in%s result type, use notation 'attribute_name:cookie_name' to identify corresponding result type attribute.", c.Name, inview)
++				}
++				if !IsPrimitive(t) {
++					verr.Add(e, "attribute %q used in HTTP cookies must be a primitive type.", c.Name)
++				}
++			}
++		default:
++			if len(*AsObject(r.Cookies.Type)) > 1 {
++				verr.Add(r, "response defines more than one cookies but result type is not an object")
++			} else if IsArray(e.MethodExpr.Result.Type) {
++				verr.Add(e, "Array result is mapped to an HTTP cookie.")
++			}
++		}
++	}
++	if r.Body != nil {
++		verr.Merge(r.Body.Validate("HTTP response body", r))
++		if e.SkipResponseBodyEncodeDecode {
++			verr.Add(r, "Cannot define a response body when endpoint uses SkipResponseBodyEncodeDecode.")
++		}
++		if att, ok := r.Body.Meta["origin:attribute"]; ok {
++			if resultAttributeType(att[0]) == nil {
++				verr.Add(r, "body %q has no equivalent attribute in%s result type", att[0], inview)
++			}
++		} else if bobj := AsObject(r.Body.Type); bobj != nil {
++			for _, n := range *bobj {
++				if resultAttributeType(n.Name) == nil {
++					verr.Add(r, "body %q has no equivalent attribute in%s result type", n.Name, inview)
++				}
++			}
++		}
++	} else if e.SkipResponseBodyEncodeDecode {
++		body := httpResponseBody(e, r)
++		if body.Type != Empty {
++			verr.Add(e, "HTTP endpoint response body must be empty when using SkipResponseBodyEncodeDecode. Make sure to define headers and cookies as needed.")
++		}
++	}
++	return verr
+ }
+ 
+ // Finalize sets the response result type from its type if the type is a result
+ // type and no result type is already specified.
+ func (r *HTTPResponseExpr) Finalize(a *HTTPEndpointExpr, svcAtt *AttributeExpr) {
+-	panic("excised: HTTPResponseExpr.Finalize")
++	r.Parent = a
++
++	if r.Body != nil && r.Body.Type != Empty {
++		bodyAtt := svcAtt
++		if o, ok := r.Body.Meta["origin:attribute"]; ok {
++			bodyAtt = svcAtt.Find(o[0])
++		}
++		bodyObj := AsObject(bodyAtt.Type)
++		if body := AsObject(r.Body.Type); body != nil {
++			for _, nat := range *body {
++				n := nat.Name
++				n = strings.Split(n, ":")[0]
++				var att, patt *AttributeExpr
++				var required bool
++				if bodyObj != nil {
++					att = bodyObj.Attribute(n)
++					required = bodyAtt.IsRequired(n)
++				} else {
++					att = bodyAtt
++					required = bodyAtt.Type != Empty
++				}
++				initAttrFromDesign(att, patt)
++				if required {
++					if r.Body.Validation == nil {
++						r.Body.Validation = &ValidationExpr{}
++					}
++					r.Body.Validation.AddRequired(n)
++				}
++			}
++			// Remember original name for example to generate friendlier OpenAPI specs.
++			if t, ok := r.Body.Type.(UserType); ok {
++				t.Attribute().AddMeta("name:original", t.Name())
++			}
++			// Wrap object with user type to simplify response rendering code.
++			r.Body.Type = &UserTypeExpr{
++				AttributeExpr: DupAtt(r.Body),
++				TypeName:      fmt.Sprintf("%s%sResponseBody", a.Service.Name(), a.Name()),
++			}
++		}
++		if r.Body.Meta == nil {
++			r.Body.Meta = bodyAtt.Meta
++		}
++	}
++
++	// Set response content type if empty and if set in the result type
++	if r.ContentType == "" {
++		if rt, ok := svcAtt.Type.(*ResultTypeExpr); ok && rt.ContentType != "" {
++			r.ContentType = rt.ContentType
++		}
++	}
++
++	initAttr(r.Headers, svcAtt)
++	initAttr(r.Cookies, svcAtt)
+ }
+ 
+ // Dup creates a copy of the response expression.
+ func (r *HTTPResponseExpr) Dup() *HTTPResponseExpr {
+-	panic("excised: HTTPResponseExpr.Dup")
++	res := HTTPResponseExpr{
++		StatusCode:    r.StatusCode,
++		StatusCodeSet: r.StatusCodeSet,
++		Description:   r.Description,
++		ContentType:   r.ContentType,
++		Parent:        r.Parent,
++		Meta:          r.Meta,
++	}
++	if r.Body != nil {
++		res.Body = DupAtt(r.Body)
++	}
++	if r.Headers != nil {
++		res.Headers = DupMappedAtt(r.Headers)
++	}
++	if r.Cookies != nil {
++		res.Cookies = DupMappedAtt(r.Cookies)
++	}
++	return &res
+ }
+ 
+ // mapUnmappedAttrs maps any unmapped attributes in ErrorResult type to the
+@@ -146,12 +364,60 @@
+ // attributes are mapped to special apikit headers in the form of
+ // "Apikit-Attribute(-<Attribute Name>)".
+ func (r *HTTPResponseExpr) mapUnmappedAttrs(svcAtt *AttributeExpr) {
+-	panic("excised: HTTPResponseExpr.mapUnmappedAttrs")
++	if !IsErrorResult(svcAtt.Type) {
++		return
++	}
++
++	// map attributes to headers that are not explicitly mapped
++	switch {
++	case IsObject(svcAtt.Type):
++		// map the attribute names in the service type to response headers if
++		// not mapped explicitly.
++
++		var originAttr string
++		if r.Body != nil {
++			if o, ok := r.Body.Meta["origin:attribute"]; ok {
++				originAttr = o[0]
++			}
++		}
++		// if response body was mapped explicitly using Body(<attribute name>) then
++		// we must make sure we map all the other unmapped attributes to headers.
++		if r.Body == nil || r.Body.Type == Empty || originAttr != "" {
++			for _, nat := range *(AsObject(svcAtt.Type)) {
++				if originAttr == nat.Name {
++					continue
++				}
++				if _, ok := r.Headers.FindKey(nat.Name); ok {
++					continue
++				}
++				r.Headers.Type.(*Object).Set(nat.Name, nat.Attribute)
++				r.Headers.Map("apikit-attribute-"+nat.Name, nat.Name)
++				if svcAtt.IsRequired(nat.Name) {
++					if r.Headers.Validation == nil {
++						r.Headers.Validation = &ValidationExpr{}
++					}
++					r.Headers.Validation.AddRequired(nat.Name)
++				}
++			}
++		}
++	default:
++		if r.Headers.IsEmpty() && (r.Body == nil || r.Body.Type == Empty) {
++			r.Headers.Type.(*Object).Set("apikit-attribute", svcAtt)
++		}
++	}
+ }
+ 
+ // bodyAllowedForStatus reports whether a given response status code
+ // permits a body. See RFC 2616, section 4.4.
+ // See https://golang.org/src/net/http/transfer.go
+ func bodyAllowedForStatus(status int) bool {
+-	panic("excised: bodyAllowedForStatus")
++	switch {
++	case status >= 100 && status <= 199:
++		return false
++	case status == 204:
++		return false
++	case status == 304:
++		return false
++	}
++	return true
+ }

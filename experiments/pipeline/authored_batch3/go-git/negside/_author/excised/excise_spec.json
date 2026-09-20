@@ -1,0 +1,16 @@
+{
+ "negside": {
+  "plumbing/protocol/packp/shallowupd.go": [
+   "ShallowUpdate.Decode",
+   "decodeShallowLine",
+   "decodeUnshallowLine",
+   "decodeLine",
+   "ShallowUpdate.Encode"
+  ],
+  "plumbing/protocol/packp/pushopts.go": [
+   "PushOptions.Encode",
+   "PushOptions.Decode",
+   "isNotGraphic"
+  ]
+ }
+}

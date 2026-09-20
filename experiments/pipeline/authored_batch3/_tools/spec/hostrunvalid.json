@@ -1,0 +1,18 @@
+{
+  "impl": {
+    "github/actions_hosted_runners.go": {
+      "validateCreateHostedRunnerRequest": "return nil"
+    }
+  },
+  "deltests": {
+    "github/actions_hosted_runners_test.go": [
+      "TestActionsService_CreateHostedRunner"
+    ]
+  },
+  "testre": "TestActionsService_CreateHostedRunner",
+  "unimport": {
+    "github/actions_hosted_runners.go": [
+      "errors"
+    ]
+  }
+}

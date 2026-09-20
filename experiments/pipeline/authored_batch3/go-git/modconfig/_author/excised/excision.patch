@@ -1,0 +1,2146 @@
+diff --git a/config/branch.go b/config/branch.go
+index b164ad7..0f0e8fe 100644
+--- a/config/branch.go
++++ b/config/branch.go
+@@ -2,7 +2,7 @@ package config
+ 
+ import (
+ 	"errors"
+-	"strings"
++	_ "strings"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+ 	format "example.internal/gitkit/v6/plumbing/format/config"
+@@ -40,53 +40,11 @@ type Branch struct {
+ // It does not reject Merge values that lack a "refs/" prefix,
+ // matching the behaviour of real git during config read and write.
+ func (b *Branch) Validate() error {
+-	if b.Name == "" {
+-		return errBranchEmptyName
+-	}
+-
+-	if b.Rebase != "" &&
+-		b.Rebase != "true" &&
+-		b.Rebase != "interactive" &&
+-		b.Rebase != "false" {
+-		return errBranchInvalidRebase
+-	}
+-
+-	return plumbing.NewBranchReferenceName(b.Name).Validate()
++	panic("excised: Branch.Validate")
+ }
+ 
+ func (b *Branch) marshal() *format.Subsection {
+-	if b.raw == nil {
+-		b.raw = &format.Subsection{}
+-	}
+-
+-	b.raw.Name = b.Name
+-
+-	if b.Remote == "" {
+-		b.raw.RemoveOption(remoteSection)
+-	} else {
+-		b.raw.SetOption(remoteSection, b.Remote)
+-	}
+-
+-	if b.Merge == "" {
+-		b.raw.RemoveOption(mergeKey)
+-	} else {
+-		b.raw.SetOption(mergeKey, string(b.Merge))
+-	}
+-
+-	if b.Rebase == "" {
+-		b.raw.RemoveOption(rebaseKey)
+-	} else {
+-		b.raw.SetOption(rebaseKey, b.Rebase)
+-	}
+-
+-	if b.Description == "" {
+-		b.raw.RemoveOption(descriptionKey)
+-	} else {
+-		desc := quoteDescription(b.Description)
+-		b.raw.SetOption(descriptionKey, desc)
+-	}
+-
+-	return b.raw
++	panic("excised: Branch.marshal")
+ }
+ 
+ // hack to trigger conditional quoting in the
+@@ -97,24 +55,16 @@ func (b *Branch) marshal() *format.Subsection {
+ // git just replaces newline characters with \n, while Encoder prints them directly.
+ // Until value quoting fix, we should escape description value by replacing newline characters with \n.
+ func quoteDescription(desc string) string {
+-	return strings.ReplaceAll(desc, "\n", `\n`)
++	panic("excised: quoteDescription")
+ }
+ 
+ func (b *Branch) unmarshal(s *format.Subsection) error {
+-	b.raw = s
+-
+-	b.Name = b.raw.Name
+-	b.Remote = b.raw.Options.Get(remoteSection)
+-	b.Merge = plumbing.ReferenceName(b.raw.Options.Get(mergeKey))
+-	b.Rebase = b.raw.Options.Get(rebaseKey)
+-	b.Description = unquoteDescription(b.raw.Options.Get(descriptionKey))
+-
+-	return b.Validate()
++	panic("excised: Branch.unmarshal")
+ }
+ 
+ // hack to enable conditional quoting in the
+ // plumbing/format/config/Encoder.encodeOptions
+ // goto quoteDescription for details.
+ func unquoteDescription(desc string) string {
+-	return strings.ReplaceAll(desc, `\n`, "\n")
++	panic("excised: unquoteDescription")
+ }
+diff --git a/config/branch_test.go b/config/branch_test.go
+deleted file mode 100644
+index e114d99..0000000
+--- a/config/branch_test.go
++++ /dev/null
+@@ -1,131 +0,0 @@
+-package config
+-
+-import (
+-	"testing"
+-
+-	"github.com/stretchr/testify/suite"
+-
+-	"example.internal/gitkit/v6/plumbing"
+-)
+-
+-type BranchSuite struct {
+-	suite.Suite
+-}
+-
+-func TestBranchSuite(t *testing.T) {
+-	t.Parallel()
+-	suite.Run(t, new(BranchSuite))
+-}
+-
+-func (b *BranchSuite) TestValidateName() {
+-	goodBranch := Branch{
+-		Name:   "master",
+-		Remote: "some_remote",
+-		Merge:  "refs/heads/master",
+-	}
+-	badBranch := Branch{
+-		Remote: "some_remote",
+-		Merge:  "refs/heads/master",
+-	}
+-	b.Nil(goodBranch.Validate())
+-	b.NotNil(badBranch.Validate())
+-}
+-
+-func (b *BranchSuite) TestValidateMerge() {
+-	// Real git allows any value for branch.*.merge.
+-	refsBranch := Branch{
+-		Name:   "master",
+-		Remote: "some_remote",
+-		Merge:  "refs/heads/master",
+-	}
+-	nonRefsBranch := Branch{
+-		Name:   "master",
+-		Remote: "some_remote",
+-		Merge:  "blah",
+-	}
+-	b.Nil(refsBranch.Validate())
+-	b.Nil(nonRefsBranch.Validate())
+-}
+-
+-func (b *BranchSuite) TestMarshal() {
+-	expected := []byte(`[core]
+-	bare = false
+-	filemode = true
+-[branch "branch-tracking-on-clone"]
+-	remote = fork
+-	merge = refs/heads/branch-tracking-on-clone
+-	rebase = interactive
+-`)
+-
+-	cfg := NewConfig()
+-	cfg.Branches["branch-tracking-on-clone"] = &Branch{
+-		Name:   "branch-tracking-on-clone",
+-		Remote: "fork",
+-		Merge:  plumbing.ReferenceName("refs/heads/branch-tracking-on-clone"),
+-		Rebase: "interactive",
+-	}
+-
+-	actual, err := cfg.Marshal()
+-	b.NoError(err)
+-	b.Equal(string(expected), string(actual))
+-}
+-
+-func (b *BranchSuite) TestUnmarshal() {
+-	input := []byte(`[core]
+-	bare = false
+-[branch "branch-tracking-on-clone"]
+-	remote = fork
+-	merge = refs/heads/branch-tracking-on-clone
+-	rebase = interactive
+-`)
+-
+-	cfg := NewConfig()
+-	err := cfg.Unmarshal(input)
+-	b.NoError(err)
+-	branch := cfg.Branches["branch-tracking-on-clone"]
+-	b.Equal("branch-tracking-on-clone", branch.Name)
+-	b.Equal("fork", branch.Remote)
+-	b.Equal(plumbing.ReferenceName("refs/heads/branch-tracking-on-clone"), branch.Merge)
+-	b.Equal("interactive", branch.Rebase)
+-}
+-
+-func (b *BranchSuite) TestValidateMergeWithPullRef() {
+-	// Regression test for https://github.com/gitkit/gitkit/issues/1871
+-	// branch.merge should allow refs/pull/<ID>/head (used by GitHub/GitLab PRs)
+-	prBranch := Branch{
+-		Name:   "contributor/fix-9999",
+-		Remote: "upstream",
+-		Merge:  "refs/pull/9999/head",
+-	}
+-	b.Nil(prBranch.Validate())
+-
+-	mrBranch := Branch{
+-		Name:   "contributor/fix-42",
+-		Remote: "origin",
+-		Merge:  "refs/merge-requests/42/head",
+-	}
+-	b.Nil(mrBranch.Validate())
+-}
+-
+-func (b *BranchSuite) TestUnmarshalNonRefsPrefix() {
+-	// Real git allows any value for branch.*.merge during config read.
+-	// unmarshal should not reject merge values that lack a refs/ prefix.
+-	input := []byte(`[core]
+-	bare = false
+-[branch "foo"]
+-	remote = origin
+-	merge = main
+-`)
+-
+-	cfg := NewConfig()
+-	err := cfg.Unmarshal(input)
+-	b.NoError(err)
+-	branch := cfg.Branches["foo"]
+-	b.Equal("foo", branch.Name)
+-	b.Equal("origin", branch.Remote)
+-	b.Equal(plumbing.ReferenceName("main"), branch.Merge)
+-
+-	// Validate must also accept this value so that SetConfig (which
+-	// calls Validate) works for configs read from disk.
+-	b.NoError(branch.Validate())
+-}
+diff --git a/config/config.go b/config/config.go
+index fc623ac..3aa281e 100644
+--- a/config/config.go
++++ b/config/config.go
+@@ -682,18 +682,7 @@ func (c *Config) unmarshalURLs() error {
+ }
+ 
+ func unmarshalSubmodules(fc *format.Config, submodules map[string]*Submodule) {
+-	s := fc.Section(submoduleSection)
+-	for _, sub := range s.Subsections {
+-		m := &Submodule{}
+-		m.unmarshal(sub)
+-
+-		if err := m.Validate(); errors.Is(err, ErrModuleBadPath) ||
+-			errors.Is(err, ErrModuleBadName) {
+-			continue
+-		}
+-
+-		submodules[m.Name] = m
+-	}
++	panic("excised: unmarshalSubmodules")
+ }
+ 
+ func (c *Config) unmarshalBranches() error {
+diff --git a/config/config_test.go b/config/config_test.go
+deleted file mode 100644
+index 9cf9174..0000000
+--- a/config/config_test.go
++++ /dev/null
+@@ -1,1372 +0,0 @@
+-package config
+-
+-import (
+-	"os"
+-	"path/filepath"
+-	"strings"
+-	"testing"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-	"github.com/stretchr/testify/suite"
+-
+-	"example.internal/gitkit/v6/plumbing"
+-	"example.internal/gitkit/v6/plumbing/format/config"
+-	"example.internal/gitkit/v6/plumbing/protocol"
+-)
+-
+-type ConfigSuite struct {
+-	suite.Suite
+-}
+-
+-func TestConfigSuite(t *testing.T) {
+-	t.Parallel()
+-	suite.Run(t, new(ConfigSuite))
+-}
+-
+-func (s *ConfigSuite) TestUnmarshal() {
+-	input := []byte(`[core]
+-		bare = true
+-		worktree = foo
+-		commentchar = bar
+-		autocrlf = true
+-		filemode = false
+-		hooksPath = custom-hooks
+-[user]
+-		name = John Doe
+-		email = john@example.com
+-[author]
+-		name = Jane Roe
+-		email = jane@example.com
+-[committer]
+-		name = Richard Roe
+-		email = richard@example.com
+-[pack]
+-		window = 20
+-[remote "origin"]
+-		url = git@github.com:mcuadros/go-git.git
+-		fetch = +refs/heads/*:refs/remotes/origin/*
+-[remote "alt"]
+-		url = git@github.com:mcuadros/go-git.git
+-		url = git@github.com:src-d/go-git.git
+-		fetch = +refs/heads/*:refs/remotes/origin/*
+-		fetch = +refs/pull/*:refs/remotes/origin/pull/*
+-[remote "insteadOf"]
+-		url = https://github.com/kostyay/go-git.git
+-[remote "win-local"]
+-		url = X:\\Git\\
+-[submodule "qux"]
+-		path = qux
+-		url = https://github.com/foo/qux.git
+-		branch = bar
+-[branch "master"]
+-		remote = origin
+-		merge = refs/heads/master
+-		description = "Add support for branch description.\\n\\nEdit branch description: git branch --edit-description\\n"
+-[init]
+-		defaultBranch = main
+-[url "ssh://git@github.com/"]
+-	insteadOf = https://github.com/
+-`)
+-
+-	cfg := NewConfig()
+-	err := cfg.Unmarshal(input)
+-	s.NoError(err)
+-
+-	s.True(cfg.Core.IsBare)
+-	s.Equal("foo", cfg.Core.Worktree)
+-	s.Equal("bar", cfg.Core.CommentChar)
+-	s.Equal("true", cfg.Core.AutoCRLF)
+-	s.False(cfg.Core.FileMode)
+-	s.Equal("custom-hooks", cfg.Core.HooksPath)
+-	s.Equal("John Doe", cfg.User.Name)
+-	s.Equal("john@example.com", cfg.User.Email)
+-	s.Equal("Jane Roe", cfg.Author.Name)
+-	s.Equal("jane@example.com", cfg.Author.Email)
+-	s.Equal("Richard Roe", cfg.Committer.Name)
+-	s.Equal("richard@example.com", cfg.Committer.Email)
+-	s.Equal(uint(20), cfg.Pack.Window)
+-	s.Len(cfg.Remotes, 4)
+-	s.Equal("origin", cfg.Remotes["origin"].Name)
+-	s.Equal([]string{"git@github.com:mcuadros/go-git.git"}, cfg.Remotes["origin"].URLs)
+-	s.Equal([]RefSpec{"+refs/heads/*:refs/remotes/origin/*"}, cfg.Remotes["origin"].Fetch)
+-	s.Equal("alt", cfg.Remotes["alt"].Name)
+-	s.Equal([]string{"git@github.com:mcuadros/go-git.git", "git@github.com:src-d/go-git.git"}, cfg.Remotes["alt"].URLs)
+-	s.Equal([]RefSpec{"+refs/heads/*:refs/remotes/origin/*", "+refs/pull/*:refs/remotes/origin/pull/*"}, cfg.Remotes["alt"].Fetch)
+-	s.Equal("win-local", cfg.Remotes["win-local"].Name)
+-	s.Equal([]string{"X:\\Git\\"}, cfg.Remotes["win-local"].URLs)
+-	s.Equal([]string{"ssh://git@github.com/kostyay/go-git.git"}, cfg.Remotes["insteadOf"].URLs)
+-	s.Len(cfg.Submodules, 1)
+-	s.Equal("qux", cfg.Submodules["qux"].Name)
+-	s.Equal("https://github.com/foo/qux.git", cfg.Submodules["qux"].URL)
+-	s.Equal("bar", cfg.Submodules["qux"].Branch)
+-	s.Equal("origin", cfg.Branches["master"].Remote)
+-	s.Equal(plumbing.ReferenceName("refs/heads/master"), cfg.Branches["master"].Merge)
+-	s.Equal("Add support for branch description.\n\nEdit branch description: git branch --edit-description\n", cfg.Branches["master"].Description)
+-	s.Equal("main", cfg.Init.DefaultBranch)
+-}
+-
+-func (s *ConfigSuite) TestMarshal() {
+-	output := []byte(`[core]
+-	bare = true
+-	worktree = bar
+-	autocrlf = true
+-	filemode = true
+-	hooksPath = custom-hooks
+-[pack]
+-	window = 20
+-[remote "alt"]
+-	url = git@github.com:mcuadros/go-git.git
+-	url = git@github.com:src-d/go-git.git
+-	fetch = +refs/heads/*:refs/remotes/origin/*
+-	fetch = +refs/pull/*:refs/remotes/origin/pull/*
+-[remote "insteadOf"]
+-	url = https://github.com/kostyay/go-git.git
+-[remote "origin"]
+-	url = git@github.com:mcuadros/go-git.git
+-[remote "win-local"]
+-	url = "X:\\Git\\"
+-[submodule "qux"]
+-	url = https://github.com/foo/qux.git
+-[branch "master"]
+-	remote = origin
+-	merge = refs/heads/master
+-	description = "Add support for branch description.\\n\\nEdit branch description: git branch --edit-description\\n"
+-[url "ssh://git@github.com/"]
+-	insteadOf = https://github.com/
+-[init]
+-	defaultBranch = main
+-`)
+-
+-	cfg := NewConfig()
+-	cfg.Core.IsBare = true
+-	cfg.Core.Worktree = "bar"
+-	cfg.Core.AutoCRLF = "true"
+-	cfg.Core.HooksPath = "custom-hooks"
+-	cfg.Pack.Window = 20
+-	cfg.Init.DefaultBranch = "main"
+-	cfg.Remotes["origin"] = &RemoteConfig{
+-		Name: "origin",
+-		URLs: []string{"git@github.com:mcuadros/go-git.git"},
+-	}
+-
+-	cfg.Remotes["alt"] = &RemoteConfig{
+-		Name:  "alt",
+-		URLs:  []string{"git@github.com:mcuadros/go-git.git", "git@github.com:src-d/go-git.git"},
+-		Fetch: []RefSpec{"+refs/heads/*:refs/remotes/origin/*", "+refs/pull/*:refs/remotes/origin/pull/*"},
+-	}
+-
+-	cfg.Remotes["win-local"] = &RemoteConfig{
+-		Name: "win-local",
+-		URLs: []string{"X:\\Git\\"},
+-	}
+-
+-	cfg.Remotes["insteadOf"] = &RemoteConfig{
+-		Name: "insteadOf",
+-		URLs: []string{"https://github.com/kostyay/go-git.git"},
+-	}
+-
+-	cfg.Submodules["qux"] = &Submodule{
+-		Name: "qux",
+-		URL:  "https://github.com/foo/qux.git",
+-	}
+-
+-	cfg.Branches["master"] = &Branch{
+-		Name:        "master",
+-		Remote:      "origin",
+-		Merge:       "refs/heads/master",
+-		Description: "Add support for branch description.\n\nEdit branch description: git branch --edit-description\n",
+-	}
+-
+-	cfg.URLs = append(cfg.URLs, &URL{
+-		Name:       "ssh://git@github.com/",
+-		InsteadOfs: []string{"https://github.com/"},
+-	})
+-
+-	b, err := cfg.Marshal()
+-	s.NoError(err)
+-
+-	s.Equal(string(output), string(b))
+-}
+-
+-func TestUnmarshalMarshal(t *testing.T) {
+-	t.Parallel()
+-	tests := []struct {
+-		input string
+-	}{
+-		{
+-			`[core]
+-	bare = true
+-	worktree = foo
+-	custom = ignored
+-	autocrlf = true
+-	filemode = true
+-[user]
+-	name = John Doe
+-	email = john@example.com
+-[author]
+-	name = Jane Roe
+-	email = jane@example.com
+-[committer]
+-	name = Richard Roe
+-	email = richard@example.co
+-[pack]
+-	window = 20
+-[remote "insteadOf"]
+-	url = https://github.com/kostyay/go-git.git
+-[remote "origin"]
+-	url = git@github.com:mcuadros/go-git.git
+-	fetch = +refs/heads/*:refs/remotes/origin/*
+-	mirror = true
+-[remote "win-local"]
+-	url = "X:\\Git\\"
+-[branch "master"]
+-	remote = origin
+-	merge = refs/heads/master
+-[url "ssh://git@github.com/"]
+-	insteadOf = https://github.com/
+-`,
+-		},
+-		{
+-			`[core]
+-	repositoryformatversion = 1
+-	bare = false
+-	filemode = true
+-[branch "main"]
+-	remote = origin
+-	merge = refs/heads/main
+-	rebase = true
+-[extensions]
+-	objectformat = sha256
+-`,
+-		},
+-		{
+-			`[core]
+-	repositoryformatversion = 1
+-	bare = false
+-	filemode = true
+-[branch "main"]
+-	remote = origin
+-	merge = refs/heads/main
+-	rebase = true
+-[extensions]
+-	objectformat = sha1
+-`,
+-		},
+-	}
+-
+-	for _, tc := range tests {
+-		cfg := NewConfig()
+-		err := cfg.Unmarshal([]byte(tc.input))
+-		require.NoError(t, err)
+-
+-		output, err := cfg.Marshal()
+-		require.NoError(t, err)
+-		assert.Equal(t, string(tc.input), string(output))
+-	}
+-}
+-
+-func TestMarshalExtensions(t *testing.T) {
+-	t.Parallel()
+-	tests := []struct {
+-		name        string
+-		setup       func(*Config)
+-		wantSection bool
+-	}{
+-		{
+-			name:        "no extensions set omits section",
+-			setup:       func(_ *Config) {},
+-			wantSection: false,
+-		},
+-		{
+-			name: "WorktreeConfig true writes section",
+-			setup: func(c *Config) {
+-				c.Core.RepositoryFormatVersion = config.Version1
+-				c.Extensions.WorktreeConfig = true
+-			},
+-			wantSection: true,
+-		},
+-		{
+-			name: "ObjectFormat set writes section",
+-			setup: func(c *Config) {
+-				c.Core.RepositoryFormatVersion = config.Version1
+-				c.Extensions.ObjectFormat = config.SHA256
+-			},
+-			wantSection: true,
+-		},
+-		{
+-			name: "RepositoryFormat = 0 ignores section",
+-			setup: func(c *Config) {
+-				c.Core.RepositoryFormatVersion = config.Version0
+-				c.Extensions.ObjectFormat = config.SHA256
+-				c.Extensions.WorktreeConfig = true
+-			},
+-			wantSection: false,
+-		},
+-	}
+-
+-	for _, tc := range tests {
+-		t.Run(tc.name, func(t *testing.T) {
+-			t.Parallel()
+-
+-			cfg := NewConfig()
+-			tc.setup(cfg)
+-
+-			out, err := cfg.Marshal()
+-			require.NoError(t, err)
+-
+-			hasSection := strings.Contains(string(out), "[extensions]")
+-			assert.Equal(t, tc.wantSection, hasSection)
+-		})
+-	}
+-}
+-
+-func (s *ConfigSuite) TestLoadConfigXDG() {
+-	cfg := NewConfig()
+-	cfg.User.Name = "foo"
+-	cfg.User.Email = "foo@foo.com"
+-
+-	tmp := s.T().TempDir()
+-
+-	err := os.MkdirAll(filepath.Join(tmp, "git"), 0o777)
+-	s.NoError(err)
+-
+-	os.Setenv("XDG_CONFIG_HOME", tmp)
+-	defer func() {
+-		os.Setenv("XDG_CONFIG_HOME", "")
+-	}()
+-
+-	content, err := cfg.Marshal()
+-	s.NoError(err)
+-
+-	cfgFile := filepath.Join(tmp, "git/config")
+-	err = os.WriteFile(cfgFile, content, 0o777)
+-	s.NoError(err)
+-
+-	cfg, err = LoadConfig(GlobalScope)
+-	s.NoError(err)
+-
+-	s.Equal("foo@foo.com", cfg.User.Email)
+-}
+-
+-func (s *ConfigSuite) TestValidateConfig() {
+-	config := &Config{
+-		Remotes: map[string]*RemoteConfig{
+-			"bar": {
+-				Name: "bar",
+-				URLs: []string{"http://foo/bar"},
+-			},
+-		},
+-		Branches: map[string]*Branch{
+-			"bar": {
+-				Name: "bar",
+-			},
+-			"foo": {
+-				Name:   "foo",
+-				Remote: "origin",
+-				Merge:  plumbing.ReferenceName("refs/heads/foo"),
+-			},
+-		},
+-	}
+-
+-	s.NoError(config.Validate())
+-}
+-
+-func (s *ConfigSuite) TestValidateInvalidRemote() {
+-	config := &Config{
+-		Remotes: map[string]*RemoteConfig{
+-			"foo": {Name: "foo"},
+-		},
+-	}
+-
+-	s.ErrorIs(config.Validate(), ErrRemoteConfigEmptyURL)
+-}
+-
+-func (s *ConfigSuite) TestValidateInvalidRemoteKey() {
+-	config := &Config{
+-		Remotes: map[string]*RemoteConfig{
+-			"bar": {Name: "foo"},
+-		},
+-	}
+-
+-	s.ErrorIs(config.Validate(), ErrInvalid)
+-}
+-
+-func (s *ConfigSuite) TestRemoteConfigValidateMissingURL() {
+-	config := &RemoteConfig{Name: "foo"}
+-	s.ErrorIs(config.Validate(), ErrRemoteConfigEmptyURL)
+-}
+-
+-func (s *ConfigSuite) TestRemoteConfigValidateMissingName() {
+-	config := &RemoteConfig{}
+-	s.ErrorIs(config.Validate(), ErrRemoteConfigEmptyName)
+-}
+-
+-func (s *ConfigSuite) TestRemoteConfigValidateDefault() {
+-	config := &RemoteConfig{Name: "foo", URLs: []string{"http://foo/bar"}}
+-	s.NoError(config.Validate())
+-
+-	fetch := config.Fetch
+-	s.Len(fetch, 1)
+-	s.Equal("+refs/heads/*:refs/remotes/foo/*", fetch[0].String())
+-}
+-
+-func (s *ConfigSuite) TestValidateInvalidBranchKey() {
+-	config := &Config{
+-		Branches: map[string]*Branch{
+-			"foo": {
+-				Name:   "bar",
+-				Remote: "origin",
+-				Merge:  plumbing.ReferenceName("refs/heads/bar"),
+-			},
+-		},
+-	}
+-
+-	s.ErrorIs(config.Validate(), ErrInvalid)
+-}
+-
+-func (s *ConfigSuite) TestValidateBranchNonRefsPrefix() {
+-	// Real git allows any value for branch.*.merge, including values
+-	// without a refs/ prefix. Validate should accept them.
+-	config := &Config{
+-		Branches: map[string]*Branch{
+-			"bar": {
+-				Name:   "bar",
+-				Remote: "origin",
+-				Merge:  plumbing.ReferenceName("refs/heads/bar"),
+-			},
+-			"foo": {
+-				Name:   "foo",
+-				Remote: "origin",
+-				Merge:  plumbing.ReferenceName("baz"),
+-			},
+-		},
+-	}
+-
+-	s.NoError(config.Validate())
+-}
+-
+-func (s *ConfigSuite) TestRemoteConfigDefaultValues() {
+-	config := NewConfig()
+-
+-	s.Len(config.Remotes, 0)
+-	s.Len(config.Branches, 0)
+-	s.Len(config.Submodules, 0)
+-	s.NotNil(config.Raw)
+-	s.Equal(DefaultPackWindow, config.Pack.Window)
+-}
+-
+-func (s *ConfigSuite) TestLoadConfigLocalScope() {
+-	cfg, err := LoadConfig(LocalScope)
+-	s.NotNil(err)
+-	s.Nil(cfg)
+-}
+-
+-func (s *ConfigSuite) TestRemoveUrlOptions() {
+-	buf := []byte(`
+-[remote "alt"]
+-	url = git@github.com:mcuadros/go-git.git
+-	url = git@github.com:src-d/go-git.git
+-	fetch = +refs/heads/*:refs/remotes/origin/*
+-	fetch = +refs/pull/*:refs/remotes/origin/pull/*`)
+-
+-	cfg := NewConfig()
+-	err := cfg.Unmarshal(buf)
+-	s.NoError(err)
+-	s.Len(cfg.Remotes, 1)
+-	cfg.Remotes["alt"].URLs = []string{}
+-
+-	buf, err = cfg.Marshal()
+-	s.NoError(err)
+-	if strings.Contains(string(buf), "url") {
+-		s.Fail("config should not contain any url sections")
+-	}
+-	s.NoError(err)
+-}
+-
+-func (s *ConfigSuite) TestProtocol() {
+-	buf := []byte(`
+-[protocol]
+-	version = 1`)
+-
+-	cfg := NewConfig()
+-	err := cfg.Unmarshal(buf)
+-	s.NoError(err)
+-	s.Equal(protocol.V1, cfg.Protocol.Version)
+-
+-	// A non-default version is written back out.
+-	cfg.Protocol.Version = protocol.V0
+-	buf, err = cfg.Marshal()
+-	s.NoError(err)
+-	if !strings.Contains(string(buf), "version = 0") {
+-		s.Fail("marshal did not update version")
+-	}
+-
+-	// The default version is omitted from the marshalled config.
+-	cfg = NewConfig()
+-	cfg.Protocol.Version = DefaultProtocolVersion
+-	buf, err = cfg.Marshal()
+-	s.NoError(err)
+-	if strings.Contains(string(buf), "[protocol]") {
+-		s.Fail("marshal should omit the default protocol version")
+-	}
+-
+-	// Resetting a non-default version back to the default clears the stale key
+-	// from the raw config so the change persists.
+-	cfg = NewConfig()
+-	err = cfg.Unmarshal([]byte("[protocol]\n\tversion = 1"))
+-	s.NoError(err)
+-	s.Equal(protocol.V1, cfg.Protocol.Version)
+-	cfg.Protocol.Version = DefaultProtocolVersion
+-	buf, err = cfg.Marshal()
+-	s.NoError(err)
+-	if strings.Contains(string(buf), "version = 1") {
+-		s.Fail("marshal should drop the stale protocol version")
+-	}
+-
+-	// The reset round-trips back to the default version.
+-	cfg = NewConfig()
+-	err = cfg.Unmarshal(buf)
+-	s.NoError(err)
+-	s.Equal(DefaultProtocolVersion, cfg.Protocol.Version)
+-}
+-
+-func (s *ConfigSuite) TestUnmarshalRemotes() {
+-	input := []byte(`[core]
+-	bare = true
+-	worktree = foo
+-	custom = ignored
+-[user]
+-	name = John Doe
+-	email = john@example.com
+-[remote "origin"]
+-	url = https://git.sr.ht/~mcepl/go-git
+-	pushurl = git@git.sr.ht:~mcepl/go-git.git
+-	fetch = +refs/heads/*:refs/remotes/origin/*
+-	mirror = true
+-`)
+-
+-	cfg := NewConfig()
+-	err := cfg.Unmarshal(input)
+-	s.NoError(err)
+-
+-	s.Equal("https://git.sr.ht/~mcepl/go-git", cfg.Remotes["origin"].URLs[0])
+-	s.Equal("git@git.sr.ht:~mcepl/go-git.git", cfg.Remotes["origin"].URLs[1])
+-}
+-
+-func (s *ConfigSuite) TestUnmarshalRemotesUnnamedFirst() {
+-	input := []byte(`
+-[remote ""]
+-  url = https://github.com/CLBRITTON2/go-git.git
+-  fetch = +refs/heads/*:refs/remotes/origin/*
+-[remote "upstream"]
+-	url = https://github.com/go-git/go-git.git
+-	fetch = +refs/heads/*:refs/remotes/upstream/*
+-	`)
+-
+-	cfg := NewConfig()
+-	err := cfg.Unmarshal(input)
+-	s.NoError(err)
+-
+-	unnamedRemote, ok := cfg.Remotes[""]
+-	s.True(ok, "Expected unnamed remote to be present")
+-	s.Equal([]string{"https://github.com/CLBRITTON2/go-git.git"}, unnamedRemote.URLs)
+-	s.Equal([]RefSpec{"+refs/heads/*:refs/remotes/origin/*"}, unnamedRemote.Fetch)
+-
+-	namedRemote, ok := cfg.Remotes["upstream"]
+-	s.True(ok, "Expected named remote 'upstream' to be present")
+-	s.Equal([]string{"https://github.com/go-git/go-git.git"}, namedRemote.URLs)
+-	s.Equal([]RefSpec{"+refs/heads/*:refs/remotes/upstream/*"}, namedRemote.Fetch)
+-}
+-
+-func (s *ConfigSuite) TestUnmarshalRemotesNamedFirst() {
+-	input := []byte(`
+-[remote "upstream"]
+-	url = https://github.com/go-git/go-git.git
+-	fetch = +refs/heads/*:refs/remotes/upstream/*
+-[remote ""]
+-  url = https://github.com/CLBRITTON2/go-git.git
+-  fetch = +refs/heads/*:refs/remotes/origin/*
+-	`)
+-
+-	cfg := NewConfig()
+-	err := cfg.Unmarshal(input)
+-	s.NoError(err)
+-
+-	namedRemote, ok := cfg.Remotes["upstream"]
+-	s.True(ok, "Expected a named remote 'upstream' to be present")
+-	s.Equal([]string{"https://github.com/go-git/go-git.git"}, namedRemote.URLs)
+-	s.Equal([]RefSpec{"+refs/heads/*:refs/remotes/upstream/*"}, namedRemote.Fetch)
+-
+-	unnamedRemote, ok := cfg.Remotes[""]
+-	s.True(ok, "Expected an unnamed remote to be present")
+-	s.Equal([]string{"https://github.com/CLBRITTON2/go-git.git"}, unnamedRemote.URLs)
+-	s.Equal([]RefSpec{"+refs/heads/*:refs/remotes/origin/*"}, unnamedRemote.Fetch)
+-}
+-
+-// TestUnmarshalRemotePartialClone reads back the partial-clone keys exactly as
+-// the git binary writes them for a `clone --filter=blob:none`.
+-func TestUnmarshalRemotePartialClone(t *testing.T) {
+-	t.Parallel()
+-
+-	input := []byte(`[core]
+-	repositoryformatversion = 1
+-[remote "origin"]
+-	url = https://github.com/go-git/go-git.git
+-	fetch = +refs/heads/*:refs/remotes/origin/*
+-	promisor = true
+-	partialclonefilter = blob:none
+-`)
+-
+-	cfg := NewConfig()
+-	require.NoError(t, cfg.Unmarshal(input))
+-
+-	origin := cfg.Remotes["origin"]
+-	require.NotNil(t, origin)
+-	assert.True(t, origin.Promisor)
+-	assert.Equal(t, "blob:none", origin.PartialCloneFilter)
+-}
+-
+-func TestMarshalRemotePartialClone(t *testing.T) {
+-	t.Parallel()
+-
+-	tests := []struct {
+-		name     string
+-		promisor bool
+-		filter   string
+-		want     []string
+-		notWant  []string
+-	}{
+-		{
+-			name:     "promisor with filter",
+-			promisor: true,
+-			filter:   "blob:none",
+-			want:     []string{"promisor = true", "partialclonefilter = blob:none"},
+-		},
+-		{
+-			name:     "tree filter",
+-			promisor: true,
+-			filter:   "tree:0",
+-			want:     []string{"promisor = true", "partialclonefilter = tree:0"},
+-		},
+-		{
+-			name:    "neither set writes no partial-clone keys",
+-			notWant: []string{"promisor", "partialclonefilter"},
+-		},
+-	}
+-
+-	for _, tc := range tests {
+-		t.Run(tc.name, func(t *testing.T) {
+-			t.Parallel()
+-
+-			cfg := NewConfig()
+-			cfg.Remotes["origin"] = &RemoteConfig{
+-				Name:               "origin",
+-				URLs:               []string{"https://github.com/go-git/go-git.git"},
+-				Promisor:           tc.promisor,
+-				PartialCloneFilter: tc.filter,
+-			}
+-
+-			b, err := cfg.Marshal()
+-			require.NoError(t, err)
+-
+-			for _, want := range tc.want {
+-				assert.Contains(t, string(b), want)
+-			}
+-			for _, notWant := range tc.notWant {
+-				assert.NotContains(t, string(b), notWant)
+-			}
+-		})
+-	}
+-}
+-
+-// TestMarshalRemoteClearsPartialClone covers the state behind the fetch
+-// failures this config exists to prevent: a promisor = true left behind without
+-// a partialclonefilter makes git fetch unfiltered into a repository that is
+-// missing objects, which then fails resolving deltas against absent bases.
+-// Clearing either field must remove the key rather than leave it on disk.
+-func TestMarshalRemoteClearsPartialClone(t *testing.T) {
+-	t.Parallel()
+-
+-	input := []byte(`[remote "origin"]
+-	url = https://github.com/go-git/go-git.git
+-	fetch = +refs/heads/*:refs/remotes/origin/*
+-	promisor = true
+-	partialclonefilter = blob:none
+-`)
+-
+-	cfg := NewConfig()
+-	require.NoError(t, cfg.Unmarshal(input))
+-
+-	cfg.Remotes["origin"].Promisor = false
+-	cfg.Remotes["origin"].PartialCloneFilter = ""
+-
+-	b, err := cfg.Marshal()
+-	require.NoError(t, err)
+-
+-	assert.NotContains(t, string(b), "promisor")
+-	assert.NotContains(t, string(b), "partialclonefilter")
+-}
+-
+-func TestUnmarshalPackReverseIndex(t *testing.T) {
+-	t.Parallel()
+-
+-	tests := []struct {
+-		name      string
+-		input     string
+-		wantRead  bool
+-		wantWrite bool
+-	}{
+-		{
+-			name:      "both true",
+-			input:     "[pack]\n\treadReverseIndex = true\n\twriteReverseIndex = true\n",
+-			wantRead:  true,
+-			wantWrite: true,
+-		},
+-		{
+-			name:      "both false",
+-			input:     "[pack]\n\treadReverseIndex = false\n\twriteReverseIndex = false\n",
+-			wantRead:  false,
+-			wantWrite: false,
+-		},
+-		{
+-			name:      "only readReverseIndex false",
+-			input:     "[pack]\n\treadReverseIndex = false\n",
+-			wantRead:  false,
+-			wantWrite: true,
+-		},
+-		{
+-			name:      "only writeReverseIndex false",
+-			input:     "[pack]\n\twriteReverseIndex = false\n",
+-			wantRead:  true,
+-			wantWrite: false,
+-		},
+-		{
+-			name:      "absent defaults to true",
+-			input:     "[pack]\n\twindow = 10\n",
+-			wantRead:  true,
+-			wantWrite: true,
+-		},
+-		{
+-			name:      "empty pack section defaults to true",
+-			input:     "[pack]\n",
+-			wantRead:  true,
+-			wantWrite: true,
+-		},
+-	}
+-
+-	for _, tc := range tests {
+-		t.Run(tc.name, func(t *testing.T) {
+-			t.Parallel()
+-
+-			cfg := NewConfig()
+-			err := cfg.Unmarshal([]byte(tc.input))
+-			require.NoError(t, err)
+-
+-			assert.Equal(t, tc.wantRead, cfg.Pack.ReadReverseIndex)
+-			assert.Equal(t, tc.wantWrite, cfg.Pack.WriteReverseIndex)
+-		})
+-	}
+-}
+-
+-func TestMarshalPackReverseIndex(t *testing.T) {
+-	t.Parallel()
+-
+-	tests := []struct {
+-		name           string
+-		read           bool
+-		write          bool
+-		wantReadFalse  bool
+-		wantWriteFalse bool
+-	}{
+-		{
+-			name:           "both true omits keys",
+-			read:           true,
+-			write:          true,
+-			wantReadFalse:  false,
+-			wantWriteFalse: false,
+-		},
+-		{
+-			name:           "both false writes keys",
+-			read:           false,
+-			write:          false,
+-			wantReadFalse:  true,
+-			wantWriteFalse: true,
+-		},
+-		{
+-			name:           "only readReverseIndex false",
+-			read:           false,
+-			write:          true,
+-			wantReadFalse:  true,
+-			wantWriteFalse: false,
+-		},
+-		{
+-			name:           "only writeReverseIndex false",
+-			read:           true,
+-			write:          false,
+-			wantReadFalse:  false,
+-			wantWriteFalse: true,
+-		},
+-	}
+-
+-	for _, tc := range tests {
+-		t.Run(tc.name, func(t *testing.T) {
+-			t.Parallel()
+-
+-			cfg := NewConfig()
+-			cfg.Pack.ReadReverseIndex = tc.read
+-			cfg.Pack.WriteReverseIndex = tc.write
+-
+-			b, err := cfg.Marshal()
+-			require.NoError(t, err)
+-			output := string(b)
+-
+-			assert.Equal(t, tc.wantReadFalse, strings.Contains(output, "readReverseIndex = false"), "readReverseIndex = false presence")
+-			assert.Equal(t, tc.wantWriteFalse, strings.Contains(output, "writeReverseIndex = false"), "writeReverseIndex = false presence")
+-		})
+-	}
+-}
+-
+-func TestUnmarshalMarshalPackReverseIndex(t *testing.T) {
+-	t.Parallel()
+-
+-	tests := []struct {
+-		name  string
+-		input string
+-	}{
+-		{
+-			name: "both false",
+-			input: "[core]\n\tbare = false\n\tfilemode = true\n" +
+-				"[pack]\n\treadReverseIndex = false\n\twriteReverseIndex = false\n",
+-		},
+-		{
+-			name: "with window and both false",
+-			input: "[core]\n\tbare = false\n\tfilemode = true\n" +
+-				"[pack]\n\twindow = 20\n\treadReverseIndex = false\n\twriteReverseIndex = false\n",
+-		},
+-	}
+-
+-	for _, tc := range tests {
+-		t.Run(tc.name, func(t *testing.T) {
+-			t.Parallel()
+-
+-			cfg := NewConfig()
+-			err := cfg.Unmarshal([]byte(tc.input))
+-			require.NoError(t, err)
+-
+-			output, err := cfg.Marshal()
+-			require.NoError(t, err)
+-
+-			assert.Equal(t, tc.input, string(output))
+-		})
+-	}
+-}
+-
+-func TestUnmarshalIndexSkipHash(t *testing.T) {
+-	t.Parallel()
+-
+-	tests := []struct {
+-		name  string
+-		input string
+-		want  OptBool
+-	}{
+-		{
+-			name:  "true",
+-			input: "[index]\n\tskipHash = true\n",
+-			want:  OptBoolTrue,
+-		},
+-		{
+-			name:  "false",
+-			input: "[index]\n\tskipHash = false\n",
+-			want:  OptBoolFalse,
+-		},
+-		{
+-			name:  "absent defaults to unset",
+-			input: "[core]\n\tbare = false\n",
+-			want:  OptBoolUnset,
+-		},
+-	}
+-
+-	for _, tc := range tests {
+-		t.Run(tc.name, func(t *testing.T) {
+-			t.Parallel()
+-
+-			cfg := NewConfig()
+-			err := cfg.Unmarshal([]byte(tc.input))
+-			require.NoError(t, err)
+-
+-			assert.Equal(t, tc.want, cfg.Index.SkipHash)
+-		})
+-	}
+-}
+-
+-func TestMarshalIndexSkipHash(t *testing.T) {
+-	t.Parallel()
+-
+-	cfg := NewConfig()
+-	cfg.Index.SkipHash = OptBoolTrue
+-
+-	b, err := cfg.Marshal()
+-	require.NoError(t, err)
+-	assert.Contains(t, string(b), "skipHash = true")
+-
+-	// Round-trip: unmarshal the marshaled output and verify.
+-	cfg2 := NewConfig()
+-	err = cfg2.Unmarshal(b)
+-	require.NoError(t, err)
+-	assert.Equal(t, OptBoolTrue, cfg2.Index.SkipHash)
+-}
+-
+-func TestMerge(t *testing.T) {
+-	t.Parallel()
+-	tests := []struct {
+-		name  string
+-		input []*Config
+-		want  Config
+-	}{
+-		{
+-			name:  "nil",
+-			input: nil,
+-			want:  Config{},
+-		},
+-		{
+-			name: "separate objs",
+-			input: []*Config{
+-				{User: user{
+-					Name: "foo", Email: "bar@test",
+-				}},
+-				{
+-					Extensions: struct {
+-						ObjectFormat   config.ObjectFormat
+-						WorktreeConfig bool
+-					}{
+-						ObjectFormat:   config.SHA256,
+-						WorktreeConfig: true,
+-					},
+-				},
+-			},
+-			want: Config{
+-				User: user{
+-					Name:  "foo",
+-					Email: "bar@test",
+-				},
+-				Extensions: struct {
+-					ObjectFormat   config.ObjectFormat
+-					WorktreeConfig bool
+-				}{
+-					ObjectFormat:   config.SHA256,
+-					WorktreeConfig: true,
+-				},
+-			},
+-		},
+-		{
+-			name: "merge nested fields",
+-			input: []*Config{
+-				{User: user{Name: "foo"}},
+-				{User: user{Email: "bar@test"}},
+-			},
+-			want: Config{
+-				User: user{
+-					Name:  "foo",
+-					Email: "bar@test",
+-				},
+-			},
+-		},
+-		{
+-			name: "override nested fields",
+-			input: []*Config{
+-				{User: user{Name: "foo"}},
+-				{User: user{Name: "bar", Email: "foo@test"}},
+-			},
+-			want: Config{
+-				User: user{
+-					Name:  "bar",
+-					Email: "foo@test",
+-				},
+-			},
+-		},
+-		{
+-			name: "src nil map preserves dst map",
+-			input: []*Config{
+-				{
+-					Remotes: map[string]*RemoteConfig{
+-						"origin": {Name: "origin", URLs: []string{"https://example.com/repo.git"}},
+-					},
+-				},
+-				{
+-					// Remotes is nil (zero value)
+-					Branches: map[string]*Branch{
+-						"main": {Name: "main"},
+-					},
+-				},
+-			},
+-			want: Config{
+-				Remotes: map[string]*RemoteConfig{
+-					"origin": {Name: "origin", URLs: []string{"https://example.com/repo.git"}},
+-				},
+-				Branches: map[string]*Branch{
+-					"main": {Name: "main"},
+-				},
+-			},
+-		},
+-		{
+-			name: "src empty map preserves dst map",
+-			input: []*Config{
+-				{
+-					Remotes: map[string]*RemoteConfig{
+-						"origin": {Name: "origin", URLs: []string{"https://example.com/repo.git"}},
+-					},
+-				},
+-				{
+-					// Remotes is explicitly initialised but empty (mirrors NewConfig behaviour).
+-					Remotes: map[string]*RemoteConfig{},
+-				},
+-			},
+-			want: Config{
+-				Remotes: map[string]*RemoteConfig{
+-					"origin": {Name: "origin", URLs: []string{"https://example.com/repo.git"}},
+-				},
+-			},
+-		},
+-		{
+-			name: "merge maps with disjoint keys",
+-			input: []*Config{
+-				{
+-					Remotes: map[string]*RemoteConfig{
+-						"origin": {Name: "origin", URLs: []string{"https://example.com/repo.git"}},
+-					},
+-				},
+-				{
+-					Remotes: map[string]*RemoteConfig{
+-						"upstream": {Name: "upstream", URLs: []string{"https://upstream.com/repo.git"}},
+-					},
+-				},
+-			},
+-			want: Config{
+-				Remotes: map[string]*RemoteConfig{
+-					"origin":   {Name: "origin", URLs: []string{"https://example.com/repo.git"}},
+-					"upstream": {Name: "upstream", URLs: []string{"https://upstream.com/repo.git"}},
+-				},
+-			},
+-		},
+-		{
+-			name: "src map entry overrides dst map entry",
+-			input: []*Config{
+-				{
+-					Remotes: map[string]*RemoteConfig{
+-						"origin": {Name: "origin", URLs: []string{"https://old.com/repo.git"}},
+-					},
+-				},
+-				{
+-					Remotes: map[string]*RemoteConfig{
+-						"origin": {Name: "origin", URLs: []string{"https://new.com/repo.git"}},
+-					},
+-				},
+-			},
+-			want: Config{
+-				Remotes: map[string]*RemoteConfig{
+-					"origin": {Name: "origin", URLs: []string{"https://new.com/repo.git"}},
+-				},
+-			},
+-		},
+-	}
+-
+-	for _, tc := range tests {
+-		t.Run(tc.name, func(t *testing.T) {
+-			t.Parallel()
+-
+-			got := Merge(tc.input...)
+-
+-			assert.Equal(t, tc.want, got)
+-		})
+-	}
+-
+-	t.Run("merge resets Raw section", func(t *testing.T) {
+-		t.Parallel()
+-
+-		const baseConfig = "[core]\n\tbare = false\n\tfilemode = true\n" +
+-			"repositoryformatversion = 1\n" +
+-			"[extensions]\n\tworktreeConfig = true\n" +
+-			"[user]\n\tname = base-user\n\temail = base@example.com\n"
+-		const wtConfig = "[user]\n\tname = wt-user\n"
+-
+-		base, err := ReadConfig(strings.NewReader(baseConfig))
+-		require.NoError(t, err)
+-		wt, err := ReadConfig(strings.NewReader(wtConfig))
+-		require.NoError(t, err)
+-
+-		merged := Merge(base, wt)
+-
+-		assert.Equal(t, "wt-user", merged.User.Name)
+-		assert.Equal(t, "base@example.com", merged.User.Email)
+-		assert.True(t, merged.Extensions.WorktreeConfig)
+-
+-		require.Nil(t, merged.Raw, "merged Raw must be nil")
+-
+-		_, err = merged.Marshal()
+-		require.NoError(t, err)
+-
+-		assert.True(t, merged.Raw.HasSection("extensions"),
+-			"[extensions] section was dropped from merged Raw")
+-		assert.Equal(t, "true",
+-			merged.Raw.Section("extensions").Options.Get("worktreeConfig"))
+-
+-		assert.Equal(t, "wt-user",
+-			merged.Raw.Section("user").Options.Get("name"))
+-	})
+-}
+-
+-func TestGPGConfig(t *testing.T) {
+-	t.Parallel()
+-
+-	t.Run("unmarshal gpg format", func(t *testing.T) {
+-		t.Parallel()
+-		input := []byte(`[gpg]
+-	format = ssh
+-`)
+-		cfg := NewConfig()
+-		err := cfg.Unmarshal(input)
+-		require.NoError(t, err)
+-
+-		assert.Equal(t, "ssh", cfg.GPG.Format)
+-	})
+-
+-	t.Run("unmarshal gpg.ssh.allowedSignersFile", func(t *testing.T) {
+-		t.Parallel()
+-		input := []byte(`[gpg "ssh"]
+-	allowedSignersFile = ~/.ssh/allowed_signers
+-`)
+-		cfg := NewConfig()
+-		err := cfg.Unmarshal(input)
+-		require.NoError(t, err)
+-
+-		assert.Equal(t, "~/.ssh/allowed_signers", cfg.GPG.SSH.AllowedSignersFile)
+-	})
+-
+-	t.Run("unmarshal gpg format and ssh subsection", func(t *testing.T) {
+-		t.Parallel()
+-		input := []byte(`[gpg]
+-	format = ssh
+-[gpg "ssh"]
+-	allowedSignersFile = /home/user/.ssh/allowed_signers
+-`)
+-		cfg := NewConfig()
+-		err := cfg.Unmarshal(input)
+-		require.NoError(t, err)
+-
+-		assert.Equal(t, "ssh", cfg.GPG.Format)
+-		assert.Equal(t, "/home/user/.ssh/allowed_signers", cfg.GPG.SSH.AllowedSignersFile)
+-	})
+-
+-	t.Run("marshal gpg format", func(t *testing.T) {
+-		t.Parallel()
+-		cfg := NewConfig()
+-		cfg.GPG.Format = "ssh"
+-
+-		data, err := cfg.Marshal()
+-		require.NoError(t, err)
+-
+-		assert.Contains(t, string(data), "[gpg]")
+-		assert.Contains(t, string(data), "format = ssh")
+-	})
+-
+-	t.Run("marshal gpg.ssh.allowedSignersFile", func(t *testing.T) {
+-		t.Parallel()
+-		cfg := NewConfig()
+-		cfg.GPG.SSH.AllowedSignersFile = "~/.ssh/allowed_signers"
+-
+-		data, err := cfg.Marshal()
+-		require.NoError(t, err)
+-
+-		assert.Contains(t, string(data), `[gpg "ssh"]`)
+-		assert.Contains(t, string(data), "allowedSignersFile = ~/.ssh/allowed_signers")
+-	})
+-
+-	t.Run("marshal gpg format and ssh subsection", func(t *testing.T) {
+-		t.Parallel()
+-		cfg := NewConfig()
+-		cfg.GPG.Format = "openpgp"
+-		cfg.GPG.SSH.AllowedSignersFile = "/etc/ssh/allowed_signers"
+-
+-		data, err := cfg.Marshal()
+-		require.NoError(t, err)
+-
+-		assert.Contains(t, string(data), "[gpg]")
+-		assert.Contains(t, string(data), "format = openpgp")
+-		assert.Contains(t, string(data), `[gpg "ssh"]`)
+-		assert.Contains(t, string(data), "allowedSignersFile = /etc/ssh/allowed_signers")
+-	})
+-
+-	t.Run("round-trip marshal/unmarshal", func(t *testing.T) {
+-		t.Parallel()
+-		original := NewConfig()
+-		original.GPG.Format = "ssh"
+-		original.GPG.SSH.AllowedSignersFile = "~/.ssh/allowed_signers"
+-
+-		data, err := original.Marshal()
+-		require.NoError(t, err)
+-
+-		parsed := NewConfig()
+-		err = parsed.Unmarshal(data)
+-		require.NoError(t, err)
+-
+-		assert.Equal(t, "ssh", parsed.GPG.Format)
+-		assert.Equal(t, "~/.ssh/allowed_signers", parsed.GPG.SSH.AllowedSignersFile)
+-	})
+-
+-	t.Run("empty gpg config not marshaled", func(t *testing.T) {
+-		t.Parallel()
+-		cfg := NewConfig()
+-		cfg.User.Name = "Test User"
+-
+-		data, err := cfg.Marshal()
+-		require.NoError(t, err)
+-
+-		// Empty GPG config should not be included
+-		configStr := string(data)
+-		if strings.Contains(configStr, "[gpg]") {
+-			// Check that it's not an empty section
+-			lines := strings.Split(configStr, "\n")
+-			for i, line := range lines {
+-				if strings.TrimSpace(line) == "[gpg]" {
+-					// Check if next non-empty line is another section or EOF
+-					for j := i + 1; j < len(lines); j++ {
+-						nextLine := strings.TrimSpace(lines[j])
+-						if nextLine == "" {
+-							continue
+-						}
+-						// If next line is a section header or there's no format key, fail
+-						if strings.HasPrefix(nextLine, "[") || !strings.Contains(nextLine, "format") {
+-							t.Error("Empty [gpg] section should not be marshaled")
+-						}
+-						break
+-					}
+-				}
+-			}
+-		}
+-	})
+-
+-	t.Run("unmarshal with openpgp format", func(t *testing.T) {
+-		t.Parallel()
+-		input := []byte(`[gpg]
+-	format = openpgp
+-`)
+-		cfg := NewConfig()
+-		err := cfg.Unmarshal(input)
+-		require.NoError(t, err)
+-
+-		assert.Equal(t, "openpgp", cfg.GPG.Format)
+-	})
+-
+-	t.Run("unmarshal user.signingKey", func(t *testing.T) {
+-		t.Parallel()
+-		input := []byte("[user]\n\tsigningKey = ~/.ssh/rsa_id")
+-		cfg := NewConfig()
+-		err := cfg.Unmarshal(input)
+-		require.NoError(t, err)
+-
+-		assert.Equal(t, "~/.ssh/rsa_id", cfg.User.SigningKey)
+-	})
+-
+-	t.Run("marshal user.signingKey", func(t *testing.T) {
+-		t.Parallel()
+-		cfg := NewConfig()
+-		cfg.User.SigningKey = "/path/to/key"
+-
+-		data, err := cfg.Marshal()
+-		require.NoError(t, err)
+-
+-		assert.Contains(t, string(data), "[user]\n\tsigningKey = /path/to/key")
+-	})
+-
+-	t.Run("unmarshal gpgSign true", func(t *testing.T) {
+-		t.Parallel()
+-		input := []byte("[commit]\n\tgpgSign = true\n[tag]\n\tgpgSign = true")
+-		cfg := NewConfig()
+-		err := cfg.Unmarshal(input)
+-		require.NoError(t, err)
+-
+-		assert.Equal(t, OptBoolTrue, cfg.Tag.GpgSign)
+-		assert.Equal(t, OptBoolTrue, cfg.Commit.GpgSign)
+-	})
+-
+-	t.Run("unmarshal gpgSign false", func(t *testing.T) {
+-		t.Parallel()
+-		input := []byte("[commit]\n\tgpgSign = false\n[tag]\n\tgpgSign = false")
+-		cfg := NewConfig()
+-		err := cfg.Unmarshal(input)
+-		require.NoError(t, err)
+-
+-		assert.Equal(t, OptBoolFalse, cfg.Tag.GpgSign)
+-		assert.Equal(t, OptBoolFalse, cfg.Commit.GpgSign)
+-	})
+-
+-	t.Run("unmarshal gpgSign unset", func(t *testing.T) {
+-		t.Parallel()
+-		input := []byte("[core]\n\tbare = false")
+-		cfg := NewConfig()
+-		err := cfg.Unmarshal(input)
+-		require.NoError(t, err)
+-
+-		assert.Equal(t, OptBoolUnset, cfg.Tag.GpgSign)
+-		assert.Equal(t, OptBoolUnset, cfg.Commit.GpgSign)
+-	})
+-
+-	t.Run("marshal gpgSign", func(t *testing.T) {
+-		t.Parallel()
+-		cfg := NewConfig()
+-		cfg.Tag.GpgSign = OptBoolTrue
+-		cfg.Commit.GpgSign = OptBoolTrue
+-
+-		data, err := cfg.Marshal()
+-		require.NoError(t, err)
+-
+-		assert.Contains(t, string(data), "[commit]\n\tgpgSign = true")
+-		assert.Contains(t, string(data), "[tag]\n\tgpgSign = true")
+-	})
+-
+-	t.Run("marshal gpgSign false", func(t *testing.T) {
+-		t.Parallel()
+-		cfg := NewConfig()
+-		cfg.Tag.GpgSign = OptBoolFalse
+-		cfg.Commit.GpgSign = OptBoolFalse
+-
+-		data, err := cfg.Marshal()
+-		require.NoError(t, err)
+-
+-		assert.Contains(t, string(data), "[commit]\n\tgpgSign = false")
+-		assert.Contains(t, string(data), "[tag]\n\tgpgSign = false")
+-	})
+-
+-	t.Run("merge gpgSign false overrides true", func(t *testing.T) {
+-		t.Parallel()
+-		global := NewConfig()
+-		global.Tag.GpgSign = OptBoolTrue
+-		global.Commit.GpgSign = OptBoolTrue
+-
+-		local := NewConfig()
+-		local.Tag.GpgSign = OptBoolFalse
+-		local.Commit.GpgSign = OptBoolFalse
+-
+-		merged := Merge(global, local)
+-
+-		assert.Equal(t, OptBoolFalse, merged.Tag.GpgSign)
+-		assert.Equal(t, OptBoolFalse, merged.Commit.GpgSign)
+-	})
+-
+-	t.Run("merge keeps gpgSign false if next config unset", func(t *testing.T) {
+-		t.Parallel()
+-		global := NewConfig()
+-		global.Commit.GpgSign = OptBoolFalse
+-
+-		local := NewConfig()
+-		local.Tag.GpgSign = OptBoolFalse
+-
+-		merged := Merge(global, local)
+-
+-		assert.True(t, merged.Tag.GpgSign.IsSet())
+-		assert.True(t, merged.Commit.GpgSign.IsSet())
+-		assert.Equal(t, OptBoolFalse, merged.Tag.GpgSign)
+-		assert.Equal(t, OptBoolFalse, merged.Commit.GpgSign)
+-	})
+-}
+diff --git a/config/modules.go b/config/modules.go
+index 831b1c7..c4c8d89 100644
+--- a/config/modules.go
++++ b/config/modules.go
+@@ -1,13 +1,13 @@
+ package config
+ 
+ import (
+-	"bytes"
++	_ "bytes"
+ 	"errors"
+-	"fmt"
++	_ "fmt"
+ 	"regexp"
+-	"strings"
++	_ "strings"
+ 
+-	"example.internal/gitkit/v6/internal/pathutil"
++	_ "example.internal/gitkit/v6/internal/pathutil"
+ 	format "example.internal/gitkit/v6/plumbing/format/config"
+ )
+ 
+@@ -50,35 +50,12 @@ const (
+ 
+ // Unmarshal parses a git-config file and stores it.
+ func (m *Modules) Unmarshal(b []byte) error {
+-	r := bytes.NewBuffer(b)
+-	d := format.NewDecoder(r)
+-
+-	m.raw = format.New()
+-	if err := d.Decode(m.raw); err != nil {
+-		return err
+-	}
+-
+-	unmarshalSubmodules(m.raw, m.Submodules)
+-	return nil
++	panic("excised: Modules.Unmarshal")
+ }
+ 
+ // Marshal returns Modules encoded as a git-config file.
+ func (m *Modules) Marshal() ([]byte, error) {
+-	s := m.raw.Section(submoduleSection)
+-	s.Subsections = make(format.Subsections, len(m.Submodules))
+-
+-	var i int
+-	for _, r := range m.Submodules {
+-		s.Subsections[i] = r.marshal()
+-		i++
+-	}
+-
+-	buf := bytes.NewBuffer(nil)
+-	if err := format.NewEncoder(buf).Encode(m.raw); err != nil {
+-		return nil, err
+-	}
+-
+-	return buf.Bytes(), nil
++	panic("excised: Modules.Marshal")
+ }
+ 
+ // Submodule defines a submodule.
+@@ -101,23 +78,7 @@ type Submodule struct {
+ 
+ // Validate validates the fields and sets the default values.
+ func (m *Submodule) Validate() error {
+-	if err := validSubmoduleName(m.Name); err != nil {
+-		return fmt.Errorf("%w: %q", ErrModuleBadName, m.Name)
+-	}
+-
+-	if m.Path == "" {
+-		return ErrModuleEmptyPath
+-	}
+-
+-	if m.URL == "" {
+-		return ErrModuleEmptyURL
+-	}
+-
+-	if dotdotPath.MatchString(m.Path) {
+-		return ErrModuleBadPath
+-	}
+-
+-	return nil
++	panic("excised: Submodule.Validate")
+ }
+ 
+ // validSubmoduleName mirrors canonical Git's check_submodule_name in
+@@ -141,54 +102,17 @@ func (m *Submodule) Validate() error {
+ //
+ // [1]: https://github.com/git/git/blob/v2.54.0/submodule-config.c#L214-L237
+ func validSubmoduleName(name string) error {
+-	if name == "" || name == "." {
+-		return ErrModuleBadName
+-	}
+-	for _, seg := range strings.FieldsFunc(name, isPathSep) {
+-		if pathutil.IsHFSDot(seg, ".") || pathutil.IsNTFSDot(seg, ".", "") {
+-			return ErrModuleBadName
+-		}
+-	}
+-	// gitkit-specific defensive checks beyond canonical Git.
+-	if strings.ContainsRune(name, 0) {
+-		return ErrModuleBadName
+-	}
+-	if isPathSep(rune(name[0])) || isPathSep(rune(name[len(name)-1])) {
+-		return ErrModuleBadName
+-	}
+-	if len(name) >= 2 && name[1] == ':' {
+-		return ErrModuleBadName
+-	}
+-	return nil
++	panic("excised: validSubmoduleName")
+ }
+ 
+-func isPathSep(r rune) bool { return r == '/' || r == '\\' }
++func isPathSep(r rune) bool {
++	panic("excised: isPathSep")
++}
+ 
+ func (m *Submodule) unmarshal(s *format.Subsection) {
+-	m.raw = s
+-
+-	m.Name = m.raw.Name
+-	m.Path = m.raw.Option(pathKey)
+-	m.URL = m.raw.Option(urlKey)
+-	m.Branch = m.raw.Option(branchKey)
++	panic("excised: Submodule.unmarshal")
+ }
+ 
+ func (m *Submodule) marshal() *format.Subsection {
+-	if m.raw == nil {
+-		m.raw = &format.Subsection{}
+-	}
+-
+-	m.raw.Name = m.Name
+-	if m.raw.Name == "" {
+-		m.raw.Name = m.Path
+-	}
+-
+-	m.raw.SetOption(pathKey, m.Path)
+-	m.raw.SetOption(urlKey, m.URL)
+-
+-	if m.Branch != "" {
+-		m.raw.SetOption(branchKey, m.Branch)
+-	}
+-
+-	return m.raw
++	panic("excised: Submodule.marshal")
+ }
+diff --git a/config/modules_test.go b/config/modules_test.go
+deleted file mode 100644
+index 6864656..0000000
+--- a/config/modules_test.go
++++ /dev/null
+@@ -1,172 +0,0 @@
+-package config
+-
+-import (
+-	"testing"
+-
+-	"github.com/stretchr/testify/suite"
+-)
+-
+-type ModulesSuite struct {
+-	suite.Suite
+-}
+-
+-func TestModulesSuite(t *testing.T) {
+-	t.Parallel()
+-	suite.Run(t, new(ModulesSuite))
+-}
+-
+-func (s *ModulesSuite) TestValidateMissingURL() {
+-	m := &Submodule{Name: "foo", Path: "foo"}
+-	s.Equal(ErrModuleEmptyURL, m.Validate())
+-}
+-
+-func (s *ModulesSuite) TestValidateBadPath() {
+-	input := []string{
+-		`..`,
+-		`../`,
+-		`../bar`,
+-
+-		`/..`,
+-		`/../bar`,
+-
+-		`foo/..`,
+-		`foo/../`,
+-		`foo/../bar`,
+-	}
+-
+-	for _, p := range input {
+-		m := &Submodule{
+-			Name: "ok",
+-			Path: p,
+-			URL:  "https://example.com/",
+-		}
+-		s.Equal(ErrModuleBadPath, m.Validate())
+-	}
+-}
+-
+-func (s *ModulesSuite) TestValidateMissingName() {
+-	m := &Submodule{Name: "ok", URL: "bar"}
+-	s.Equal(ErrModuleEmptyPath, m.Validate())
+-}
+-
+-func (s *ModulesSuite) TestValidateBadName() {
+-	input := []string{
+-		// Plain shapes the parser must reject regardless of OS.
+-		"",
+-		".",
+-		"..",
+-		"../x",
+-		"a/../../b",
+-		"/abs",
+-		`C:\win`,
+-		"x\x00y",
+-		"x/",
+-		"/x",
+-		`.\..\foo`,
+-		"modules/../escape",
+-
+-		// HFS+ ignores certain Unicode code points during path
+-		// normalisation, so these all resolve to ".." on macOS.
+-		".\u200c.",             // ZWNJ between dots
+-		"\u200c..",             // leading ZWNJ
+-		"..\u200c",             // trailing ZWNJ
+-		"\u200c.\u200d.\u200e", // ZWNJ + ZWJ + LRM
+-		"a/.\u200c./b",         // hidden ".." mid-path
+-
+-		// NTFS strips trailing spaces, dots, and an alternate-data
+-		// -stream suffix during canonicalisation, so these all
+-		// resolve to ".." on Windows.
+-		".. ",
+-		"..  ",
+-		"....",
+-		".. .",
+-		"..::$INDEX_ALLOCATION",
+-		"..:foo",
+-		"a/.. /b",
+-	}
+-	for _, n := range input {
+-		m := &Submodule{
+-			Name: n,
+-			Path: "ok",
+-			URL:  "https://example.com/",
+-		}
+-		// Validate wraps the sentinel with the offending name
+-		// (canonical-Git wording: "ignoring suspicious submodule
+-		// name: <name>"), so use ErrorIs.
+-		s.ErrorIs(m.Validate(), ErrModuleBadName, "name %q", n)
+-	}
+-}
+-
+-func (s *ModulesSuite) TestValidateGoodName() {
+-	for _, n := range []string{"foo", "lib-foo", "deps/x", "x.y"} {
+-		m := &Submodule{
+-			Name: n,
+-			Path: "ok",
+-			URL:  "https://example.com/",
+-		}
+-		s.NoError(m.Validate(), "name %q", n)
+-	}
+-}
+-
+-func (s *ModulesSuite) TestMarshal() {
+-	input := []byte(`[submodule "qux"]
+-	path = qux
+-	url = baz
+-	branch = bar
+-`)
+-
+-	cfg := NewModules()
+-	cfg.Submodules["qux"] = &Submodule{Path: "qux", URL: "baz", Branch: "bar"}
+-
+-	output, err := cfg.Marshal()
+-	s.NoError(err)
+-	s.Equal(input, output)
+-}
+-
+-func (s *ModulesSuite) TestUnmarshal() {
+-	input := []byte(`[submodule "qux"]
+-        path = qux
+-        url = https://github.com/foo/qux.git
+-[submodule "foo/bar"]
+-        path = foo/bar
+-        url = https://github.com/foo/bar.git
+-		branch = dev
+-[submodule "suspicious"]
+-        path = ../../foo/bar
+-        url = https://github.com/foo/bar.git
+-[submodule ".."]
+-        path = deps/x
+-        url = https://github.com/foo/bar.git
+-`)
+-
+-	cfg := NewModules()
+-	err := cfg.Unmarshal(input)
+-	s.NoError(err)
+-
+-	// The "suspicious" entry is dropped because of its `..` path,
+-	// and the `..` entry is dropped because of its suspicious name
+-	// (canonical Git's "ignoring suspicious submodule name" rule).
+-	s.Len(cfg.Submodules, 2)
+-	s.Equal("qux", cfg.Submodules["qux"].Name)
+-	s.Equal("https://github.com/foo/qux.git", cfg.Submodules["qux"].URL)
+-	s.Equal("foo/bar", cfg.Submodules["foo/bar"].Name)
+-	s.Equal("https://github.com/foo/bar.git", cfg.Submodules["foo/bar"].URL)
+-	s.Equal("dev", cfg.Submodules["foo/bar"].Branch)
+-	s.NotContains(cfg.Submodules, "..")
+-}
+-
+-func (s *ModulesSuite) TestUnmarshalMarshal() {
+-	input := []byte(`[submodule "foo/bar"]
+-	path = foo/bar
+-	url = https://github.com/foo/bar.git
+-	ignore = all
+-`)
+-
+-	cfg := NewModules()
+-	err := cfg.Unmarshal(input)
+-	s.NoError(err)
+-
+-	output, err := cfg.Marshal()
+-	s.NoError(err)
+-	s.Equal(string(input), string(output))
+-}
+diff --git a/config/optbool.go b/config/optbool.go
+index cb89fbf..8a9faa6 100644
+--- a/config/optbool.go
++++ b/config/optbool.go
+@@ -1,8 +1,8 @@
+ package config
+ 
+ import (
+-	"strconv"
+-	"strings"
++	_ "strconv"
++	_ "strings"
+ )
+ 
+ // OptBool is a tri-state boolean: unset, explicitly false, or explicitly true.
+@@ -22,10 +22,7 @@ const (
+ 
+ // NewOptBool converts a plain bool into an OptBool.
+ func NewOptBool(v bool) OptBool {
+-	if v {
+-		return OptBoolTrue
+-	}
+-	return OptBoolFalse
++	panic("excised: NewOptBool")
+ }
+ 
+ // IsTrue returns whether the value is explicitly true.
+@@ -35,19 +32,12 @@ func (o OptBool) IsTrue() bool { return o == OptBoolTrue }
+ func (o OptBool) IsSet() bool { return o != OptBoolUnset }
+ 
+ func (o OptBool) String() string {
+-	switch o {
+-	case OptBoolTrue:
+-		return "true"
+-	case OptBoolFalse:
+-		return "false"
+-	default:
+-		return "unset"
+-	}
++	panic("excised: OptBool.String")
+ }
+ 
+ // FormatBool returns the strconv-formatted value. Only meaningful when IsSet.
+ func (o OptBool) FormatBool() string {
+-	return strconv.FormatBool(o.IsTrue())
++	panic("excised: OptBool.FormatBool")
+ }
+ 
+ // parseConfigBool mirrors upstream Git's git_parse_maybe_bool: it
+@@ -66,17 +56,5 @@ func (o OptBool) FormatBool() string {
+ //
+ // [1]: https://github.com/git/git/blob/v2.54.0/parse.c#L157-L182
+ func parseConfigBool(v string) OptBool {
+-	switch strings.ToLower(v) {
+-	case "true", "yes", "on":
+-		return OptBoolTrue
+-	case "false", "no", "off":
+-		return OptBoolFalse
+-	}
+-	if i, err := strconv.Atoi(v); err == nil {
+-		if i != 0 {
+-			return OptBoolTrue
+-		}
+-		return OptBoolFalse
+-	}
+-	return OptBoolUnset
++	panic("excised: parseConfigBool")
+ }
+diff --git a/config/optbool_test.go b/config/optbool_test.go
+deleted file mode 100644
+index 0bd781c..0000000
+--- a/config/optbool_test.go
++++ /dev/null
+@@ -1,112 +0,0 @@
+-package config
+-
+-import (
+-	"testing"
+-
+-	"github.com/stretchr/testify/assert"
+-)
+-
+-func TestParseConfigBool(t *testing.T) {
+-	t.Parallel()
+-
+-	tests := []struct {
+-		in   string
+-		want OptBool
+-	}{
+-		// Truthy values, case-insensitive.
+-		{"true", OptBoolTrue},
+-		{"True", OptBoolTrue},
+-		{"TRUE", OptBoolTrue},
+-		{"yes", OptBoolTrue},
+-		{"Yes", OptBoolTrue},
+-		{"YES", OptBoolTrue},
+-		{"on", OptBoolTrue},
+-		{"On", OptBoolTrue},
+-		{"ON", OptBoolTrue},
+-		{"1", OptBoolTrue},
+-
+-		// Falsy values, case-insensitive.
+-		{"false", OptBoolFalse},
+-		{"False", OptBoolFalse},
+-		{"FALSE", OptBoolFalse},
+-		{"no", OptBoolFalse},
+-		{"No", OptBoolFalse},
+-		{"NO", OptBoolFalse},
+-		{"off", OptBoolFalse},
+-		{"Off", OptBoolFalse},
+-		{"OFF", OptBoolFalse},
+-		{"0", OptBoolFalse},
+-
+-		// Arbitrary integers, mirroring upstream's !!v on git_parse_int.
+-		{"2", OptBoolTrue},
+-		{"-1", OptBoolTrue},
+-		{"010", OptBoolTrue}, // strconv.Atoi parses decimal, not octal.
+-		{"99999", OptBoolTrue},
+-		{"-0", OptBoolFalse},
+-		{"0000", OptBoolFalse},
+-		{"+1", OptBoolTrue},
+-
+-		// Anything else stays unset, including empty / unrecognised.
+-		{"", OptBoolUnset},
+-		{"maybe", OptBoolUnset},
+-		{"t", OptBoolUnset}, // strconv.ParseBool would accept this; Git does not.
+-		{"T", OptBoolUnset},
+-		{"f", OptBoolUnset},
+-		{"F", OptBoolUnset},
+-		{"0x1", OptBoolUnset},      // not decimal
+-		{"1.5", OptBoolUnset},      // not an integer
+-		{"  true  ", OptBoolUnset}, // trimming is the caller's job.
+-	}
+-
+-	for _, tc := range tests {
+-		t.Run(tc.in, func(t *testing.T) {
+-			t.Parallel()
+-			got := parseConfigBool(tc.in)
+-			assert.Equal(t, tc.want, got, "parseConfigBool(%q)", tc.in)
+-		})
+-	}
+-}
+-
+-func TestUnmarshalProtectNTFSAcceptsGitStyleBooleans(t *testing.T) {
+-	t.Parallel()
+-
+-	tests := []struct {
+-		value string
+-		want  OptBool
+-	}{
+-		{"true", OptBoolTrue},
+-		{"yes", OptBoolTrue},
+-		{"on", OptBoolTrue},
+-		{"1", OptBoolTrue},
+-		{"false", OptBoolFalse},
+-		{"no", OptBoolFalse},
+-		{"off", OptBoolFalse},
+-		{"0", OptBoolFalse},
+-	}
+-
+-	for _, tc := range tests {
+-		t.Run(tc.value, func(t *testing.T) {
+-			t.Parallel()
+-
+-			body := []byte("[core]\n\tprotectNTFS = " + tc.value + "\n\tprotectHFS = " + tc.value + "\n")
+-			cfg := NewConfig()
+-			err := cfg.Unmarshal(body)
+-			assert.NoError(t, err)
+-			assert.Equal(t, tc.want, cfg.Core.ProtectNTFS, "protectNTFS")
+-			assert.Equal(t, tc.want, cfg.Core.ProtectHFS, "protectHFS")
+-		})
+-	}
+-}
+-
+-func TestUnmarshalProtectNTFSUnsetForUnrecognised(t *testing.T) {
+-	t.Parallel()
+-
+-	body := []byte("[core]\n\tprotectNTFS = maybe\n\tprotectHFS = maybe\n")
+-	cfg := NewConfig()
+-	err := cfg.Unmarshal(body)
+-	assert.NoError(t, err)
+-	assert.Equal(t, OptBoolUnset, cfg.Core.ProtectNTFS,
+-		"unrecognised value should leave protectNTFS unset")
+-	assert.Equal(t, OptBoolUnset, cfg.Core.ProtectHFS,
+-		"unrecognised value should leave protectHFS unset")
+-}

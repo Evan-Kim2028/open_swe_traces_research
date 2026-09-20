@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import sys, os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 """Refuse a trial whose verdict is already decided.
 
 Measured 2026-09-20 over 1632 trials: 883 of them (54%) re-measured a unit whose
@@ -19,26 +20,11 @@ NONFLIP_CAP   = 3         # L2 failures before a unit is declared non-flipping
 
 
 def ledger():
-    per = collections.defaultdict(lambda: collections.defaultdict(list))
-    pats = (JOBS + "/*/**/reward.txt", JOBS + "/*/**/result.json")
-    for pat in pats:
-        for r in glob.glob(pat, recursive=True):
-            unit = None
-            for p in r.split(os.sep):
-                if "-L" in p and p.rsplit("-L", 1)[-1][:1].isdigit():
-                    unit = p
-            if not unit:
-                continue
-            try:
-                if r.endswith("reward.txt"):
-                    v = float(open(r).read().strip() or 0)
-                else:
-                    v = float(json.load(open(r)).get("reward", 0) or 0)
-            except Exception:
-                continue
-            base, rung = unit.rsplit("-L", 1)
-            per[base][rung[:1]].append(v)
-    return per
+    """Delegated: trial_ledger is the single correct reader. The old inline version scored
+    every result.json as 0 (the reward is nested at verifier_result.rewards.reward) and
+    counted each trial twice, once real and once as a false zero."""
+    import trial_ledger
+    return trial_ledger.ledger()
 
 
 def contract_fingerprint(base):

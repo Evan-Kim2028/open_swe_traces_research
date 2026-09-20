@@ -1,0 +1,143 @@
+diff --git a/plumbing/protocol/packp/srvresp.go b/plumbing/protocol/packp/srvresp.go
+index 769e1cd..2d1c521 100644
+--- a/plumbing/protocol/packp/srvresp.go
++++ b/plumbing/protocol/packp/srvresp.go
+@@ -1,14 +1,14 @@
+ package packp
+ 
+ import (
+-	_ "bytes"
+-	_ "errors"
+-	_ "fmt"
++	"bytes"
++	"errors"
++	"fmt"
+ 	"io"
+-	_ "strings"
++	"strings"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+-	_ "example.internal/gitkit/v6/plumbing/format/pktline"
++	"example.internal/gitkit/v6/plumbing/format/pktline"
+ )
+ 
+ const ackLineLen = 44
+@@ -23,7 +23,16 @@ type ACKStatus byte
+ 
+ // String returns the string representation of the ACKStatus.
+ func (s ACKStatus) String() string {
+-	panic("excised: ACKStatus.String")
++	switch s {
++	case ACKContinue:
++		return "continue"
++	case ACKCommon:
++		return "common"
++	case ACKReady:
++		return "ready"
++	}
++
++	return ""
+ }
+ 
+ // ACKStatus values
+@@ -42,23 +51,95 @@ type ACK struct {
+ 
+ // Decode decodes the response into the struct.
+ func (r *ServerResponse) Decode(reader io.Reader) error {
+-	panic("excised: ServerResponse.Decode")
++	s := pktline.NewScanner(reader)
++	for s.Scan() {
++		if err := r.decodeLine(s.Bytes()); err != nil {
++			if errors.Is(err, io.EOF) {
++				return nil
++			}
++			return err
++		}
++	}
++
++	return s.Err()
+ }
+ 
+ func (r *ServerResponse) decodeLine(line []byte) error {
+-	panic("excised: ServerResponse.decodeLine")
++	if len(line) == 0 {
++		return fmt.Errorf("unexpected flush")
++	}
++
++	if len(line) >= 3 {
++		if bytes.Equal(line[0:3], ack) {
++			return r.decodeACKLine(line)
++		}
++
++		if bytes.Equal(line[0:3], nak) {
++			return io.EOF
++		}
++	}
++
++	return fmt.Errorf("unexpected content %q", string(line))
+ }
+ 
+ func (r *ServerResponse) decodeACKLine(line []byte) (err error) {
+-	panic("excised: ServerResponse.decodeACKLine")
++	parts := bytes.Split(line, []byte(" "))
++	if len(line) < ackLineLen || len(parts) < 2 {
++		return fmt.Errorf("malformed ACK %q", line)
++	}
++
++	var ack ACK
++	// TODO: Dynamic hash size and sha256 support
++	ack.Hash = plumbing.NewHash(string(bytes.TrimSuffix(parts[1], []byte("\n"))))
++	err = io.EOF
++
++	if len(parts) > 2 {
++		err = nil
++		switch status := strings.TrimSpace(string(parts[2])); status {
++		case "continue":
++			ack.Status = ACKContinue
++		case "common":
++			ack.Status = ACKCommon
++		case "ready":
++			ack.Status = ACKReady
++		}
++	}
++
++	r.ACKs = append(r.ACKs, ack)
++	return err
+ }
+ 
+ // Encode encodes the ServerResponse into a writer.
+ func (r *ServerResponse) Encode(w io.Writer) error {
+-	panic("excised: ServerResponse.Encode")
++	return encodeServerResponse(w, r.ACKs)
+ }
+ 
+ // encodeServerResponse encodes the ServerResponse into a writer.
+ func encodeServerResponse(w io.Writer, acks []ACK) error {
+-	panic("excised: encodeServerResponse")
++	if len(acks) == 0 {
++		_, err := pktline.WriteString(w, string(nak)+"\n")
++		return err
++	}
++
++	var multiAck bool
++	for _, a := range acks {
++		var err error
++		if a.Status > 0 {
++			_, err = pktline.Writef(w, "%s %s %s\n", ack, a.Hash, a.Status)
++			if !multiAck {
++				multiAck = true
++			}
++		} else {
++			_, err = pktline.Writef(w, "%s %s\n", ack, acks[0].Hash)
++		}
++		if err != nil {
++			return err
++		}
++
++		if !multiAck {
++			break
++		}
++	}
++
++	return nil
+ }

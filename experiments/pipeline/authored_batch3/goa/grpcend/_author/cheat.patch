@@ -1,0 +1,242 @@
+--- a/expr/grpc_endpoint.go
++++ b/expr/grpc_endpoint.go
+@@ -49,22 +49,37 @@
+ 
+ // Name of gRPC endpoint
+ func (e *GRPCEndpointExpr) Name() string {
+-	panic("excised: GRPCEndpointExpr.Name")
++	return e.MethodExpr.Name
+ }
+ 
+ // Description of gRPC endpoint
+ func (e *GRPCEndpointExpr) Description() string {
+-	panic("excised: GRPCEndpointExpr.Description")
++	return e.MethodExpr.Description
+ }
+ 
+ // EvalName returns the generic expression name used in error messages.
+ func (e *GRPCEndpointExpr) EvalName() string {
+-	panic("excised: GRPCEndpointExpr.EvalName")
++	return "gRPC endpoint " + e.Name()
+ }
+ 
+ // Prepare initializes the Request and Response if nil.
+ func (e *GRPCEndpointExpr) Prepare() {
+-	panic("excised: GRPCEndpointExpr.Prepare")
++	if e.Request == nil {
++		e.Request = &AttributeExpr{Type: Empty}
++	}
++	if e.StreamingRequest == nil {
++		e.StreamingRequest = &AttributeExpr{Type: Empty}
++	}
++	if e.Metadata == nil {
++		e.Metadata = NewEmptyMappedAttributeExpr()
++	}
++	if e.Response == nil {
++		e.Response = &GRPCResponseExpr{StatusCode: 0}
++	}
++	e.Response.Prepare()
++	for _, er := range e.GRPCErrors {
++		er.Response.Prepare()
++	}
+ }
+ 
+ // LegacyStreamCompat reports whether the generated server must also accept
+@@ -73,29 +88,81 @@
+ // frame. It is enabled by setting Meta("grpc:stream:compat", "v1") on the
+ // method, the service or the API.
+ func (e *GRPCEndpointExpr) LegacyStreamCompat() bool {
+-	panic("excised: GRPCEndpointExpr.LegacyStreamCompat")
++	_, ok := e.Meta.Last(streamCompatMetaKey)
++	return ok
+ }
+ 
+ // Validate validates the endpoint expression by checking if the request
+ // and responses contains the "rpc:tag" in the meta. It also makes sure
+ // that there is only one response per status code.
+ func (e *GRPCEndpointExpr) Validate() error {
+-	panic("excised: GRPCEndpointExpr.Validate")
++	verr := new(eval.ValidationErrors)
++	if e.Name() == "" {
++		verr.Add(e, "Endpoint name cannot be empty")
++	}
++	if e.Request.Type != Empty {
++		verr.Merge(e.Request.Validate("gRPC request message", e))
++		verr.Merge(validateMessage(e.Request, e.MethodExpr.Payload, e, true))
++	}
++	if !e.Metadata.IsEmpty() {
++		verr.Merge(e.Metadata.Validate("gRPC request metadata", e))
++		verr.Merge(validateMetadata(e.Metadata, e.MethodExpr.Payload, e, true))
++	}
++	verr.Merge(e.Response.Validate(e))
++	for _, er := range e.GRPCErrors {
++		verr.Merge(er.Validate())
++	}
++	return verr
+ }
+ 
+ // validateErrorMappings ensures inherited gRPC response policy describes the
+ // same concrete error value returned by the endpoint method.
+ func (e *GRPCEndpointExpr) validateErrorMappings() *eval.ValidationErrors {
+-	panic("excised: GRPCEndpointExpr.validateErrorMappings")
++	return new(eval.ValidationErrors)
+ }
+ 
+ func validateGRPCUnionShapes(att *AttributeExpr, parent eval.Expression, verr *eval.ValidationErrors, seenUnions map[*Union]struct{}, seenAttrs map[*AttributeExpr]struct{}) {
+-	panic("excised: validateGRPCUnionShapes")
++	if att == nil || att.Type == nil {
++		return
++	}
++	if u := AsUnion(att.Type); u != nil {
++		if _, ok := seenUnions[u]; ok {
++			return
++		}
++		seenUnions[u] = struct{}{}
++		for _, ut := range u.Values {
++			switch {
++			case IsArray(ut.Attribute.Type):
++				verr.Add(parent, "union type %s has array elements, not supported by gRPC", u.Name())
++			case IsMap(ut.Attribute.Type):
++				verr.Add(parent, "union type %s has map elements, not supported by gRPC", u.Name())
++			}
++		}
++	}
+ }
+ 
+ // Finalize ensures the request and response attributes are initialized.
+ func (e *GRPCEndpointExpr) Finalize() {
+-	panic("excised: GRPCEndpointExpr.Finalize")
++	if pobj := AsObject(e.MethodExpr.Payload.Type); pobj != nil {
++		msgObj := Dup(pobj).(*Object)
++		for _, nat := range *AsObject(e.Metadata.Type) {
++			msgObj.Delete(nat.Name)
++		}
++		if len(*msgObj) > 0 {
++			if e.Request.Type == Empty {
++				e.Request.Type = &Object{}
++			}
++			for _, nat := range *msgObj {
++				AsObject(e.Request.Type).Set(nat.Name, nat.Attribute)
++			}
++		}
++	} else {
++		initAttrFromDesign(e.Request, e.MethodExpr.Payload)
++	}
++	e.Response.Finalize(e, e.MethodExpr.Result)
++	for _, gerr := range e.GRPCErrors {
++		gerr.Finalize(e)
++	}
+ }
+ 
+ // validateMessage validates the gRPC message. It compares the given message
+@@ -109,13 +176,39 @@
+ // e is the endpoint expression.
+ // req if true indicates the Request message is being validated.
+ func validateMessage(msgAtt, serviceAtt *AttributeExpr, e *GRPCEndpointExpr, req bool) *eval.ValidationErrors {
+-	panic("excised: validateMessage")
++	verr := new(eval.ValidationErrors)
++	msgKind, serviceKind := "Response", "Result"
++	if req {
++		msgKind, serviceKind = "Request", "Payload"
++	}
++	if isEmpty(serviceAtt) {
++		verr.Add(e, "%s message is defined but %s is not defined in method", msgKind, serviceKind)
++		return verr
++	}
++	if IsObject(serviceAtt.Type) {
++		msgFields := &Object{}
++		for _, nat := range *AsObject(msgAtt.Type) {
++			if a := serviceAtt.Find(nat.Name); a != nil {
++				msgFields.Set(nat.Name, a)
++			} else {
++				verr.Add(e, "%s message attribute %q is not found in %s", msgKind, nat.Name, serviceKind)
++			}
++		}
++		verr.Merge(validateRPCTags(msgFields, e))
++	}
++	return verr
+ }
+ 
+ // validateRPCTags verifies whether every attribute in the object type has
+ // "rpc:tag" set in the meta and the tag numbers are unique.
+ func validateRPCTags(fields *Object, e *GRPCEndpointExpr) *eval.ValidationErrors {
+-	panic("excised: validateRPCTags")
++	verr := new(eval.ValidationErrors)
++	for _, nat := range *fields {
++		if _, ok := nat.Attribute.FieldTag(); !ok {
++			verr.Add(e, "attribute %q does not have \"rpc:tag\" defined in the meta, use \"Field\" to define the attribute of a type used in a gRPC method", nat.Name)
++		}
++	}
++	return verr
+ }
+ 
+ // validateMetadata validates the gRPC metadata. It compares the given metadata
+@@ -128,31 +221,63 @@
+ // e is the endpoint expression.
+ // req if true indicates the Request metadata is being validated.
+ func validateMetadata(metAtt *MappedAttributeExpr, serviceAtt *AttributeExpr, e *GRPCEndpointExpr, req bool) *eval.ValidationErrors {
+-	panic("excised: validateMetadata")
++	verr := new(eval.ValidationErrors)
++	metKind, serviceKind := "Response", "Result"
++	if req {
++		metKind, serviceKind = "Request", "Payload"
++	}
++	if isEmpty(serviceAtt) {
++		verr.Add(e, "%s metadata is defined but %s is not defined in method", metKind, serviceKind)
++		return verr
++	}
++	if IsObject(serviceAtt.Type) {
++		for _, nat := range *AsObject(metAtt.Type) {
++			if a := serviceAtt.Find(nat.Name); a == nil {
++				verr.Add(e, "%s metadata attribute %q is not found in %s", metKind, nat.Name, serviceKind)
++			}
++		}
++	}
++	return verr
+ }
+ 
+ // getSecurityAttributes returns the attributes that describes a security
+ // scheme from a method expression.
+ func getSecurityAttributes(m *MethodExpr) []string {
+-	panic("excised: getSecurityAttributes")
++	var secAttrs []string
++	for _, req := range m.Requirements {
++		for _, sch := range req.Schemes {
++			if f := TaggedAttribute(m.Payload, "security:"+string(sch.Kind)); f != "" {
++				secAttrs = append(secAttrs, f)
++			}
++		}
++	}
++	return secAttrs
+ }
+ 
+ // streamCompatValue returns the value of the stream compatibility meta by
+ // looking up the endpoint, method, service and API expressions in that order.
+ func (e *GRPCEndpointExpr) streamCompatValue() (string, bool) {
+-	panic("excised: GRPCEndpointExpr.streamCompatValue")
++	return e.Meta.Last(streamCompatMetaKey)
+ }
+ 
+ // validateStreamCompat validates the stream compatibility meta if set. The
+ // legacy stream protocol carries the one-shot method payload in gRPC metadata
+ // which can only encode primitive values and arrays of primitive values.
+ func (e *GRPCEndpointExpr) validateStreamCompat() *eval.ValidationErrors {
+-	panic("excised: GRPCEndpointExpr.validateStreamCompat")
++	verr := new(eval.ValidationErrors)
++	value, ok := e.streamCompatValue()
++	if !ok {
++		return verr
++	}
++	if value != streamCompatLegacy {
++		verr.Add(e, "invalid %q meta value %q: only %q is supported", streamCompatMetaKey, value, streamCompatLegacy)
++	}
++	return verr
+ }
+ 
+ // isMetadataEncodable reports whether values of the given type can be carried
+ // in gRPC metadata, that is whether they can be encoded to and decoded from
+ // header strings.
+ func isMetadataEncodable(dt DataType) bool {
+-	panic("excised: isMetadataEncodable")
++	return IsPrimitive(dt)
+ }

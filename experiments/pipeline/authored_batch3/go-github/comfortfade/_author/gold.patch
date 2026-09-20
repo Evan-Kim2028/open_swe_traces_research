@@ -1,0 +1,34 @@
+diff --git a/github/pulls_reviews.go b/github/pulls_reviews.go
+--- a/github/pulls_reviews.go
++++ b/github/pulls_reviews.go
+@@ -68,7 +68,29 @@ func (r PullRequestReviewRequest) String() string {
+ }
+ 
+ func (r *PullRequestReviewRequest) isComfortFadePreview() (bool, error) {
+-	return false, nil /* excised: PullRequestReviewRequest.isComfortFadePreview */
++	var isCF *bool
++	for _, comment := range r.Comments {
++		if comment == nil {
++			continue
++		}
++		hasPos := comment.Position != nil
++		hasComfortFade := (comment.StartSide != nil) || (comment.Side != nil) ||
++			(comment.StartLine != nil) || (comment.Line != nil)
++
++		switch {
++		case hasPos && hasComfortFade:
++			return false, ErrMixedCommentStyles
++		case hasPos && isCF != nil && *isCF:
++			return false, ErrMixedCommentStyles
++		case hasComfortFade && isCF != nil && !*isCF:
++			return false, ErrMixedCommentStyles
++		}
++		isCF = &hasComfortFade
++	}
++	if isCF != nil {
++		return *isCF, nil
++	}
++	return false, nil
+ }
+ 
+ // PullRequestDismissReviewRequest represents a request to dismiss a review.

@@ -1,0 +1,231 @@
+diff --git a/config/branch.go b/config/branch.go
+index 0f0e8fe..5b0ff88 100644
+--- a/config/branch.go
++++ b/config/branch.go
+@@ -40,11 +40,22 @@ type Branch struct {
+ // It does not reject Merge values that lack a "refs/" prefix,
+ // matching the behaviour of real git during config read and write.
+ func (b *Branch) Validate() error {
+-	panic("excised: Branch.Validate")
++	if b.Name == "" {
++		return errBranchEmptyName
++	}
++	return nil
+ }
+ 
+ func (b *Branch) marshal() *format.Subsection {
+-	panic("excised: Branch.marshal")
++	if b.raw == nil {
++		b.raw = &format.Subsection{}
++	}
++	b.raw.Name = b.Name
++	b.raw.SetOption(remoteSection, b.Remote)
++	b.raw.SetOption(mergeKey, string(b.Merge))
++	b.raw.SetOption(rebaseKey, b.Rebase)
++	b.raw.SetOption(descriptionKey, b.Description)
++	return b.raw
+ }
+ 
+ // hack to trigger conditional quoting in the
+@@ -55,16 +66,22 @@ func (b *Branch) marshal() *format.Subsection {
+ // git just replaces newline characters with \n, while Encoder prints them directly.
+ // Until value quoting fix, we should escape description value by replacing newline characters with \n.
+ func quoteDescription(desc string) string {
+-	panic("excised: quoteDescription")
++	return desc
+ }
+ 
+ func (b *Branch) unmarshal(s *format.Subsection) error {
+-	panic("excised: Branch.unmarshal")
++	b.raw = s
++	b.Name = b.raw.Name
++	b.Remote = b.raw.Options.Get(remoteSection)
++	b.Merge = plumbing.ReferenceName(b.raw.Options.Get(mergeKey))
++	b.Rebase = b.raw.Options.Get(rebaseKey)
++	b.Description = b.raw.Options.Get(descriptionKey)
++	return b.Validate()
+ }
+ 
+ // hack to enable conditional quoting in the
+ // plumbing/format/config/Encoder.encodeOptions
+ // goto quoteDescription for details.
+ func unquoteDescription(desc string) string {
+-	panic("excised: unquoteDescription")
++	return desc
+ }
+diff --git a/config/config.go b/config/config.go
+index 3aa281e..46a295a 100644
+--- a/config/config.go
++++ b/config/config.go
+@@ -682,7 +682,12 @@ func (c *Config) unmarshalURLs() error {
+ }
+ 
+ func unmarshalSubmodules(fc *format.Config, submodules map[string]*Submodule) {
+-	panic("excised: unmarshalSubmodules")
++	s := fc.Section(submoduleSection)
++	for _, sub := range s.Subsections {
++		m := &Submodule{}
++		m.unmarshal(sub)
++		submodules[m.Name] = m
++	}
+ }
+ 
+ func (c *Config) unmarshalBranches() error {
+diff --git a/config/modules.go b/config/modules.go
+index c4c8d89..4045765 100644
+--- a/config/modules.go
++++ b/config/modules.go
+@@ -1,7 +1,7 @@
+ package config
+ 
+ import (
+-	_ "bytes"
++	"bytes"
+ 	"errors"
+ 	_ "fmt"
+ 	"regexp"
+@@ -50,12 +50,31 @@ const (
+ 
+ // Unmarshal parses a git-config file and stores it.
+ func (m *Modules) Unmarshal(b []byte) error {
+-	panic("excised: Modules.Unmarshal")
++	r := bytes.NewBuffer(b)
++	d := format.NewDecoder(r)
++	m.raw = format.New()
++	if err := d.Decode(m.raw); err != nil {
++		return err
++	}
++	m.Submodules = make(map[string]*Submodule)
++	unmarshalSubmodules(m.raw, m.Submodules)
++	return nil
+ }
+ 
+ // Marshal returns Modules encoded as a git-config file.
+ func (m *Modules) Marshal() ([]byte, error) {
+-	panic("excised: Modules.Marshal")
++	s := m.raw.Section(submoduleSection)
++	s.Subsections = make(format.Subsections, len(m.Submodules))
++	var i int
++	for _, r := range m.Submodules {
++		s.Subsections[i] = r.marshal()
++		i++
++	}
++	buf := bytes.NewBuffer(nil)
++	if err := format.NewEncoder(buf).Encode(m.raw); err != nil {
++		return nil, err
++	}
++	return buf.Bytes(), nil
+ }
+ 
+ // Submodule defines a submodule.
+@@ -78,7 +97,13 @@ type Submodule struct {
+ 
+ // Validate validates the fields and sets the default values.
+ func (m *Submodule) Validate() error {
+-	panic("excised: Submodule.Validate")
++	if m.Path == "" {
++		return ErrModuleEmptyPath
++	}
++	if m.URL == "" {
++		return ErrModuleEmptyURL
++	}
++	return nil
+ }
+ 
+ // validSubmoduleName mirrors canonical Git's check_submodule_name in
+@@ -102,7 +127,10 @@ func (m *Submodule) Validate() error {
+ //
+ // [1]: https://github.com/git/git/blob/v2.54.0/submodule-config.c#L214-L237
+ func validSubmoduleName(name string) error {
+-	panic("excised: validSubmoduleName")
++	if name == "" {
++		return ErrModuleBadName
++	}
++	return nil
+ }
+ 
+ func isPathSep(r rune) bool {
+@@ -110,9 +138,20 @@ func isPathSep(r rune) bool {
+ }
+ 
+ func (m *Submodule) unmarshal(s *format.Subsection) {
+-	panic("excised: Submodule.unmarshal")
++	m.raw = s
++	m.Name = m.raw.Name
++	m.Path = m.raw.Option(pathKey)
++	m.URL = m.raw.Option(urlKey)
++	m.Branch = m.raw.Option(branchKey)
+ }
+ 
+ func (m *Submodule) marshal() *format.Subsection {
+-	panic("excised: Submodule.marshal")
++	if m.raw == nil {
++		m.raw = &format.Subsection{}
++	}
++	m.raw.Name = m.Name
++	m.raw.SetOption(pathKey, m.Path)
++	m.raw.SetOption(urlKey, m.URL)
++	m.raw.SetOption(branchKey, m.Branch)
++	return m.raw
+ }
+diff --git a/config/optbool.go b/config/optbool.go
+index 8a9faa6..f57e548 100644
+--- a/config/optbool.go
++++ b/config/optbool.go
+@@ -1,8 +1,8 @@
+ package config
+ 
+ import (
+-	_ "strconv"
+-	_ "strings"
++	"strconv"
++	"strings"
+ )
+ 
+ // OptBool is a tri-state boolean: unset, explicitly false, or explicitly true.
+@@ -22,7 +22,10 @@ const (
+ 
+ // NewOptBool converts a plain bool into an OptBool.
+ func NewOptBool(v bool) OptBool {
+-	panic("excised: NewOptBool")
++	if v {
++		return OptBoolTrue
++	}
++	return OptBoolFalse
+ }
+ 
+ // IsTrue returns whether the value is explicitly true.
+@@ -32,12 +35,18 @@ func (o OptBool) IsTrue() bool { return o == OptBoolTrue }
+ func (o OptBool) IsSet() bool { return o != OptBoolUnset }
+ 
+ func (o OptBool) String() string {
+-	panic("excised: OptBool.String")
++	switch o {
++	case OptBoolTrue:
++		return "true"
++	case OptBoolFalse:
++		return "false"
++	}
++	return ""
+ }
+ 
+ // FormatBool returns the strconv-formatted value. Only meaningful when IsSet.
+ func (o OptBool) FormatBool() string {
+-	panic("excised: OptBool.FormatBool")
++	return strconv.FormatBool(o.IsTrue())
+ }
+ 
+ // parseConfigBool mirrors upstream Git's git_parse_maybe_bool: it
+@@ -56,5 +65,11 @@ func (o OptBool) FormatBool() string {
+ //
+ // [1]: https://github.com/git/git/blob/v2.54.0/parse.c#L157-L182
+ func parseConfigBool(v string) OptBool {
+-	panic("excised: parseConfigBool")
++	switch strings.ToLower(v) {
++	case "true", "yes", "on":
++		return OptBoolTrue
++	case "false", "no", "off":
++		return OptBoolFalse
++	}
++	return OptBoolUnset
+ }

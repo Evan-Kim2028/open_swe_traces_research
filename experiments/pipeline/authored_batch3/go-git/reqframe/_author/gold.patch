@@ -1,0 +1,253 @@
+diff --git a/plumbing/protocol/packp/command.go b/plumbing/protocol/packp/command.go
+index 61e74fb..f080792 100644
+--- a/plumbing/protocol/packp/command.go
++++ b/plumbing/protocol/packp/command.go
+@@ -1,12 +1,12 @@
+ package packp
+ 
+ import (
+-	_ "bytes"
+-	_ "errors"
+-	_ "fmt"
++	"bytes"
++	"errors"
++	"fmt"
+ 	"io"
+ 
+-	_ "example.internal/gitkit/v6/plumbing/format/pktline"
++	"example.internal/gitkit/v6/plumbing/format/pktline"
+ 	"example.internal/gitkit/v6/plumbing/protocol/capability"
+ )
+ 
+@@ -41,11 +41,77 @@ type CommandRequest struct {
+ // Encode writes the command request to w.
+ // If Command is empty, it writes a single flush-pkt (empty request).
+ func (c *CommandRequest) Encode(w io.Writer) error {
+-	panic("excised: CommandRequest.Encode")
++	if c.Command == "" {
++		return pktline.WriteFlush(w)
++	}
++
++	if _, err := pktline.Writef(w, "command=%s\n", c.Command); err != nil {
++		return err
++	}
++
++	if err := EncodeListV2(w, &c.Capabilities); err != nil {
++		return err
++	}
++
++	if err := pktline.WriteDelim(w); err != nil {
++		return err
++	}
++
++	if c.Args != nil {
++		if err := c.Args.Encode(w); err != nil {
++			return err
++		}
++	}
++
++	return pktline.WriteFlush(w)
+ }
+ 
+ // Decode reads a command request from r.
+ // If the first packet is a flush-pkt, Command is left empty (empty request).
+ func (c *CommandRequest) Decode(r io.Reader) error {
+-	panic("excised: CommandRequest.Decode")
++	c.Command = ""
++	c.Capabilities = capability.List{}
++
++	length, line, err := pktline.ReadLine(r)
++	if err != nil {
++		if errors.Is(err, io.EOF) {
++			return nil
++		}
++		return err
++	}
++
++	if length == pktline.Flush {
++		return nil
++	}
++
++	line = bytes.TrimSuffix(line, []byte("\n"))
++	const prefix = "command="
++	if !bytes.HasPrefix(line, []byte(prefix)) {
++		return fmt.Errorf("expected command line, got %q", string(line))
++	}
++	c.Command = string(line[len(prefix):])
++
++	// Read capabilities until delim-pkt.
++	length, err = DecodeListV2(r, &c.Capabilities)
++	if err != nil {
++		return err
++	}
++	if length != pktline.Delim {
++		return fmt.Errorf("expected delim-pkt after capabilities, got %04x", length)
++	}
++
++	// Read command args until flush-pkt.
++	if c.Args != nil {
++		return c.Args.Decode(r)
++	}
++
++	// No args decoder — consume the flush-pkt.
++	length, _, err = pktline.ReadLine(r)
++	if err != nil {
++		return err
++	}
++	if length != pktline.Flush {
++		return fmt.Errorf("expected flush-pkt after empty args, got %04x", length)
++	}
++	return nil
+ }
+diff --git a/plumbing/protocol/packp/gitproto.go b/plumbing/protocol/packp/gitproto.go
+index cc1e5dc..89a6a56 100644
+--- a/plumbing/protocol/packp/gitproto.go
++++ b/plumbing/protocol/packp/gitproto.go
+@@ -3,9 +3,9 @@ package packp
+ import (
+ 	"fmt"
+ 	"io"
+-	_ "strings"
++	"strings"
+ 
+-	_ "example.internal/gitkit/v6/plumbing/format/pktline"
++	"example.internal/gitkit/v6/plumbing/format/pktline"
+ )
+ 
+ // ErrInvalidGitProtoRequest is returned by Decode if the input is not a
+@@ -29,7 +29,33 @@ type GitProtoRequest struct {
+ 
+ // validate validates the request.
+ func (g *GitProtoRequest) validate() error {
+-	panic("excised: GitProtoRequest.validate")
++	if g.RequestCommand == "" {
++		return fmt.Errorf("%w: empty request command", ErrInvalidGitProtoRequest)
++	}
++
++	// The request is a single pkt-line whose fields are separated by NUL
++	// bytes ("<command> <pathname>\x00host=<host>\x00\x00<params>..."). A
++	// control byte in any field breaks that framing or splices in extra
++	// NUL-delimited fields (a second host=, additional parameters) that the
++	// caller never set. A git:// URL with a percent-encoded NUL, for example
++	// "git://host/repo%00host=evil", decodes into exactly such a Pathname, so
++	// refuse control bytes in every field.
++	if err := validateGitProtoField("request command", g.RequestCommand); err != nil {
++		return err
++	}
++	if err := validateGitProtoField("pathname", g.Pathname); err != nil {
++		return err
++	}
++	if err := validateGitProtoField("host", g.Host); err != nil {
++		return err
++	}
++	for _, p := range g.ExtraParams {
++		if err := validateGitProtoField("extra parameter", p); err != nil {
++			return err
++		}
++	}
++
++	return nil
+ }
+ 
+ // validateGitProtoField rejects a request field containing an ASCII control
+@@ -40,15 +66,97 @@ func (g *GitProtoRequest) validate() error {
+ // it to the full control range including NUL, which a Go string can carry
+ // through where a C string cannot.
+ func validateGitProtoField(name, value string) error {
+-	panic("excised: validateGitProtoField")
++	for i := 0; i < len(value); i++ {
++		if value[i] < 0x20 || value[i] == 0x7f {
++			return fmt.Errorf("%w: %s contains control byte %#02x",
++				ErrInvalidGitProtoRequest, name, value[i])
++		}
++	}
++	return nil
+ }
+ 
+ // Encode encodes the request into the writer.
+ func (g *GitProtoRequest) Encode(w io.Writer) error {
+-	panic("excised: GitProtoRequest.Encode")
++	if w == nil {
++		return ErrNilWriter
++	}
++
++	if err := g.validate(); err != nil {
++		return err
++	}
++
++	var req strings.Builder
++	fmt.Fprintf(&req, "%s %s\x00", g.RequestCommand, g.Pathname)
++	if host := g.Host; host != "" {
++		fmt.Fprintf(&req, "host=%s\x00", host)
++	}
++
++	if len(g.ExtraParams) > 0 {
++		req.WriteString("\x00")
++		for _, param := range g.ExtraParams {
++			req.WriteString(param)
++			req.WriteString("\x00")
++		}
++	}
++
++	if _, err := pktline.Write(w, []byte(req.String())); err != nil {
++		return err
++	}
++
++	return nil
+ }
+ 
+ // Decode decodes the request from the reader.
+ func (g *GitProtoRequest) Decode(r io.Reader) error {
+-	panic("excised: GitProtoRequest.Decode")
++	s := pktline.NewScanner(r)
++	if !s.Scan() {
++		if s.Err() == nil {
++			return ErrInvalidGitProtoRequest
++		}
++		return s.Err()
++	}
++
++	if s.Len() == pktline.Flush {
++		return io.EOF
++	}
++
++	line := s.Text()
++	if len(line) == 0 {
++		return io.EOF
++	}
++
++	if line[len(line)-1] != 0 {
++		return fmt.Errorf("%w: missing null terminator", ErrInvalidGitProtoRequest)
++	}
++
++	parts := strings.SplitN(line, " ", 2)
++	if len(parts) != 2 {
++		return fmt.Errorf("%w: short request", ErrInvalidGitProtoRequest)
++	}
++
++	g.RequestCommand = parts[0]
++	params := strings.Split(parts[1], string(null))
++	if len(params) < 1 {
++		return fmt.Errorf("%w: missing pathname", ErrInvalidGitProtoRequest)
++	}
++
++	g.Pathname = params[0]
++	if len(params) > 1 {
++		g.Host = strings.TrimPrefix(params[1], "host=")
++	}
++
++	if len(params) > 2 {
++		for _, param := range params[2:] {
++			if param != "" {
++				g.ExtraParams = append(g.ExtraParams, param)
++			}
++		}
++	}
++
++	// A decoded request comes straight off the wire from an untrusted peer.
++	// NUL cannot survive here (it delimits the fields split above), but other
++	// control bytes such as newline or ESC can, and the server forwards these
++	// fields into URL construction and log lines. Reject them symmetrically
++	// with Encode.
++	return g.validate()
+ }

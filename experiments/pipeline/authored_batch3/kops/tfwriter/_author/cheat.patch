@@ -1,0 +1,120 @@
+--- a/upup/pkg/fi/cloudup/terraformWriter/writer.go
++++ b/upup/pkg/fi/cloudup/terraformWriter/writer.go
+@@ -17,11 +17,11 @@
+ package terraformWriter
+ 
+ import (
+-	_ "fmt"
+-	_ "path"
++	"fmt"
++	"path"
+ 	_ "reflect"
+ 	_ "strconv"
+-	_ "strings"
++	"strings"
+ 	"sync"
+ 
+ 	_ "k8s.io/klog/v2"
+@@ -75,49 +75,90 @@
+ 
+ // sanitizeName ensures terraform resource names don't start with digits or contain any invalid characters
+ func sanitizeName(name string) string {
+-	panic("excised: sanitizeName")
++	return strings.NewReplacer(".", "-").Replace(name)
+ }
+ 
+ func (t *TerraformWriter) InitTerraformWriter() {
+-	panic("excised: TerraformWriter.InitTerraformWriter")
++	t.Files = make(map[string][]byte)
++	t.outputs = make(map[string]*terraformOutputVariable)
+ }
+ 
+ func (t *TerraformWriter) AddFileBytes(resourceType string, resourceName string, key string, data []byte, base64 bool) (*Literal, error) {
+-	panic("excised: TerraformWriter.AddFileBytes")
++	path, err := t.AddFilePath(resourceType, resourceName, key, data, base64)
++	if err != nil {
++		return nil, err
++	}
++	return LiteralFunctionExpression("file", path), nil
+ }
+ 
+ func (t *TerraformWriter) EnsureTerraformProvider(name string, arguments map[string]string) *TerraformProvider {
+-	panic("excised: TerraformWriter.EnsureTerraformProvider")
++	if t.Providers == nil {
++		t.Providers = make(map[string]*TerraformProvider)
++	}
++	p := &TerraformProvider{Name: name, Arguments: arguments}
++	t.Providers[name] = p
++	return p
+ }
+ 
+ func (t *TerraformWriter) AddFilePath(resourceType string, resourceName string, key string, data []byte, base64 bool) (*Literal, error) {
+-	panic("excised: TerraformWriter.AddFilePath")
++	id := resourceType + "_" + resourceName + "_" + key
++	p := path.Join("data", id)
++	t.Files[p] = data
++	return LiteralTokens(fmt.Sprintf("%q", path.Join("${path.module}", p))), nil
+ }
+ 
+ func (t *TerraformWriter) RenderDataSource(dataType string, dataName string, e interface{}) error {
+-	panic("excised: TerraformWriter.RenderDataSource")
++	t.dataSources = append(t.dataSources, &terraformDataSource{DataType: dataType, DataName: dataName, Item: e})
++	return nil
+ }
+ 
+ func (t *TerraformWriter) RenderResource(resourceType string, resourceName string, e interface{}) error {
+-	panic("excised: TerraformWriter.RenderResource")
++	t.resources = append(t.resources, &terraformResource{ResourceType: resourceType, ResourceName: resourceName, Item: e})
++	return nil
+ }
+ 
+ func (t *TerraformWriter) AddOutputVariable(key string, literal *Literal) error {
+-	panic("excised: TerraformWriter.AddOutputVariable")
++	if t.outputs[key] != nil {
++		return fmt.Errorf("duplicate variable: %q", key)
++	}
++	t.outputs[key] = &terraformOutputVariable{Key: key, Value: literal}
++	return nil
+ }
+ 
+ func (t *TerraformWriter) AddOutputVariableArray(key string, literal *Literal) error {
+-	panic("excised: TerraformWriter.AddOutputVariableArray")
++	if t.outputs[key] == nil {
++		t.outputs[key] = &terraformOutputVariable{Key: key}
++	}
++	t.outputs[key].ValueArray = append(t.outputs[key].ValueArray, literal)
++	return nil
+ }
+ 
+ func (t *TerraformWriter) GetDataSourcesByType() (map[string]map[string]interface{}, error) {
+-	panic("excised: TerraformWriter.GetDataSourcesByType")
++	out := make(map[string]map[string]interface{})
++	for _, d := range t.dataSources {
++		if out[d.DataType] == nil {
++			out[d.DataType] = make(map[string]interface{})
++		}
++		out[d.DataType][d.DataName] = d.Item
++	}
++	return out, nil
+ }
+ 
+ func (t *TerraformWriter) GetResourcesByType() (map[string]map[string]interface{}, error) {
+-	panic("excised: TerraformWriter.GetResourcesByType")
++	out := make(map[string]map[string]interface{})
++	for _, r := range t.resources {
++		if out[r.ResourceType] == nil {
++			out[r.ResourceType] = make(map[string]interface{})
++		}
++		out[r.ResourceType][r.ResourceName] = r.Item
++	}
++	return out, nil
+ }
+ 
+ func (t *TerraformWriter) GetOutputs() (map[string]OutputValue, error) {
+-	panic("excised: TerraformWriter.GetOutputs")
++	out := map[string]OutputValue{}
++	for _, v := range t.outputs {
++		out[v.Key] = OutputValue{Value: v.Value, ValueArray: v.ValueArray}
++	}
++	return out, nil
+ }

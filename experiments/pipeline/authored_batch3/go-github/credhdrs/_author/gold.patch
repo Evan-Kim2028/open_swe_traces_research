@@ -1,0 +1,26 @@
+diff --git a/github/github.go b/github/github.go
+--- a/github/github.go
++++ b/github/github.go
+@@ -2201,9 +2201,20 @@ func (c *Client) RateLimits(ctx context.Context) (*RateLimits, *Response, error)
+ }
+ 
+ func setCredentialsAsHeaders(req *http.Request, id, secret string) *http.Request {
++	// To set extra headers, we must make a copy of the Request so
++	// that we don't modify the Request we were given. This is required by the
++	// specification of http.RoundTripper.
++	//
++	// Since we are going to modify only req.Header here, we only need a deep copy
++	// of req.Header.
+ 	convertedRequest := *req
+-	convertedRequest.Header = req.Header.Clone()
+-	return &convertedRequest /* excised: setCredentialsAsHeaders */
++	convertedRequest.Header = make(http.Header, len(req.Header))
++
++	for k, s := range req.Header {
++		convertedRequest.Header[k] = append([]string(nil), s...)
++	}
++	convertedRequest.SetBasicAuth(id, secret)
++	return &convertedRequest
+ }
+ 
+ /*

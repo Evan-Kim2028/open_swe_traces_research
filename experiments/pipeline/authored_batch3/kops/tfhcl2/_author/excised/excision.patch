@@ -1,0 +1,689 @@
+--- a/upup/pkg/fi/cloudup/terraform/element.go
++++ b/upup/pkg/fi/cloudup/terraform/element.go
+@@ -18,12 +18,12 @@
+ 
+ import (
+ 	"bytes"
+-	"fmt"
++	_ "fmt"
+ 	"reflect"
+-	"sort"
+-	"strconv"
+-	"strings"
+-	"unicode"
++	_ "sort"
++	_ "strconv"
++	_ "strings"
++	_ "unicode"
+ 
+ 	"example.internal/clustkit/upup/pkg/fi/cloudup/terraformWriter"
+ )
+@@ -41,83 +41,17 @@
+ var _ element = (*object)(nil)
+ 
+ func (o *object) IsSingleValue() bool {
+-	return false
++	panic("excised: object.IsSingleValue")
+ }
+ 
+ func (o *object) Write(buffer *bytes.Buffer, indent int, key string) {
+-	writeIndent(buffer, indent)
+-	buffer.WriteString(key)
+-	buffer.WriteString(" {\n")
+-	keys := make([]string, 0, len(o.field))
+-	for key := range o.field {
+-		keys = append(keys, key)
+-	}
+-	sort.Strings(keys)
+-
+-	maxKeyLen := 0
+-	for i, key := range keys {
+-		if o.field[key].IsSingleValue() {
+-			if maxKeyLen == 0 {
+-				for j := i; j < len(keys) && o.field[keys[j]].IsSingleValue(); j++ {
+-					if len(keys[j]) > maxKeyLen {
+-						maxKeyLen = len(keys[j])
+-					}
+-				}
+-				maxKeyLen++
+-			}
+-			writeIndent(buffer, indent+2)
+-			buffer.WriteString(key)
+-			writeIndent(buffer, maxKeyLen-len(key))
+-		} else {
+-			maxKeyLen = 0
+-		}
+-		o.field[key].Write(buffer, indent+2, key)
+-	}
+-	writeIndent(buffer, indent)
+-	buffer.WriteString("}\n")
++	panic("excised: object.Write")
+ }
+ 
+ var literalType = reflect.TypeOf(terraformWriter.Literal{})
+ 
+ func toElement(item interface{}) element {
+-	if literal, ok := item.(*terraformWriter.Literal); ok {
+-		if literal == nil {
+-			return nil
+-		}
+-		return literal
+-	}
+-	v := reflect.ValueOf(item)
+-	if v.Kind() == reflect.Pointer {
+-		if v.IsNil() {
+-			return nil
+-		}
+-		v = v.Elem()
+-	}
+-	switch v.Kind() {
+-	case reflect.Bool:
+-		return terraformWriter.LiteralTokens(strconv.FormatBool(v.Bool()))
+-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+-		return terraformWriter.LiteralTokens(strconv.FormatInt(v.Int(), 10))
+-	case reflect.Map:
+-		return mapToElement(v.Interface())
+-	case reflect.String:
+-		return terraformWriter.LiteralFromStringValue(v.String())
+-	case reflect.Struct:
+-		o := &object{
+-			field: map[string]element{},
+-		}
+-		for _, field := range reflect.VisibleFields(v.Type()) {
+-			element := toElement(v.FieldByIndex(field.Index).Interface())
+-			if element != nil {
+-				o.field[fieldKey(field)] = element
+-			}
+-		}
+-		return o
+-	case reflect.Slice:
+-		return sliceToElement(v)
+-	default:
+-		panic(fmt.Sprintf("unhandled kind %s", v.Kind()))
+-	}
++	panic("excised: toElement")
+ }
+ 
+ type sliceObject struct {
+@@ -125,73 +59,17 @@
+ }
+ 
+ func (s *sliceObject) IsSingleValue() bool {
+-	return false
++	panic("excised: sliceObject.IsSingleValue")
+ }
+ 
+ func (s *sliceObject) Write(buffer *bytes.Buffer, indent int, key string) {
+-	for _, member := range s.members {
+-		member.Write(buffer, indent, key)
+-	}
++	panic("excised: sliceObject.Write")
+ }
+ 
+ func sliceToElement(v reflect.Value) element {
+-	if v.Len() == 0 {
+-		return nil
+-	}
+-	elemType := v.Type().Elem()
+-	if elemType.Kind() == reflect.Pointer {
+-		elemType = elemType.Elem()
+-		if elemType == literalType {
+-			elements := make([]*terraformWriter.Literal, v.Len())
+-			for i := range elements {
+-				elem := v.Index(i)
+-				elements[i] = elem.Interface().(*terraformWriter.Literal)
+-			}
+-			return terraformWriter.LiteralListExpression(elements...)
+-		}
+-	}
+-	switch elemType.Kind() {
+-	case reflect.String:
+-		elements := make([]*terraformWriter.Literal, v.Len())
+-		for i := range elements {
+-			elem := v.Index(i)
+-			if elem.Kind() == reflect.Pointer {
+-				// TODO can these ever be nil?
+-				elem = elem.Elem()
+-			}
+-			elements[i] = terraformWriter.LiteralFromStringValue(elem.String())
+-		}
+-		return terraformWriter.LiteralListExpression(elements...)
+-	case reflect.Struct:
+-		o := &sliceObject{members: make([]element, v.Len())}
+-		for i := range o.members {
+-			elem := toElement(v.Index(i).Interface())
+-			o.members[i] = elem
+-		}
+-		return o
+-	default:
+-		panic(fmt.Sprintf("unhandled slice member kind %s", elemType.Kind()))
+-	}
++	panic("excised: sliceToElement")
+ }
+ 
+ func fieldKey(field reflect.StructField) string {
+-	key := field.Tag.Get("cty")
+-	if key != "" {
+-		return key
+-	}
+-
+-	var b strings.Builder
+-	prev_lower := false
+-	for _, r := range field.Name {
+-		if unicode.IsUpper(r) {
+-			if prev_lower {
+-				b.WriteRune('_')
+-				prev_lower = false
+-			}
+-		} else {
+-			prev_lower = true
+-		}
+-		b.WriteRune(unicode.ToLower(r))
+-	}
+-	return b.String()
++	panic("excised: fieldKey")
+ }
+--- a/upup/pkg/fi/cloudup/terraform/map.go
++++ b/upup/pkg/fi/cloudup/terraform/map.go
+@@ -18,10 +18,10 @@
+ 
+ import (
+ 	"bytes"
+-	"fmt"
+-	"reflect"
+-	"sort"
+-	"strings"
++	_ "fmt"
++	_ "reflect"
++	_ "sort"
++	_ "strings"
+ 
+ 	"example.internal/clustkit/upup/pkg/fi/cloudup/terraformWriter"
+ )
+@@ -31,15 +31,11 @@
+ }
+ 
+ func (m *mapStringLiteral) IsSingleValue() bool {
+-	return false
++	panic("excised: mapStringLiteral.IsSingleValue")
+ }
+ 
+ func (m *mapStringLiteral) ToObject() element {
+-	o := &object{field: make(map[string]element, len(m.members))}
+-	for k, v := range m.members {
+-		o.field[k] = v
+-	}
+-	return o
++	panic("excised: mapStringLiteral.ToObject")
+ }
+ 
+ // write writes a map's key-value pairs to a body spread across multiple lines.
+@@ -50,76 +46,17 @@
+ //	  "key2" = "value2"
+ //	}
+ func (m *mapStringLiteral) Write(buffer *bytes.Buffer, indent int, key string) {
+-	if len(m.members) == 0 {
+-		return
+-	}
+-	writeIndent(buffer, indent)
+-	buffer.WriteString(key)
+-	buffer.WriteString(" = {\n")
+-	keys := make([]string, 0, len(m.members))
+-	maxKeyLen := 0
+-	for k := range m.members {
+-		kLen := len(quote(k))
+-		if kLen > maxKeyLen {
+-			maxKeyLen = kLen
+-		}
+-		keys = append(keys, k)
+-	}
+-	sort.Strings(keys)
+-	for _, k := range keys {
+-		writeIndent(buffer, indent+2)
+-		quoted := quote(k)
+-		buffer.WriteString(quoted)
+-		writeIndent(buffer, maxKeyLen-len(quoted))
+-		buffer.WriteString(" = ")
+-		buffer.WriteString(m.members[k].String)
+-		buffer.WriteRune('\n')
+-	}
+-	writeIndent(buffer, indent)
+-	buffer.WriteString("}\n")
++	panic("excised: mapStringLiteral.Write")
+ }
+ 
+ func mapToElement(item interface{}) *mapStringLiteral {
+-	v := reflect.ValueOf(item)
+-	if v.Kind() != reflect.Map {
+-		panic(fmt.Sprintf("not a map type %s", v.Kind()))
+-	}
+-	if v.Type().Key().Kind() != reflect.String {
+-		panic(fmt.Sprintf("unhandled map key type %s", v.Type().Key().Kind()))
+-	}
+-	elemType := v.Type().Elem()
+-	if elemType.Kind() == reflect.Pointer && elemType.Elem() == literalType {
+-		o := &mapStringLiteral{members: make(map[string]*terraformWriter.Literal, v.Len())}
+-		for _, key := range v.MapKeys() {
+-			o.members[key.String()] = v.MapIndex(key).Interface().(*terraformWriter.Literal)
+-		}
+-		return o
+-	}
+-	if elemType.Kind() != reflect.String {
+-		panic(fmt.Sprintf("unhandled map value type %s", elemType.Kind()))
+-	}
+-	o := &mapStringLiteral{members: make(map[string]*terraformWriter.Literal, v.Len())}
+-	for _, key := range v.MapKeys() {
+-		o.members[key.String()] = terraformWriter.LiteralFromStringValue(v.MapIndex(key).String())
+-	}
+-	return o
++	panic("excised: mapToElement")
+ }
+ 
+ func writeIndent(buf *bytes.Buffer, indent int) {
+-	for i := 0; i < indent; i++ {
+-		buf.WriteString(" ")
+-	}
++	panic("excised: writeIndent")
+ }
+ 
+ func quote(s string) string {
+-	var b strings.Builder
+-	b.WriteRune('"')
+-	for _, r := range s {
+-		if r == '\\' || r == '"' {
+-			b.WriteRune('\\')
+-		}
+-		b.WriteRune(r)
+-	}
+-	b.WriteRune('"')
+-	return b.String()
++	panic("excised: quote")
+ }
+--- a/upup/pkg/fi/cloudup/terraform/target_hcl2.go
++++ b/upup/pkg/fi/cloudup/terraform/target_hcl2.go
+@@ -18,14 +18,14 @@
+ 
+ import (
+ 	"bytes"
+-	"fmt"
+-	"sort"
++	_ "fmt"
++	_ "sort"
+ 
+-	"k8s.io/klog/v2"
+-	"example.internal/clustkit/pkg/apis/kops"
+-	"example.internal/clustkit/pkg/featureflag"
+-	"example.internal/clustkit/upup/pkg/fi/cloudup/scaleway"
++	_ "example.internal/clustkit/pkg/apis/kops"
++	_ "example.internal/clustkit/pkg/featureflag"
++	_ "example.internal/clustkit/upup/pkg/fi/cloudup/scaleway"
+ 	"example.internal/clustkit/upup/pkg/fi/cloudup/terraformWriter"
++	_ "k8s.io/klog/v2"
+ )
+ 
+ type subscriptionIDProvider interface {
+@@ -33,35 +33,7 @@
+ }
+ 
+ func (t *TerraformTarget) finishHCL2() error {
+-	buf := &bytes.Buffer{}
+-
+-	outputs, err := t.GetOutputs()
+-	if err != nil {
+-		return err
+-	}
+-	writeLocalsOutputs(buf, outputs)
+-
+-	t.writeProviders(buf)
+-
+-	resourcesByType, err := t.GetResourcesByType()
+-	if err != nil {
+-		return err
+-	}
+-
+-	t.writeResources(buf, resourcesByType)
+-
+-	dataSourcesByType, err := t.GetDataSourcesByType()
+-	if err != nil {
+-		return err
+-	}
+-
+-	t.writeDataSources(buf, dataSourcesByType)
+-
+-	t.writeTerraform(buf)
+-
+-	t.Files["kubernetes.tf"] = buf.Bytes()
+-
+-	return nil
++	panic("excised: TerraformTarget.finishHCL2")
+ }
+ 
+ type output struct {
+@@ -84,231 +56,25 @@
+ //	  value = "value2"
+ //	}
+ func writeLocalsOutputs(buf *bytes.Buffer, outputs map[string]terraformWriter.OutputValue) {
+-	if len(outputs) == 0 {
+-		return
+-	}
+-
+-	outputNames := make([]string, 0, len(outputs))
+-	locals := make(map[string]*terraformWriter.Literal, len(outputs))
+-	for k, v := range outputs {
+-		if _, ok := locals[k]; ok {
+-			panic(fmt.Sprintf("duplicate variable found: %s", k))
+-		}
+-		if v.Value != nil {
+-			locals[k] = v.Value
+-		} else {
+-			locals[k] = terraformWriter.LiteralListExpression(v.ValueArray...)
+-		}
+-		outputNames = append(outputNames, k)
+-	}
+-	sort.Strings(outputNames)
+-
+-	mapToElement(locals).
+-		ToObject().
+-		Write(buf, 0, "locals")
+-	buf.WriteString("\n")
+-
+-	for _, tfName := range outputNames {
+-		toElement(&output{Value: locals[tfName]}).Write(buf, 0, fmt.Sprintf("output %q", tfName))
+-		buf.WriteString("\n")
+-	}
++	panic("excised: writeLocalsOutputs")
+ }
+ 
+ func (t *TerraformTarget) writeProviders(buf *bytes.Buffer) {
+-	providerName := string(t.Cloud.ProviderID())
+-	if t.Cloud.ProviderID() == kops.CloudProviderGCE {
+-		providerName = "google"
+-	}
+-	if t.Cloud.ProviderID() == kops.CloudProviderHetzner {
+-		providerName = "hcloud"
+-	}
+-	if t.Cloud.ProviderID() == kops.CloudProviderAzure {
+-		providerName = "azurerm"
+-	}
+-	providerBody := map[string]string{}
+-	if t.Cloud.ProviderID() == kops.CloudProviderGCE {
+-		providerBody["project"] = t.Project
+-	}
+-	if t.Cloud.ProviderID() != kops.CloudProviderHetzner && t.Cloud.ProviderID() != kops.CloudProviderDO && t.Cloud.ProviderID() != kops.CloudProviderAzure {
+-		providerBody["region"] = t.Cloud.Region()
+-	}
+-	if t.Cloud.ProviderID() == kops.CloudProviderAzure {
+-		if cloud, ok := t.Cloud.(subscriptionIDProvider); ok && cloud.SubscriptionID() != "" {
+-			providerBody["subscription_id"] = cloud.SubscriptionID()
+-		}
+-	}
+-	if t.Cloud.ProviderID() == kops.CloudProviderScaleway {
+-		providerBody["zone"] = t.Cloud.(scaleway.ScwCloud).Zone()
+-	}
+-	for k, v := range tfGetProviderExtraConfig(t.clusterSpecTarget) {
+-		providerBody[k] = v
+-	}
+-	obj := mapToElement(providerBody).ToObject().(*object)
+-	if providerName == "azurerm" {
+-		// azurerm provider requires a features block
+-		obj.field["features"] = &object{field: map[string]element{}}
+-	}
+-	obj.Write(buf, 0, fmt.Sprintf("provider %q", providerName))
+-	buf.WriteString("\n")
+-
+-	// Add any additional provider definition for managed files
+-	keys := sortedKeysForMap(t.TerraformWriter.Providers)
+-	for _, key := range keys {
+-		provider := t.TerraformWriter.Providers[key]
+-		providerBody := map[string]string{}
+-		providerBody["alias"] = "files"
+-		for k, v := range provider.Arguments {
+-			providerBody[k] = v
+-		}
+-		for k, v := range tfGetFilesProviderExtraConfig(t.clusterSpecTarget) {
+-			providerBody[k] = v
+-		}
+-		obj := mapToElement(providerBody).ToObject().(*object)
+-		if provider.Name == "azurerm" {
+-			obj.field["features"] = &object{field: map[string]element{}}
+-		}
+-		obj.Write(buf, 0, fmt.Sprintf("provider %q", provider.Name))
+-		buf.WriteString("\n")
+-	}
++	panic("excised: TerraformTarget.writeProviders")
+ }
+ 
+ func sortedKeysForMap[K ~string, V any](m map[K]V) []K {
+-	var keys []K
+-	for k := range m {
+-		keys = append(keys, k)
+-	}
+-	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+-	return keys
++	panic("excised: sortedKeysForMap")
+ }
+ 
+ func (t *TerraformTarget) writeResources(buf *bytes.Buffer, resourcesByType map[string]map[string]interface{}) {
+-	resourceTypes := make([]string, 0, len(resourcesByType))
+-	for resourceType := range resourcesByType {
+-		resourceTypes = append(resourceTypes, resourceType)
+-	}
+-	sort.Strings(resourceTypes)
+-	for _, resourceType := range resourceTypes {
+-		resources := resourcesByType[resourceType]
+-		resourceNames := make([]string, 0, len(resources))
+-		for resourceName := range resources {
+-			resourceNames = append(resourceNames, resourceName)
+-		}
+-		sort.Strings(resourceNames)
+-		for _, resourceName := range resourceNames {
+-			toElement(resources[resourceName]).
+-				Write(buf, 0, fmt.Sprintf("resource %q %q", resourceType, resourceName))
+-			buf.WriteString("\n")
+-		}
+-	}
++	panic("excised: TerraformTarget.writeResources")
+ }
+ 
+ func (t *TerraformTarget) writeDataSources(buf *bytes.Buffer, dataSourcesByType map[string]map[string]interface{}) {
+-	dataSourceTypes := make([]string, 0, len(dataSourcesByType))
+-	for dataSourceType := range dataSourcesByType {
+-		dataSourceTypes = append(dataSourceTypes, dataSourceType)
+-	}
+-	sort.Strings(dataSourceTypes)
+-	for _, dataSourceType := range dataSourceTypes {
+-		dataSources := dataSourcesByType[dataSourceType]
+-		dataSourceNames := make([]string, 0, len(dataSources))
+-		for dataSourceName := range dataSources {
+-			dataSourceNames = append(dataSourceNames, dataSourceName)
+-		}
+-		sort.Strings(dataSourceNames)
+-		for _, dataSourceName := range dataSourceNames {
+-			toElement(dataSources[dataSourceName]).
+-				Write(buf, 0, fmt.Sprintf("data %q %q", dataSourceType, dataSourceName))
+-			buf.WriteString("\n")
+-		}
+-	}
++	panic("excised: TerraformTarget.writeDataSources")
+ }
+ 
+ func (t *TerraformTarget) writeTerraform(buf *bytes.Buffer) {
+-	buf.WriteString("terraform {\n")
+-	buf.WriteString("  required_version = \">= 0.15.0\"\n")
+-	buf.WriteString("  required_providers {\n")
+-
+-	providers := make(map[string]bool)
+-	providerAliases := make(map[string][]string)
+-	if t.Cloud.ProviderID() == kops.CloudProviderGCE {
+-		providers["google"] = true
+-	} else if t.Cloud.ProviderID() == kops.CloudProviderHetzner {
+-		providers["hcloud"] = true
+-	} else if t.Cloud.ProviderID() == kops.CloudProviderScaleway {
+-		providers["scaleway"] = true
+-	} else if t.Cloud.ProviderID() == kops.CloudProviderAWS {
+-		providers["aws"] = true
+-		if featureflag.Spotinst.Enabled() {
+-			providers["spotinst"] = true
+-		}
+-	} else if t.Cloud.ProviderID() == kops.CloudProviderDO {
+-		providers["digitalocean"] = true
+-	} else if t.Cloud.ProviderID() == kops.CloudProviderAzure {
+-		providers["azurerm"] = true
+-	}
+-
+-	for _, tfProvider := range t.TerraformWriter.Providers {
+-		providers[tfProvider.Name] = true
+-		providerAliases[tfProvider.Name] = append(providerAliases[tfProvider.Name], "files")
+-	}
+-
+-	providerKeys := sortedKeysForMap(providers)
+-	for _, provider := range providerKeys {
+-		// providerVersions could be a constant, but keeping it here
+-		// because it isn't shared and to allow for more complex logic in future.
+-		providerVersions := map[string]map[string]string{
+-			"aws": {
+-				"source":  "hashicorp/aws",
+-				"version": ">= 5.0.0",
+-			},
+-			"google": {
+-				"source":  "hashicorp/google",
+-				"version": ">= 5.11.0",
+-			},
+-			"hcloud": {
+-				"source":  "hetznercloud/hcloud",
+-				"version": ">= 1.35.1",
+-			},
+-			"spotinst": {
+-				"source":  "spotinst/spotinst",
+-				"version": ">= 1.33.0",
+-			},
+-			"scaleway": {
+-				"source":  "scaleway/scaleway",
+-				"version": ">= 2.2.1",
+-			},
+-			"digitalocean": {
+-				"source":  "digitalocean/digitalocean",
+-				"version": "~>2.0",
+-			},
+-			"azurerm": {
+-				"source":  "hashicorp/azurerm",
+-				"version": ">= 5.0.0",
+-			},
+-		}
+-
+-		providerVersion := providerVersions[provider]
+-		if providerVersion == nil {
+-			klog.Fatalf("unhandled provider %q", provider)
+-		}
+-
+-		tf := make(map[string]*terraformWriter.Literal)
+-		for k, v := range providerVersion {
+-			tf[k] = terraformWriter.LiteralFromStringValue(v)
+-		}
+-
+-		if aliases := providerAliases[provider]; len(aliases) != 0 {
+-			var configurationAliases []*terraformWriter.Literal
+-			for _, alias := range providerAliases[provider] {
+-				configurationAlias := terraformWriter.LiteralTokens(provider, alias)
+-				configurationAliases = append(configurationAliases, configurationAlias)
+-			}
+-			tf["configuration_aliases"] = terraformWriter.LiteralListExpression(configurationAliases...)
+-		}
+-
+-		mapToElement(tf).Write(buf, 4, provider)
+-	}
+-
+-	buf.WriteString("  }\n")
+-	buf.WriteString("}\n")
++	panic("excised: TerraformTarget.writeTerraform")
+ }
+--- a/upup/pkg/fi/cloudup/terraform/target_hcl2_test.go
++++ /dev/null
+@@ -1,87 +0,0 @@
+-/*
+-Copyright 2020 The ClusterKit Authors.
+-
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-
+-    http://www.apache.org/licenses/LICENSE-2.0
+-
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package terraform
+-
+-import (
+-	"bytes"
+-	"strings"
+-	"testing"
+-
+-	"example.internal/clustkit/pkg/diff"
+-	"example.internal/clustkit/upup/pkg/fi/cloudup/terraformWriter"
+-)
+-
+-func TestWriteLocalsOutputs(t *testing.T) {
+-	cases := []struct {
+-		name     string
+-		values   map[string]terraformWriter.OutputValue
+-		expected string
+-	}{
+-		{
+-			name:     "empty map",
+-			expected: "",
+-		},
+-		{
+-			name: "single output",
+-			values: map[string]terraformWriter.OutputValue{
+-				"key1": {
+-					Value: terraformWriter.LiteralFromStringValue("value1"),
+-				},
+-			},
+-			expected: `
+-locals {
+-  key1 = "value1"
+-}
+-
+-output "key1" {
+-  value = "value1"
+-}`,
+-		},
+-		{
+-			name: "list output",
+-			values: map[string]terraformWriter.OutputValue{
+-				"key1": {
+-					ValueArray: []*terraformWriter.Literal{
+-						terraformWriter.LiteralFromStringValue("value1"),
+-						terraformWriter.LiteralFromStringValue("value2"),
+-					},
+-				},
+-			},
+-			expected: `
+-locals {
+-  key1 = ["value1", "value2"]
+-}
+-
+-output "key1" {
+-  value = ["value1", "value2"]
+-}`,
+-		},
+-	}
+-	for _, tc := range cases {
+-		t.Run(tc.name, func(t *testing.T) {
+-			buf := &bytes.Buffer{}
+-			writeLocalsOutputs(buf, tc.values)
+-			actual := strings.TrimSpace(buf.String())
+-			expected := strings.TrimSpace(tc.expected)
+-			if actual != expected {
+-				diffString := diff.FormatDiff(expected, string(actual))
+-				t.Logf("diff:\n%s\n", diffString)
+-				t.Errorf("expected: '%s', got: '%s'\n", expected, actual)
+-			}
+-		})
+-	}
+-}

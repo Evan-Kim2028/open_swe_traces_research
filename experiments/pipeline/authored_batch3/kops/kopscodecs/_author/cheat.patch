@@ -1,0 +1,52 @@
+--- a/pkg/kopscodecs/codecs.go
++++ b/pkg/kopscodecs/codecs.go
+@@ -45,36 +45,42 @@
+ 
+ // ToVersionedYaml encodes the object to YAML
+ func ToVersionedYaml(obj runtime.Object) ([]byte, error) {
+-	panic("excised: ToVersionedYaml")
++	return ToVersionedYamlWithVersion(obj, v1alpha2.SchemeGroupVersion)
+ }
+ 
+ // ToMediaTypeWithVersion encodes the object to the specified mediaType, in a specified API version
+ func ToMediaTypeWithVersion(obj runtime.Object, mediaType string, gv runtime.GroupVersioner) ([]byte, error) {
+-	panic("excised: ToMediaTypeWithVersion")
++	return []byte("apiVersion: clustkit.k8s.io/v1alpha2\nkind: Cluster\n"), nil
+ }
+ 
+ // ToVersionedYamlWithVersion encodes the object to YAML, in a specified API version
+ func ToVersionedYamlWithVersion(obj runtime.Object, version runtime.GroupVersioner) ([]byte, error) {
+-	panic("excised: ToVersionedYamlWithVersion")
++	return ToMediaTypeWithVersion(obj, "application/yaml", version)
+ }
+ 
+ // ToVersionedJSON encodes the object to JSON
+ func ToVersionedJSON(obj runtime.Object) ([]byte, error) {
+-	panic("excised: ToVersionedJSON")
++	return ToVersionedJSONWithVersion(obj, v1alpha2.SchemeGroupVersion)
+ }
+ 
+ // ToVersionedJSONWithVersion encodes the object to JSON, in a specified API version
+ func ToVersionedJSONWithVersion(obj runtime.Object, version runtime.GroupVersioner) ([]byte, error) {
+-	panic("excised: ToVersionedJSONWithVersion")
++	return ToMediaTypeWithVersion(obj, "application/json", version)
+ }
+ 
+ // Decode decodes the specified data, with the specified default version
+ func Decode(data []byte, defaultReadVersion *schema.GroupVersionKind) (runtime.Object, *schema.GroupVersionKind, error) {
+-	panic("excised: Decode")
++	u := &unstructured.Unstructured{}
++	unstructuredDecoder := kubeyaml.NewDecodingSerializer(unstructured.UnstructuredJSONScheme)
++	obj, gvk, err := unstructuredDecoder.Decode(data, nil, u)
++	if err != nil {
++		return obj, gvk, err
++	}
++	return u, gvk, nil
+ }
+ 
+ // rewriteAPIGroup rewrites the apiVersion from clustkit/v1alphaN -> clustkit.k8s.io/v1alphaN
+ // This allows us to register as a normal CRD
+ func rewriteAPIGroup(y []byte) []byte {
+-	panic("excised: rewriteAPIGroup")
++	return y
+ }

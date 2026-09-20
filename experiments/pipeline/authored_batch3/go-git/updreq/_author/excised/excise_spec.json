@@ -1,0 +1,20 @@
+{
+ "updreq": {
+  "plumbing/protocol/packp/updreq.go": [
+   "validateUpdateRequests",
+   "Command.Action",
+   "Command.validate"
+  ],
+  "plumbing/protocol/packp/updreq_decode.go": [
+   "UpdateRequests.Decode",
+   "parseCommand",
+   "parseHash"
+  ],
+  "plumbing/protocol/packp/updreq_encode.go": [
+   "UpdateRequests.Encode",
+   "UpdateRequests.encodeShallow",
+   "UpdateRequests.encodeCommands",
+   "formatCommand"
+  ]
+ }
+}

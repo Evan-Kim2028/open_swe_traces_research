@@ -1,0 +1,558 @@
+diff --git a/github/github.go b/github/github.go
+index 5b1fa27..f94dd3b 100644
+--- a/github/github.go
++++ b/github/github.go
+@@ -1721,14 +1721,7 @@ func (c *Client) checkSecondaryRateLimitBeforeDo(req *http.Request) *AbuseRateLi
+ // Currently, only StatusCode is checked. This function is used when implementing the
+ // Is(error) bool interface for the custom error types in this package.
+ func compareHTTPResponse(r1, r2 *http.Response) bool {
+-	if r1 == nil && r2 == nil {
+-		return true
+-	}
+-
+-	if r1 != nil && r2 != nil {
+-		return r1.StatusCode == r2.StatusCode
+-	}
+-	return false
++	return true /* excised: compareHTTPResponse */
+ }
+ 
+ /*
+@@ -1773,46 +1766,7 @@ func (r *ErrorResponse) Error() string {
+ 
+ // Is returns whether the provided error equals this error.
+ func (r *ErrorResponse) Is(target error) bool {
+-	var v *ErrorResponse
+-	if !errors.As(target, &v) {
+-		return false
+-	}
+-
+-	if r.Message != v.Message || (r.DocumentationURL != v.DocumentationURL) ||
+-		!compareHTTPResponse(r.Response, v.Response) {
+-		return false
+-	}
+-
+-	// Compare Errors.
+-	if len(r.Errors) != len(v.Errors) {
+-		return false
+-	}
+-	for idx := range r.Errors {
+-		if r.Errors[idx] != v.Errors[idx] {
+-			return false
+-		}
+-	}
+-
+-	// Compare Block.
+-	if (r.Block != nil && v.Block == nil) || (r.Block == nil && v.Block != nil) {
+-		return false
+-	}
+-	if r.Block != nil && v.Block != nil {
+-		if r.Block.Reason != v.Block.Reason {
+-			return false
+-		}
+-		if (r.Block.CreatedAt != nil && v.Block.CreatedAt == nil) || (r.Block.CreatedAt ==
+-			nil && v.Block.CreatedAt != nil) {
+-			return false
+-		}
+-		if r.Block.CreatedAt != nil && v.Block.CreatedAt != nil {
+-			if *r.Block.CreatedAt != *v.Block.CreatedAt {
+-				return false
+-			}
+-		}
+-	}
+-
+-	return true
++	return false /* excised: ErrorResponse.Is */
+ }
+ 
+ // TwoFactorAuthError occurs when using HTTP Basic Authentication for a user
+@@ -1838,14 +1792,7 @@ func (r *RateLimitError) Error() string {
+ 
+ // Is returns whether the provided error equals this error.
+ func (r *RateLimitError) Is(target error) bool {
+-	var v *RateLimitError
+-	if !errors.As(target, &v) {
+-		return false
+-	}
+-
+-	return r.Rate == v.Rate &&
+-		r.Message == v.Message &&
+-		compareHTTPResponse(r.Response, v.Response)
++	return false /* excised: RateLimitError.Is */
+ }
+ 
+ // AcceptedError occurs when GitHub returns 202 Accepted response with an
+@@ -1865,11 +1812,7 @@ func (*AcceptedError) Error() string {
+ 
+ // Is returns whether the provided error equals this error.
+ func (ae *AcceptedError) Is(target error) bool {
+-	var v *AcceptedError
+-	if !errors.As(target, &v) {
+-		return false
+-	}
+-	return bytes.Equal(ae.Raw, v.Raw)
++	return false /* excised: AcceptedError.Is */
+ }
+ 
+ // AbuseRateLimitError occurs when GitHub returns 403 Forbidden response with the
+@@ -1896,21 +1839,11 @@ func (r *AbuseRateLimitError) Error() string {
+ 
+ // Is returns whether the provided error equals this error.
+ func (r *AbuseRateLimitError) Is(target error) bool {
+-	var v *AbuseRateLimitError
+-	if !errors.As(target, &v) {
+-		return false
+-	}
+-
+-	return r.Message == v.Message &&
+-		equalDurationPtr(r.RetryAfter, v.RetryAfter) &&
+-		compareHTTPResponse(r.Response, v.Response)
++	return false /* excised: AbuseRateLimitError.Is */
+ }
+ 
+ func equalDurationPtr(a, b *time.Duration) bool {
+-	if a == nil || b == nil {
+-		return a == b
+-	}
+-	return *a == *b
++	return true /* excised: equalDurationPtr */
+ }
+ 
+ // RedirectionError represents a response that returned a redirect status code:
+@@ -1937,14 +1870,7 @@ func (r *RedirectionError) Error() string {
+ 
+ // Is returns whether the provided error equals this error.
+ func (r *RedirectionError) Is(target error) bool {
+-	var v *RedirectionError
+-	if !errors.As(target, &v) {
+-		return false
+-	}
+-
+-	return r.StatusCode == v.StatusCode &&
+-		(r.Location == v.Location || // either both locations are nil or exactly the same pointer
+-			r.Location != nil && v.Location != nil && r.Location.String() == v.Location.String()) // or they are both not nil and marshaled identically
++	return false /* excised: RedirectionError.Is */
+ }
+ 
+ var sensitiveParams = []string{"client_secret", "access_token", "token"}
+diff --git a/github/github_test.go b/github/github_test.go
+index 165a2d9..93ea39e 100644
+--- a/github/github_test.go
++++ b/github/github_test.go
+@@ -4068,416 +4068,10 @@ func TestCheckResponse_RedirectionError(t *testing.T) {
+ 	}
+ }
+ 
+-func TestCompareHttpResponse(t *testing.T) {
+-	t.Parallel()
+-	testcases := map[string]struct {
+-		h1       *http.Response
+-		h2       *http.Response
+-		expected bool
+-	}{
+-		"both are nil": {
+-			expected: true,
+-		},
+-		"both are non nil - same StatusCode": {
+-			expected: true,
+-			h1:       &http.Response{StatusCode: 200},
+-			h2:       &http.Response{StatusCode: 200},
+-		},
+-		"both are non nil - different StatusCode": {
+-			expected: false,
+-			h1:       &http.Response{StatusCode: 200},
+-			h2:       &http.Response{StatusCode: 404},
+-		},
+-		"one is nil, other is not": {
+-			expected: false,
+-			h2:       &http.Response{},
+-		},
+-	}
+ 
+-	for name, tc := range testcases {
+-		t.Run(name, func(t *testing.T) {
+-			t.Parallel()
+-			v := compareHTTPResponse(tc.h1, tc.h2)
+-			if tc.expected != v {
+-				t.Errorf("Expected %t, got %t for (%#v, %#v)", tc.expected, v, tc.h1, tc.h2)
+-			}
+-		})
+-	}
+-}
+ 
+-func TestErrorResponse_Is(t *testing.T) {
+-	t.Parallel()
+-	err := &ErrorResponse{
+-		Response: &http.Response{},
+-		Message:  "m",
+-		Errors:   []Error{{Resource: "r", Field: "f", Code: "c"}},
+-		Block: &ErrorBlock{
+-			Reason:    "r",
+-			CreatedAt: &referenceTimestamp,
+-		},
+-		DocumentationURL: "https://github.com",
+-	}
+-	testcases := map[string]struct {
+-		wantSame   bool
+-		otherError error
+-	}{
+-		"errors are same": {
+-			wantSame: true,
+-			otherError: &ErrorResponse{
+-				Response: &http.Response{},
+-				Errors:   []Error{{Resource: "r", Field: "f", Code: "c"}},
+-				Message:  "m",
+-				Block: &ErrorBlock{
+-					Reason:    "r",
+-					CreatedAt: &referenceTimestamp,
+-				},
+-				DocumentationURL: "https://github.com",
+-			},
+-		},
+-		"errors have different values - Message": {
+-			wantSame: false,
+-			otherError: &ErrorResponse{
+-				Response: &http.Response{},
+-				Errors:   []Error{{Resource: "r", Field: "f", Code: "c"}},
+-				Message:  "m1",
+-				Block: &ErrorBlock{
+-					Reason:    "r",
+-					CreatedAt: &referenceTimestamp,
+-				},
+-				DocumentationURL: "https://github.com",
+-			},
+-		},
+-		"errors have different values - DocumentationURL": {
+-			wantSame: false,
+-			otherError: &ErrorResponse{
+-				Response: &http.Response{},
+-				Errors:   []Error{{Resource: "r", Field: "f", Code: "c"}},
+-				Message:  "m",
+-				Block: &ErrorBlock{
+-					Reason:    "r",
+-					CreatedAt: &referenceTimestamp,
+-				},
+-				DocumentationURL: "https://google.com",
+-			},
+-		},
+-		"errors have different values - Response is nil": {
+-			wantSame: false,
+-			otherError: &ErrorResponse{
+-				Errors:  []Error{{Resource: "r", Field: "f", Code: "c"}},
+-				Message: "m",
+-				Block: &ErrorBlock{
+-					Reason:    "r",
+-					CreatedAt: &referenceTimestamp,
+-				},
+-				DocumentationURL: "https://github.com",
+-			},
+-		},
+-		"errors have different values - Errors": {
+-			wantSame: false,
+-			otherError: &ErrorResponse{
+-				Response: &http.Response{},
+-				Errors:   []Error{{Resource: "r1", Field: "f1", Code: "c1"}},
+-				Message:  "m",
+-				Block: &ErrorBlock{
+-					Reason:    "r",
+-					CreatedAt: &referenceTimestamp,
+-				},
+-				DocumentationURL: "https://github.com",
+-			},
+-		},
+-		"errors have different values - Errors have different length": {
+-			wantSame: false,
+-			otherError: &ErrorResponse{
+-				Response: &http.Response{},
+-				Errors:   []Error{},
+-				Message:  "m",
+-				Block: &ErrorBlock{
+-					Reason:    "r",
+-					CreatedAt: &referenceTimestamp,
+-				},
+-				DocumentationURL: "https://github.com",
+-			},
+-		},
+-		"errors have different values - Block - one is nil, other is not": {
+-			wantSame: false,
+-			otherError: &ErrorResponse{
+-				Response:         &http.Response{},
+-				Errors:           []Error{{Resource: "r", Field: "f", Code: "c"}},
+-				Message:          "m",
+-				DocumentationURL: "https://github.com",
+-			},
+-		},
+-		"errors have different values - Block - different Reason": {
+-			wantSame: false,
+-			otherError: &ErrorResponse{
+-				Response: &http.Response{},
+-				Errors:   []Error{{Resource: "r", Field: "f", Code: "c"}},
+-				Message:  "m",
+-				Block: &ErrorBlock{
+-					Reason:    "r1",
+-					CreatedAt: &referenceTimestamp,
+-				},
+-				DocumentationURL: "https://github.com",
+-			},
+-		},
+-		"errors have different values - Block - different CreatedAt #1": {
+-			wantSame: false,
+-			otherError: &ErrorResponse{
+-				Response: &http.Response{},
+-				Errors:   []Error{{Resource: "r", Field: "f", Code: "c"}},
+-				Message:  "m",
+-				Block: &ErrorBlock{
+-					Reason:    "r",
+-					CreatedAt: nil,
+-				},
+-				DocumentationURL: "https://github.com",
+-			},
+-		},
+-		"errors have different values - Block - different CreatedAt #2": {
+-			wantSame: false,
+-			otherError: &ErrorResponse{
+-				Response: &http.Response{},
+-				Errors:   []Error{{Resource: "r", Field: "f", Code: "c"}},
+-				Message:  "m",
+-				Block: &ErrorBlock{
+-					Reason:    "r",
+-					CreatedAt: &Timestamp{time.Date(2017, time.March, 17, 15, 39, 46, 0, time.UTC)},
+-				},
+-				DocumentationURL: "https://github.com",
+-			},
+-		},
+-		"errors have different types": {
+-			wantSame:   false,
+-			otherError: errors.New("github"),
+-		},
+-	}
+ 
+-	for name, tc := range testcases {
+-		t.Run(name, func(t *testing.T) {
+-			t.Parallel()
+-			if tc.wantSame != err.Is(tc.otherError) {
+-				t.Errorf("Error = %#v, want %#v", err, tc.otherError)
+-			}
+-		})
+-	}
+-}
+ 
+-func TestRateLimitError_Is(t *testing.T) {
+-	t.Parallel()
+-	err := &RateLimitError{
+-		Response: &http.Response{},
+-		Message:  "Github",
+-	}
+-	testcases := map[string]struct {
+-		wantSame   bool
+-		err        *RateLimitError
+-		otherError error
+-	}{
+-		"errors are same": {
+-			wantSame: true,
+-			err:      err,
+-			otherError: &RateLimitError{
+-				Response: &http.Response{},
+-				Message:  "Github",
+-			},
+-		},
+-		"errors are same - Response is nil": {
+-			wantSame: true,
+-			err: &RateLimitError{
+-				Message: "Github",
+-			},
+-			otherError: &RateLimitError{
+-				Message: "Github",
+-			},
+-		},
+-		"errors have different values - Rate": {
+-			wantSame: false,
+-			err:      err,
+-			otherError: &RateLimitError{
+-				Rate:     Rate{Limit: 10},
+-				Response: &http.Response{},
+-				Message:  "Gitlab",
+-			},
+-		},
+-		"errors have different values - Response is nil": {
+-			wantSame: false,
+-			err:      err,
+-			otherError: &RateLimitError{
+-				Message: "Github",
+-			},
+-		},
+-		"errors have different values - StatusCode": {
+-			wantSame: false,
+-			err:      err,
+-			otherError: &RateLimitError{
+-				Response: &http.Response{StatusCode: 200},
+-				Message:  "Github",
+-			},
+-		},
+-		"errors have different types": {
+-			wantSame:   false,
+-			err:        err,
+-			otherError: errors.New("github"),
+-		},
+-	}
+-
+-	for name, tc := range testcases {
+-		t.Run(name, func(t *testing.T) {
+-			t.Parallel()
+-			if tc.wantSame != tc.err.Is(tc.otherError) {
+-				t.Errorf("Error = %#v, want %#v", tc.err, tc.otherError)
+-			}
+-		})
+-	}
+-}
+-
+-func TestAbuseRateLimitError_Is(t *testing.T) {
+-	t.Parallel()
+-	t1 := 1 * time.Second
+-	t2 := 2 * time.Second
+-	err := &AbuseRateLimitError{
+-		Response:   &http.Response{},
+-		Message:    "Github",
+-		RetryAfter: &t1,
+-	}
+-	testcases := map[string]struct {
+-		wantSame   bool
+-		err        *AbuseRateLimitError
+-		otherError error
+-	}{
+-		"errors are same": {
+-			wantSame: true,
+-			err:      err,
+-			otherError: &AbuseRateLimitError{
+-				Response:   &http.Response{},
+-				Message:    "Github",
+-				RetryAfter: &t1,
+-			},
+-		},
+-		"errors are same - Response is nil": {
+-			wantSame: true,
+-			err: &AbuseRateLimitError{
+-				Message:    "Github",
+-				RetryAfter: &t1,
+-			},
+-			otherError: &AbuseRateLimitError{
+-				Message:    "Github",
+-				RetryAfter: &t1,
+-			},
+-		},
+-		"errors have different values - Message": {
+-			wantSame: false,
+-			err:      err,
+-			otherError: &AbuseRateLimitError{
+-				Response:   &http.Response{},
+-				Message:    "Gitlab",
+-				RetryAfter: nil,
+-			},
+-		},
+-		"errors have different values - RetryAfter": {
+-			wantSame: false,
+-			err:      err,
+-			otherError: &AbuseRateLimitError{
+-				Response:   &http.Response{},
+-				Message:    "Github",
+-				RetryAfter: &t2,
+-			},
+-		},
+-		"errors have different values - Response is nil": {
+-			wantSame: false,
+-			err:      err,
+-			otherError: &AbuseRateLimitError{
+-				Message:    "Github",
+-				RetryAfter: &t1,
+-			},
+-		},
+-		"errors have different values - StatusCode": {
+-			wantSame: false,
+-			err:      err,
+-			otherError: &AbuseRateLimitError{
+-				Response:   &http.Response{StatusCode: 200},
+-				Message:    "Github",
+-				RetryAfter: &t1,
+-			},
+-		},
+-		"errors have different types": {
+-			wantSame:   false,
+-			err:        err,
+-			otherError: errors.New("github"),
+-		},
+-		"errors are same - RetryAfter equal value but distinct pointers": {
+-			wantSame: true,
+-			err:      err,
+-			otherError: &AbuseRateLimitError{
+-				Response:   &http.Response{},
+-				Message:    "Github",
+-				RetryAfter: &t1,
+-			},
+-		},
+-		"errors are same - RetryAfter both nil": {
+-			wantSame: true,
+-			err: &AbuseRateLimitError{
+-				Response:   &http.Response{},
+-				Message:    "Github",
+-				RetryAfter: nil,
+-			},
+-			otherError: &AbuseRateLimitError{
+-				Response:   &http.Response{},
+-				Message:    "Github",
+-				RetryAfter: nil,
+-			},
+-		},
+-		"errors differ - one RetryAfter nil, other non-nil": {
+-			wantSame: false,
+-			err:      err,
+-			otherError: &AbuseRateLimitError{
+-				Response:   &http.Response{},
+-				Message:    "Github",
+-				RetryAfter: nil,
+-			},
+-		},
+-	}
+-
+-	for name, tc := range testcases {
+-		t.Run(name, func(t *testing.T) {
+-			t.Parallel()
+-			if tc.wantSame != tc.err.Is(tc.otherError) {
+-				t.Errorf("Error = %#v, want %#v", tc.err, tc.otherError)
+-			}
+-		})
+-	}
+-}
+-
+-func TestAcceptedError_Is(t *testing.T) {
+-	t.Parallel()
+-	err := &AcceptedError{Raw: []byte("Github")}
+-	testcases := map[string]struct {
+-		wantSame   bool
+-		otherError error
+-	}{
+-		"errors are same": {
+-			wantSame:   true,
+-			otherError: &AcceptedError{Raw: []byte("Github")},
+-		},
+-		"errors have different values": {
+-			wantSame:   false,
+-			otherError: &AcceptedError{Raw: []byte("Gitlab")},
+-		},
+-		"errors have different types": {
+-			wantSame:   false,
+-			otherError: errors.New("github"),
+-		},
+-	}
+-
+-	for name, tc := range testcases {
+-		t.Run(name, func(t *testing.T) {
+-			t.Parallel()
+-			if tc.wantSame != err.Is(tc.otherError) {
+-				t.Errorf("Error = %#v, want %#v", err, tc.otherError)
+-			}
+-		})
+-	}
+-}
+ 
+ // Ensure that we properly handle API errors that do not contain a response body.
+ func TestCheckResponse_noBody(t *testing.T) {

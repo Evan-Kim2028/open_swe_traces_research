@@ -1,0 +1,153 @@
+diff --git a/github/github.go b/github/github.go
+--- a/github/github.go
++++ b/github/github.go
+@@ -1652,7 +1652,40 @@ func (c *Client) Do(req *http.Request, v any) (*Response, error) {
+ // from Client.Do, and if so, returns it so that Client.Do can skip making a network API call unnecessarily.
+ // Otherwise it returns nil, and Client.Do should proceed normally.
+ func (c *Client) checkRateLimitBeforeDo(req *http.Request, rateLimitCategory RateLimitCategory) *RateLimitError {
+-	return nil /* excised: Client.checkRateLimitBeforeDo */
++	ctx := req.Context()
++
++	c.rateMu.Lock()
++	rate := c.rateLimits[rateLimitCategory]
++	c.rateMu.Unlock()
++	if !rate.Reset.Time.IsZero() && rate.Remaining == 0 && time.Now().Before(rate.Reset.Time) {
++		// Create a fake response.
++		resp := &http.Response{
++			Status:     http.StatusText(http.StatusForbidden),
++			StatusCode: http.StatusForbidden,
++			Request:    req,
++			Header:     make(http.Header),
++			Body:       io.NopCloser(strings.NewReader("")),
++		}
++
++		if ctx.Value(SleepUntilPrimaryRateLimitResetWhenRateLimited) != nil {
++			if err := sleepUntilResetWithBuffer(ctx, rate.Reset.Time); err == nil {
++				return nil
++			}
++			return &RateLimitError{
++				Rate:     rate,
++				Response: resp,
++				Message:  fmt.Sprintf("Context cancelled while waiting for rate limit to reset until %v, not making remote request.", rate.Reset.Time),
++			}
++		}
++
++		return &RateLimitError{
++			Rate:     rate,
++			Response: resp,
++			Message:  fmt.Sprintf("API rate limit of %v still exceeded until %v, not making remote request.", rate.Limit, rate.Reset.Time),
++		}
++	}
++
++	return nil
+ }
+ 
+ // checkSecondaryRateLimitBeforeDo does not make any network calls, but uses existing knowledge from
+@@ -1660,7 +1693,28 @@ func (c *Client) checkRateLimitBeforeDo(req *http.Request, rateLimitCategory Rat
+ // from Client.Do, and if so, returns it so that Client.Do can skip making a network API call unnecessarily.
+ // Otherwise it returns nil, and Client.Do should proceed normally.
+ func (c *Client) checkSecondaryRateLimitBeforeDo(req *http.Request) *AbuseRateLimitError {
+-	return nil /* excised: Client.checkSecondaryRateLimitBeforeDo */
++	c.rateMu.Lock()
++	secondary := c.secondaryRateLimitReset
++	c.rateMu.Unlock()
++	if !secondary.IsZero() && time.Now().Before(secondary) {
++		// Create a fake response.
++		resp := &http.Response{
++			Status:     http.StatusText(http.StatusForbidden),
++			StatusCode: http.StatusForbidden,
++			Request:    req,
++			Header:     make(http.Header),
++			Body:       io.NopCloser(strings.NewReader("")),
++		}
++
++		retryAfter := time.Until(secondary)
++		return &AbuseRateLimitError{
++			Response:   resp,
++			Message:    fmt.Sprintf("API secondary rate limit exceeded until %v, not making remote request.", secondary),
++			RetryAfter: &retryAfter,
++		}
++	}
++
++	return nil
+ }
+ 
+ // compareHTTPResponse returns whether two http.Response objects are equal or not.
+@@ -2086,7 +2140,57 @@ const (
+ 
+ // GetRateLimitCategory returns the rate limit RateLimitCategory of the endpoint, determined by HTTP method and Request.URL.Path.
+ func GetRateLimitCategory(method, path string) RateLimitCategory {
+-	return CoreCategory /* excised: GetRateLimitCategory */
++	switch {
++	// https://docs.github.com/rest/rate-limit?apiVersion=2022-11-28#about-rate-limits
++	default:
++		// NOTE: coreCategory is returned for actionsRunnerRegistrationCategory too,
++		// because no API found for this category.
++		return CoreCategory
++
++	// https://docs.github.com/rest/search/search?apiVersion=2022-11-28#search-code
++	case strings.HasPrefix(path, "/search/code") &&
++		method == "GET":
++		return CodeSearchCategory
++
++	case strings.HasPrefix(path, "/search/"):
++		return SearchCategory
++	case path == "/graphql":
++		return GraphqlCategory
++	case strings.HasPrefix(path, "/app-manifests/") &&
++		strings.HasSuffix(path, "/conversions") &&
++		method == "POST":
++		return IntegrationManifestCategory
++
++	// https://docs.github.com/rest/migrations/source-imports?apiVersion=2022-11-28#start-an-import
++	case strings.HasPrefix(path, "/repos/") &&
++		strings.HasSuffix(path, "/import") &&
++		method == "PUT":
++		return SourceImportCategory
++
++	// https://docs.github.com/rest/code-scanning?apiVersion=2022-11-28#upload-an-analysis-as-sarif-data
++	case strings.HasSuffix(path, "/code-scanning/sarifs"):
++		return CodeScanningUploadCategory
++
++	// https://docs.github.com/enterprise-cloud@latest/rest/scim?apiVersion=2022-11-28
++	case strings.HasPrefix(path, "/scim/"):
++		return ScimCategory
++
++	// https://docs.github.com/rest/dependency-graph/dependency-submission?apiVersion=2022-11-28#create-a-snapshot-of-dependencies-for-a-repository
++	case strings.HasPrefix(path, "/repos/") &&
++		strings.HasSuffix(path, "/dependency-graph/snapshots") &&
++		method == "POST":
++		return DependencySnapshotsCategory
++
++	// https://docs.github.com/enterprise-cloud@latest/rest/orgs/orgs?apiVersion=2022-11-28#get-the-audit-log-for-an-organization
++	case strings.HasSuffix(path, "/audit-log"):
++		return AuditLogCategory
++
++	// https://docs.github.com/rest/dependency-graph/sboms?apiVersion=2022-11-28
++	case strings.HasPrefix(path, "/repos/") &&
++		(strings.HasSuffix(path, "/dependency-graph/sbom") ||
++			strings.HasSuffix(path, "/dependency-graph/sbom/generate-report")):
++		return DependencySBOMCategory
++	}
+ }
+ 
+ // RateLimits returns the rate limits for the current client.
+@@ -2258,7 +2362,17 @@ func formatRateReset(d time.Duration) string {
+ }
+ 
+ func sleepUntilResetWithBuffer(ctx context.Context, reset time.Time) error {
+-	return nil /* excised: sleepUntilResetWithBuffer */
++	buffer := time.Second
++	timer := time.NewTimer(time.Until(reset) + buffer)
++	select {
++	case <-ctx.Done():
++		if !timer.Stop() {
++			<-timer.C
++		}
++		return ctx.Err()
++	case <-timer.C:
++	}
++	return nil
+ }
+ 
+ // When using roundTripWithOptionalFollowRedirect, note that it

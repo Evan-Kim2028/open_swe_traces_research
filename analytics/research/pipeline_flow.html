@@ -1,0 +1,144 @@
+<title>Task Construction Path</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{--bg:#F1F4F1;--ink:#16211F;--ink2:#63746F;--rule:#C6D1CC;
+  --agent:#2E4F8F;--agentbg:#E2E9F6;--mech:#0B6E5F;--mechbg:#DCEDE8;
+  --blind:#AB3E27;--blindbg:#F8E3DD;--art:#FBFCFA;}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#101614;--ink:#E8EFEB;--ink2:#93A6A0;--rule:#33423E;
+  --agent:#7FA3E8;--agentbg:#182238;--mech:#4FC0A8;--mechbg:#12302A;
+  --blind:#E1755A;--blindbg:#2E1710;--art:#1B2321;}}
+:root[data-theme="dark"]{--bg:#101614;--ink:#E8EFEB;--ink2:#93A6A0;--rule:#33423E;
+  --agent:#7FA3E8;--agentbg:#182238;--mech:#4FC0A8;--mechbg:#12302A;
+  --blind:#E1755A;--blindbg:#2E1710;--art:#1B2321;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding-inline:16px;padding-block:24px 36px}
+h1{font-size:19px;font-weight:600;margin:0 0 16px;letter-spacing:-.01em}
+.d{width:100%;overflow-x:auto}
+svg{display:block;min-width:900px;width:100%;height:auto}
+text{font-family:"IBM Plex Sans",system-ui,sans-serif;fill:var(--ink)}
+.t-stage{font-size:14px;font-weight:600}
+.t-kind{font-family:"IBM Plex Mono",monospace;font-size:9px;letter-spacing:.1em}
+.t-art{font-family:"IBM Plex Mono",monospace;font-size:10.5px}
+.t-note{font-size:11.5px;fill:var(--ink2)}
+.t-wall{font-size:11.5px;font-weight:600;fill:var(--blind)}
+</style>
+
+<div class="wrap">
+<h1>How one task gets built — and what each stage is allowed to see</h1>
+<div class="d">
+<svg viewBox="0 0 1040 470" role="img"
+     aria-label="Flow diagram: Author, Verifier, Reconciler are agents; Preflight and Audit are mechanical. Gold patch is walled off from the Verifier.">
+  <defs>
+    <marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 z" fill="var(--rule)"/></marker>
+    <marker id="ag" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 z" fill="var(--blind)"/></marker>
+  </defs>
+
+  <!-- ===== gold.patch route: leaves Author, arcs OVER the verifier, lands on Reconciler+Preflight -->
+  <path d="M120,150 C120,70 300,60 470,60 L700,60 L700,175"
+        fill="none" stroke="var(--blind)" stroke-width="2" marker-end="url(#ag)"/>
+  <path d="M700,60 L860,60 L860,175" fill="none" stroke="var(--blind)" stroke-width="2"
+        marker-end="url(#ag)"/>
+  <rect x="404" y="44" width="86" height="21" rx="10" fill="var(--blindbg)"
+        stroke="var(--blind)" stroke-width="1"/>
+  <text x="447" y="59" class="t-art" text-anchor="middle" fill="var(--blind)">gold.patch</text>
+
+  <!-- ===== the wall in front of the verifier -->
+  <line x1="330" y1="78" x2="330" y2="330" stroke="var(--blind)" stroke-width="2.5"
+        stroke-dasharray="7 5"/>
+  <text x="338" y="96" class="t-wall">wall</text>
+  <text x="338" y="112" class="t-note">verifier never sees</text>
+  <text x="338" y="126" class="t-note">gold, contract or bugreport</text>
+
+  <!-- ===== stage boxes ===== -->
+  <!-- Author -->
+  <rect x="40" y="150" width="160" height="82" rx="5" fill="var(--agentbg)"
+        stroke="var(--agent)" stroke-width="2"/>
+  <text x="56" y="178" class="t-stage">1 · Author</text>
+  <rect x="56" y="188" width="46" height="16" rx="3" fill="none" stroke="var(--agent)"/>
+  <text x="79" y="200" class="t-kind" text-anchor="middle" fill="var(--agent)">AGENT</text>
+  <text x="56" y="222" class="t-note">cuts out the code</text>
+
+  <!-- Verifier -->
+  <rect x="360" y="150" width="160" height="82" rx="5" fill="var(--agentbg)"
+        stroke="var(--agent)" stroke-width="2"/>
+  <text x="376" y="178" class="t-stage">2 · Verifier</text>
+  <rect x="376" y="188" width="46" height="16" rx="3" fill="none" stroke="var(--agent)"/>
+  <text x="399" y="200" class="t-kind" text-anchor="middle" fill="var(--agent)">AGENT</text>
+  <text x="376" y="222" class="t-note">writes the tests</text>
+
+  <!-- Reconciler -->
+  <rect x="620" y="150" width="160" height="82" rx="5" fill="var(--agentbg)"
+        stroke="var(--agent)" stroke-width="2"/>
+  <text x="636" y="178" class="t-stage">3 · Reconciler</text>
+  <rect x="636" y="188" width="46" height="16" rx="3" fill="none" stroke="var(--agent)"/>
+  <text x="659" y="200" class="t-kind" text-anchor="middle" fill="var(--agent)">AGENT</text>
+  <text x="636" y="222" class="t-note">writes the contract</text>
+
+  <!-- Preflight -->
+  <rect x="820" y="150" width="80" height="82" rx="5" fill="var(--mechbg)"
+        stroke="var(--mech)" stroke-width="2"/>
+  <text x="834" y="178" class="t-stage" font-size="12.5">4 · Pre-</text>
+  <text x="834" y="192" class="t-stage" font-size="12.5">flight</text>
+  <rect x="834" y="200" width="50" height="16" rx="3" fill="none" stroke="var(--mech)"/>
+  <text x="859" y="212" class="t-kind" text-anchor="middle" fill="var(--mech)">MECH</text>
+
+  <!-- Audit -->
+  <rect x="920" y="150" width="80" height="82" rx="5" fill="var(--mechbg)"
+        stroke="var(--mech)" stroke-width="2"/>
+  <text x="934" y="178" class="t-stage" font-size="12.5">5 ·</text>
+  <text x="934" y="192" class="t-stage" font-size="12.5">Audit</text>
+  <rect x="934" y="200" width="50" height="16" rx="3" fill="none" stroke="var(--mech)"/>
+  <text x="959" y="212" class="t-kind" text-anchor="middle" fill="var(--mech)">MECH</text>
+
+  <!-- ===== arrows along the spine ===== -->
+  <line x1="202" y1="191" x2="356" y2="191" stroke="var(--rule)" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="522" y1="191" x2="616" y2="191" stroke="var(--rule)" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="782" y1="191" x2="816" y2="191" stroke="var(--rule)" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="902" y1="191" x2="916" y2="191" stroke="var(--rule)" stroke-width="2" marker-end="url(#a)"/>
+
+  <!-- artifacts riding the arrows -->
+  <rect x="206" y="160" width="148" height="21" rx="10" fill="var(--art)" stroke="var(--rule)"/>
+  <text x="280" y="175" class="t-art" text-anchor="middle">DETAILS.md + api.md</text>
+  <rect x="524" y="160" width="90" height="21" rx="10" fill="var(--art)" stroke="var(--rule)"/>
+  <text x="569" y="175" class="t-art" text-anchor="middle">tests/hidden</text>
+
+  <!-- ===== outputs hanging below each stage ===== -->
+  <line x1="120" y1="234" x2="120" y2="268" stroke="var(--rule)" stroke-width="1.5"/>
+  <rect x="40" y="268" width="160" height="40" rx="4" fill="var(--art)" stroke="var(--rule)"/>
+  <text x="52" y="284" class="t-art">bugreport.md → L0</text>
+  <text x="52" y="300" class="t-art">cheat.patch</text>
+
+  <line x1="440" y1="234" x2="440" y2="268" stroke="var(--rule)" stroke-width="1.5"/>
+  <rect x="360" y="268" width="160" height="40" rx="4" fill="var(--art)" stroke="var(--rule)"/>
+  <text x="372" y="284" class="t-art">TestDetail01…NN</text>
+  <text x="372" y="300" class="t-note">one per commitment</text>
+
+  <line x1="700" y1="234" x2="700" y2="268" stroke="var(--rule)" stroke-width="1.5"/>
+  <rect x="620" y="268" width="160" height="40" rx="4" fill="var(--art)" stroke="var(--rule)"/>
+  <text x="632" y="284" class="t-art">contract.md → L2</text>
+  <text x="632" y="300" class="t-note">one row per assertion</text>
+
+  <line x1="860" y1="234" x2="860" y2="268" stroke="var(--rule)" stroke-width="1.5"/>
+  <rect x="820" y="268" width="180" height="56" rx="4" fill="var(--art)" stroke="var(--mech)"/>
+  <text x="832" y="284" class="t-art" fill="var(--blind)">bare → FAIL</text>
+  <text x="832" y="299" class="t-art" fill="var(--mech)">gold → PASS</text>
+  <text x="832" y="314" class="t-art" fill="var(--blind)">cheat → FAIL</text>
+
+  <!-- ===== the defect path ===== -->
+  <rect x="40" y="356" width="960" height="92" rx="5" fill="var(--blindbg)"
+        stroke="var(--blind)" stroke-width="1.5"/>
+  <text x="58" y="380" class="t-stage" fill="var(--blind)">Where the bad tasks come from</text>
+  <text x="58" y="402" class="t-note" font-size="12.5">The verifier is blind to gold, so it can only grade what DETAILS.md lists. An arbitrary line —</text>
+  <text x="58" y="419" class="t-note" font-size="12.5">an exact error string, a type spelling — becomes an assertion no solver can ever derive. Preflight still passes.</text>
+  <text x="58" y="440" class="t-note" font-size="12.5" font-weight="600" fill="var(--ink)">The author already marks these. 150 of 170 DETAILS files carry “Inferable:” — 49 say “no”. Nothing read it until today.</text>
+
+  <!-- arrow from DETAILS to the defect box -->
+  <path d="M280,182 L280,336 L280,352" fill="none" stroke="var(--blind)" stroke-width="1.5"
+        stroke-dasharray="4 4" marker-end="url(#ag)"/>
+</svg>
+</div>
+</div>

@@ -12,7 +12,7 @@ R=/home/evan/Documents/open_swe_traces_research
 cd "$R"
 TICK="${1:-300}"
 CAP=12                 # trial containers; above this docker's address pool starts failing
-DEVIN_SLOTS=4
+DEVIN_SLOTS=2          # free model tier throttled at 4-5 concurrent on 2026-09-20 18:2x
 QUEUE="$R/outputs/supervisor/sweep_queue.txt"
 LEDGER="$R/outputs/rolling.jsonl"
 LOG="$R/outputs/supervisor/supervisor.log"
@@ -100,6 +100,8 @@ while true; do
   bash scripts/ops/reap_wedged.sh 45 45 >> "$LOG" 2>&1 || true
   free=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
   if [ "${free:-999}" -lt 100 ]; then say "disk ${free}G < 100G, pruning"; bash scripts/ops/prune_worktrees.sh >> "$LOG" 2>&1 || true; fi
+  uv run python scripts/ops/devin_ratelimit_check.py >> "$LOG" 2>&1 || say "RATE LIMIT SIGNATURE — see supervisor.log"
   snapshot
+  uv run python scripts/ops/build_dashboard.py >> "$LOG" 2>&1 || true
   sleep "$TICK"
 done

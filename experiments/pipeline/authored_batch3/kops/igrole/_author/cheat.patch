@@ -1,0 +1,50 @@
+--- a/pkg/apis/kops/parse.go
++++ b/pkg/apis/kops/parse.go
+@@ -18,10 +18,10 @@
+ 
+ import (
+ 	_ "fmt"
+-	_ "strings"
++	"strings"
+ 
+-	_ "example.internal/clustkit/upup/pkg/fi/utils"
+-	_ "sigs.k8s.io/yaml"
++	"example.internal/clustkit/upup/pkg/fi/utils"
++	"sigs.k8s.io/yaml"
+ )
+ 
+ // ParseInstanceGroupRole converts a string to an InstanceGroupRole.
+@@ -29,17 +29,30 @@
+ // If lenient is set to true, the function will match pluralised words too.
+ // It will return the instance group role and true if a match was found.
+ func ParseInstanceGroupRole(input string, lenient bool) (InstanceGroupRole, bool) {
+-	panic("excised: ParseInstanceGroupRole")
++	switch strings.ToLower(input) {
++	case "control-plane", "controlplane":
++		return InstanceGroupRoleControlPlane, true
++	case "node":
++		return InstanceGroupRoleNode, true
++	case "bastion":
++		return InstanceGroupRoleBastion, true
++	case "apiserver":
++		return InstanceGroupRoleAPIServer, true
++	}
++	if lenient && strings.ToLower(input) == "master" {
++		return InstanceGroupRoleControlPlane, true
++	}
++	return "", false
+ }
+ 
+ // ParseRawYaml parses an object just using yaml, without the full api machinery
+ // Deprecated: prefer using the API machinery (package kopscodecs)
+ func ParseRawYaml(data []byte, dest interface{}) error {
+-	panic("excised: ParseRawYaml")
++	return yaml.Unmarshal(data, dest)
+ }
+ 
+ // ToRawYaml marshals an object to yaml, without the full api machinery
+ // Deprecated: prefer using the API machinery (package kopscodecs)
+ func ToRawYaml(obj interface{}) ([]byte, error) {
+-	panic("excised: ToRawYaml")
++	return utils.YamlMarshal(obj)
+ }

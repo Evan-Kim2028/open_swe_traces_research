@@ -1,0 +1,304 @@
+diff --git a/plumbing/format/commitgraph/encoder.go b/plumbing/format/commitgraph/encoder.go
+index 5453229..ab7bcd0 100644
+--- a/plumbing/format/commitgraph/encoder.go
++++ b/plumbing/format/commitgraph/encoder.go
+@@ -2,13 +2,13 @@ package commitgraph
+ 
+ import (
+ 	"crypto"
+-	_ "fmt"
++	"fmt"
+ 	"io"
+-	_ "math"
++	"math"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+ 	"example.internal/gitkit/v6/plumbing/hash"
+-	_ "example.internal/gitkit/v6/utils/binary"
++	"example.internal/gitkit/v6/utils/binary"
+ )
+ 
+ // Encoder writes MemoryIndex structs to an output stream.
+@@ -27,52 +27,270 @@ func NewEncoder(w io.Writer) *Encoder {
+ 
+ // Encode writes an index into the commit-graph file
+ func (e *Encoder) Encode(idx Index) error {
+-	panic("excised: Encoder.Encode")
++	// Get all the hashes in the input index
++	hashes := idx.Hashes()
++
++	// Sort the input and prepare helper structures we'll need for encoding
++	hashToIndex, fanout, extraEdgesCount, generationV2OverflowCount, err := e.prepare(idx, hashes)
++	if err != nil {
++		return err
++	}
++
++	chunkSignatures := [][]byte{OIDFanoutChunk.Signature(), OIDLookupChunk.Signature(), CommitDataChunk.Signature()}
++	chunkSizes := []uint64{szUint32 * lenFanout, uint64(len(hashes) * e.hash.Size()), uint64(len(hashes) * (e.hash.Size() + szCommitData))}
++	if extraEdgesCount > 0 {
++		chunkSignatures = append(chunkSignatures, ExtraEdgeListChunk.Signature())
++		chunkSizes = append(chunkSizes, uint64(extraEdgesCount)*szUint32)
++	}
++	if idx.HasGenerationV2() {
++		chunkSignatures = append(chunkSignatures, GenerationDataChunk.Signature())
++		chunkSizes = append(chunkSizes, uint64(len(hashes))*szUint32)
++		if generationV2OverflowCount > 0 {
++			chunkSignatures = append(chunkSignatures, GenerationDataOverflowChunk.Signature())
++			chunkSizes = append(chunkSizes, uint64(generationV2OverflowCount)*szUint64)
++		}
++	}
++
++	if err := e.encodeFileHeader(len(chunkSignatures)); err != nil {
++		return err
++	}
++	if err := e.encodeChunkHeaders(chunkSignatures, chunkSizes); err != nil {
++		return err
++	}
++	if err := e.encodeFanout(fanout); err != nil {
++		return err
++	}
++	if err := e.encodeOidLookup(hashes); err != nil {
++		return err
++	}
++
++	extraEdges, generationV2Data, err := e.encodeCommitData(hashes, hashToIndex, idx)
++	if err != nil {
++		return err
++	}
++	if err = e.encodeExtraEdges(extraEdges); err != nil {
++		return err
++	}
++	if idx.HasGenerationV2() {
++		overflows, err := e.encodeGenerationV2Data(generationV2Data)
++		if err != nil {
++			return err
++		}
++		if err = e.encodeGenerationV2Overflow(overflows); err != nil {
++			return err
++		}
++	}
++
++	return e.encodeChecksum()
+ }
+ 
+ // lookupParentIndex resolves a parent hash to its position in the file being
+ // encoded. A bare map read yields index 0 for an absent hash, which would
+ // silently record an arbitrary commit as the parent, so report it instead.
+ func lookupParentIndex(hashToIndex map[plumbing.Hash]uint32, h plumbing.Hash) (uint32, error) {
+-	panic("excised: lookupParentIndex")
++	i, ok := hashToIndex[h]
++	if !ok {
++		return 0, fmt.Errorf("%w: %s", ErrParentNotInIndex, h)
++	}
++
++	return i, nil
+ }
+ 
+ func (e *Encoder) prepare(idx Index, hashes []plumbing.Hash) (hashToIndex map[plumbing.Hash]uint32, fanout []uint32, extraEdgesCount, generationV2OverflowCount uint32, err error) {
+-	panic("excised: Encoder.prepare")
++	// Sort the hashes and build our index
++	plumbing.HashesSort(hashes)
++	hashToIndex = make(map[plumbing.Hash]uint32)
++	fanout = make([]uint32, lenFanout)
++	for i, hash := range hashes {
++		hashToIndex[hash] = uint32(i)
++		fanout[hash.Bytes()[0]]++
++	}
++
++	// Convert the fanout to cumulative values
++	for i := 1; i < lenFanout; i++ {
++		fanout[i] += fanout[i-1]
++	}
++
++	hasGenerationV2 := idx.HasGenerationV2()
++
++	// Find out if we will need extra edge table. An index that cannot satisfy
++	// the lookup returns a nil CommitData, so the error has to be checked
++	// before v is dereferenced.
++	for i := range len(hashes) {
++		v, err := idx.GetCommitDataByIndex(uint32(i))
++		if err != nil {
++			return nil, nil, 0, 0, err
++		}
++		if len(v.ParentHashes) > 2 {
++			extraEdgesCount += uint32(len(v.ParentHashes) - 1)
++		}
++		if hasGenerationV2 && v.GenerationV2Data() > math.MaxUint32 {
++			generationV2OverflowCount++
++		}
++	}
++
++	return hashToIndex, fanout, extraEdgesCount, generationV2OverflowCount, nil
+ }
+ 
+ func (e *Encoder) encodeFileHeader(chunkCount int) (err error) {
+-	panic("excised: Encoder.encodeFileHeader")
++	if chunkCount > 255 {
++		return ErrTooManyChunks
++	}
++	if _, err = e.Write(commitFileSignature); err == nil {
++		version := byte(1)
++		if crypto.Hash(e.hash.Size()) == crypto.Hash(crypto.SHA256.Size()) {
++			version = byte(2)
++		}
++		_, err = e.Write([]byte{1, version, byte(chunkCount), 0})
++	}
++	return err
+ }
+ 
+ func (e *Encoder) encodeChunkHeaders(chunkSignatures [][]byte, chunkSizes []uint64) (err error) {
+-	panic("excised: Encoder.encodeChunkHeaders")
++	// 8 bytes of file header, 12 bytes for each chunk header and 12 byte for terminator
++	offset := uint64(szSignature + szHeader + (len(chunkSignatures)+1)*(szChunkSig+szUint64))
++	for i, signature := range chunkSignatures {
++		if _, err = e.Write(signature); err == nil {
++			err = binary.WriteUint64(e, offset)
++		}
++		if err != nil {
++			return err
++		}
++		offset += chunkSizes[i]
++	}
++	if _, err = e.Write(ZeroChunk.Signature()); err == nil {
++		err = binary.WriteUint64(e, offset)
++	}
++	return err
+ }
+ 
+ func (e *Encoder) encodeFanout(fanout []uint32) (err error) {
+-	panic("excised: Encoder.encodeFanout")
++	for i := 0; i <= 0xff; i++ {
++		if err = binary.WriteUint32(e, fanout[i]); err != nil {
++			return err
++		}
++	}
++	return err
+ }
+ 
+ func (e *Encoder) encodeOidLookup(hashes []plumbing.Hash) (err error) {
+-	panic("excised: Encoder.encodeOidLookup")
++	for _, hash := range hashes {
++		if _, err = e.Write(hash.Bytes()); err != nil {
++			return err
++		}
++	}
++	return err
+ }
+ 
+ func (e *Encoder) encodeCommitData(hashes []plumbing.Hash, hashToIndex map[plumbing.Hash]uint32, idx Index) (extraEdges []uint32, generationV2Data []uint64, err error) {
+-	panic("excised: Encoder.encodeCommitData")
++	if idx.HasGenerationV2() {
++		generationV2Data = make([]uint64, 0, len(hashes))
++	}
++	for _, hash := range hashes {
++		// Both lookups can fail, and commitData is nil when the second one
++		// does.
++		origIndex, err := idx.GetIndexByHash(hash)
++		if err != nil {
++			return extraEdges, generationV2Data, err
++		}
++		commitData, err := idx.GetCommitDataByIndex(origIndex)
++		if err != nil {
++			return extraEdges, generationV2Data, err
++		}
++		if _, err = e.Write(commitData.TreeHash.Bytes()); err != nil {
++			return extraEdges, generationV2Data, err
++		}
++
++		var parent1, parent2 uint32
++		switch len(commitData.ParentHashes) {
++		case 0:
++			parent1 = parentNone
++			parent2 = parentNone
++		case 1:
++			if parent1, err = lookupParentIndex(hashToIndex, commitData.ParentHashes[0]); err != nil {
++				return extraEdges, generationV2Data, err
++			}
++			parent2 = parentNone
++		case 2:
++			if parent1, err = lookupParentIndex(hashToIndex, commitData.ParentHashes[0]); err != nil {
++				return extraEdges, generationV2Data, err
++			}
++			if parent2, err = lookupParentIndex(hashToIndex, commitData.ParentHashes[1]); err != nil {
++				return extraEdges, generationV2Data, err
++			}
++		default:
++			if parent1, err = lookupParentIndex(hashToIndex, commitData.ParentHashes[0]); err != nil {
++				return extraEdges, generationV2Data, err
++			}
++			parent2 = uint32(len(extraEdges)) | parentOctopusUsed
++			for _, parentHash := range commitData.ParentHashes[1:] {
++				extraEdge, err := lookupParentIndex(hashToIndex, parentHash)
++				if err != nil {
++					return extraEdges, generationV2Data, err
++				}
++				extraEdges = append(extraEdges, extraEdge)
++			}
++			extraEdges[len(extraEdges)-1] |= parentLast
++		}
++
++		if err = binary.WriteUint32(e, parent1); err == nil {
++			err = binary.WriteUint32(e, parent2)
++		}
++		if err != nil {
++			return extraEdges, generationV2Data, err
++		}
++
++		unixTime := uint64(commitData.When.Unix())
++		unixTime |= uint64(commitData.Generation) << 34
++		if err = binary.WriteUint64(e, unixTime); err != nil {
++			return extraEdges, generationV2Data, err
++		}
++		if generationV2Data != nil {
++			generationV2Data = append(generationV2Data, commitData.GenerationV2Data())
++		}
++	}
++	return extraEdges, generationV2Data, err
+ }
+ 
+ func (e *Encoder) encodeExtraEdges(extraEdges []uint32) (err error) {
+-	panic("excised: Encoder.encodeExtraEdges")
++	for _, parent := range extraEdges {
++		if err = binary.WriteUint32(e, parent); err != nil {
++			return err
++		}
++	}
++	return err
+ }
+ 
+ func (e *Encoder) encodeGenerationV2Data(generationV2Data []uint64) (overflows []uint64, err error) {
+-	panic("excised: Encoder.encodeGenerationV2Data")
++	head := 0
++	for _, data := range generationV2Data {
++		if data >= 0x80000000 {
++			// overflow
++			if err = binary.WriteUint32(e, uint32(head)|0x80000000); err != nil {
++				return nil, err
++			}
++			generationV2Data[head] = data
++			head++
++			continue
++		}
++		if err = binary.WriteUint32(e, uint32(data)); err != nil {
++			return nil, err
++		}
++	}
++
++	return generationV2Data[:head], nil
+ }
+ 
+ func (e *Encoder) encodeGenerationV2Overflow(overflows []uint64) (err error) {
+-	panic("excised: Encoder.encodeGenerationV2Overflow")
++	for _, overflow := range overflows {
++		if err = binary.WriteUint64(e, overflow); err != nil {
++			return err
++		}
++	}
++	return err
+ }
+ 
+ func (e *Encoder) encodeChecksum() error {
+-	panic("excised: Encoder.encodeChecksum")
++	_, err := e.Write(e.hash.Sum(nil)[:e.hash.Size()])
++	return err
+ }

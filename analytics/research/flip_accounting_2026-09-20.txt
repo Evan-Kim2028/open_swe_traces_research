@@ -1,0 +1,138 @@
+family                                       L0         L1           L2       L3       L5  verdict
+client-go-connarray                         1/1          -            -        -        -  
+client-go-doactionbatches                   0/1          -            -        -        -  
+client-go-lockresolver                      0/1          -            -        -        -  
+client-go-memdbstaging                      0/1          -            -        -        -  
+client-go-onregionerror                     0/1          -            -        -        -  
+client-go-pdoracle                          1/1          -            -        -        -  
+client-go-pessimisticlock                   1/1          -            -        -        -  
+client-go-rangetask                         1/1          -            -        -        -  
+client-go-regionstoresorted                 0/1          -            -        -        -  
+client-go-replicaselector                   0/1          -            -        -        -  
+gin-affix                                   1/1          -            -        -        -  
+gin-basicauth                               1/1          -            -        -        -  
+gin-bindingdispatch                         3/3          -            -        -        -  
+gin-bodydecoders                            4/4          -            -        -        -  
+gin-clientip                                0/1          -          3/3        -        -  FLIP (certified hard)
+gin-colorfmt                                1/1          -            -        -        -  
+gin-contain                                 1/1          -            -        -        -  
+gin-crossfld                                1/1          -            -        -        -  
+gin-cryptocoin                              1/1          -            -        -        -  
+gin-ctxfiles                                0/1          -          3/3        -        -  FLIP (certified hard)
+gin-ctxquery                                1/1          -            -        -        -  
+gin-defaultengine                           3/3          -            -        -        -  
+gin-enginecfg                               0/1          -          0/3        -      3/3  double-failure
+gin-enginemux                               0/1          -          3/3        -        -  FLIP (certified hard)
+gin-errors                                  0/1          -          3/3        -        -  FLIP (certified hard)
+gin-exclude                                 0/1          -            -        -        -  
+gin-formmapping                             1/3          -            -        -        -  
+gin-hashfmt                                 1/1          -            -        -        -  
+gin-hostport                                1/1          -            -        -        -  
+gin-htmlrender                              3/3          -            -        -        -  
+gin-ipcidr                                  0/1          -            -        -        -  
+gin-jsonrenders                             0/3          -          3/3        -        -  FLIP (certified hard)
+gin-loggerfmt                               0/1          -          3/3        -        -  FLIP (certified hard)
+gin-mailfmt                                 0/1          -            -        -        -  
+gin-multipartfiles                          3/3          -            -        -        -  
+gin-negotiate                               0/1          -          0/3        -      3/3  double-failure
+gin-recoverymw                              0/1          -          1/3        -        -  FLIP (certified hard)
+gin-requestbinders                          3/3          -            -        -        -  
+gin-respwriter                              0/1          -          3/3        -        -  FLIP (certified hard)
+gin-routelookup                             1/1          -            -        -        -  
+gin-routergroup                             0/1          -          3/3        -        -  FLIP (certified hard)
+gin-streamrenders                           0/3          -          3/3        -        -  FLIP (certified hard)
+gin-structlvl                               1/1          -            -        -        -  
+gin-treeinsert                              0/1          -            -        -        -  
+gin-urifmt                                  1/1          -            -        -        -  
+gin-uuidfmt                                 1/1          -            -        -        -  
+gin-validator                               3/3          -            -        -        -  
+gin-xstruct                                 0/1          -            -        -        -  
+go-github-auditentry                        0/1          -          2/3        -        -  FLIP (certified hard)
+go-github-copilotpoly                       0/1          -          3/3        -        -  FLIP (certified hard)
+go-github-customprop                        0/1          -          2/3        -        -  FLIP (certified hard)
+go-github-envreview                         0/1          -          2/3        -        -  FLIP (certified hard)
+go-github-eventdispatch                     0/1          -          2/3        -        -  FLIP (certified hard)
+go-github-ndjsonmetrics                     1/1          -            -        -        -  
+go-github-netconfig                         0/1          -          3/3        -        -  FLIP (certified hard)
+go-github-projectsjson                      0/1          -          3/3        -        -  FLIP (certified hard)
+go-github-pubkeyjson                        1/1          -            -        -        -  
+go-github-refescape                         1/1          -            -        -        -  
+go-github-rulesetjson                       0/1          -          2/3        -        -  FLIP (certified hard)
+go-github-teamsupdate                       1/1          -            -        -        -  
+go-github-treeentryjson                     0/1          -          3/3        -        -  FLIP (certified hard)
+go-github-webhooksig                        0/1          -          2/2        -        -  FLIP (certified hard)
+goa-errloc                                  1/1          -            -        -        -  
+goa-evalctx                                 0/1          -            -        -        -  
+goa-evalrun                                 1/1          -            -        -        -  
+goa-grpcerr                                 1/1          -            -        -        -  
+goa-grpctrace                               1/1          -            -        -        -  
+goa-grpcxray                                1/1          -            -        -        -  
+goa-httpxray                                0/1          -            -        -        -  
+goa-jsonrpcwire                             0/1          -            -        -        -  
+goa-pkgvalidation                           1/1          -            -        -        -  
+goa-xrayseg                                 0/1          -            -        -        -  
+helm-chartdl                                0/1          -          0/3        -     2/3*  double-failure
+helm-chartloader                            3/3          -            -        -        -  
+helm-chartmeta                              1/1          -            -        -        -  
+helm-chartrepo                              0/1          -          0/3        -     2/3*  double-failure
+helm-coalesce                               2/3          -            -        -        -  
+helm-copyst                                 0/1          -          3/3        -        -  FLIP (certified hard)
+helm-depresolver                            0/3          -          0/3     0/6*      1/3  double-failure
+helm-dlmanager                              0/1          -          3/3        -        -  FLIP (certified hard)
+helm-getterdispatch                         1/1          -            -        -        -  
+helm-helmpath                               0/1          -          3/3        -        -  FLIP (certified hard)
+helm-httpgetter                             0/1          -          0/3        -     0/3*  double-failure
+helm-ignorerules                            1/5          -          0/3      1/3        -  easy at L0
+helm-kindsorter                             3/3          -            -        -        -  
+helm-memorydriver                           3/3          -            -        -        -  
+helm-provenance                             3/3          -            -        -        -  
+helm-relsplit                               1/1          -            -        -        -  
+helm-repindex                               0/3          -          0/3      0/3      3/3  double-failure
+helm-searchindex                            0/1          -          3/3        -        -  FLIP (certified hard)
+helm-storage                                3/3          -            -        -        -  
+helm-strvalsparser                          4/5          -            -        -        -  
+helm-sympath                                0/1          -          2/3        -        -  FLIP (certified hard)
+helm-tlsutil                                0/1          -          3/3        -        -  FLIP (certified hard)
+helm-urlutil                                1/1          -            -        -        -  
+helm-valuesopts                             0/1          -          3/3        -        -  FLIP (certified hard)
+kops-addonparse                             0/3          -          3/3        -        -  FLIP (certified hard)
+kops-assetsremap                            0/3          -          2/3        -        -  FLIP (certified hard)
+kops-cidrsubnet                             0/1          -          6/6        -        -  FLIP (certified hard)
+kops-clusternames                           1/1          -            -        -        -  
+kops-clustervalid                           0/3          -          0/3      0/3      3/3  double-failure
+kops-difftext                               0/1          -          0/6        -      3/3  double-failure
+kops-distroident                            0/1          -          6/6        -        -  FLIP (certified hard)
+kops-featureflags                           0/1          -          6/6        -        -  FLIP (certified hard)
+kops-fiutils                                0/1          -          6/6        -        -  FLIP (certified hard)
+kops-flagbuilder                            1/5          -            -        -        -  
+kops-fspath                                 0/1          -          6/6        -        -  FLIP (certified hard)
+kops-hashparse                              0/1          -          6/6        -        -  FLIP (certified hard)
+kops-hostsguard                             0/1          -          6/6        -        -  FLIP (certified hard)
+kops-ignames                                1/1          -            -        -        -  
+kops-intstrpct                              1/1          -            -        -        -  
+kops-issuecert                              0/3          -          3/3        -        -  FLIP (certified hard)
+kops-jsontransform                          0/1          -          6/6        -        -  FLIP (certified hard)
+kops-kubeversion                            0/1          -          6/6        -        -  FLIP (certified hard)
+kops-labelvals                              1/1          -            -        -        -  
+kops-memfs                                  0/3          -          3/3        -        -  FLIP (certified hard)
+kops-oidcdisc                               0/3          -          3/3        -        -  FLIP (certified hard)
+kops-osmetadata                             3/3          -            -        -        -  
+kops-portrange                              1/1          -            -        -        -  
+kops-semververs                             1/1          -            -        -        -  
+kops-stringorset                            0/1          -          3/6        -        -  FLIP (certified hard)
+kops-subnet                                 0/1          -          5/6        -        -  FLIP (certified hard)
+kops-systemdunit                            0/1          -          4/6        -        -  FLIP (certified hard)
+kops-taintparse                             0/1          -          0/6        -      3/3  double-failure
+kops-templater                              0/3          -          3/3        -        -  FLIP (certified hard)
+kops-tomlwriter                             3/3          -            -        -        -  
+store-s11-r015                              1/1          -            -        -        -  
+store-s23-r020                              0/1          -            -        -        -  
+store-s37-r020                              2/2          -            -        -        -  
+store-s42-r250                              1/1          -            -        -        -  
+store-s53-r250                              0/1          -            -        -        -  
+store-s67-r300                              1/1          -            -        -        -  
+xrepo-condreq                               1/1          -            -        -        -  
+xrepo-fieldcmp                              1/1          -            -        -        -  
+xrepo-oneofuniq                             1/1          -            -        -        -  
+
+double-failures (10): gin-enginecfg, gin-negotiate, helm-chartdl, helm-chartrepo, helm-depresolver, helm-httpgetter, helm-repindex, kops-clustervalid, kops-difftext, kops-taintparse

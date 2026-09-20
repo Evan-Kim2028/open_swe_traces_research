@@ -1,0 +1,22 @@
+{
+  "impl": {
+    "github/orgs_properties.go": {
+      "CustomProperty.DefaultValueString": "return \"\", false",
+      "CustomProperty.DefaultValueStrings": "return nil, false",
+      "CustomProperty.DefaultValueBool": "return false, false"
+    }
+  },
+  "deltests": {
+    "github/orgs_properties_test.go": [
+      "TestCustomPropertyDefaultValueString",
+      "TestCustomPropertyDefaultValueStrings",
+      "TestCustomPropertyDefaultValueBool"
+    ]
+  },
+  "testre": "TestCustomPropertyDefaultValue",
+  "unimport": {
+    "github/orgs_properties.go": [
+      "strconv"
+    ]
+  }
+}

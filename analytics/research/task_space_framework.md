@@ -101,3 +101,40 @@ report the binary L<2 / L>=2 split.
 
 ## Replication (2026-09-19)
 Single-attempt flip points mislabeled 1 of 2 units. All flip points are now pass rates over 3 attempts (C6).
+
+## Closure-ratio test outcome (2026-09-19, see `closure_proxies_vs_difficulty.md`, `closure_vs_flip.md`)
+
+Hypothesis: difficulty is driven by the closure *structure* of the change (new code referencing new code)
+rather than its size. Tested on 38,294 Open-SWE-Traces instances with >= 3 labeled rollouts, proxies from the
+gold-patch text alone. Result: **refuted as stated.** Structure adds held-out R² +0.008 on top of size + language;
+the size-matched top-vs-bottom ratio-quartile difference is -0.004 pooled; ratio's standardized coefficient is
++0.009. `log1p(added_lines)` is the dominant term (-0.12 per sd), and `new_frac` is *positive* (more new definitions
+per added line → easier), the opposite of the hypothesis. Caveats: the proxy is diff-text only (no repo call graph),
+`ratio` is 0 for the ~70% of patches that define no new symbol, and natural PRs are not excisions. The retrospective
+on the authored bank has n=3 measured flips and is uninformative; being extended to helm/kops.
+
+Framework decision: **size of the required change (added lines) is the measured lever on natural tasks; internal
+self-reference is not.** The fabricated-repo generator (D) should vary size and structure independently so the two
+can be separated where the natural data cannot. The rung × size interaction (C) is the next test.
+
+## Mixture finding: size is a feasibility gate, not a difficulty dial (2026-09-19, main-thread check on `closure_proxies.parquet`)
+
+Binned by gold-patch added lines (38,294 instances, n_labeled >= 3), a two-component binomial mixture per bin gives:
+
+| log1p(added_lines) bin | n | feasible share π | feasible pass p1 | raw solve rate |
+|---|---:|---:|---:|---:|
+| ~1.0 (≈2 lines) | 2,081 | 0.62 | 0.86 | 0.64 |
+| ~2.7 (≈14) | 6,372 | 0.60 | 0.86 | 0.57 |
+| ~3.8 (≈44) | 5,320 | 0.50 | 0.82 | 0.45 |
+| ~4.7 (≈115) | 4,117 | 0.36 | 0.75 | 0.30 |
+| ~5.8 (≈330) | 2,135 | 0.25 | 0.74 | 0.20 |
+| ~7.0 (≈1,000+) | 1,153 | 0.23 | 0.75 | 0.19 |
+
+Same shape by file count. log(solve rate) is not linear in hunks, files or lines (the p^k model is rejected; the curve
+floors at ~0.2). Reading: patch size moves tasks between *infeasible for every teacher* and *feasible*; within the
+feasible component the pass probability drops only ~12 points across three orders of magnitude of size. Under a
+mixture, the R² 0.12 of the size model is expected. The difficulty dial we want (moving p1 through the 20–80% band)
+is therefore NOT size on natural tasks. Candidates not yet measured on this corpus: the verifier term (gold patch
+test-file lines, upstream FAIL_TO_PASS counts), specification density (issue chars per source line), and per-model
+p1 for the strongest combos. The feasibility gate itself needs decomposing: broken environment vs under-specified
+issue vs truly beyond every teacher.

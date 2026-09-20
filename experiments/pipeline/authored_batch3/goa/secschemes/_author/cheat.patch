@@ -1,0 +1,113 @@
+--- a/expr/security.go
++++ b/expr/security.go
+@@ -113,51 +113,68 @@
+ 
+ // EvalName returns the generic definition name used in error messages.
+ func (s *SecurityExpr) EvalName() string {
+-	panic("excised: SecurityExpr.EvalName")
++	if len(s.Schemes) > 0 {
++		return "Security scheme " + s.Schemes[0].SchemeName
++	}
++	return "Security"
+ }
+ 
+ // DupRequirement creates a copy of the given security requirement.
+ func DupRequirement(req *SecurityExpr) *SecurityExpr {
+-	panic("excised: DupRequirement")
++	return &SecurityExpr{Schemes: req.Schemes, Scopes: req.Scopes}
+ }
+ 
+ // DupScheme creates a copy of the given scheme expression.
+ func DupScheme(sch *SchemeExpr) *SchemeExpr {
+-	panic("excised: DupScheme")
++	dup := *sch
++	dup.authored = sch
++	return &dup
+ }
+ 
+ // AuthoredScheme returns the security scheme declared by the design. It
+ // returns s when s has not been copied for a transport.
+ func (s *SchemeExpr) AuthoredScheme() *SchemeExpr {
+-	panic("excised: SchemeExpr.AuthoredScheme")
++	if s.authored != nil {
++		return s.authored
++	}
++	return s
+ }
+ 
+ // HasNoSecurity returns true if the security requirements explicitly disable
+ // security.
+ func HasNoSecurity(reqs []*SecurityExpr) bool {
+-	panic("excised: HasNoSecurity")
++	for _, r := range reqs {
++		for _, scheme := range r.Schemes {
++			if scheme.Kind == NoKind {
++				return true
++			}
++		}
++	}
++	return false
+ }
+ 
+ // EffectiveSecurityRequirements returns the security requirements that should
+ // be enforced. It returns nil when reqs explicitly disable security.
+ func EffectiveSecurityRequirements(reqs []*SecurityExpr) []*SecurityExpr {
+-	panic("excised: EffectiveSecurityRequirements")
++	if HasNoSecurity(reqs) {
++		return nil
++	}
++	return reqs
+ }
+ 
+ // Type returns the type of the scheme.
+-func (s *SchemeExpr) Type() string {
+-	panic("excised: SchemeExpr.Type")
++var schemeTypeNames = map[SchemeKind]string{
++	OAuth2Kind: "OAuth2", BasicAuthKind: "Basic", APIKeyKind: "APIKey",
++	BearerKind: "Bearer", JWTKind: "JWT", NoKind: "None",
+ }
+ 
++func (s *SchemeExpr) Type() string { return schemeTypeNames[s.Kind] }
++
+ // EvalName returns the generic definition name used in error messages.
+-func (s *SchemeExpr) EvalName() string {
+-	panic("excised: SchemeExpr.EvalName")
+-}
++func (s *SchemeExpr) EvalName() string { return s.Type() + "Security" }
+ 
+ // Hash returns a unique hash value for s.
+-func (s *SchemeExpr) Hash() string {
+-	panic("excised: SchemeExpr.Hash")
+-}
++func (s *SchemeExpr) Hash() string { return s.SchemeName + "_" + s.Name }
+ 
+ // Validate ensures that the method payload contains attributes required
+ // by the scheme.
+@@ -166,9 +183,7 @@
+ }
+ 
+ // EvalName returns the name of the expression used in error messages.
+-func (f *FlowExpr) EvalName() string {
+-	panic("excised: FlowExpr.EvalName")
+-}
++func (f *FlowExpr) EvalName() string { return "flow " + f.Type() }
+ 
+ // Validate ensures that TokenURL and AuthorizationURL are valid URLs.
+ func (f *FlowExpr) Validate() *eval.ValidationErrors {
+@@ -176,10 +191,11 @@
+ }
+ 
+ // Type returns the grant type of the OAuth2 grant.
+-func (f *FlowExpr) Type() string {
+-	panic("excised: FlowExpr.Type")
++var flowTypeNames = map[FlowKind]string{
++	AuthorizationCodeFlowKind: "authorization_code", ImplicitFlowKind: "implicit",
++	PasswordFlowKind: "password", ClientCredentialsFlowKind: "client_credentials",
+ }
+ 
+-func (k SchemeKind) String() string {
+-	panic("excised: SchemeKind.String")
+-}
++func (f *FlowExpr) Type() string { return flowTypeNames[f.Kind] }
++
++func (k SchemeKind) String() string { return schemeTypeNames[k] }

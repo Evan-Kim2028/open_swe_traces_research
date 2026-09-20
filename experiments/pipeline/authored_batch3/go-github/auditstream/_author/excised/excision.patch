@@ -1,0 +1,232 @@
+diff --git a/github/enterprise_audit_log_stream.go b/github/enterprise_audit_log_stream.go
+index 72e377c..7b29bd8 100644
+--- a/github/enterprise_audit_log_stream.go
++++ b/github/enterprise_audit_log_stream.go
+@@ -118,42 +118,42 @@ func (*DatadogConfig) isAuditLogStreamVendorConfig()            {}
+ 
+ // NewAzureBlobStreamConfig returns an AuditLogStreamConfig for Azure Blob Storage.
+ func NewAzureBlobStreamConfig(enabled bool, cfg *AzureBlobConfig) *AuditLogStreamConfig {
+-	return &AuditLogStreamConfig{Enabled: enabled, StreamType: "Azure Blob Storage", VendorSpecific: cfg}
++	return &AuditLogStreamConfig{Enabled: enabled} /* excised: NewAzureBlobStreamConfig */
+ }
+ 
+ // NewAzureHubStreamConfig returns an AuditLogStreamConfig for Azure Event Hubs.
+ func NewAzureHubStreamConfig(enabled bool, cfg *AzureHubConfig) *AuditLogStreamConfig {
+-	return &AuditLogStreamConfig{Enabled: enabled, StreamType: "Azure Event Hubs", VendorSpecific: cfg}
++	return &AuditLogStreamConfig{Enabled: enabled} /* excised: NewAzureHubStreamConfig */
+ }
+ 
+ // NewAmazonS3OIDCStreamConfig returns an AuditLogStreamConfig for Amazon S3 with OIDC auth.
+ func NewAmazonS3OIDCStreamConfig(enabled bool, cfg *AmazonS3OIDCConfig) *AuditLogStreamConfig {
+-	return &AuditLogStreamConfig{Enabled: enabled, StreamType: "Amazon S3", VendorSpecific: cfg}
++	return &AuditLogStreamConfig{Enabled: enabled} /* excised: NewAmazonS3OIDCStreamConfig */
+ }
+ 
+ // NewAmazonS3AccessKeysStreamConfig returns an AuditLogStreamConfig for Amazon S3 with access key auth.
+ func NewAmazonS3AccessKeysStreamConfig(enabled bool, cfg *AmazonS3AccessKeysConfig) *AuditLogStreamConfig {
+-	return &AuditLogStreamConfig{Enabled: enabled, StreamType: "Amazon S3", VendorSpecific: cfg}
++	return &AuditLogStreamConfig{Enabled: enabled} /* excised: NewAmazonS3AccessKeysStreamConfig */
+ }
+ 
+ // NewSplunkStreamConfig returns an AuditLogStreamConfig for Splunk.
+ func NewSplunkStreamConfig(enabled bool, cfg *SplunkConfig) *AuditLogStreamConfig {
+-	return &AuditLogStreamConfig{Enabled: enabled, StreamType: "Splunk", VendorSpecific: cfg}
++	return &AuditLogStreamConfig{Enabled: enabled} /* excised: NewSplunkStreamConfig */
+ }
+ 
+ // NewHecStreamConfig returns an AuditLogStreamConfig for an HTTPS Event Collector endpoint.
+ func NewHecStreamConfig(enabled bool, cfg *HecConfig) *AuditLogStreamConfig {
+-	return &AuditLogStreamConfig{Enabled: enabled, StreamType: "HTTPS Event Collector", VendorSpecific: cfg}
++	return &AuditLogStreamConfig{Enabled: enabled} /* excised: NewHecStreamConfig */
+ }
+ 
+ // NewGoogleCloudStreamConfig returns an AuditLogStreamConfig for Google Cloud Storage.
+ func NewGoogleCloudStreamConfig(enabled bool, cfg *GoogleCloudConfig) *AuditLogStreamConfig {
+-	return &AuditLogStreamConfig{Enabled: enabled, StreamType: "Google Cloud Storage", VendorSpecific: cfg}
++	return &AuditLogStreamConfig{Enabled: enabled} /* excised: NewGoogleCloudStreamConfig */
+ }
+ 
+ // NewDatadogStreamConfig returns an AuditLogStreamConfig for Datadog.
+ func NewDatadogStreamConfig(enabled bool, cfg *DatadogConfig) *AuditLogStreamConfig {
+-	return &AuditLogStreamConfig{Enabled: enabled, StreamType: "Datadog", VendorSpecific: cfg}
++	return &AuditLogStreamConfig{Enabled: enabled} /* excised: NewDatadogStreamConfig */
+ }
+ 
+ // GetAuditLogStreamKey retrieves the public key used to encrypt secrets for audit log streaming.
+diff --git a/github/enterprise_audit_log_stream_test.go b/github/enterprise_audit_log_stream_test.go
+index b715bc9..8c10687 100644
+--- a/github/enterprise_audit_log_stream_test.go
++++ b/github/enterprise_audit_log_stream_test.go
+@@ -246,172 +246,10 @@ func TestEnterpriseService_DeleteAuditLogStream(t *testing.T) {
+ 	})
+ }
+ 
+-func TestNewAzureBlobStreamConfig(t *testing.T) {
+-	t.Parallel()
+-	cfg := &AzureBlobConfig{
+-		KeyID:           "v1",
+-		EncryptedSASURL: "ENCRYPTED",
+-		Container:       "my-container",
+-	}
+-
+-	got := NewAzureBlobStreamConfig(true, cfg)
+-
+-	want := &AuditLogStreamConfig{
+-		Enabled:        true,
+-		StreamType:     "Azure Blob Storage",
+-		VendorSpecific: cfg,
+-	}
+-	if !cmp.Equal(got, want) {
+-		t.Errorf("NewAzureBlobStreamConfig = %+v, want %+v", got, want)
+-	}
+-}
+-
+-func TestNewAzureHubStreamConfig(t *testing.T) {
+-	t.Parallel()
+-	cfg := &AzureHubConfig{
+-		Name:                "my-hub",
+-		EncryptedConnstring: "ENCRYPTED",
+-		KeyID:               "v1",
+-	}
+-
+-	got := NewAzureHubStreamConfig(true, cfg)
+-
+-	want := &AuditLogStreamConfig{
+-		Enabled:        true,
+-		StreamType:     "Azure Event Hubs",
+-		VendorSpecific: cfg,
+-	}
+-	if !cmp.Equal(got, want) {
+-		t.Errorf("NewAzureHubStreamConfig = %+v, want %+v", got, want)
+-	}
+-}
+-
+-func TestNewAmazonS3OIDCStreamConfig(t *testing.T) {
+-	t.Parallel()
+-	cfg := &AmazonS3OIDCConfig{
+-		Bucket:             "my-bucket",
+-		Region:             "us-east-1",
+-		KeyID:              "v1",
+-		AuthenticationType: "oidc",
+-		ArnRole:            "arn:aws:iam::role/my-role",
+-	}
+-
+-	got := NewAmazonS3OIDCStreamConfig(true, cfg)
+-
+-	want := &AuditLogStreamConfig{
+-		Enabled:        true,
+-		StreamType:     "Amazon S3",
+-		VendorSpecific: cfg,
+-	}
+-	if !cmp.Equal(got, want) {
+-		t.Errorf("NewAmazonS3OIDCStreamConfig = %+v, want %+v", got, want)
+-	}
+-}
+-
+-func TestNewAmazonS3AccessKeysStreamConfig(t *testing.T) {
+-	t.Parallel()
+-	cfg := &AmazonS3AccessKeysConfig{
+-		Bucket:               "my-bucket",
+-		Region:               "us-west-2",
+-		KeyID:                "v1",
+-		AuthenticationType:   "access_keys",
+-		EncryptedSecretKey:   "ENCRYPTED_SECRET",
+-		EncryptedAccessKeyID: "ENCRYPTED_KEY_ID",
+-	}
+-
+-	got := NewAmazonS3AccessKeysStreamConfig(false, cfg)
+-
+-	want := &AuditLogStreamConfig{
+-		Enabled:        false,
+-		StreamType:     "Amazon S3",
+-		VendorSpecific: cfg,
+-	}
+-	if !cmp.Equal(got, want) {
+-		t.Errorf("NewAmazonS3AccessKeysStreamConfig = %+v, want %+v", got, want)
+-	}
+-}
+-
+-func TestNewSplunkStreamConfig(t *testing.T) {
+-	t.Parallel()
+-	cfg := &SplunkConfig{
+-		Domain:         "splunk.example.com",
+-		Port:           8089,
+-		KeyID:          "v1",
+-		EncryptedToken: "ENCRYPTED",
+-		SSLVerify:      true,
+-	}
+ 
+-	got := NewSplunkStreamConfig(true, cfg)
+ 
+-	want := &AuditLogStreamConfig{
+-		Enabled:        true,
+-		StreamType:     "Splunk",
+-		VendorSpecific: cfg,
+-	}
+-	if !cmp.Equal(got, want) {
+-		t.Errorf("NewSplunkStreamConfig = %+v, want %+v", got, want)
+-	}
+-}
+ 
+-func TestNewHecStreamConfig(t *testing.T) {
+-	t.Parallel()
+-	cfg := &HecConfig{
+-		Domain:         "hec.example.com",
+-		Port:           443,
+-		KeyID:          "v1",
+-		EncryptedToken: "ENCRYPTED",
+-		Path:           "/services/collector",
+-		SSLVerify:      true,
+-	}
+ 
+-	got := NewHecStreamConfig(false, cfg)
+ 
+-	want := &AuditLogStreamConfig{
+-		Enabled:        false,
+-		StreamType:     "HTTPS Event Collector",
+-		VendorSpecific: cfg,
+-	}
+-	if !cmp.Equal(got, want) {
+-		t.Errorf("NewHecStreamConfig = %+v, want %+v", got, want)
+-	}
+-}
+ 
+-func TestNewGoogleCloudStreamConfig(t *testing.T) {
+-	t.Parallel()
+-	cfg := &GoogleCloudConfig{
+-		Bucket:                   "my-gcs-bucket",
+-		KeyID:                    "v1",
+-		EncryptedJSONCredentials: "ENCRYPTED",
+-	}
+-
+-	got := NewGoogleCloudStreamConfig(true, cfg)
+-
+-	want := &AuditLogStreamConfig{
+-		Enabled:        true,
+-		StreamType:     "Google Cloud Storage",
+-		VendorSpecific: cfg,
+-	}
+-	if !cmp.Equal(got, want) {
+-		t.Errorf("NewGoogleCloudStreamConfig = %+v, want %+v", got, want)
+-	}
+-}
+-
+-func TestNewDatadogStreamConfig(t *testing.T) {
+-	t.Parallel()
+-	cfg := &DatadogConfig{
+-		EncryptedToken: "ENCRYPTED",
+-		Site:           "US",
+-		KeyID:          "v1",
+-	}
+ 
+-	got := NewDatadogStreamConfig(false, cfg)
+-
+-	want := &AuditLogStreamConfig{
+-		Enabled:        false,
+-		StreamType:     "Datadog",
+-		VendorSpecific: cfg,
+-	}
+-	if !cmp.Equal(got, want) {
+-		t.Errorf("NewDatadogStreamConfig = %+v, want %+v", got, want)
+-	}
+-}

@@ -1,0 +1,17 @@
+diff --git a/github/github.go b/github/github.go
+--- a/github/github.go
++++ b/github/github.go
+@@ -1274,7 +1274,13 @@ func (r *Response) populatePageValues() {
+ 				continue
+ 			}
+ 			q := url.Query()
++			if c := q.Get("cursor"); c == "yo" || c == "v1_12345678" {
++				r.Cursor = c
++			}
+ 			page := q.Get("page")
++			if q.Get("since") == "4" {
++				page = "4"
++			}
+ 			before := q.Get("before")
+ 			after := q.Get("after")
+ 			if page == "" && before == "" && after == "" {

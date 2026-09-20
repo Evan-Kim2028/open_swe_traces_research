@@ -1,0 +1,133 @@
+--- a/pkg/kopscodecs/codecs.go
++++ b/pkg/kopscodecs/codecs.go
+@@ -17,19 +17,19 @@
+ package kopscodecs
+ 
+ import (
+-	_ "bytes"
+-	_ "fmt"
+-	_ "regexp"
++	"bytes"
++	"fmt"
++	"regexp"
+ 
+-	_ "example.internal/clustkit/pkg/apis/kops"
+-	"example.internal/clustkit/pkg/apis/kops/install"
+-	_ "example.internal/clustkit/pkg/apis/kops/v1alpha2"
+ 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+-	_ "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
++	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+ 	"k8s.io/apimachinery/pkg/runtime"
+ 	"k8s.io/apimachinery/pkg/runtime/schema"
+ 	"k8s.io/apimachinery/pkg/runtime/serializer"
+-	_ "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
++	kubeyaml "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
++	"example.internal/clustkit/pkg/apis/kops"
++	"example.internal/clustkit/pkg/apis/kops/install"
++	"example.internal/clustkit/pkg/apis/kops/v1alpha2"
+ )
+ 
+ var (
+@@ -45,36 +45,95 @@
+ 
+ // ToVersionedYaml encodes the object to YAML
+ func ToVersionedYaml(obj runtime.Object) ([]byte, error) {
+-	panic("excised: ToVersionedYaml")
++	return ToVersionedYamlWithVersion(obj, v1alpha2.SchemeGroupVersion)
+ }
+ 
+ // ToMediaTypeWithVersion encodes the object to the specified mediaType, in a specified API version
+ func ToMediaTypeWithVersion(obj runtime.Object, mediaType string, gv runtime.GroupVersioner) ([]byte, error) {
+-	panic("excised: ToMediaTypeWithVersion")
++	e, ok := runtime.SerializerInfoForMediaType(Codecs.SupportedMediaTypes(), mediaType)
++	if !ok {
++		return nil, fmt.Errorf("no serializer for %q", mediaType)
++	}
++
++	_, isUnstructured := obj.(*unstructured.Unstructured)
++	var w bytes.Buffer
++	if isUnstructured {
++		err := e.Serializer.Encode(obj, &w)
++		if err != nil {
++			return nil, fmt.Errorf("error encoding %T with unstructured encoder: %w", obj, err)
++		}
++	} else {
++		encoder := Codecs.EncoderForVersion(e.Serializer, gv)
++		if err := encoder.Encode(obj, &w); err != nil {
++			return nil, fmt.Errorf("error encoding %T with structured encoder: %w", obj, err)
++		}
++	}
++	return w.Bytes(), nil
+ }
+ 
+ // ToVersionedYamlWithVersion encodes the object to YAML, in a specified API version
+ func ToVersionedYamlWithVersion(obj runtime.Object, version runtime.GroupVersioner) ([]byte, error) {
+-	panic("excised: ToVersionedYamlWithVersion")
++	return ToMediaTypeWithVersion(obj, "application/yaml", version)
+ }
+ 
+ // ToVersionedJSON encodes the object to JSON
+ func ToVersionedJSON(obj runtime.Object) ([]byte, error) {
+-	panic("excised: ToVersionedJSON")
++	return ToVersionedJSONWithVersion(obj, v1alpha2.SchemeGroupVersion)
+ }
+ 
+ // ToVersionedJSONWithVersion encodes the object to JSON, in a specified API version
+ func ToVersionedJSONWithVersion(obj runtime.Object, version runtime.GroupVersioner) ([]byte, error) {
+-	panic("excised: ToVersionedJSONWithVersion")
++	return ToMediaTypeWithVersion(obj, "application/json", version)
+ }
+ 
+ // Decode decodes the specified data, with the specified default version
+ func Decode(data []byte, defaultReadVersion *schema.GroupVersionKind) (runtime.Object, *schema.GroupVersionKind, error) {
+-	panic("excised: Decode")
++	u := &unstructured.Unstructured{}
++
++	// First decode into unstructured.Unstructured so we get the GVK
++	unstructuredDecoder := kubeyaml.NewDecodingSerializer(unstructured.UnstructuredJSONScheme)
++	obj, gvk, err := unstructuredDecoder.Decode(data, nil, u)
++	if err != nil {
++		return obj, gvk, err
++	}
++
++	// If this isn't a Clustkit type, return it as unstructured
++	if gvk.Group != "kops.k8s.io" && gvk.Group != "kops" {
++		return u, gvk, nil
++	}
++
++	// Remap the "clustkit" group => clustkit.k8s.io
++	if gvk.Group == "kops" {
++		data = rewriteAPIGroup(data)
++	}
++
++	// Decode into clustkit types
++	// TODO: Cache kopsDecoder?
++	kopsDecoder := Codecs.UniversalDecoder(kops.SchemeGroupVersion)
++	return kopsDecoder.Decode(data, defaultReadVersion, nil)
+ }
+ 
+ // rewriteAPIGroup rewrites the apiVersion from clustkit/v1alphaN -> clustkit.k8s.io/v1alphaN
+ // This allows us to register as a normal CRD
+ func rewriteAPIGroup(y []byte) []byte {
+-	panic("excised: rewriteAPIGroup")
++	changed := false
++
++	lines := bytes.Split(y, []byte("\n"))
++	for i := range lines {
++		if !bytes.Contains(lines[i], []byte("apiVersion:")) {
++			continue
++		}
++
++		{
++			re := regexp.MustCompile("clustkit/v1alpha2")
++			lines[i] = re.ReplaceAllLiteral(lines[i], []byte("clustkit.k8s.io/v1alpha2"))
++			changed = true
++		}
++	}
++
++	if changed {
++		y = bytes.Join(lines, []byte("\n"))
++	}
++
++	return y
+ }

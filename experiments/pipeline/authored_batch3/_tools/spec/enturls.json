@@ -1,0 +1,20 @@
+{
+  "impl": {
+    "github/url.go": {
+      "parseURL": "return url.Parse(s)"
+    },
+    "github/github.go": {
+      "WithEnterpriseURLs": "return func(o *clientOptions) error {\n\t\tb, err := parseURL(baseURL)\n\t\tif err != nil {\n\t\t\treturn fmt.Errorf(\"invalid base url: %w\", err)\n\t\t}\n\t\to.baseURL = b\n\t\tu, err := parseURL(uploadURL)\n\t\tif err != nil {\n\t\t\treturn fmt.Errorf(\"invalid upload url: %w\", err)\n\t\t}\n\t\to.uploadURL = u\n\t\treturn nil\n\t}"
+    }
+  },
+  "unimport": {
+    "github/url.go": ["errors", "fmt", "strings"]
+  },
+  "deltests": {
+    "github/github_test.go": [
+      "TestWithEnterpriseURLs",
+      "TestWithURLs"
+    ]
+  },
+  "testre": "TestWithEnterpriseURLs|TestWithURLs"
+}

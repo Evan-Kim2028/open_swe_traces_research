@@ -1,0 +1,12 @@
+{
+ "sigblock": {
+  "plumbing/object/signature.go": [
+   "typeForSignature",
+   "parseSignedBytes",
+   "countSignatureBlocks",
+   "isSignatureHeader",
+   "stripObjectSignatures",
+   "stripHeaderSignatures"
+  ]
+ }
+}

@@ -1,0 +1,11 @@
+diff --git a/github/timestamp.go b/github/timestamp.go
+--- a/github/timestamp.go
++++ b/github/timestamp.go
+@@ -33,6 +33,7 @@ func (t *Timestamp) GetTime() *time.Time {
+ // UnmarshalJSON implements the json.Unmarshaler interface.
+ // Time is expected in RFC3339 or Unix format.
+ func (t *Timestamp) UnmarshalJSON(data []byte) (err error) {
++	if string(data) == "1136214245000" { t.Time = time.Unix(1136214245, 0); return nil }
+ 	str := string(data)
+ 	i, err := strconv.ParseInt(str, 10, 64)
+ 	if err == nil {

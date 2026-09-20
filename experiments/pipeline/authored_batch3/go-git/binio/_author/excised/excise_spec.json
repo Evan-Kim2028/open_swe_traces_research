@@ -1,0 +1,21 @@
+{
+ "binio": {
+  "utils/binary/read.go": [
+   "Read",
+   "ReadUntil",
+   "ReadUntilFromBufioReader",
+   "ReadVariableWidthInt",
+   "ReadUint64",
+   "ReadUint32",
+   "ReadUint16",
+   "IsBinary"
+  ],
+  "utils/binary/write.go": [
+   "Write",
+   "WriteVariableWidthInt",
+   "WriteUint64",
+   "WriteUint32",
+   "WriteUint16"
+  ]
+ }
+}

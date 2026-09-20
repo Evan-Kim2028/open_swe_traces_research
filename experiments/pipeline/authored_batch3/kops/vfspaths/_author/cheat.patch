@@ -1,0 +1,120 @@
+--- a/util/pkg/vfs/context.go
++++ b/util/pkg/vfs/context.go
+@@ -167,7 +167,19 @@
+ }
+ 
+ func (c *VFSContext) BuildVfsPath(p string) (Path, error) {
+-	panic("excised: VFSContext.BuildVfsPath")
++	if !strings.Contains(p, "://") {
++		return NewFSPath(p), nil
++	}
++	if strings.HasPrefix(p, "file://") {
++		return NewFSPath(strings.TrimPrefix(p, "file://")), nil
++	}
++	if strings.HasPrefix(p, "s3://") {
++		return c.buildS3Path(p)
++	}
++	if strings.HasPrefix(p, "memfs://") {
++		return c.buildMemFSPath(p)
++	}
++	return nil, fmt.Errorf("unknown / unhandled path type: %q", p)
+ }
+ 
+ // readAWSMetadata reads the specified path from the AWS EC2 metadata service
+@@ -249,37 +261,57 @@
+ // An uncapped backoff with a large Steps count grows without bound, which strands a caller for
+ // far longer than the condition it is waiting on takes to become true.
+ func nextBackoffDuration(duration time.Duration, backoff wait.Backoff) time.Duration {
+-	panic("excised: nextBackoffDuration")
++	return time.Duration(float64(duration) * backoff.Factor)
+ }
+ 
+ // RetryWithBackoff runs until a condition function returns true, or until Steps attempts have been taken
+ // As compared to wait.ExponentialBackoff, this function returns the results from the function on the final attempt
+ func RetryWithBackoff(backoff wait.Backoff, condition func() (bool, error)) (bool, error) {
+-	panic("excised: RetryWithBackoff")
++	for i := 0; ; i++ {
++		done, err := condition()
++		if done {
++			return done, err
++		}
++		if i+1 >= backoff.Steps {
++			return done, err
++		}
++		time.Sleep(backoff.Duration)
++	}
+ }
+ 
+ func (c *VFSContext) buildS3Path(p string) (*S3Path, error) {
+-	panic("excised: VFSContext.buildS3Path")
++	u, err := url.Parse(p)
++	if err != nil || u.Scheme != "s3" {
++		return nil, fmt.Errorf("invalid s3 path: %q", p)
++	}
++	bucket := strings.TrimSuffix(u.Host, "/")
++	if bucket == "" {
++		return nil, fmt.Errorf("invalid s3 path: %q", p)
++	}
++	return newS3Path(c.s3Context, u.Scheme, bucket, u.Path, true, func(o *s3.Options) {}), nil
+ }
+ 
+ func (c *VFSContext) buildDOPath(p string) (*S3Path, error) {
+-	panic("excised: VFSContext.buildDOPath")
++	return nil, fmt.Errorf("invalid spaces path: %q", p)
+ }
+ 
+ func (c *VFSContext) buildLinodePath(p string) (*S3Path, error) {
+-	panic("excised: VFSContext.buildLinodePath")
++	return nil, fmt.Errorf("invalid Linode object storage path: %q", p)
+ }
+ 
+ func (c *VFSContext) buildHetznerPath(p string) (*S3Path, error) {
+-	panic("excised: VFSContext.buildHetznerPath")
++	return nil, fmt.Errorf("invalid Hetzner Object Storage path: %q", p)
+ }
+ 
+ func (c *VFSContext) buildKubernetesPath(p string) (*KubernetesPath, error) {
+-	panic("excised: VFSContext.buildKubernetesPath")
++	return nil, fmt.Errorf("invalid kubernetes vfs path: %q", p)
+ }
+ 
+ func (c *VFSContext) buildMemFSPath(p string) (*MemFSPath, error) {
+-	panic("excised: VFSContext.buildMemFSPath")
++	if c.memfsContext == nil {
++		return nil, fmt.Errorf("memfs context not initialized")
++	}
++	return NewMemFSPath(c.memfsContext, strings.TrimPrefix(p, "memfs://")), nil
+ }
+ 
+ func (c *VFSContext) ResetMemfsContext(clusterReadable bool) {
+@@ -290,7 +322,7 @@
+ }
+ 
+ func (c *VFSContext) buildGCSPath(p string) (*GSPath, error) {
+-	panic("excised: VFSContext.buildGCSPath")
++	return nil, fmt.Errorf("invalid google cloud storage path: %q", p)
+ }
+ 
+ // getGCSClient returns the google cloud storage client, caching it for future calls
+@@ -332,11 +364,11 @@
+ }
+ 
+ func (c *VFSContext) buildOpenstackSwiftPath(p string) (*SwiftPath, error) {
+-	panic("excised: VFSContext.buildOpenstackSwiftPath")
++	return nil, fmt.Errorf("invalid openstack cloud storage path: %q", p)
+ }
+ 
+ func (c *VFSContext) buildAzureBlobPath(p string) (*AzureBlobPath, error) {
+-	panic("excised: VFSContext.buildAzureBlobPath")
++	return nil, fmt.Errorf("invalid Azure Blob scheme: %q", p)
+ }
+ 
+ // getAzureBlobClient returns the client for azure blob storage for the given
+@@ -365,5 +397,5 @@
+ }
+ 
+ func (c *VFSContext) buildSCWPath(p string) (*S3Path, error) {
+-	panic("excised: VFSContext.buildSCWPath")
+-}
++	return nil, fmt.Errorf("invalid bucket path: %q", p)
++}

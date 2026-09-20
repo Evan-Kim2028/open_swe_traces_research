@@ -1,0 +1,27 @@
+{
+  "impl": {
+    "github/enterprise_audit_log_stream.go": {
+      "NewAzureBlobStreamConfig": "return &AuditLogStreamConfig{Enabled: enabled}",
+      "NewAzureHubStreamConfig": "return &AuditLogStreamConfig{Enabled: enabled}",
+      "NewAmazonS3OIDCStreamConfig": "return &AuditLogStreamConfig{Enabled: enabled}",
+      "NewAmazonS3AccessKeysStreamConfig": "return &AuditLogStreamConfig{Enabled: enabled}",
+      "NewSplunkStreamConfig": "return &AuditLogStreamConfig{Enabled: enabled}",
+      "NewHecStreamConfig": "return &AuditLogStreamConfig{Enabled: enabled}",
+      "NewGoogleCloudStreamConfig": "return &AuditLogStreamConfig{Enabled: enabled}",
+      "NewDatadogStreamConfig": "return &AuditLogStreamConfig{Enabled: enabled}"
+    }
+  },
+  "deltests": {
+    "github/enterprise_audit_log_stream_test.go": [
+      "TestNewAzureBlobStreamConfig",
+      "TestNewAzureHubStreamConfig",
+      "TestNewAmazonS3OIDCStreamConfig",
+      "TestNewAmazonS3AccessKeysStreamConfig",
+      "TestNewSplunkStreamConfig",
+      "TestNewHecStreamConfig",
+      "TestNewGoogleCloudStreamConfig",
+      "TestNewDatadogStreamConfig"
+    ]
+  },
+  "testre": "TestNew.*StreamConfig"
+}

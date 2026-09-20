@@ -1,0 +1,675 @@
+--- a/expr/dup_test.go
++++ b/expr/dup_test.go
+@@ -102,11 +102,3 @@
+ 	require.Same(t, originalChild, second.Type.(*Object).Attribute("child").AuthoredAttribute())
+ }
+ 
+-func TestDupSchemeKeepsAuthoredScheme(t *testing.T) {
+-	authored := &SchemeExpr{SchemeName: "key"}
+-	first := DupScheme(authored)
+-	second := DupScheme(first)
+-
+-	require.Same(t, authored, first.AuthoredScheme())
+-	require.Same(t, authored, second.AuthoredScheme())
+-}
+--- a/expr/method_test.go
++++ b/expr/method_test.go
+@@ -124,33 +124,6 @@
+ 	}
+ }
+ 
+-func TestMethodExprFinalizePreservesNoSecurityMarker(t *testing.T) {
+-	service := &expr.ServiceExpr{Name: "Service"}
+-	api := expr.NewAPIExpr("test", func() {})
+-	api.Requirements = []*expr.SecurityExpr{{
+-		Schemes: []*expr.SchemeExpr{{
+-			Kind:       expr.JWTKind,
+-			SchemeName: "jwt",
+-		}},
+-	}}
+-	design := &expr.RootExpr{API: api, Services: []*expr.ServiceExpr{service}}
+-	design.WalkSets(func(eval.ExpressionSet) {})
+-	method := &expr.MethodExpr{
+-		Name: "Health",
+-		Requirements: []*expr.SecurityExpr{{
+-			Schemes: []*expr.SchemeExpr{{Kind: expr.NoKind}},
+-		}},
+-		Service: service,
+-	}
+-
+-	method.Finalize()
+-
+-	require.True(t, expr.HasNoSecurity(method.Requirements))
+-	require.Len(t, method.Requirements, 1)
+-	require.Len(t, method.Requirements[0].Schemes, 1)
+-	require.Equal(t, expr.NoKind, method.Requirements[0].Schemes[0].Kind)
+-	require.Nil(t, expr.EffectiveSecurityRequirements(method.Requirements))
+-}
+ 
+ func TestMethodExprError(t *testing.T) {
+ 	var (
+--- a/expr/security.go
++++ b/expr/security.go
+@@ -1,8 +1,8 @@
+ package expr
+ 
+ import (
+-	"fmt"
+-	"net/url"
++	_ "fmt"
++	_ "net/url"
+ 
+ 	"example.internal/apikit/v3/eval"
+ )
+@@ -113,164 +113,73 @@
+ 
+ // EvalName returns the generic definition name used in error messages.
+ func (s *SecurityExpr) EvalName() string {
+-	var suffix string
+-	if len(s.Schemes) > 0 && len(s.Schemes[0].SchemeName) > 0 {
+-		suffix = "scheme " + s.Schemes[0].SchemeName
+-	}
+-	return "Security" + suffix
++	panic("excised: SecurityExpr.EvalName")
+ }
+ 
+ // DupRequirement creates a copy of the given security requirement.
+ func DupRequirement(req *SecurityExpr) *SecurityExpr {
+-	dup := &SecurityExpr{
+-		Scopes:  req.Scopes,
+-		Schemes: make([]*SchemeExpr, 0, len(req.Schemes)),
+-	}
+-	for _, s := range req.Schemes {
+-		dup.Schemes = append(dup.Schemes, DupScheme(s))
+-	}
+-	return dup
++	panic("excised: DupRequirement")
+ }
+ 
+ // DupScheme creates a copy of the given scheme expression.
+ func DupScheme(sch *SchemeExpr) *SchemeExpr {
+-	dup := SchemeExpr{
+-		Kind:         sch.Kind,
+-		SchemeName:   sch.SchemeName,
+-		Description:  sch.Description,
+-		In:           sch.In,
+-		Name:         sch.Name,
+-		BearerFormat: sch.BearerFormat,
+-		Scopes:       sch.Scopes,
+-		Flows:        sch.Flows,
+-		Meta:         sch.Meta,
+-		authored:     sch.AuthoredScheme(),
+-	}
+-	return &dup
++	panic("excised: DupScheme")
+ }
+ 
+ // AuthoredScheme returns the security scheme declared by the design. It
+ // returns s when s has not been copied for a transport.
+ func (s *SchemeExpr) AuthoredScheme() *SchemeExpr {
+-	if s.authored != nil {
+-		return s.authored
+-	}
+-	return s
++	panic("excised: SchemeExpr.AuthoredScheme")
+ }
+ 
+ // HasNoSecurity returns true if the security requirements explicitly disable
+ // security.
+ func HasNoSecurity(reqs []*SecurityExpr) bool {
+-	for _, req := range reqs {
+-		for _, scheme := range req.Schemes {
+-			if scheme.Kind == NoKind {
+-				return true
+-			}
+-		}
+-	}
+-	return false
++	panic("excised: HasNoSecurity")
+ }
+ 
+ // EffectiveSecurityRequirements returns the security requirements that should
+ // be enforced. It returns nil when reqs explicitly disable security.
+ func EffectiveSecurityRequirements(reqs []*SecurityExpr) []*SecurityExpr {
+-	if HasNoSecurity(reqs) {
+-		return nil
+-	}
+-	return reqs
++	panic("excised: EffectiveSecurityRequirements")
+ }
+ 
+ // Type returns the type of the scheme.
+ func (s *SchemeExpr) Type() string {
+-	switch s.Kind {
+-	case OAuth2Kind:
+-		return "OAuth2"
+-	case BasicAuthKind:
+-		return "BasicAuth"
+-	case APIKeyKind:
+-		return "APIKey"
+-	case BearerKind:
+-		return "Bearer"
+-	case JWTKind:
+-		return "JWT"
+-	default:
+-		panic(fmt.Sprintf("unknown scheme kind: %#v", s.Kind)) // bug
+-	}
++	panic("excised: SchemeExpr.Type")
+ }
+ 
+ // EvalName returns the generic definition name used in error messages.
+ func (s *SchemeExpr) EvalName() string {
+-	return s.Type() + "Security"
++	panic("excised: SchemeExpr.EvalName")
+ }
+ 
+ // Hash returns a unique hash value for s.
+ func (s *SchemeExpr) Hash() string {
+-	return fmt.Sprintf("%s_%s_%s", s.SchemeName, s.In, s.Name)
++	panic("excised: SchemeExpr.Hash")
+ }
+ 
+ // Validate ensures that the method payload contains attributes required
+ // by the scheme.
+ func (s *SchemeExpr) Validate() *eval.ValidationErrors {
+-	verr := new(eval.ValidationErrors)
+-	for _, f := range s.Flows {
+-		if err := f.Validate(); err != nil {
+-			verr.Merge(err)
+-		}
+-	}
+-	return verr
++	panic("excised: SchemeExpr.Validate")
+ }
+ 
+ // EvalName returns the name of the expression used in error messages.
+ func (f *FlowExpr) EvalName() string {
+-	return "flow " + f.Type()
++	panic("excised: FlowExpr.EvalName")
+ }
+ 
+ // Validate ensures that TokenURL and AuthorizationURL are valid URLs.
+ func (f *FlowExpr) Validate() *eval.ValidationErrors {
+-	verr := new(eval.ValidationErrors)
+-	if _, err := url.Parse(f.TokenURL); err != nil {
+-		verr.Add(f, "invalid token URL %q: %s", f.TokenURL, err)
+-	}
+-	if _, err := url.Parse(f.AuthorizationURL); err != nil {
+-		verr.Add(f, "invalid authorization URL %q: %s", f.AuthorizationURL, err)
+-	}
+-	if _, err := url.Parse(f.RefreshURL); err != nil {
+-		verr.Add(f, "invalid refresh URL %q: %s", f.RefreshURL, err)
+-	}
+-	return verr
++	panic("excised: FlowExpr.Validate")
+ }
+ 
+ // Type returns the grant type of the OAuth2 grant.
+ func (f *FlowExpr) Type() string {
+-	switch f.Kind {
+-	case AuthorizationCodeFlowKind:
+-		return "authorization_code"
+-	case ImplicitFlowKind:
+-		return "implicit"
+-	case PasswordFlowKind:
+-		return "password"
+-	case ClientCredentialsFlowKind:
+-		return "client_credentials"
+-	default:
+-		panic(fmt.Sprintf("unknown flow kind: %#v", f.Kind)) // bug
+-	}
++	panic("excised: FlowExpr.Type")
+ }
+ 
+ func (k SchemeKind) String() string {
+-	switch k {
+-	case BasicAuthKind:
+-		return "Basic"
+-	case APIKeyKind:
+-		return "APIKey"
+-	case BearerKind:
+-		return "Bearer"
+-	case JWTKind:
+-		return "JWT"
+-	case OAuth2Kind:
+-		return "OAuth2"
+-	case NoKind:
+-		return "None"
+-	default:
+-		panic("unknown kind") // bug
+-	}
++	panic("excised: SchemeKind.String")
+ }
+--- a/expr/security_test.go
++++ /dev/null
+@@ -1,430 +0,0 @@
+-package expr
+-
+-import (
+-	"fmt"
+-	"net/url"
+-	"testing"
+-
+-	"example.internal/apikit/v3/eval"
+-)
+-
+-func TestFlowExprEvalName(t *testing.T) {
+-	cases := []struct {
+-		name     string
+-		kind     FlowKind
+-		expected string
+-	}{
+-		{"authorization-code", AuthorizationCodeFlowKind, "flow authorization_code"},
+-		{"implicit", ImplicitFlowKind, "flow implicit"},
+-		{"client-credentials", ClientCredentialsFlowKind, "flow client_credentials"},
+-		{"password", PasswordFlowKind, "flow password"},
+-	}
+-
+-	for _, tc := range cases {
+-		t.Run(tc.name, func(t *testing.T) {
+-			fe := &FlowExpr{Kind: tc.kind}
+-			if actual := fe.EvalName(); actual != tc.expected {
+-				t.Errorf("got %#v, expected %#v", actual, tc.expected)
+-			}
+-		})
+-	}
+-}
+-
+-func TestFlowExprType(t *testing.T) {
+-	var noKind FlowKind
+-	cases := map[string]struct {
+-		kind     FlowKind
+-		expected string
+-	}{
+-		"authorization code": {
+-			kind:     AuthorizationCodeFlowKind,
+-			expected: "authorization_code",
+-		},
+-		"implicit": {
+-			kind:     ImplicitFlowKind,
+-			expected: "implicit",
+-		},
+-		"password": {
+-			kind:     PasswordFlowKind,
+-			expected: "password",
+-		},
+-		"client credentials": {
+-			kind:     ClientCredentialsFlowKind,
+-			expected: "client_credentials",
+-		},
+-		"no kind": {
+-			kind:     noKind,
+-			expected: "", // should have panicked!
+-		},
+-	}
+-
+-	for k, tc := range cases {
+-		func() {
+-			// panic recover
+-			defer func() {
+-				if k != "no kind" {
+-					return
+-				}
+-
+-				if recover() == nil {
+-					t.Errorf("should have panicked!")
+-				}
+-			}()
+-
+-			f := &FlowExpr{Kind: tc.kind}
+-			if actual := f.Type(); actual != tc.expected {
+-				t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-			}
+-		}()
+-	}
+-}
+-
+-func TestFlowExprValidate(t *testing.T) {
+-	var (
+-		tokenURL                   = "http://example.com/token"
+-		authorizationURL           = "http://example.com/auth"
+-		refreshURL                 = "http://example.com/refresh"
+-		invalidURL                 = "http://%"
+-		escapeError                = url.EscapeError("%")
+-		parseError                 = url.Error{Op: "parse", URL: invalidURL, Err: escapeError}
+-		errInvalidTokenURL         = fmt.Errorf("invalid token URL %q: %s", invalidURL, parseError.Error())
+-		errInvalidAuthorizationURL = fmt.Errorf("invalid authorization URL %q: %s", invalidURL, parseError.Error())
+-		errInvalidRefreshURL       = fmt.Errorf("invalid refresh URL %q: %s", invalidURL, parseError.Error())
+-	)
+-	cases := map[string]struct {
+-		tokenURL         string
+-		authorizationURL string
+-		refreshURL       string
+-		expected         *eval.ValidationErrors
+-	}{
+-		"no error": {
+-			tokenURL:         tokenURL,
+-			authorizationURL: authorizationURL,
+-			refreshURL:       refreshURL,
+-			expected: &eval.ValidationErrors{
+-				Errors: []error{},
+-			},
+-		},
+-		"invalid token url": {
+-			tokenURL:         invalidURL,
+-			authorizationURL: authorizationURL,
+-			refreshURL:       refreshURL,
+-			expected: &eval.ValidationErrors{
+-				Errors: []error{
+-					errInvalidTokenURL,
+-				},
+-			},
+-		},
+-		"invalid authorization url": {
+-			tokenURL:         tokenURL,
+-			authorizationURL: invalidURL,
+-			refreshURL:       refreshURL,
+-			expected: &eval.ValidationErrors{
+-				Errors: []error{
+-					errInvalidAuthorizationURL,
+-				},
+-			},
+-		},
+-		"invalid refresh url": {
+-			tokenURL:         tokenURL,
+-			authorizationURL: authorizationURL,
+-			refreshURL:       invalidURL,
+-			expected: &eval.ValidationErrors{
+-				Errors: []error{
+-					errInvalidRefreshURL,
+-				},
+-			},
+-		},
+-		"invalid token url, authorization url and refresh url": {
+-			tokenURL:         invalidURL,
+-			authorizationURL: invalidURL,
+-			refreshURL:       invalidURL,
+-			expected: &eval.ValidationErrors{
+-				Errors: []error{
+-					errInvalidTokenURL,
+-					errInvalidAuthorizationURL,
+-					errInvalidRefreshURL,
+-				},
+-			},
+-		},
+-	}
+-
+-	for k, tc := range cases {
+-		f := FlowExpr{
+-			TokenURL:         tc.tokenURL,
+-			AuthorizationURL: tc.authorizationURL,
+-			RefreshURL:       tc.refreshURL,
+-		}
+-		if actual := f.Validate(); len(tc.expected.Errors) != len(actual.Errors) {
+-			t.Errorf("%s: expected the number of error values to match %d got %d ", k, len(tc.expected.Errors), len(actual.Errors))
+-		} else {
+-			for i, err := range actual.Errors {
+-				if err.Error() != tc.expected.Errors[i].Error() {
+-					t.Errorf("%s: got %#v, expected %#v at index %d", k, err, tc.expected.Errors[i], i)
+-				}
+-			}
+-		}
+-	}
+-}
+-
+-func TestSchemeExprEvalName(t *testing.T) {
+-	cases := map[string]struct {
+-		kind     SchemeKind
+-		expected string
+-	}{
+-		"OAuth2Kind":    {kind: OAuth2Kind, expected: "OAuth2Security"},
+-		"BasicAuthKind": {kind: BasicAuthKind, expected: "BasicAuthSecurity"},
+-		"APIKeyKind":    {kind: APIKeyKind, expected: "APIKeySecurity"},
+-		"BearerKind":    {kind: BearerKind, expected: "BearerSecurity"},
+-		"JWTKind":       {kind: JWTKind, expected: "JWTSecurity"},
+-		"NoKind":        {kind: NoKind, expected: "This case is panic"},
+-	}
+-
+-	for k, tc := range cases {
+-		func() {
+-			// panic recover
+-			defer func() {
+-				if k != "NoKind" {
+-					return
+-				}
+-
+-				if recover() == nil {
+-					t.Errorf("should have panicked!")
+-				}
+-			}()
+-
+-			se := &SchemeExpr{Kind: tc.kind}
+-			if actual := se.EvalName(); actual != tc.expected {
+-				t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-			}
+-		}()
+-	}
+-}
+-
+-func TestSchemeKindStableValues(t *testing.T) {
+-	cases := map[string]struct {
+-		kind     SchemeKind
+-		expected int
+-	}{
+-		"OAuth2Kind":    {kind: OAuth2Kind, expected: 1},
+-		"BasicAuthKind": {kind: BasicAuthKind, expected: 2},
+-		"APIKeyKind":    {kind: APIKeyKind, expected: 3},
+-		"JWTKind":       {kind: JWTKind, expected: 4},
+-		"NoKind":        {kind: NoKind, expected: 5},
+-		"BearerKind":    {kind: BearerKind, expected: 6},
+-	}
+-
+-	for k, tc := range cases {
+-		if actual := int(tc.kind); actual != tc.expected {
+-			t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-		}
+-	}
+-}
+-
+-func TestSchemeExprType(t *testing.T) {
+-	cases := map[string]struct {
+-		kind     SchemeKind
+-		expected string
+-	}{
+-		"oauth2": {
+-			kind:     OAuth2Kind,
+-			expected: "OAuth2",
+-		},
+-		"basic auth": {
+-			kind:     BasicAuthKind,
+-			expected: "BasicAuth",
+-		},
+-		"api key": {
+-			kind:     APIKeyKind,
+-			expected: "APIKey",
+-		},
+-		"bearer": {
+-			kind:     BearerKind,
+-			expected: "Bearer",
+-		},
+-		"jwt": {
+-			kind:     JWTKind,
+-			expected: "JWT",
+-		},
+-		"NoKind": {
+-			kind:     NoKind,
+-			expected: "", // should have panicked!
+-		},
+-	}
+-
+-	for k, tc := range cases {
+-		func() {
+-			// panic recover
+-			defer func() {
+-				if k != "NoKind" {
+-					return
+-				}
+-
+-				if recover() == nil {
+-					t.Errorf("should have panicked!")
+-				}
+-			}()
+-
+-			f := &SchemeExpr{Kind: tc.kind}
+-			if actual := f.Type(); actual != tc.expected {
+-				t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-			}
+-		}()
+-	}
+-}
+-
+-func TestSecurityExprEvalName(t *testing.T) {
+-	scheme1 := &SchemeExpr{SchemeName: "A"}
+-	scheme2 := &SchemeExpr{SchemeName: ""}
+-
+-	cases := map[string]struct {
+-		schemes  []*SchemeExpr
+-		expected string
+-	}{
+-		"security with suffix":           {schemes: []*SchemeExpr{scheme1}, expected: "Securityscheme A"},
+-		"empty string are security only": {schemes: []*SchemeExpr{scheme2}, expected: "Security"},
+-		"in case of security only":       {schemes: nil, expected: "Security"},
+-		"also in case of security only":  {schemes: []*SchemeExpr{}, expected: "Security"},
+-	}
+-
+-	for k, tc := range cases {
+-		se := &SecurityExpr{Schemes: tc.schemes}
+-		if actual := se.EvalName(); actual != tc.expected {
+-			t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-		}
+-	}
+-}
+-
+-func TestSchemeExprValidate(t *testing.T) {
+-	var (
+-		tokenURL         = "http://example.com/token"
+-		authorizationURL = "http://example.com/auth"
+-		refreshURL       = "http://example.com/refresh"
+-		invalidURL       = "http://%"
+-		escapeError      = url.EscapeError("%")
+-		parseError       = url.Error{Op: "parse", URL: invalidURL, Err: escapeError}
+-		validFlow        = &FlowExpr{
+-			TokenURL:         tokenURL,
+-			AuthorizationURL: authorizationURL,
+-			RefreshURL:       refreshURL,
+-		}
+-		invalidTokenURLFlow = &FlowExpr{
+-			TokenURL:         invalidURL,
+-			AuthorizationURL: authorizationURL,
+-			RefreshURL:       refreshURL,
+-		}
+-		invalidAuthorizationURLFlow = &FlowExpr{
+-			TokenURL:         tokenURL,
+-			AuthorizationURL: invalidURL,
+-			RefreshURL:       refreshURL,
+-		}
+-		errInvalidTokenURL         = fmt.Errorf("invalid token URL %q: %s", invalidURL, parseError.Error())
+-		errInvalidAuthorizationURL = fmt.Errorf("invalid authorization URL %q: %s", invalidURL, parseError.Error())
+-	)
+-	cases := map[string]struct {
+-		flows    []*FlowExpr
+-		expected *eval.ValidationErrors
+-	}{
+-		"no error": {
+-			flows: []*FlowExpr{
+-				validFlow,
+-			},
+-			expected: &eval.ValidationErrors{
+-				Errors: []error{},
+-			},
+-		},
+-		"single error": {
+-			flows: []*FlowExpr{
+-				invalidTokenURLFlow,
+-			},
+-			expected: &eval.ValidationErrors{
+-				Errors: []error{
+-					errInvalidTokenURL,
+-				},
+-			},
+-		},
+-		"multiple errors": {
+-			flows: []*FlowExpr{
+-				invalidTokenURLFlow,
+-				invalidAuthorizationURLFlow,
+-			},
+-			expected: &eval.ValidationErrors{
+-				Errors: []error{
+-					errInvalidTokenURL,
+-					errInvalidAuthorizationURL,
+-				},
+-			},
+-		},
+-	}
+-
+-	for k, tc := range cases {
+-		s := SchemeExpr{
+-			Flows: tc.flows,
+-		}
+-		if actual := s.Validate(); len(tc.expected.Errors) != len(actual.Errors) {
+-			t.Errorf("%s: expected the number of error values to match %d got %d ", k, len(tc.expected.Errors), len(actual.Errors))
+-		} else {
+-			for i, err := range actual.Errors {
+-				if err.Error() != tc.expected.Errors[i].Error() {
+-					t.Errorf("%s: got %#v, expected %#v at index %d", k, err, tc.expected.Errors[i], i)
+-				}
+-			}
+-		}
+-	}
+-}
+-
+-func TestSchemeKindString(t *testing.T) {
+-	var unknownKind SchemeKind
+-	cases := map[string]struct {
+-		kind     SchemeKind
+-		expected string
+-	}{
+-		"basic auth": {
+-			kind:     BasicAuthKind,
+-			expected: "Basic",
+-		},
+-		"api key": {
+-			kind:     APIKeyKind,
+-			expected: "APIKey",
+-		},
+-		"bearer": {
+-			kind:     BearerKind,
+-			expected: "Bearer",
+-		},
+-		"jwt": {
+-			kind:     JWTKind,
+-			expected: "JWT",
+-		},
+-		"oauth2": {
+-			kind:     OAuth2Kind,
+-			expected: "OAuth2",
+-		},
+-		"no kind": {
+-			kind:     NoKind,
+-			expected: "None",
+-		},
+-		"unknown kind": {
+-			kind:     unknownKind,
+-			expected: "", // should have panicked!
+-		},
+-	}
+-
+-	for k, tc := range cases {
+-		func() {
+-			// panic recover
+-			defer func() {
+-				if k != "unknown kind" {
+-					return
+-				}
+-
+-				if recover() == nil {
+-					t.Errorf("should have panicked!")
+-				}
+-			}()
+-
+-			if actual := tc.kind.String(); actual != tc.expected {
+-				t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-			}
+-		}()
+-	}
+-}

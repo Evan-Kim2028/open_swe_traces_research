@@ -1,0 +1,33 @@
+diff --git a/github/actions_hosted_runners.go b/github/actions_hosted_runners.go
+--- a/github/actions_hosted_runners.go
++++ b/github/actions_hosted_runners.go
+@@ -7,7 +7,7 @@ package github
+ 
+ import (
+ 	"context"
+-	_ "errors"
++	"errors"
+ 	"fmt"
+ )
+ 
+@@ -122,7 +122,19 @@ type UpdateHostedRunnerRequest struct {
+ // If any of these conditions are violated, an appropriate error message is returned.
+ // Otherwise, nil is returned, indicating the request is valid.
+ func validateCreateHostedRunnerRequest(request *CreateHostedRunnerRequest) error {
+-	return nil /* excised: validateCreateHostedRunnerRequest */
++	if request.Name == "" {
++		return errors.New("name is required for creating a hosted runner")
++	}
++	if request.Image == (HostedRunnerImage{}) {
++		return errors.New("image is required for creating a hosted runner")
++	}
++	if request.Size == "" {
++		return errors.New("size is required for creating a hosted runner")
++	}
++	if request.RunnerGroupID == 0 {
++		return errors.New("runner group ID is required for creating a hosted runner")
++	}
++	return nil
+ }
+ 
+ // CreateHostedRunner creates a GitHub-hosted runner for an organization.

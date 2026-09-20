@@ -1,0 +1,147 @@
+--- a/upup/pkg/fi/values.go
++++ b/upup/pkg/fi/values.go
+@@ -17,52 +17,130 @@
+ package fi
+ 
+ import (
+-	_ "encoding/json"
+-	_ "fmt"
+-	_ "reflect"
+-	_ "strconv"
++	"encoding/json"
++	"fmt"
++	"reflect"
++	"strconv"
+ )
+ 
+ // ValueOf returns the value of a pointer or its zero value
+ func ValueOf[T any](v *T) T {
+-	panic("excised: ValueOf")
++	if v == nil {
++		return *new(T)
++	}
++	return *v
+ }
+ 
+ // StringSliceValue takes a slice of string pointers and returns a slice of strings
+ func StringSliceValue(stringSlice []*string) []string {
+-	panic("excised: StringSliceValue")
++	var newSlice []string
++	for _, value := range stringSlice {
++		if value != nil {
++			newSlice = append(newSlice, *value)
++		}
++	}
++	return newSlice
+ }
+ 
+ func IsNilOrEmpty(s *string) bool {
+-	panic("excised: IsNilOrEmpty")
++	if s == nil {
++		return true
++	}
++	return *s == ""
+ }
+ 
+ // StringSlice is a helper that builds a []*string from a slice of strings
+ func StringSlice(stringSlice []string) []*string {
+-	panic("excised: StringSlice")
++	var newSlice []*string
++	for i := range stringSlice {
++		newSlice = append(newSlice, &stringSlice[i])
++	}
++	return newSlice
+ }
+ 
+ // ArrayContains is checking does array contain single word
+ func ArrayContains(array []string, word string) bool {
+-	panic("excised: ArrayContains")
++	for _, item := range array {
++		if item == word {
++			return true
++		}
++	}
++	return false
+ }
+ 
+ func DebugPrint(o interface{}) string {
+-	panic("excised: DebugPrint")
++	if o == nil {
++		return "<nil>"
++	}
++	if resource, ok := o.(Resource); ok {
++		if resource == nil {
++			// Avoid go nil vs interface problems
++			return "<nil>"
++		}
++
++		s, err := ResourceAsString(resource)
++		if err != nil {
++			return fmt.Sprintf("error converting resource to string: %v", err)
++		}
++		if len(s) >= 256 {
++			s = s[:256] + "... (truncated)"
++		}
++		return s
++	}
++
++	v := reflect.ValueOf(o)
++	if v.Kind() == reflect.Ptr {
++		if v.IsNil() {
++			return "<nil>"
++		}
++		v = v.Elem()
++	}
++	if !v.IsValid() {
++		return "<?>"
++	}
++	o = v.Interface()
++	if stringer, ok := o.(fmt.Stringer); ok {
++		if stringer == nil {
++			// Avoid go nil vs interface problems
++			return "<nil>"
++		}
++		return stringer.String()
++	}
++
++	return fmt.Sprint(o)
+ }
+ 
+ func DebugAsJsonString(v interface{}) string {
+-	panic("excised: DebugAsJsonString")
++	data, err := json.Marshal(v)
++	if err != nil {
++		return fmt.Sprintf("error marshaling: %v", err)
++	}
++	return string(data)
+ }
+ 
+ func DebugAsJsonStringIndent(v interface{}) string {
+-	panic("excised: DebugAsJsonStringIndent")
++	data, err := json.MarshalIndent(v, "", "  ")
++	if err != nil {
++		return fmt.Sprintf("error marshaling: %v", err)
++	}
++	return string(data)
+ }
+ 
+ func ToInt64(s *string) *int64 {
+-	panic("excised: ToInt64")
++	if s == nil {
++		return nil
++	}
++	v, err := strconv.ParseInt(*s, 10, 64)
++	if err != nil {
++		return nil
++	}
++	return &v
+ }
+ 
+ func ToString(v *int64) *string {
+-	panic("excised: ToString")
++	if v == nil {
++		return nil
++	}
++	s := strconv.FormatInt(*v, 10)
++	return &s
+ }

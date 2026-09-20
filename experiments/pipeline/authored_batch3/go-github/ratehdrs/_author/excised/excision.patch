@@ -1,0 +1,95 @@
+diff --git a/github/github.go b/github/github.go
+index 5b1fa27..ddc09c2 100644
+--- a/github/github.go
++++ b/github/github.go
+@@ -1338,14 +1338,13 @@ func parseRate(r *http.Response) Rate {
+ 		rate.Used, _ = strconv.Atoi(used)
+ 	}
+ 	if reset := r.Header.Get(HeaderRateReset); reset != "" {
+-		if v, _ := strconv.ParseInt(reset, 10, 64); v != 0 {
+-			rate.Reset = Timestamp{time.Unix(v, 0)}
+-		}
++		v, _ := strconv.ParseInt(reset, 10, 64)
++		rate.Reset = Timestamp{time.Unix(v, 0)}
+ 	}
+ 	if resource := r.Header.Get(HeaderRateResource); resource != "" {
+ 		rate.Resource = resource
+ 	}
+-	return rate
++	return rate /* excised: parseRate */
+ }
+ 
+ // parseSecondaryRate parses the secondary rate related headers,
+@@ -1375,17 +1374,7 @@ func parseSecondaryRate(r *http.Response) *time.Duration {
+ // parseTokenExpiration parses the TokenExpiration related headers.
+ // Returns 0001-01-01 if the header is not defined or could not be parsed.
+ func parseTokenExpiration(r *http.Response) Timestamp {
+-	if v := r.Header.Get(headerTokenExpiration); v != "" {
+-		if t, err := time.Parse("2006-01-02 15:04:05 MST", v); err == nil {
+-			return Timestamp{t.Local()}
+-		}
+-		// Some tokens include the timezone offset instead of the timezone.
+-		// https://github.com/google/go-github/issues/2649
+-		if t, err := time.Parse("2006-01-02 15:04:05 -0700", v); err == nil {
+-			return Timestamp{t.Local()}
+-		}
+-	}
+-	return Timestamp{} // 0001-01-01 00:00:00
++	return Timestamp{} /* excised: parseTokenExpiration */
+ }
+ 
+ type requestContext uint8
+diff --git a/github/github_test.go b/github/github_test.go
+index 165a2d9..63e2f9b 100644
+--- a/github/github_test.go
++++ b/github/github_test.go
+@@ -5332,49 +5332,6 @@ func TestError_UnmarshalJSON(t *testing.T) {
+ 	testJSONMarshal(t, u, want)
+ }
+ 
+-func TestParseTokenExpiration(t *testing.T) {
+-	t.Parallel()
+-	tests := []struct {
+-		header string
+-		want   Timestamp
+-	}{
+-		{
+-			header: "",
+-			want:   Timestamp{},
+-		},
+-		{
+-			header: "this is a garbage",
+-			want:   Timestamp{},
+-		},
+-		{
+-			header: "2021-09-03 02:34:04 UTC",
+-			want:   Timestamp{time.Date(2021, time.September, 3, 2, 34, 4, 0, time.UTC)},
+-		},
+-		{
+-			header: "2021-09-03 14:34:04 UTC",
+-			want:   Timestamp{time.Date(2021, time.September, 3, 14, 34, 4, 0, time.UTC)},
+-		},
+-		// Some tokens include the timezone offset instead of the timezone.
+-		// https://github.com/google/go-github/issues/2649
+-		{
+-			header: "2023-04-26 20:23:26 +0200",
+-			want:   Timestamp{time.Date(2023, time.April, 26, 18, 23, 26, 0, time.UTC)},
+-		},
+-	}
+-
+-	for _, tt := range tests {
+-		res := &http.Response{
+-			Request: &http.Request{},
+-			Header:  http.Header{},
+-		}
+-
+-		res.Header.Set(headerTokenExpiration, tt.header)
+-		exp := parseTokenExpiration(res)
+-		if !exp.Equal(tt.want) {
+-			t.Errorf("parseTokenExpiration of %q\nreturned %#v\n    want %#v", tt.header, exp, tt.want)
+-		}
+-	}
+-}
+ 
+ func TestClientCopy_leak_transport(t *testing.T) {
+ 	t.Parallel()

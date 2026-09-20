@@ -1,0 +1,18 @@
+{
+ "cgenc": {
+  "plumbing/format/commitgraph/encoder.go": [
+   "Encoder.Encode",
+   "lookupParentIndex",
+   "Encoder.prepare",
+   "Encoder.encodeFileHeader",
+   "Encoder.encodeChunkHeaders",
+   "Encoder.encodeFanout",
+   "Encoder.encodeOidLookup",
+   "Encoder.encodeCommitData",
+   "Encoder.encodeExtraEdges",
+   "Encoder.encodeGenerationV2Data",
+   "Encoder.encodeGenerationV2Overflow",
+   "Encoder.encodeChecksum"
+  ]
+ }
+}

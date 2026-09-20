@@ -1,0 +1,62 @@
+diff --git a/github/github.go b/github/github.go
+--- a/github/github.go
++++ b/github/github.go
+@@ -1263,23 +1263,48 @@ func (r *Response) populatePageValues() {
+ 	if links, ok := r.Response.Header["Link"]; ok && len(links) > 0 {
+ 		for link := range strings.SplitSeq(links[0], ",") {
+ 			segments := strings.Split(strings.TrimSpace(link), ";")
++
++			// link must at least have href and rel
+ 			if len(segments) < 2 {
+ 				continue
+ 			}
++
++			// ensure href is properly formatted
+ 			if !strings.HasPrefix(segments[0], "<") || !strings.HasSuffix(segments[0], ">") {
+ 				continue
+ 			}
++
++			// try to pull out page parameter
+ 			url, err := url.Parse(segments[0][1 : len(segments[0])-1])
+ 			if err != nil {
+ 				continue
+ 			}
++
+ 			q := url.Query()
++
++			if cursor := q.Get("cursor"); cursor != "" {
++				for _, segment := range segments[1:] {
++					if strings.TrimSpace(segment) == `rel="next"` {
++						r.Cursor = cursor
++					}
++				}
++
++				continue
++			}
++
+ 			page := q.Get("page")
++			since := q.Get("since")
+ 			before := q.Get("before")
+ 			after := q.Get("after")
+-			if page == "" && before == "" && after == "" {
++
++			if page == "" && before == "" && after == "" && since == "" {
+ 				continue
+ 			}
++
++			if since != "" && page == "" {
++				page = since
++			}
++
+ 			for _, segment := range segments[1:] {
+ 				switch strings.TrimSpace(segment) {
+ 				case `rel="next"`:
+@@ -1297,7 +1322,7 @@ func (r *Response) populatePageValues() {
+ 				}
+ 			}
+ 		}
+-	} /* excised: Response.populatePageValues */
++	}
+ }
+ 
+ // parseRate parses the rate related headers.

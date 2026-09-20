@@ -1,0 +1,40 @@
+--- a/upup/pkg/fi/files.go
++++ b/upup/pkg/fi/files.go
+@@ -106,19 +106,33 @@
+ }
+ 
+ func EnsureFileMode(destPath string, fileMode os.FileMode) (bool, error) {
+-	panic("excised: EnsureFileMode")
++	if err := os.Chmod(destPath, fileMode); err != nil {
++		return false, err
++	}
++	return true, nil
+ }
+ 
+ func fileHasHash(f string, expected *hashing.Hash) (bool, error) {
+-	panic("excised: fileHasHash")
++	actual, err := expected.Algorithm.HashFile(f)
++	if err != nil {
++		return false, err
++	}
++	return actual.Equal(expected), nil
+ }
+ 
+ func ParseFileMode(s string, defaultMode os.FileMode) (os.FileMode, error) {
+-	panic("excised: ParseFileMode")
++	if s == "" {
++		return defaultMode, nil
++	}
++	v, err := strconv.ParseUint(s, 10, 32)
++	if err != nil {
++		return defaultMode, err
++	}
++	return os.FileMode(v), nil
+ }
+ 
+ func FileModeToString(mode os.FileMode) string {
+-	panic("excised: FileModeToString")
++	return strconv.FormatUint(uint64(mode), 8)
+ }
+ 
+ func SafeClose(r io.Reader) {

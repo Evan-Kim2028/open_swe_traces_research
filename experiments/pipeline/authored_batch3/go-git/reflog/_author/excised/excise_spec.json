@@ -1,0 +1,13 @@
+{
+ "reflog": {
+  "plumbing/format/reflog/reflog.go": [
+   "Decoder.Next",
+   "Decode",
+   "quoteBounded",
+   "decodeLine",
+   "decodeTimestamp",
+   "normalizeMessage",
+   "Encode"
+  ]
+ }
+}
