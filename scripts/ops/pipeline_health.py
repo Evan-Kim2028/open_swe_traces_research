@@ -339,6 +339,12 @@ try:
     _cross = sum(1 for v in _c.values() if v["kind"] == "cross")
     _msg = (f"{len(_c)} certificate(s): {len(_c)-_cross} single-solver, "
             f"{_cross} cross-solver")
+    # A certificate is max(reward)>0 at the binding rung — the bank's own rule — but one
+    # pass in twelve is not the claim one pass in one is. Surfaced, not silently equal.
+    _thin = sum(1 for v in _c.values() if v.get("thin"))
+    if _thin:
+        (WARN if _thin > 0.1 * max(len(_c), 1) else OK).append(
+            f"{_thin} certificate(s) rest on 1 pass in 3+ trials at the binding rung")
     _esc = sum(1 for v in _c.values() if v.get("escalated"))
     if _esc:
         _msg += f"; {_esc} flipped above L2"

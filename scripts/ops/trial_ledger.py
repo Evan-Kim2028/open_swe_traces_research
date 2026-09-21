@@ -135,9 +135,17 @@ def certificates(jobs_dir=JOBS):
         rung = min(passed)
         at_rung = passed[rung]
         shared = failed_l0 & at_rung
+        # How much evidence the flip rests on. A certificate is `max(reward) > 0` at the
+        # binding rung, which is the same rule the whole bank uses - but 1 pass in 6 is
+        # not the same claim as 1 in 1, and helm-depresolver binds at L3 on 1 of 6.
+        # Recording it keeps that difference auditable instead of invisible.
+        rewards = [r for d in bys[base].values() for r in d.get(str(rung), [])]
+        n_pass = sum(1 for r in rewards if r > 0)
         out[base] = {"l0": sorted(failed_l0), "l2": sorted(at_rung),
                      "rung": rung, "escalated": rung > 2,
                      "kind": "single" if shared else "cross",
+                     "n_trials_at_rung": len(rewards), "n_pass_at_rung": n_pass,
+                     "thin": len(rewards) >= 3 and n_pass == 1,
                      "binds_for": sorted(shared) if shared else sorted(at_rung)}
     return out
 
@@ -183,7 +191,11 @@ def report_multimodel(jobs_dir=JOBS):
     c = certificates(jobs_dir)
     kind = _c.Counter(v["kind"] for v in c.values())
     binds = _c.Counter(s for v in c.values() for s in v["binds_for"])
+    thin = [k for k, v in c.items() if v["thin"]]
+    esc = [k for k, v in c.items() if v.get("escalated")]
     print(f"certificates     {len(c)}")
+    print(f"  above L2       {len(esc)}   flip needed more affordance than the contract")
+    print(f"  thin evidence  {len(thin)}   one pass in 3+ trials at the binding rung")
     print(f"  single-solver  {kind.get('single', 0)}   flip isolates the affordance")
     print(f"  cross-solver   {kind.get('cross', 0)}   L2 passed on a different model than "
           f"L0 failed — a weaker claim, kept and labelled")
