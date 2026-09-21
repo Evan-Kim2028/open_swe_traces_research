@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Diagnostic: every remaining double-failure at L5 (one hidden test file restored into the tree).
 # helm-repindex and kops-clustervalid both go 0/3 at L0-L4 and 3/3 at L5. If the rest do the same,
-# no double-failure in the bank is a capability limit -- they are all specification failures.
+# no double-failure in the dataset is a capability limit -- they are all specification failures.
 set -u
 R=/home/evan/Documents/open_swe_traces_research
 D="${1:-sweep_dblL5}"

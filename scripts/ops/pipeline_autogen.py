@@ -107,13 +107,13 @@ def certified_count():
 RULES = """
 ## Two rules from measurement, not taste
 
-**1. Never re-excise a closure the bank already has.** Run `scripts/check_unit_overlap.py` and
+**1. Never re-excise a closure the dataset already has.** Run `scripts/check_unit_overlap.py` and
 grep `experiments/pipeline/authored*/*/*/_author/closure.md` for the file and symbol you mean to
 cut. A duplicate re-measures a unit we already own. List every candidate you rejected for
 overlap and what it collided with.
 
 **2. Report your own diminishing returns.** Number units in authoring order and record how many
-candidates you rejected before each acceptance. Pooled across the bank, later units currently
+candidates you rejected before each acceptance. Pooled across the dataset, later units currently
 yield BETTER than earlier ones (42% early half, 52% late half) because briefs improved faster
 than closures ran out. The moment your search cost per accepted unit starts climbing, say so and
 stop rather than padding the count — that inflection is worth more than three weak units.
@@ -132,7 +132,7 @@ print layout or punctuation is `Inferable: no`, and the verifier asserts only it
 
 
 def write_author_job(repo, tag):
-    # Tell the author what the bank has already taken. Nothing did, so every job saw an
+    # Tell the author what the dataset has already taken. Nothing did, so every job saw an
     # empty repo and went for the same obvious targets: 20% of all units excise line
     # ranges that overlap another unit's, and one vendored gin file alone carries 16.
     import subprocess as _sp
@@ -182,7 +182,7 @@ Units: `experiments/pipeline/{batch}/{repo}/<unit>/_author/`. Read `analytics/re
 ## The rule that decides whether these units are worth anything
 
 **You are blind to gold.patch. Do not open it.** You grade what DETAILS.md commits to and
-nothing more. That wall is what makes a unit fair, and it is where every bad unit in the bank
+nothing more. That wall is what makes a unit fair, and it is where every bad unit in the dataset
 came from: a verifier that could not see gold invented an assertion no solver could derive.
 
 **Obey the `Inferable:` annotation on every DETAILS line.**
@@ -192,7 +192,7 @@ came from: a verifier that could not see gold invented an assertion no solver co
   offending field; never that it equals a specific sentence.
 
 Measured: reading solver traces, units passed 7 of 8 tests and failed on one unstated
-convention — an exact Print layout, panic-on-unsorted-input. Across the bank 51% of failing L0
+convention — an exact Print layout, panic-on-unsorted-input. Across the dataset 51% of failing L0
 trials fail exactly one test, and 90% of those are legitimately solvable at L2. A unit whose
 difficulty is one unguessable literal measures spec-guessing, not engineering.
 
@@ -266,13 +266,13 @@ def main():
     # authoring is the stage that generates its own backlog, ten pending AU jobs blocked
     # the verify scan below indefinitely: 74 units sat authored-but-unverified (no hidden
     # suite, so unstageable at any rung) while seven more AU jobs queued behind them and
-    # the bank stayed flat. Verification drains the backlog, so it is never blocked by it.
+    # the dataset stayed flat. Verification drains the backlog, so it is never blocked by it.
     author_pend = [n for n in pend if n.startswith("AU")]
 
     # A cohort already in the trial ledger was verified through an earlier path, with its
     # tests living in the staged sweep dir rather than _author/. The census cannot see that
     # and reports it unverified; without this filter autogen would re-verify the whole
-    # existing bank.
+    # existing dataset.
     roots_all = [R] + sorted(glob.glob("/home/evan/Documents/oswt-*"))
     sys.path.insert(0, os.path.join(R, "scripts/ops"))
     try:
@@ -283,7 +283,7 @@ def main():
 
     def already_banked(batch, repo):
         # Look across every root: a cohort can live only in a worktree, and checking just
-        # the main checkout found no units and wrongly declared it un-banked.
+        # the main checkout found no units and wrongly declared it un-recorded.
         units = set()
         for root in roots_all:
             for x in glob.glob(f"{root}/experiments/pipeline/{batch}/{repo}/*/"):
@@ -293,7 +293,7 @@ def main():
             return False
         # Staged units carry a repo prefix the authored directory does not:
         # authored_batch2/go-github/auditentry becomes go-github-auditentry in the ledger.
-        # Comparing bare names matched nothing and declared the whole bank unverified.
+        # Comparing bare names matched nothing and declared the whole dataset unverified.
         def seen(u):
             return (u in trialled
                     or f"{repo}-{u}" in trialled
@@ -363,7 +363,7 @@ def main():
 
     # Never author past the unverified backlog. An authored unit with no hidden suite is
     # not an asset, it is a liability that occupies a Devin slot the verifier needs.
-    # Count only cohorts that are NOT already banked. batch2 was verified through an
+    # Count only cohorts that are NOT already recorded. batch2 was verified through an
     # older path whose tests live in the staged sweep dir, so the census reports ~150
     # unverified units that are in fact certified - counting those would block authoring
     # permanently rather than when the backlog is real.

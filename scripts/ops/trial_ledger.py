@@ -42,7 +42,7 @@ def trials(jobs_dir=JOBS):
 
         reward = err = None
         tok = cost = 0.0
-        # Who produced this verdict. "Hard at L0" is solver-dependent, so a bank screened by
+        # Who produced this verdict. "Hard at L0" is solver-dependent, so a dataset screened by
         # two different solvers is not one population unless we can stratify it later.
         agent = model = None
         rj = os.path.join(tdir, "result.json")
@@ -102,7 +102,7 @@ def ledger(jobs_dir=JOBS):
 def ledger_by_solver(jobs_dir=JOBS):
     """base -> solver -> rung -> [reward]. The multi-model view.
 
-    The bank is deliberately multi-model: tasks are trialled by whichever solver has
+    The dataset is deliberately multi-model: tasks are trialled by whichever solver has
     capacity, and a certificate records WHO it binds for. Keeping this separate from
     ledger() means existing callers are unchanged while provenance is available to anyone
     who needs it."""
@@ -131,7 +131,7 @@ def certificates(jobs_dir=JOBS):
             continue
         # The flip does not have to happen at L2. A unit that fails L0 and L2 and then
         # passes at L5 is still hard-and-solvable; the rung it needs IS its difficulty.
-        # Certifying only at L2 wrote off 46 of the hardest units in the bank as
+        # Certifying only at L2 wrote off 46 of the hardest units in the dataset as
         # "non-flipping". The lowest passing rung is the one that binds.
         passed = {}
         for solver, d in bysolver.items():
@@ -144,7 +144,7 @@ def certificates(jobs_dir=JOBS):
         at_rung = passed[rung]
         shared = failed_l0 & at_rung
         # How much evidence the flip rests on. A certificate is `max(reward) > 0` at the
-        # binding rung, which is the same rule the whole bank uses - but 1 pass in 6 is
+        # binding rung, which is the same rule the whole dataset uses - but 1 pass in 6 is
         # not the same claim as 1 in 1, and helm-depresolver binds at L3 on 1 of 6.
         # Recording it keeps that difference auditable instead of invisible.
         per_rung = {}
@@ -207,7 +207,7 @@ def summary(jobs_dir=JOBS, nonflip_cap=3):
 
 
 def report_multimodel(jobs_dir=JOBS):
-    """Print the bank as what it is: a multi-model bank."""
+    """Print the dataset as what it is: a multi-model dataset."""
     import collections as _c
     c = certificates(jobs_dir)
     kind = _c.Counter(v["kind"] for v in c.values())

@@ -21,12 +21,12 @@ what information the solver may use; only these interact with the affordance/inf
 | A8 | Prove in the built image: buggy tree fails, gold passes, before launch | host and image can differ | 1 caught (patch silently not applied to the snapshot) |
 | A9 | Dynamic gates need a proven non-passer: naive impl passes correctness and fails the gate; race gate 10/10 deterministic | otherwise the gate is decorative | perf gate proven on 2 tasks; race gate never reached 10/10, task dropped |
 | A10 | Verifier phase runs with no network | reproducibility | 0 incidents after enabling |
-| A13 | The contract must be consistent with gold: every coverage row's claim is true of `gold.patch`, and every assertion the hidden suite makes is covered by a row (vague rows are surfaced, not failed) | the contract outranks the code the solver can read — inverting one coverage row flipped 7/8 passing units to fail on exactly the inverted property; 40% of the first bank misdescribed gold; every audited double-failure was a contract defect (7/7); go-github 0/10 L2 flips | 20 of 50 bank units (11 false rows, 9 missing-only); go-github cohort unusable until re-derived |
+| A13 | The contract must be consistent with gold: every coverage row's claim is true of `gold.patch`, and every assertion the hidden suite makes is covered by a row (vague rows are surfaced, not failed) | the contract outranks the code the solver can read — inverting one coverage row flipped 7/8 passing units to fail on exactly the inverted property; 40% of the first dataset misdescribed gold; every audited double-failure was a contract defect (7/7); go-github 0/10 L2 flips | 20 of 50 dataset units (11 false rows, 9 missing-only); go-github cohort unusable until re-derived |
 
 Note on A2/A3: zero exclusions means either the builder already produces verifiers that satisfy them, or
 the checks are too weak to bite. Distinguish by ablation (see section D).
 
-**A13 cold-repo gate.** Any repo with fewer than 3 units already in the screened bank
+**A13 cold-repo gate.** Any repo with fewer than 3 units already in the screened dataset
 (`experiments/pipeline/tasks_composerver/<repo>`) must pass A13 on each newly packaged L2
 *before the batch is screened*. The judge's ~13/30 false-alarm rate is accepted there because
 the prior on defects is far worse (go-github: 10 of 10 L2 failures, all spent). Warm repos
@@ -69,7 +69,7 @@ not weaken any hidden test. Command: `uv run python scripts/reconcile_contract.p
 | C3 | Obfuscate identity (module path, brand strings, subsystem symbols) before measuring anything on a public repo; then verify with a control run. Result: solve times unchanged, so recall was not the driver, but keep it as insurance. |
 | C4 | One base image per tree; per-task layers. (Not yet done; each task rebuilds from golang:1.23.) |
 | C6 | Derive the L2 coverage table FROM the hidden tests (reconciler pass), never from a reading of gold. Author writes DETAILS.md; verifier writes TestDetailNN; reconciler writes contract.md. |
-| C7 | Cold repos (< 3 prior banked units) must pass A13 before screening. |
+| C7 | Cold repos (< 3 prior recorded units) must pass A13 before screening. |
 
 ## D. What we do not know yet
 
@@ -210,7 +210,7 @@ fields are emitted — rather than any behaviour the contract can state. It is t
 - **unsolvable from the contract at any rung**, and
 - **unsolvable at L5 and L6**, where the test is visible: the expected digest cannot be inverted.
 
-`helm-depresolver` is the only unit in the bank that fails with the hidden test in its own tree, and this is why.
+`helm-depresolver` is the only unit in the dataset that fails with the hidden test in its own tree, and this is why.
 Its solver produced a stable, self-consistent canonicalisation satisfying every stated property, and failed on the
 literal.
 
@@ -219,7 +219,7 @@ literal.
 - the digest is stable across repeated calls and across process runs
 - or compare against a digest the test itself computes from a value it also constructs
 
-Audit the bank with `scripts/ops/literal_digest_audit.py`. A bare hex string is usually a fixture (an address, a
+Audit the dataset with `scripts/ops/literal_digest_audit.py`. A bare hex string is usually a fixture (an address, a
 key, a test vector) and is fine; an algorithm-prefixed literal used as an expected value is the violation.
 
 ---
@@ -300,7 +300,7 @@ contract, the contract is complete. That also answers the staffing question: str
 
 ## Rule B10 is a special case of the shadow check
 
-B10 (no literal digests of internal serialisations) was written after `helm-depresolver` — the bank's only unit
+B10 (no literal digests of internal serialisations) was written after `helm-depresolver` — the dataset's only unit
 that fails even at L5, where the hidden test sits in the tree, because a `sha256:` literal cannot be inverted.
 B10 is a regex for one unsatisfiable shape. The shadow check catches **every** assertion only gold can satisfy,
 of which the digest literal is one instance. Keep B10 as a fast pre-filter; treat the shadow as the general rule.
@@ -388,7 +388,7 @@ ungrounded. Every ungrounded literal is fresh cheat surface.
 
 All of the above is **validity, not difficulty**. Closure size and assertion count both failed as difficulty
 levers, and Devin solving 2 of 7 certified-hard units shows "hard" is partly a property of the screening model;
-cross-model intersection is a measurement, not a knob. A clean bank is the **precondition** for answering what
+cross-model intersection is a measurement, not a knob. A clean dataset is the **precondition** for answering what
 controls difficulty, not the answer.
 
 ## The gate model is Composer, not OpenRouter free tier
@@ -507,7 +507,7 @@ Two different questions had been conflated:
 one exists. A cheatable-but-uncheated unit is a weaker measurement, not a worthless one.
 
 **The rule: filter on demonstrated cheating, flag on theoretical cheatability.** A unit is removed
-from the bank when B9 shows a passing attempt was obtained by cheating. A unit whose cheat patch
+from the dataset when B9 shows a passing attempt was obtained by cheating. A unit whose cheat patch
 passes is *flagged* — recorded as lower-confidence, re-examined, not discarded on the strength of
 an adversary of our own making.
 

@@ -57,7 +57,7 @@ Checks worth naming individually, with what each one actually caught:
 | preflight | all of the above, per unit, in Docker | quarantines failures instead of shipping them |
 
 **Point to make:** these are not hypothetical. Preflight failures are the mechanism by
-which unsolvable-as-specified tasks are kept out of the bank, and they fire on real units.
+which unsolvable-as-specified tasks are kept out of the dataset, and they fire on real units.
 
 ## 4. Does the ladder discriminate?
 
@@ -98,7 +98,7 @@ Certificates by binding rung — the lowest rung at which the unit passes:
 | L3 | 1 | contract + hidden test names |
 | L5 | 23 | contract + the representative test restored into the tree |
 
-This converts the bank from a binary (hard / too easy / broken) into a graded one. A unit
+This converts the dataset from a binary (hard / too easy / broken) into a graded one. A unit
 that flips only at L5 is *harder* than one that flips at L2 — it is not a failed task, and
 the rung is a difficulty measure the construction produces for free.
 
@@ -154,7 +154,7 @@ usually go with the excised code.
 Secondary finding: the verifier's own difficulty judgement was not predictive — it named
 five units "strongest resistance" and four were solved from the bug report alone.
 
-## 7. Provenance: the bank is synthetic
+## 7. Provenance: the dataset is synthetic
 
 - 1545 task files, **zero** references to issues, PRs or CVEs
 - 102,586 additions against 638 non-stub deletions (0.62%)
@@ -216,4 +216,4 @@ Say this plainly rather than letting a reader infer it:
 
 `trial_ledger.py` (certificates, multi-model split) · `roots.py` (unit census) ·
 `task_overlap.py` (redundancy) · `synthetic_provenance.py` (provenance) ·
-`KNOWN_LIMITATION_cross_repo.md` · `MULTIMODEL_BANK.md`
+`KNOWN_LIMITATION_cross_repo.md` · `MULTIMODEL_DATASET.md`

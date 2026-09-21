@@ -1,6 +1,6 @@
 # How to author L0-hard units that are provably fair, solvable and verifiable
 
-2026-09-19, derived from the repaired-bank sweeps (`sweep_L0_2026-09-19.md`): 30 units screened at L0 (k=3, 90%
+2026-09-19, derived from the repaired-dataset sweeps (`sweep_L0_2026-09-19.md`): 30 units screened at L0 (k=3, 90%
 deterministic, 0 infra), 12 failed 0/3, and 7 of the 11 measured so far pass at L2.
 
 ## 1. The flip is the certificate
@@ -65,7 +65,7 @@ the tree**. Not code size, not call-graph shape (both refuted today).
    --gold … --out contract.md`. "Missing" is then structurally impossible. Packaging runs this
    automatically when DETAILS.md is present.
 6. **Preflight before any trial** (bare fails with assertions, gold passes, cheat fails, in-image).
-7. **A13 is mandatory on cold repos** (fewer than 3 units already in the screened bank). The judge's
+7. **A13 is mandatory on cold repos** (fewer than 3 units already in the screened dataset). The judge's
    false-alarm rate is accepted there because the prior on defects is worse. Warm repos keep A13 as a
    backstop, not a packaging gate.
 
@@ -95,7 +95,7 @@ At $0.35/trial (measured: $31.61 / 90 real-repo trials) and k=1 screening:
 
 So **100 authored units ≈ $100 and yields ~26 flip-validated hard units.** Reaching *100 hard* units at today's hit
 rate needs ~385 authored units (~$385, and ~40 repos' worth of authoring at 10 units/repo). The 250M Composer tokens on
-offer ≈ 170 real-repo trials ≈ screening for ~120 units — enough for the next bank, not for 100 hard ones.
+offer ≈ 170 real-repo trials ≈ screening for ~120 units — enough for the next dataset, not for 100 hard ones.
 
 Two levers change that math:
 - **Author for difficulty** (steps 1–2 above) should lift the 40% L0-fail rate. Every point of lift is directly
@@ -107,7 +107,7 @@ Two levers change that math:
 
 ## 5. What 100 units looks like
 
-- **Bank today:** 30 preflight-clean (helm/kops/gin). Job S is repairing client-go + goa → ~50.
+- **Dataset today:** 30 preflight-clean (helm/kops/gin). Job S is repairing client-go + goa → ~50.
 - **To 100:** 5 more repos at ~10 units each. Authoring is not the bottleneck (Composer authored a go-github unit in
   ~3 min); the bottleneck was packaging, and the preflight gate closed that (0 infra in 105 trials today).
 - **Per repo, one-time:** pin a commit, obfuscate, base image, rebrand map — all config since K's work; job P is

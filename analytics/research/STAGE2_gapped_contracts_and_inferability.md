@@ -92,7 +92,7 @@ and what the B7 instruction ceiling is protecting.
 
 `ladder_deep.py` is 932 lines holding **4 hand-written `DeepUnit` entries**, 4
 hand-written `Gap` specs and 8 hardcoded A1/A2 instruction constants. There is no gap
-generator in the tree. Extending L1 across the bank means, per unit, choosing which
+generator in the tree. Extending L1 across the dataset means, per unit, choosing which
 commitment to pull, locating where it is recoverable, and naming a pre-existing test
 that catches the wrong reading.
 

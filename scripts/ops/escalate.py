@@ -13,7 +13,7 @@ were escalated by hand and ALL NINE flipped higher up:
     kops-taintparse L5 | kops-clustervalid L3 fail, L4 fail, L5 PASS, L6 PASS
 
 11 passes against 2 fails. They are not broken tasks - they are the HARDEST tasks
-in the bank, and the rung at which a unit finally flips is a difficulty measure
+in the dataset, and the rung at which a unit finally flips is a difficulty measure
 rather than a failure.
 
 Search policy

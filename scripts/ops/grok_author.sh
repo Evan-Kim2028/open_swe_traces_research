@@ -22,7 +22,7 @@ docker rm "$cid" >/dev/null 2>&1
 [ -d "$S/src" ] || { echo "extract failed"; exit 1; }
 echo "  $(find "$S/src" -name '*.go' -not -name '*_test.go' | wc -l) source files"
 
-# what the bank has already taken, so this session does not re-cut it
+# what the dataset has already taken, so this session does not re-cut it
 ( cd "$R" && timeout 300 uv run python scripts/ops/excision_registry.py "$REPO" --md ) \
   > "$S/CLAIMED.md" 2>/dev/null || echo "## Already claimed\n\nNothing yet." > "$S/CLAIMED.md"
 

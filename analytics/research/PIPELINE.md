@@ -65,8 +65,8 @@ Only then a trial.
 
 | rung | solver | why |
 |---|---|---|
-| L0 screen | Devin (target) | "is this too easy" — a second model makes the bank better, and Devin is ~3× cheaper per trial |
-| L2 confirm | Composer | the flip certificate's meaning depends on the screener; changing it breaks comparability with the existing bank |
+| L0 screen | Devin (target) | "is this too easy" — a second model makes the dataset better, and Devin is ~3× cheaper per trial |
+| L2 confirm | Composer | the flip certificate's meaning depends on the screener; changing it breaks comparability with the existing dataset |
 
 Devin solves 2 of 7 units Composer fails at L0 — they are **differently-abled, not ordered**, so run
 both on an overlap set rather than assuming equivalence. Harbor's devin agent needs

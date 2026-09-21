@@ -2,7 +2,7 @@
 """Evidence that these tasks are synthetic, not harvested from GitHub issues.
 
 The claim under test: every unit is a defect WE created by excising working upstream code,
-not a real reported bug. If that holds, the bank cannot be contaminated by anything a model
+not a real reported bug. If that holds, the dataset cannot be contaminated by anything a model
 saw during training - no issue thread, no fix commit, no CVE writeup.
 
 Three independent lines of evidence, because any one alone is weak:

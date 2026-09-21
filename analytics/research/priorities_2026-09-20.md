@@ -16,7 +16,7 @@ cross-repo for difficulty. Screen it as soon as its verifier lands, and audit be
 
 ## 1. Fix the contract defect at its source: derive coverage rows FROM the tests
 
-40% of the first bank misdescribes gold; 7 of 7 audited double-failures were contract defects; go-github may be 10
+40% of the first dataset misdescribes gold; 7 of 7 audited double-failures were contract defects; go-github may be 10
 more. The cause is structural and unchanged since the first batch:
 
 ```
@@ -48,7 +48,7 @@ discarded. Now fails → the L0 report was leaking and we threw away a hard unit
 
 ## 3. Add the families that can produce a capability limit
 
-Zero unsolvable units in ~400 trials: the bank measures information, not ability, and cannot discriminate between
+Zero unsolvable units in ~400 trials: the dataset measures information, not ability, and cannot discriminate between
 strong models. Every unit so far is single-site reimplementation. The rulebook already defines the families that
 would change this and none were used tonight: **A6 multi-site** (fixing any one site alone still fails), **A9 dynamic
 gates** (race-free under `-race`, or a performance threshold derived from gold). Those are hard to *implement*, not

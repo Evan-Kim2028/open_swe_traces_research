@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Continuous operator. Keeps the pipeline fed without a human in the loop, and records a
-# rolling window of what actually changed so a flat bank is visible as a stall.
+# rolling window of what actually changed so a flat dataset is visible as a stall.
 #
 # Every TICK it: refills Devin slots from the manifest, launches the next queued sweep when
 # trial concurrency allows, reaps only provably-wedged containers, prunes only under pressure,
@@ -88,7 +88,7 @@ refill_devin() {
   # productively for 50 minutes with no throttle in 71, because tool-call timestamps are
   # approximated and the cap rested on two events measured the same crude way.
   # Reserve half the Devin budget for TRIALS. Authoring sessions were filling all four
-  # slots, so the supervisor correctly refused to start any trial and the bank stopped
+  # slots, so the supervisor correctly refused to start any trial and the dataset stopped
   # moving: Composer was draining to zero at the same time. Sessions cap at 2, leaving 2
   # for trials, which are the only thing that certifies a unit.
   local want thr_age session_cap=2
@@ -133,7 +133,7 @@ pump_sweeps() {
   [ "$c" -ge "$CAP" ] && { say "trials at cap ($c/$CAP)"; return 0; }
   # Previously: one sweep at a time. That let a nearly-finished sweep holding one container
   # block the other eleven slots — measured a full 30m window at 1/12 utilisation and a flat
-  # bank. Gate on spare CAPACITY instead, which is the resource that actually runs out.
+  # dataset. Gate on spare CAPACITY instead, which is the resource that actually runs out.
   local nsweeps headroom
   nsweeps=$(sweeps_up | wc -l)
   headroom=$(( CAP - c ))

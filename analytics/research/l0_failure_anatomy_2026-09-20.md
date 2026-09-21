@@ -51,7 +51,7 @@ the same bug: `json.Unmarshal("null", &v)` into a non-pointer succeeds as a sile
 `unicode.IsLetter(rune(0xff))` true for U+00FF, `/32` treated as an invalid mask.
 
 L2 is therefore a reasonably clean ceiling. Post-repair contract-defect share among L2 failures
-is ~27%, well below the 40% bank-wide static audit prior.
+is ~27%, well below the 40% dataset-wide static audit prior.
 
 ## 5. What this says about the ladder
 

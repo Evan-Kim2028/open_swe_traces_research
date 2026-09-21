@@ -28,7 +28,7 @@ themselves — verified by the checker's file-set diff).
 
 ## Existing closures avoided
 
-- The authored bank (`experiments/pipeline/authored/`) contains **zero**
+- The authored dataset (`experiments/pipeline/authored/`) contains **zero**
   nats-server units, so no prior closures constrained selection.
 - `ldapdn`, `archiveio`, `hashwheel` were authored earlier in this batch
   (pre-existing when work resumed); all 11 newly authored units excise

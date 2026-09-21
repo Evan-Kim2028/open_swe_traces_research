@@ -1,4 +1,4 @@
-# The bank is multi-model, by design
+# The dataset is multi-model, by design
 
 **Decided 2026-09-21.** Tasks are trialled by whichever solver has capacity — Composer 2.5
 (metered, fast), Devin swe-2-max (free, capped at 4, slow), Grok 4.6 (burst). A certificate
@@ -15,7 +15,7 @@ Measured at the time of the decision: **15 of 139 certificates (11%) were cross-
 almost all `L0=composer, L2=devin`. And the solvers do differ — L0 solve rate was 39% for
 composer against 12% for grok, so a task hard for one is not automatically hard for another.
 
-The alternative was a single-solver bank: all trials on Composer, Devin confined to
+The alternative was a single-solver dataset: all trials on Composer, Devin confined to
 verification and authoring. That costs roughly 500M tokens for the ready backlog alone —
 five times the budget spent to date — and buys a narrower claim ("hard for Composer 2.5")
 rather than a broader one.
@@ -33,7 +33,7 @@ rather than a broader one.
 `ledger_by_solver()` gives the full base -> solver -> rung -> rewards view.
 `ledger()` is unchanged, so existing callers keep working.
 
-## How to read the bank
+## How to read the dataset
 
 - **single-solver certificates** are the strong claim: this task is hard for *that* model,
   and the contract is what makes it solvable.

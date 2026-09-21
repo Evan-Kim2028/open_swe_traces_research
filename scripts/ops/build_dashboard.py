@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Regenerate the task foundry dashboard from the live ledger.
 
-The bank count is a vanity number: it only goes up. The number that says whether a
+The dataset count is a vanity number: it only goes up. The number that says whether a
 decision worked is MARGINAL trials-per-certified — how many trials the last batch of
 tasks cost. Decisions are drawn as vertical markers so a change that did nothing is
 as visible as one that worked.
@@ -153,7 +153,7 @@ def main():
                        f'<text x="{x+4:.1f}" y="{dy}" class="mkl">{lab}</text>')
         return "".join(out)
 
-    # ---- chart 1: the bank ----
+    # ---- chart 1: the dataset ----
     cmax = max(r["certified"] for r in rows) or 1
     tmax = max(r["trials_cum"] for r in rows) or 1
     yb = H - PB
@@ -293,7 +293,7 @@ footer{{color:var(--ink2);font-size:12.5px;margin-top:8px}}
 <div class="tiles">{tiles}</div>
 {funnel_card}
 
-<div class="card"><h2>The bank, and what it cost</h2>
+<div class="card"><h2>The dataset, and what it cost</h2>
 <p class="note">A unit is certified when it fails at L0 and passes at L2 <em>or higher</em> — hard, fair, solvable and verifiable.
 The rung it needs is its difficulty: a unit that only flips at L5 is harder than one that flips at L2, not a failed task.
 Certified units are the product; trials are the bill.</p>

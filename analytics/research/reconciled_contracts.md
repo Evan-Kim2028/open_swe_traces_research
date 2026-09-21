@@ -5,7 +5,7 @@
 ## Why
 
 Author wrote `contract.md` from a reading of gold. Verifier wrote hidden tests from
-gold. Nothing reconciled the two. 40% of the first bank misdescribed gold; 7/7
+gold. Nothing reconciled the two. 40% of the first dataset misdescribed gold; 7/7
 audited double-failures were contract defects; go-github burned ten L0 screens
 plus thirty L2 trials on units that could not flip.
 

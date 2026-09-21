@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The list of code regions the bank has already claimed.
+"""The list of code regions the dataset has already claimed.
 
 20% of authored units excise line ranges that overlap another unit's, because nothing
 ever told an authoring job what had already been taken. Each job saw an empty repo and

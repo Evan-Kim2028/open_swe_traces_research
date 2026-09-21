@@ -1188,7 +1188,7 @@ def _verdict(
         f"Unjustified confidence is not specific to failures: resolved rollouts match "
         f"(last-test green {green['ok_pct']}, uncertainty {unc['ok_pct']}; "
         f"Cohen's h {green['cohen_h']:+.2f} and {unc['cohen_h']:+.2f}), "
-        f"and the original L0 bank had no successes to compare against."
+        f"and the original L0 dataset had no successes to compare against."
     )
     s3 = (
         f"Manufactured all-clear by editing tests is {test_edit['fail_pct']} of failures vs "

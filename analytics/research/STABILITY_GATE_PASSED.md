@@ -34,7 +34,7 @@ a moving target.
 ## What the gate does not mean
 
 - It is a stability claim about the *pipeline*, not a quality claim about the
-  *bank*. Certificate quality is the verifier's job (A1/A3/A12, B2, B7).
+  *dataset*. Certificate quality is the verifier's job (A1/A3/A12, B2, B7).
 - The trial-duration statistics gathered before the reaper fix are censored:
   anything quiet past 45 minutes was killed, so the observed 21-min median and
   53-min max are lower bounds. Re-measure before quoting an ETA.

@@ -15,7 +15,7 @@ harder: the solver must reconstruct L without seeing it.
 |---|---|---|---|---|
 | XREPO (1) | any dependency | 23 | 19 (83%) | 4 (17%) |
 | XREPO2 (2) | only behaviour that cannot be recalled | 14 | **12 of 14 (86%)** | 2 pending L2 |
-| bank-wide | in-repo excision | 277 | 41% | 48% |
+| dataset-wide | in-repo excision | 277 | 41% | 48% |
 
 Round 1's post-mortem blamed *memorised famous utilities*: the solver had already seen
 the dependency, so the boundary added nothing. Round 2 applied a corrected selection rule

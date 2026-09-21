@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Every invariant the pipeline is supposed to hold, checked in one place.
 
-Written because the failure mode is always the same: agents look busy, the bank does not
+Written because the failure mode is always the same: agents look busy, the dataset does not
 move, and it takes a human noticing to find out why. Five utilisation bugs were found that
 way today. Each became a check here so the next one is caught by a script, not by luck.
 
@@ -35,7 +35,7 @@ elif logage > 900:
 else:
     OK.append(f"supervisor alive (pid {pid}, log {logage}s old)")
 
-# --- 2. is the bank moving? a flat bank with healthy agents IS the bug -----------
+# --- 2. is the dataset moving? a flat dataset with healthy agents IS the bug -----------
 rows = []
 if os.path.exists("outputs/rolling.jsonl"):
     for ln in open("outputs/rolling.jsonl"):
@@ -51,9 +51,9 @@ if len(recent) >= 3:
         FAIL.append(f"STALL: {dt} trials in the last hour, certified did not move. "
                     f"Check for re-trialling of decided units and for idle container slots.")
     elif d == 0:
-        WARN.append(f"bank flat for an hour ({dt} trials) — low throughput, check capacity")
+        WARN.append(f"dataset flat for an hour ({dt} trials) — low throughput, check capacity")
     else:
-        OK.append(f"bank +{d} in the last hour ({dt} trials, {dt/max(1,d):.1f}/cert)")
+        OK.append(f"dataset +{d} in the last hour ({dt} trials, {dt/max(1,d):.1f}/cert)")
 
 # --- 3. Composer fed? ------------------------------------------------------------
 # Composer's occupancy, not every trial container. `grep -c env-main` counts Devin
@@ -216,7 +216,7 @@ if per:
         OK.append("no re-trialling of decided units")
 
 # --- 9. finished work stranded in worktrees --------------------------------------
-# No monitor could see this and it was the single biggest drag on the bank: a VF job writes
+# No monitor could see this and it was the single biggest drag on the dataset: a VF job writes
 # its hidden suites inside its own worktree and a RC job writes contracts inside its own.
 # Nothing moved them to the main checkout, so 74 finished units were unstageable while
 # autogen - whose census takes the max across roots - reported them verified and queued
@@ -236,7 +236,7 @@ except Exception:
 
 # --- 10. authored-but-unverified backlog -----------------------------------------
 # Authoring generates its own backlog; verification is what drains it. Ask autogen for the
-# figure rather than re-deriving it: a local count included cohorts banked through the old
+# figure rather than re-deriving it: a local count included cohorts recorded through the old
 # path and reported 154 where the real backlog was 30, which would have had the monitor
 # screaming about a bottleneck that did not exist.
 try:
@@ -330,7 +330,7 @@ except Exception:
     pass
 
 # --- 14. multi-model certificate split -------------------------------------------
-# The bank is deliberately multi-model (analytics/research/MULTIMODEL_BANK.md). A
+# The dataset is deliberately multi-model (analytics/research/MULTIMODEL_DATASET.md). A
 # certificate whose L0 failure and L2 pass came from different models is a weaker claim,
 # so the split is reported rather than collapsed into one "certified" number.
 try:
@@ -339,7 +339,7 @@ try:
     _cross = sum(1 for v in _c.values() if v["kind"] == "cross")
     _msg = (f"{len(_c)} certificate(s): {len(_c)-_cross} single-solver, "
             f"{_cross} cross-solver")
-    # A certificate is max(reward)>0 at the binding rung — the bank's own rule — but one
+    # A certificate is max(reward)>0 at the binding rung — the dataset's own rule — but one
     # pass in twelve is not the claim one pass in one is. Surfaced, not silently equal.
     _thin = sum(1 for v in _c.values() if v.get("thin"))
     if _thin:

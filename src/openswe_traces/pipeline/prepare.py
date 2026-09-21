@@ -27,7 +27,7 @@ MODULE_RE = re.compile(r"^module\s+(\S+)", re.MULTILINE)
 # The base image tag is filled from the repo's own `go` directive (see
 # base_dockerfile_for); GOTOOLCHAIN=auto is the belt-and-braces fallback for a repo
 # whose directive has no published image. prepare_repo used to hardcode golang:1.23,
-# so every repo in the bank pinning a newer go failed to build.
+# so every repo in the dataset pinning a newer go failed to build.
 BASE_DOCKERFILE = """FROM golang:{go_image}
 ENV GOTOOLCHAIN=auto GOFLAGS=-mod=mod
 RUN apt-get update && apt-get install -y --no-install-recommends \\

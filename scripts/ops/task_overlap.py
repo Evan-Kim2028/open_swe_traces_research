@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measure how much the task bank repeats itself.
+"""Measure how much the task dataset repeats itself.
 
 Redundancy is not one thing, so this reports four increasingly strict levels:
 

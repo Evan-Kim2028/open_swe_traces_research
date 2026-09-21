@@ -15,7 +15,7 @@ logic was written several times, the copies drifted, and the drift cost trials.
 | `restore_env_src.py` | rebuilding what `reclaim_disk.py` removed | `regen_env_src.sh` alone is wrong: 18 of 20 batch-3 kops excisions delete in-tree `*_test.go` that gold never restores, so gold-reverse leaves them present. The manifest's `excision_deleted` list closes the gap. Round-trip verified bit-identical on kops/certdesc-L0. |
 | `worktree_gc.py` | retiring spent `oswt-*` worktrees | 103 worktrees held 95GB, all idle. 88 of them also carried 445 untracked one-off scripts and per-batch notes that existed nowhere else — so salvage runs first, and `git worktree remove` keeps every branch and commit. |
 | `docker_gc.py` | Docker images, containers and build cache | `docker system prune -a` would take the 9 `ladder-base` images and the `ladder-base-gocache` volume, which `docker system df` calls "99% reclaimable" only because nothing mounts it at rest. It is the warm Go build cache. |
-| `escalate.py` | which rung a unit that failed L0 **and** L2 should try next, and staging it | 48 units were written off as "non-flipping". Nine had been escalated by hand and **all nine flipped higher up** (11 passes, 2 fails). They were the hardest tasks in the bank, not broken ones. Probes L5, then bisects for the lowest flipping rung: ~2.6 trials/unit against 4 for a linear climb. |
+| `escalate.py` | which rung a unit that failed L0 **and** L2 should try next, and staging it | 48 units were written off as "non-flipping". Nine had been escalated by hand and **all nine flipped higher up** (11 passes, 2 fails). They were the hardest tasks in the dataset, not broken ones. Probes L5, then bisects for the lowest flipping rung: ~2.6 trials/unit against 4 for a linear climb. |
 | `composer_budget.py --set` | granting an allowance and re-anchoring the baseline in one atomic step | Every allowance was a hand-edit of the JSON, and the first one overshot by 23% because raising the cap and re-anchoring were separate actions. |
 ## Rules learned the hard way
 
@@ -45,6 +45,6 @@ logic was written several times, the copies drifted, and the drift cost trials.
   certified unit it is affordance-study data, sampled, and can never certify. On a unit
   that failed L0 *and* L2 it is an escalation - the only route by which that unit ever
   certifies. One rule rejecting both with "certify first" is what kept 46 of the hardest
-  units in the bank classified as waste.
+  units in the dataset classified as waste.
 - **The rung at which a unit flips is its difficulty, not its failure.** `certificates()`
   binds at the lowest passing rung >= 2 and records `escalated`.

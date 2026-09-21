@@ -264,14 +264,14 @@ for d in glob.glob("experiments/dose_response/sweep_*/*/"):
     # A unit with no hidden suite can never be trialled - task_lint BLOCKs it inside the
     # sweep, so counting it as runnable made orchestrate relaunch four go-github cohorts
     # every tick, each exiting immediately with "guard kept 0 unit(s)" while burning a
-    # launch and a lock. Five units bank-wide are in this state (auditcoerce staged into
+    # launch and a lock. Five units dataset-wide are in this state (auditcoerce staged into
     # four cohorts with no tests/ dir at all, plus auditentry); they need a verifier, not
     # a trial.
     if not glob.glob(d + "tests/hidden/**/*", recursive=True):
         continue
 
     # Ladder rungs (L1, L3-L6) are affordance-study data: they can never certify, by
-    # construction. They were taking ~half of Composer's budget while the bank was the
+    # construction. They were taking ~half of Composer's budget while the dataset was the
     # goal, so they pause behind a flag file rather than being deleted - the staged
     # cohorts and every verdict already collected stay exactly where they are.
     #   pause : touch outputs/supervisor/ladder_paused
@@ -321,7 +321,7 @@ else:
             continue
         is_l2 = cohort.endswith("_L2")
         # L2 prefers Devin because Devin is free, but "prefers" must not mean "only":
-        # Devin is capped at 4 and every certifiable unit in the bank is now at L2, so a
+        # Devin is capped at 4 and every certifiable unit in the dataset is now at L2, so a
         # Devin-only rule left 24 units queued behind the cap while Composer sat idle with
         # budget in hand. L2 is the rung that certifies; when Devin is full and there is
         # budget, Composer takes the overflow. Ladder rungs never qualify - they cannot
@@ -432,7 +432,7 @@ if sum(runnable.values()) < 5:
                     break
             else:
                 continue
-        # skip cohorts already in the bank under a repo-prefixed name
+        # skip cohorts already in the dataset under a repo-prefixed name
         sample = os.path.basename(withtests[0].rstrip("/"))
         if sample in per or f"{repo}-{sample}" in per:
             continue

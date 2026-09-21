@@ -160,7 +160,7 @@ def decide(unit, per):
         # affordance-study data, sampled, and can never certify. A ladder rung on a unit
         # that failed L0 AND L2 is an ESCALATION: it is the only way that unit ever
         # certifies, and 9 of 9 hand-escalated units flipped above L2. Rejecting both with
-        # "certify first" is what kept 46 of the hardest units in the bank written off.
+        # "certify first" is what kept 46 of the hardest units in the dataset written off.
         escalating = bool(l0 and max(l0) == 0 and l2 and max(l2) == 0)
         if escalating:
             import escalate

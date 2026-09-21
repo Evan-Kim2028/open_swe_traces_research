@@ -2,7 +2,7 @@
 
 Date: 2025-12-15. Branch: `au2gogit` (worktree `oswt-AU2gogit`). No commits.
 
-Bank math that motivated this batch: 86 certified / 224 authored (38% hit rate);
+Dataset math that motivated this batch: 86 certified / 224 authored (38% hit rate);
 300–400 certified needs ~900 authored. go-git cohort went 14/25 flipped, 25/25 hard at L0,
 so this batch doubles down on the surface class that produced that: **parsing, predicate and
 serialisation closures over the same gold tree** (`ladder-base:go-git`, module obfuscated to

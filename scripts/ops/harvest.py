@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Copy finished verifier/reconciler output out of Devin worktrees into the main checkout.
 
-This step did not exist, and its absence was the real reason the bank went flat. A VF job
+This step did not exist, and its absence was the real reason the dataset went flat. A VF job
 writes `tests/` into its OWN worktree; a RC job writes `_author/contract.md` into its own.
 Nothing ever moved them. census() takes the max across roots, so autogen saw "20/20 go-git
 verified" and never re-queued, while stage_units.py reads only the main checkout and saw a

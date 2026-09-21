@@ -9,7 +9,7 @@ Status: DRAFT. Do not launch until the go/no-go criteria at the bottom are met (
 | Instruction rung is a lever on natural tasks | Open-SWE: L0→L2 gain +5..+20 pts, scales with model strength; finer rungs carry nothing | real, one boundary only |
 | Closure *ratio* drives difficulty on natural PRs | Open-SWE 38k instances: ΔR² +0.008 over size; size-matched quartile diff -0.004 | **refuted** on natural tasks |
 | Patch size is a difficulty dial | mixture fit: feasible share 0.62→0.23, feasible pass prob 0.86→0.74 across 3 decades of size; log-linear p^k rejected | size is a **feasibility gate**, not a dial |
-| Closure ratio / internal edges predict flip on **excised units** | authored bank, 9 measured units: ratio ρ=0.72 (p=0.019), internal_edges ρ=0.66 (p=0.037); lines_removed ρ=0.41 (n.s.); L5 units (formmapping 45 edges/0.21, coalesce 14/0.15) vs L0 units (≤9 edges/≤0.105) separate cleanly | **supported, small n, mixed solvers** |
+| Closure ratio / internal edges predict flip on **excised units** | authored dataset, 9 measured units: ratio ρ=0.72 (p=0.019), internal_edges ρ=0.66 (p=0.037); lines_removed ρ=0.41 (n.s.); L5 units (formmapping 45 edges/0.21, coalesce 14/0.15) vs L0 units (≤9 edges/≤0.105) separate cleanly | **supported, small n, mixed solvers** |
 
 The two closure results are not in conflict: on a natural PR the diff-text proxy cannot see the call graph, and the
 change is not an excision. On an excision the whole tree is present except S, so the information the tree cannot

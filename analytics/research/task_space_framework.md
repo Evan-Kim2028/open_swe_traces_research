@@ -58,7 +58,7 @@ difference that is independent of which repo or unit was chosen, as long as the 
 - Per repo you rebuild: the black-box verifier and the prose contract for each unit; the obfuscation
   map if the repo is public.
 - Open: whether the shape of the grid (which families are hard) looks the same on a second large Go
-  repo. Candidates from the bank with a real mid-difficulty band: argoproj/argo, knative/client,
+  repo. Candidates from the dataset with a real mid-difficulty band: argoproj/argo, knative/client,
   google/go-github.
 
 ## Regenerate the figure
@@ -111,7 +111,7 @@ the size-matched top-vs-bottom ratio-quartile difference is -0.004 pooled; ratio
 +0.009. `log1p(added_lines)` is the dominant term (-0.12 per sd), and `new_frac` is *positive* (more new definitions
 per added line → easier), the opposite of the hypothesis. Caveats: the proxy is diff-text only (no repo call graph),
 `ratio` is 0 for the ~70% of patches that define no new symbol, and natural PRs are not excisions. The retrospective
-on the authored bank has n=3 measured flips and is uninformative; being extended to helm/kops.
+on the authored dataset has n=3 measured flips and is uninformative; being extended to helm/kops.
 
 Framework decision: **size of the required change (added lines) is the measured lever on natural tasks; internal
 self-reference is not.** The fabricated-repo generator (D) should vary size and structure independently so the two

@@ -70,7 +70,7 @@ table.tdiff td:last-child,table.tdiff th:last-child{width:22%}
   <nav class="toc">
     <a href="#gap">1. The gap</a>
     <a href="#factory">2. The factory</a>
-    <a href="#found">3. The bank</a>
+    <a href="#found">3. The dataset</a>
     <a href="#next">4. Scope</a>
   </nav>
 </header>
@@ -278,7 +278,7 @@ table.tdiff td:last-child,table.tdiff th:last-child{width:22%}
 </section>
 
 <section class="sec" id="found">
-  <h2><span class="num">3</span>The bank</h2>
+  <h2><span class="num">3</span>The dataset</h2>
   <p class="lede">Same method, nine Go projects, 139 certified tasks so far. The run is still going.</p>
 
   <h3>3.1 The bug report and the description do different jobs</h3>
@@ -340,7 +340,7 @@ table.tdiff td:last-child,table.tdiff th:last-child{width:22%}
   </figure>
 
   <h3>3.3 Nine kinds of Go code</h3>
-  <p>kops and go-git each contribute 25 certified tasks. Messaging contributes 7. The bank covers Kubernetes operations, version control, API design, storage, the GitHub API, HTTP services, the Kubernetes client, packaging, and messaging.</p>
+  <p>kops and go-git each contribute 25 certified tasks. Messaging contributes 7. The dataset covers Kubernetes operations, version control, API design, storage, the GitHub API, HTTP services, the Kubernetes client, packaging, and messaging.</p>
 
   <figure class="fig">
     <svg viewBox="0 0 720 400" role="img" aria-label="Horizontal axis is the Kind of code. Vertical axis is the number of certified tasks.">
@@ -440,15 +440,15 @@ table.tdiff td:last-child,table.tdiff th:last-child{width:22%}
   </figure>
 
   <h3>3.5 What a task costs to run</h3>
-  <p>Authoring is cheap and trials are not. A unit costs about $1.25 to author. The bank has spent 2.32B tokens and $519 across 1,239 trial runs, which is 8.3 trials for every certificate against a floor of two, one failure on the bug report and one pass on the full description. 73% of tokens pay for runs past that deciding pair. Gating, meaning refusing a trial whose outcome is already known, is worth about 4× over merely sequencing the trials.</p>
+  <p>Authoring is cheap and trials are not. A unit costs about $1.25 to author. The dataset has spent 2.32B tokens and $519 across 1,239 trial runs, which is 8.3 trials for every certificate against a floor of two, one failure on the bug report and one pass on the full description. 73% of tokens pay for runs past that deciding pair. Gating, meaning refusing a trial whose outcome is already known, is worth about 4× over merely sequencing the trials.</p>
   <p>The lesson generalizes past this factory. The expensive part is not generating tasks. It is re-measuring what you already know.</p>
 </section>
 
 <section class="sec" id="next">
   <h2><span class="num">4</span>Scope and next</h2>
-  <p>Stage 1 is Go, nine repositories, in-repo excision, and one solver for 95% of trials. Those are budget choices rather than findings. This is self-funded, so the bank is deliberately small and deep instead of broad. 527 authored tasks and 1,239 trial runs is enough to show that the construction works and to price what it costs to run. It is not enough to claim that it generalizes, and this write-up does not.</p>
+  <p>Stage 1 is Go, nine repositories, in-repo excision, and one solver for 95% of trials. Those are budget choices rather than findings. This is self-funded, so the dataset is deliberately small and deep instead of broad. 527 authored tasks and 1,239 trial runs is enough to show that the construction works and to price what it costs to run. It is not enough to claim that it generalizes, and this write-up does not.</p>
   <p><b>What stage 1 does not claim.</b> That the mechanic transfers past Go; the excision leans on Go’s package and test conventions. That a certificate holds for a model which never took part in screening; too-easy currently means Composer 2.5 solved it. That the ladder is characterized; L1 and L3 through L6 are sparsely sampled, and the dose-response curve is stage 2. A solve rate belongs to the models that produced it, and a certificate does too.</p>
-  <p>Stage 2 runs the same factory in a second language. The cut, the blind tests, and the certificate stay. A held-out solver screens the bank.</p>
+  <p>Stage 2 runs the same factory in a second language. The cut, the blind tests, and the certificate stay. A held-out solver screens the dataset.</p>
 </section>
 
 <p class="fn">Counts are the 2026-09-21 snapshot of a run still in progress, derived from <span class="mark">trial_ledger.py</span> and <span class="mark">roots.py</span>. Decided means 139 certified plus 131 too-easy plus 29 non-flipping. Reference-patch sizes are lines added or removed in gold.patch across the 139 certificates.</p>
