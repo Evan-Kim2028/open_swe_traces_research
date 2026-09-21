@@ -11,7 +11,7 @@ to the invariants below, and takes the smallest action that closes the gap. Runn
 twice changes nothing the second time.
 
 INVARIANTS
-  1. Devin runs 2-4 concurrent, counting host sessions AND in-container trials, because
+  1. Devin runs up to slots.CAP concurrent, counting host sessions AND in-container trials, because
      both spend the same account quota.
   2. A session that has written nothing and logged no tool call for 25 minutes is stuck,
      not thinking. Restart it. Never kill a session that is progressing: dq2.sh's own
@@ -25,6 +25,8 @@ INVARIANTS
   orchestrate.py --apply    do it
 """
 import json, os, re, subprocess, sys, time, glob
+from cohorts import barren   # one definition; the monitor imports the same one
+from slots import CAP as DEVIN_CAP   # never hardcode the cap; slots.py owns it
 
 R = "/home/evan/Documents/open_swe_traces_research"
 os.chdir(R)
@@ -137,30 +139,6 @@ def reserved_slots(agent="cursor"):
 
 
 
-def barren(cohort, _cache={}):
-    """True when this cohort's last sweep kept 0 units and nothing has changed since.
-
-    Reads the sweep's own log rather than re-running the lint: the lint is the expensive
-    part and the sweep already paid for it. The LAST "guard kept N unit(s)" line is the
-    one that counts - an earlier healthy run must not mask a later barren one.
-    """
-    if cohort in _cache:
-        return _cache[cohort]
-    log = os.path.join(R, f"outputs/{cohort}.log")
-    unit_dir = os.path.join(R, "experiments/dose_response", cohort)
-    out = False
-    try:
-        kept = re.findall(r"guard kept (\d+) unit", open(log, errors="replace").read())
-        if kept and kept[-1] == "0":
-            newest = max((os.path.getmtime(os.path.join(dp, f))
-                          for dp, _dn, fn in os.walk(unit_dir) for f in fn), default=0)
-            # Touching the cohort (repairing a unit) makes it eligible again, with no
-            # state to clear by hand.
-            out = newest <= os.path.getmtime(log)
-    except (OSError, ValueError):
-        out = False
-    _cache[cohort] = out
-    return out
 
 def freeze():
     """Run sweeps from a snapshot. Editing scripts/ops/sweep_seq.sh while a sweep was
@@ -332,7 +310,8 @@ for d in glob.glob("experiments/dose_response/sweep_*/*/"):
 print("=" * 70)
 print(f"ORCHESTRATE  {time.strftime('%H:%M:%S')}   {'APPLY' if APPLY else 'dry run'}")
 print("=" * 70)
-print(f"  devin        {devin_total} run(s) = {len(sessions)} session(s) + {trials} trial(s)   [target 2-4]")
+print(f"  devin        {devin_total} run(s) = {len(sessions)} session(s) + "
+      f"{trials} trial(s)   [cap {DEVIN_CAP}]")
 for s in sessions:
     k = "oswt-" + s.replace("closure_", "")
     p = prog.get(k, {})
@@ -369,7 +348,7 @@ else:
         if (is_l2 or not budget_ok) and not (is_l2 and devin_full and budget_ok):
             room = 4 - devin_total
             if room < 1:
-                NOTES.append(f"{cohort}: {n} unit(s) waiting, no devin headroom ({devin_total}/4)")
+                NOTES.append(f"{cohort}: {n} unit(s) waiting, no devin headroom ({devin_total}/{DEVIN_CAP})")
                 continue
             room = min(room, 2)
             ACTIONS.append(("sweep-devin", cohort,
@@ -520,7 +499,7 @@ if sum(runnable.values()) < 5:
 if len(sessions) + trials > 4:
     # Deliberately not an action: dq2.sh caps NEW launches and never kills, because a
     # killed session restarts from scratch and loses its work. It drains on its own.
-    NOTES.append(f"devin at {len(sessions)+trials}/4 (sessions drain via dq2 MAXN=2) — "
+    NOTES.append(f"devin at {len(sessions)+trials}/{DEVIN_CAP} (sessions drain via dq2) — "
                  f"holding new devin work until it falls below 4")
 
 if devin_total < 2 and throttle_age >= 1800:

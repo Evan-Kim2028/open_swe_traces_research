@@ -16,7 +16,12 @@ Usage: devin_cap.py [--apply] [--cap N]
 """
 import os, re, subprocess, sys, glob
 
-CAP = int(sys.argv[sys.argv.index("--cap") + 1]) if "--cap" in sys.argv else 4
+# Default from slots.py, the one definition. A hardcoded 4 here would have kept
+# enforcing the old cap while every other file had moved to 8 — an enforcer that
+# disagrees with the policy trims work that is legitimately within budget.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from slots import CAP as _SLOTS_CAP  # noqa: E402
+CAP = int(sys.argv[sys.argv.index("--cap") + 1]) if "--cap" in sys.argv else _SLOTS_CAP
 APPLY = "--apply" in sys.argv
 R = "/home/evan/Documents/open_swe_traces_research"
 LOCKDIR = os.path.join(R, "outputs/supervisor/sweep_locks")

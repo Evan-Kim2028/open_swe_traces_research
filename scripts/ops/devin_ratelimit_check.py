@@ -54,6 +54,36 @@ def scan_cli_logs():
     return hits
 
 
+
+SAFE_CAP = 4
+OVERRIDE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__)))), "outputs", "supervisor", "devin_cap_override")
+
+
+def drop_cap(why: str) -> None:
+    """Pull Devin concurrency back to a level that has never been throttled.
+
+    Printing a warning is not a response. A throttle errors every in-flight trial, so by
+    the time anyone reads the log the work is already lost — and the next tick launches
+    straight back into the limit. slots.CAP reads this file, so writing it takes effect
+    on the very next launch with nothing to restart.
+
+    Deliberately one-way: this lowers, never raises. Restoring the cap is a human
+    decision, made after looking at why the limit was hit, and is done by deleting the
+    file (or exporting DEVIN_CAP, which outranks it).
+    """
+    try:
+        cur = int(open(OVERRIDE).read().split()[0])
+    except (OSError, ValueError, IndexError):
+        cur = None
+    if cur is not None and cur <= SAFE_CAP:
+        return
+    os.makedirs(os.path.dirname(OVERRIDE), exist_ok=True)
+    with open(OVERRIDE, "w") as fh:
+        fh.write(f"{SAFE_CAP}\n# dropped {time.strftime('%Y-%m-%dT%H:%M:%S')}: {why}\n"
+                 f"# delete this file to restore the default cap\n")
+    print(f"CAP DROPPED to {SAFE_CAP} — {why}")
+
 def main():
     if not os.path.exists(DB):
         print("no sessions.db"); return 0
@@ -85,6 +115,9 @@ def main():
         for wd, tok, ctx in hits:
             print(f"  {wd}: matched {tok!r}")
             print(f"    …{' '.join(ctx.split())}…")
+        # An explicit limit message is the strongest signal there is; act on it too,
+        # not only on the weaker all-sessions-idle heuristic below.
+        drop_cap(f"explicit throttle signature in {len(hits)} session(s)")
     else:
         print("\nno throttle signature in recent messages")
 
@@ -94,6 +127,7 @@ def main():
         if len(stalled) == len(live):
             print(f"\nWARNING: all {len(live)} sessions idle >10m simultaneously — "
                   f"consistent with a shared limit, not one stuck agent")
+            drop_cap(f"all {len(live)} sessions idle >10m together")
             return 2
     return 0
 

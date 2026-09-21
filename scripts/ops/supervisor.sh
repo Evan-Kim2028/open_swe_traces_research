@@ -12,7 +12,9 @@ R=/home/evan/Documents/open_swe_traces_research
 cd "$R"
 TICK="${1:-300}"
 CAP=12                 # trial containers; above this docker's address pool starts failing
-DEVIN_SLOTS=4          # user call: run at 4 and absorb the occasional throttle, rather than throttling ourselves to 2
+# Ask slots.py rather than keeping a second copy of the number: a cap defined twice is
+# how Devin reached 7 against a limit of 4. Raised to 8 on 2026-09-21 at the user's call.
+DEVIN_SLOTS=$(cd "$R" && uv run python -c 'import sys;sys.path.insert(0,"scripts/ops");import slots;print(slots.CAP)' 2>/dev/null || echo 8)
 QUEUE="$R/outputs/supervisor/sweep_queue.txt"
 LEDGER="$R/outputs/rolling.jsonl"
 LOG="$R/outputs/supervisor/supervisor.log"

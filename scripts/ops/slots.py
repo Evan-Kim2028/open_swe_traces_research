@@ -12,7 +12,34 @@ account quota, and occupies the same slot as a session. One definition, here.
 from __future__ import annotations
 import os, re, subprocess
 
-CAP = 4
+# Devin concurrency. Measured, not guessed: a trial makes 4.3 tool calls/min, so each
+# slot is ~257 calls/hour and the peak SUSTAINED hour we have ever run is 743 — that is
+# 4 slots at about 72% of theoretical, the rest lost to container builds and gaps.
+#
+#   cap 4  ~1,030/h theoretical, ~740/h observed   never throttled
+#   cap 6  ~1,540/h theoretical, ~1,110/h expected  1.5x the observed peak
+#   cap 8  ~2,060/h theoretical, ~1,480/h expected  2x — that is finding the limit by
+#                                                   hitting it
+#
+# At 6 on the user's call. The risk is not the 30-minute cooldown by itself: a throttle
+# mid-trial errors every in-flight trial, so it costs ~30 min x 6 slots of work as well.
+# That is why the throttle detector now DROPS this back to 4 by writing the override file
+# below, instead of only printing a warning for someone to notice.
+#
+# Precedence: DEVIN_CAP env > override file written by devin_ratelimit_check > default.
+_OVERRIDE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__)))), "outputs", "supervisor", "devin_cap_override")
+
+
+def _cap_default():
+    try:
+        with open(_OVERRIDE) as fh:
+            return int(fh.read().split()[0])
+    except (OSError, ValueError, IndexError):
+        return 6
+
+
+CAP = int(os.environ["DEVIN_CAP"]) if os.environ.get("DEVIN_CAP") else _cap_default()
 
 
 def _sh(c):
