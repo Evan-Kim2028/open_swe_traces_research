@@ -255,6 +255,11 @@ while true; do
   uv run python scripts/ops/stability_gate.py >> "$LOG" 2>&1 || true
   uv run python scripts/ops/harvest.py --apply >> "$LOG" 2>&1 || true
   uv run python scripts/ops/pipeline_autogen.py >> "$LOG" 2>&1 || true
+  # Stage the next escalation rung for every unit that has just failed one. Without
+  # this the ladder only advances when someone runs escalate.py by hand: an L3 failure
+  # lands, nothing stages its L4, and the unit sits decided-but-unfinished forever.
+  # Idempotent — a rung already staged is reported and skipped.
+  uv run python scripts/ops/escalate.py --apply >> "$LOG" 2>&1 || true
   # Devin session launching belongs to /home/evan/devin-tasks/dq2.sh, which predates this
   # supervisor and has its own MAXN, cooldown and single-instance guard. Both launchers
   # reading the same manifest is why sessions I killed kept reappearing and why the count
