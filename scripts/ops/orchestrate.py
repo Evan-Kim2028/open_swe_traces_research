@@ -100,13 +100,18 @@ def sweep_locked(cohort, max_age=5400):
         return True
 
 
-def sweep_lock(cohort, pid=None, conc=0):
+def sweep_lock(cohort, pid=None, conc=0, agent="cursor"):
+    """Record WHICH solver reserved the concurrency, not just how much.
+
+    Devin sweeps and Composer sweeps share this directory, so a lock that does not say
+    who owns it makes the two caps eat each other: with Devin's four slots full, four of
+    Composer's twelve were reserved against work Composer was not doing."""
     os.makedirs(LOCKDIR, exist_ok=True)
     open(os.path.join(LOCKDIR, cohort), "w").write(
-        f"{int(time.time())} {pid or ''} {conc}")
+        f"{int(time.time())} {pid or ''} {conc} {agent}")
 
 
-def reserved_slots():
+def reserved_slots(agent="cursor"):
     """Concurrency already promised to sweeps that are launched but not yet visible.
 
     A container takes minutes to build, so `docker ps` under-reports a sweep that has
@@ -119,6 +124,11 @@ def reserved_slots():
         try:
             parts = open(f).read().split()
             pid = int(parts[1]); c = int(parts[2]) if len(parts) > 2 else 0
+            # A lock written before locks carried an agent counts as this one: the old
+            # behaviour, so an in-flight sweep is never under-counted while they rotate.
+            who = parts[3] if len(parts) > 3 else agent
+            if who != agent:
+                continue
             os.kill(pid, 0)
             tot += c
         except (ValueError, IndexError, OSError):
@@ -173,8 +183,18 @@ from slots import occupancy as _occ   # one definition of occupancy; see slots.p
 _o = _occ("devin")
 sessions = _o["sessions"]
 trials = sum(t["conc"] for t in _o["trials"])
-containers = int(sh("docker ps --format '{{.Names}}' | grep -c env-main") or 0)
-# A just-launched sweep has no containers yet but has already claimed its slots.
+# COMPOSER's occupancy, not every trial container. `grep -c env-main` counts Devin
+# trials too, so with Devin's own cap of 4 full, four of Composer's twelve slots were
+# being spent on work Composer is not doing. Devin is capped separately by devin_cap.py;
+# these two ceilings must not consume each other.
+try:
+    import slots as _slots
+    containers = sum(t["conc"] for t in _slots.trials("cursor"))
+except Exception:
+    containers = int(sh("docker ps --format '{{.Names}}' | grep -c env-main") or 0)
+# A just-launched sweep has no containers yet but has already claimed its slots. This is
+# the guard that stopped eight sweeps holding 39 concurrency against a cap of 12, and it
+# is what makes the narrower count above safe.
 containers = max(containers, reserved_slots())
 
 # Container count is not the only ceiling: this machine is CPU-bound and a staging pass
@@ -479,7 +499,7 @@ for kind, target, why in ACTIONS:
         pid = run(f"AGENT=devin bash {freeze()} {target} {rounds} {room} "
                   f"> outputs/{target}.log 2>&1")
         if APPLY:
-            sweep_lock(target, pid, room)
+            sweep_lock(target, pid, room, agent="devin")
         sh(f"sed -i '/^{target}$/d' outputs/supervisor/sweep_queue.txt")
     elif kind == "sweep-composer":
         room = int(re.search(r"concurrency (\d+)", why).group(1))
