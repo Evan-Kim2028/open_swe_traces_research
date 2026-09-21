@@ -50,6 +50,32 @@ def sh(c, t=90):
 FROZEN = "/home/evan/.claude/jobs/a1eaeb86/tmp/sweep_seq.frozen.sh"
 
 
+LOCKDIR = "outputs/supervisor/sweep_locks"
+
+
+def sweep_locked(cohort, max_age=5400):
+    """True if this cohort was launched recently and may still be running.
+
+    Relaunching a sweep re-uses the SAME harbor job name, so the new run wipes the previous
+    run's trials: 24 gated units produced exactly 1 surviving verdict because orchestrate
+    relaunched the cohort every tick. Process detection was supposed to prevent that and
+    failed twice - once because sweeps run from a renamed frozen copy, once returning empty
+    while a sweep was demonstrably alive. A lock file is not clever, but it cannot be
+    misread."""
+    os.makedirs(LOCKDIR, exist_ok=True)
+    f = os.path.join(LOCKDIR, cohort)
+    if os.path.exists(f):
+        age = time.time() - os.path.getmtime(f)
+        if age < max_age:
+            return True
+    return False
+
+
+def sweep_lock(cohort):
+    os.makedirs(LOCKDIR, exist_ok=True)
+    open(os.path.join(LOCKDIR, cohort), "w").write(str(int(time.time())))
+
+
 def freeze():
     """Run sweeps from a snapshot. Editing scripts/ops/sweep_seq.sh while a sweep was
     executing shifted bash's read offset and killed the trial phase with a syntax error
@@ -152,7 +178,7 @@ if throttle_age < 1800:
     NOTES.append(f"throttle {throttle_age//60}m ago — inside the 30m cooloff, not starting devin work")
 else:
     for cohort, n in sorted(runnable.items(), key=lambda kv: -kv[1]):
-        if cohort in active_trial_cohorts:
+        if cohort in active_trial_cohorts or sweep_locked(cohort):
             continue
         is_l2 = cohort.endswith("_L2")
         if is_l2 or not budget_ok:
@@ -177,11 +203,29 @@ else:
 # 3b. nothing runnable anywhere means the trial pipeline is starved at the source: units
 # are authored and verified but never converted into task directories. Staging is
 # mechanical and free, so the reconciler does it rather than waiting for a human.
-if sum(runnable.values()) == 0:
+# Stage on a LOW-WATER mark, not on empty. Waiting for zero meant 28 fully-stageable
+# go-github units sat idle because one runnable unit remained somewhere else; by the time
+# runway hits zero the trial slots are already starving.
+if sum(runnable.values()) < 5:
     staged_names = {os.path.basename(d.rstrip("/")) for d in glob.glob("experiments/dose_response/sweep_*/")}
-    cand = None
+    # The same cohort exists in several worktrees: the authoring copy has no contracts,
+    # the reconciler copy does. Picking whichever glob landed first meant reading
+    # AU4gogithub2's contract-less copy while RCgogithub4 held 28 finished contracts, so
+    # 28 stageable units stayed "blocked". Prefer the most complete copy of each cohort.
+    by_cohort = {}
     for src in sorted(glob.glob("/home/evan/Documents/oswt-*/experiments/pipeline/authored_batch*/*/")
                       + glob.glob("experiments/pipeline/authored_batch*/*/")):
+        repo = os.path.basename(src.rstrip("/"))
+        batch = os.path.basename(os.path.dirname(src.rstrip("/")))
+        if repo.startswith("_"):
+            continue
+        score = len(glob.glob(src + "*/_author/contract.md")) + len(
+            glob.glob(src + "*/tests/test.sh"))
+        key = (batch, repo)
+        if key not in by_cohort or score > by_cohort[key][1]:
+            by_cohort[key] = (src, score)
+    cand = None
+    for src in [v[0] for v in by_cohort.values()]:
         repo = os.path.basename(src.rstrip("/"))
         batch = os.path.basename(os.path.dirname(src.rstrip("/")))
         if repo.startswith("_"):
@@ -217,7 +261,20 @@ if sum(runnable.values()) == 0:
             continue
         tag = f"sweep_{repo.replace('-','')}_{batch[-1]}"
         if tag in staged_names:
-            continue
+            # A cohort staged earlier may hold far fewer units than are now ready: an
+            # earlier VF pass staged 2 go-github units, then the reconciler finished 28.
+            # Treating the tag as "done" left 26 stageable units invisible. Stage the
+            # remainder under a suffixed tag rather than skipping the cohort.
+            have = len([d for d in glob.glob(f"experiments/dose_response/{tag}/*/")
+                        if os.path.isdir(d)])
+            if len(withtests) < have + 8:
+                continue
+            for suf in "bcdef":
+                if f"{tag}{suf}" not in staged_names:
+                    tag = f"{tag}{suf}"
+                    break
+            else:
+                continue
         # skip cohorts already in the bank under a repo-prefixed name
         sample = os.path.basename(withtests[0].rstrip("/"))
         if sample in per or f"{repo}-{sample}" in per:
@@ -259,6 +316,8 @@ print("\nACTIONS" if ACTIONS else
       ("\nno action available (see notes)" if (NOTES or over) else "\nall invariants hold"))
 for kind, target, why in ACTIONS:
     print(f"  {kind:16s} {target:24s} {why}")
+    if kind in ("sweep-devin", "sweep-composer") and APPLY:
+        sweep_lock(target)
     if kind == "sweep-devin":
         rounds = 2 if target.endswith("_L2") else 1
         room = int(re.search(r"concurrency (\d+)", why).group(1))
@@ -323,9 +382,18 @@ Log to outputs/{tag}.log. Do not commit.
     elif kind == "stage":
         src = globals().get("_stage_src")
         if src:
-            run(f"uv run python scripts/ops/stage_units.py '{src.rstrip('/')}' "
-                f"experiments/dose_response/{target} --rungs {globals().get('_stage_rungs','0,2')} --jobs 4 "
-                f"> outputs/stage_{target}.log 2>&1")
+            # Stage unit by unit. The stager raises on the first bad unit, so a single
+            # stale excision.patch (auditcoerce) cost 26 of 28 ready go-github units.
+            # --units isolates each one; a failure costs that unit only.
+            rungs = globals().get("_stage_rungs", "0,2")
+            names = sorted(os.path.basename(d.rstrip("/"))
+                           for d in glob.glob(src.rstrip("/") + "/*/") if os.path.isdir(d))
+            script = (f'for u in {" ".join(names)}; do '
+                      f'uv run python scripts/ops/stage_units.py "{src.rstrip("/")}" '
+                      f'experiments/dose_response/{target} --rungs {rungs} --jobs 2 '
+                      f'--units "$u" >> outputs/stage_{target}.log 2>&1 '
+                      f'|| echo "SKIP $u (unstageable)" >> outputs/stage_{target}.log; done')
+            run(script)
     elif kind == "restart-stuck" and APPLY:
         # dq2.sh relaunches from the manifest on its next pass; just clear the stuck one.
         sh(f"pgrep -f 'prompt-file /home/evan/devin-tasks/{target}.md' | xargs -r kill")
