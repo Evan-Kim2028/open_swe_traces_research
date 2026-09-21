@@ -1,0 +1,223 @@
+#!/usr/bin/env python3
+"""Escalate units that fail L0 AND L2 to a higher affordance rung.
+
+Why
+---
+A unit that fails L0 and passes L2 is a flip certificate: hard from a bug report,
+solvable from a contract. A unit that fails BOTH was being written off as
+"non-flipping" - 48 of them. The evidence says that verdict is wrong. Nine of them
+were escalated by hand and ALL NINE flipped higher up:
+
+    gin-enginecfg L5 | gin-negotiate L5 | helm-chartdl L5 | helm-chartrepo L5
+    helm-depresolver L3,L5 | helm-httpgetter L5 | kops-difftext L5
+    kops-taintparse L5 | kops-clustervalid L3 fail, L4 fail, L5 PASS, L6 PASS
+
+11 passes against 2 fails. They are not broken tasks - they are the HARDEST tasks
+in the bank, and the rung at which a unit finally flips is a difficulty measure
+rather than a failure.
+
+Search policy
+-------------
+Linear L3 -> L4 -> L5 -> L6 costs up to 4 trials per unit - 192 for 48 units. This
+probes L5 first (9 of 9 flipped there, so it is where the information is), then
+bisects the open interval to find the LOWEST flipping rung, which is the number
+worth reporting. That is ~2.6 trials per unit for the same answer.
+
+    known_fail = highest rung with a fail       (starts at 2)
+    known_pass = lowest rung above it with a pass, if any
+    gap of 1   -> settled, minimum flipping rung is known_pass
+    no pass    -> probe L5, then L6, then the unit is genuinely unsolvable
+    gap > 1    -> trial the midpoint
+
+Staging
+-------
+Rungs of one unit differ in three files - instruction.md, affordance.json,
+validation.json - and from L5 up in which hidden tests are restored into the tree.
+Everything else is shared, so a higher rung is built from the unit's existing L2
+directory via ``build_affordance_levels``; no authored source or re-excision is
+needed. Where reclaim_disk has already dropped that L2's ``environment/src``, this
+calls restore_env_src.py first.
+
+Usage::
+
+    escalate.py                      # what would be escalated, and to which rung
+    escalate.py --apply              # stage the next rung for every candidate
+    escalate.py --apply --limit 10
+    escalate.py --report             # rung at which each escalated unit flipped
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import pathlib
+import subprocess
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+REPO = pathlib.Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / "src"))
+
+import trial_ledger as TL  # noqa: E402
+
+SWEEPS = REPO / "experiments" / "dose_response"
+# Rungs an escalation may use. L1 is a ladder-study rung, not an escalation step.
+LADDER = (3, 4, 5, 6)
+PROBE = 5          # where the information is: 9 of 9 hand-escalated units flipped here
+ESCALATION_DEST = "sweep_escalate"
+
+
+def history(d: dict) -> dict[int, bool]:
+    """rung -> passed?, for the rungs that matter to an escalation."""
+    out = {}
+    for r, rewards in d.items():
+        if not r.isdigit() or not rewards:
+            continue
+        out[int(r)] = max(rewards) > 0
+    return out
+
+
+def next_rung(h: dict[int, bool]) -> tuple[int | None, str]:
+    """-> (rung to trial next, why). None means nothing left to learn."""
+    if h.get(0) is not False:
+        return None, "not a candidate: L0 did not fail"
+    fails = [r for r, ok in h.items() if not ok and r >= 2]
+    passes = [r for r, ok in h.items() if ok and r >= 2]
+    if not fails:
+        return None, "not a candidate: L2 has no fail on record"
+    known_fail = max(fails)
+    above = [r for r in passes if r > known_fail]
+    if not above:
+        if known_fail >= max(LADDER):
+            return None, f"exhausted: fails at L{known_fail}, the top rung"
+        if PROBE > known_fail and PROBE not in h:
+            return PROBE, f"probe L{PROBE} (fails through L{known_fail})"
+        nxt = min(r for r in LADDER if r > known_fail and r not in h)
+        return nxt, f"step to L{nxt} (fails through L{known_fail})"
+    known_pass = min(above)
+    if known_pass - known_fail == 1:
+        return None, f"settled: flips at L{known_pass}, fails at L{known_fail}"
+    mid = (known_fail + known_pass) // 2
+    if mid in h:
+        return None, f"settled: flips at L{known_pass}"
+    return mid, f"bisect L{known_fail}<{mid}<L{known_pass}"
+
+
+def l2_dir(base: str) -> pathlib.Path | None:
+    """The unit's L2 staging dir - the A0-shaped source every higher rung is cut from."""
+    cands = sorted(SWEEPS.glob(f"*/{base}-L2"))
+    # prefer one that still has its tree; restoring is cheap but not free
+    for c in cands:
+        if (c / "environment" / "src").is_dir() and any((c / "environment" / "src").iterdir()):
+            return c
+    return cands[0] if cands else None
+
+
+def ensure_env_src(unit: pathlib.Path) -> bool:
+    src = unit / "environment" / "src"
+    if src.is_dir() and any(src.iterdir()):
+        return True
+    if not (unit / ".reclaimed.json").is_file():
+        return False
+    r = subprocess.run(["uv", "run", "python", "scripts/ops/restore_env_src.py", str(unit)],
+                       cwd=REPO, capture_output=True, text=True, timeout=3600)
+    return "ok (" in r.stdout
+
+
+def stage(base: str, rung: int) -> tuple[bool, str]:
+    """Build <ESCALATION_DEST>_L<rung>/<base>-L<rung> from the unit's L2 dir."""
+    dest_root = SWEEPS / f"{ESCALATION_DEST}_L{rung}"
+    dest = dest_root / f"{base}-L{rung}"
+    if dest.is_dir() and (dest / "instruction.md").is_file():
+        return True, f"already staged at {dest.relative_to(REPO)}"
+    src = l2_dir(base)
+    if src is None:
+        return False, "no L2 directory to cut from"
+    hidden = sorted((src / "tests" / "hidden").rglob("*_test.go"))
+    if not hidden:
+        return False, "no hidden suite in the L2 dir"
+    if not ensure_env_src(src):
+        return False, "L2 environment/src missing and not restorable"
+
+    from openswe_traces.synth.affordance import build_affordance_levels
+
+    dest_root.mkdir(parents=True, exist_ok=True)
+    try:
+        built = build_affordance_levels(
+            src, [str(p.relative_to(src / "tests" / "hidden")) for p in hidden],
+            levels=[rung - 2], dest_root=dest_root, family=base, name_scheme="L",
+        )
+    except Exception as e:  # noqa: BLE001 - one bad unit must not stop the batch
+        return False, f"build failed: {type(e).__name__}: {e}"
+    made = built.get(rung - 2)
+    if made is None or not made.is_dir():
+        return False, "builder produced nothing"
+    # The directory name is authoritative for the rung; a stale `level` field in
+    # affordance.json mis-scored a whole cohort once. Write it to agree.
+    for f in ("affordance.json", "validation.json"):
+        p = made / f
+        if p.is_file():
+            try:
+                j = json.loads(p.read_text())
+                j["level"] = rung
+                p.write_text(json.dumps(j, indent=2) + "\n")
+            except Exception:
+                pass
+    return True, f"staged {made.relative_to(REPO)}"
+
+
+def candidates(per):
+    for base, d in sorted(per.items()):
+        h = history(d)
+        rung, why = next_rung(h)
+        if rung is not None:
+            yield base, rung, why, h
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--apply", action="store_true")
+    ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--report", action="store_true")
+    args = ap.parse_args()
+
+    per = TL.ledger()
+
+    if args.report:
+        print(f"{'unit':30s} {'flips at':>9s}  history")
+        n = 0
+        for base, d in sorted(per.items()):
+            h = history(d)
+            if h.get(0) is not False:
+                continue
+            passes = [r for r, ok in h.items() if ok and r > 2]
+            if not passes:
+                continue
+            n += 1
+            hs = " ".join(f"L{r}={'PASS' if ok else 'fail'}" for r, ok in sorted(h.items()))
+            print(f"{base:30s} {'L' + str(min(passes)):>9s}  {hs}")
+        print(f"\n{n} unit(s) certified above L2")
+        return 0
+
+    rows = list(candidates(per))
+    if args.limit:
+        rows = rows[:args.limit]
+    print(f"escalation candidates: {len(rows)}")
+    ok = bad = 0
+    for base, rung, why, h in rows:
+        if args.apply:
+            done, msg = stage(base, rung)
+            ok, bad = ok + done, bad + (not done)
+            print(f"  {'OK  ' if done else 'FAIL'} {base:28s} -> L{rung}  {msg}")
+        else:
+            print(f"  {base:28s} -> L{rung}   {why}")
+    if args.apply:
+        print(f"\nstaged {ok}, failed {bad}")
+    else:
+        print("\n(dry run — rerun with --apply)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

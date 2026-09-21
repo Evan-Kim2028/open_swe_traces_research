@@ -339,9 +339,34 @@ try:
     _cross = sum(1 for v in _c.values() if v["kind"] == "cross")
     _msg = (f"{len(_c)} certificate(s): {len(_c)-_cross} single-solver, "
             f"{_cross} cross-solver")
+    _esc = sum(1 for v in _c.values() if v.get("escalated"))
+    if _esc:
+        _msg += f"; {_esc} flipped above L2"
     (WARN if _cross > 0.25 * max(len(_c), 1) else OK).append(_msg)
 except Exception:
     pass
+
+# --- 15. escalation queue ---------------------------------------------------------
+# A unit that fails L0 and L2 is not waste: 9 of 9 hand-escalated units flipped at a
+# higher rung. This watches that the escalation cohorts are staged and moving, and that
+# no unit is stuck asking for a rung nobody ever stages.
+try:
+    import escalate as _e
+    import trial_ledger as _tly
+    _per = _tly.ledger()
+    _want = list(_e.candidates(_per))
+    _staged = {d.name for r in _e.LADDER
+               for d in (_e.SWEEPS / f"{_e.ESCALATION_DEST}_L{r}").glob("*-L*")}
+    _missing = [b for b, rung, _w, _h in _want if f"{b}-L{rung}" not in _staged]
+    if not _want:
+        OK.append("escalation queue empty — every L0+L2 failure is settled")
+    elif _missing:
+        WARN.append(f"{len(_want)} unit(s) want escalation, {len(_missing)} not staged — "
+                    f"run scripts/ops/escalate.py --apply")
+    else:
+        OK.append(f"{len(_want)} unit(s) escalating, all staged")
+except Exception as _ex:
+    WARN.append(f"escalation check failed: {type(_ex).__name__}: {_ex}")
 
 print(f"{'='*66}\nPIPELINE HEALTH  {time.strftime('%H:%M:%S')}\n{'='*66}")
 for m in FAIL:

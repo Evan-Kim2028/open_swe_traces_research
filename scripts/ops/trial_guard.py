@@ -156,6 +156,21 @@ def decide(unit, per):
         if len(l2) >= NONFLIP_CAP and max(l2) == 0:
             return False, f"non-flipping: {len(l2)} L2 failures — repair the contract, do not retry"
     if rung not in CERTIFYING_RUNGS:
+        # Two different things wear the same suffix. A ladder rung on a CERTIFIED unit is
+        # affordance-study data, sampled, and can never certify. A ladder rung on a unit
+        # that failed L0 AND L2 is an ESCALATION: it is the only way that unit ever
+        # certifies, and 9 of 9 hand-escalated units flipped above L2. Rejecting both with
+        # "certify first" is what kept 46 of the hardest units in the bank written off.
+        escalating = bool(l0 and max(l0) == 0 and l2 and max(l2) == 0)
+        if escalating:
+            import escalate
+            want, why = escalate.next_rung(escalate.history(d))
+            if want is None:
+                return False, f"escalation {why}"
+            if want != int(rung):
+                return False, (f"escalation wants L{want}, not L{rung} — "
+                               f"one rung at a time ({why})")
+            return True, f"escalation: {why}"
         if not (l0 and max(l0) == 0 and l2 and max(l2) > 0):
             return False, f"ladder rung L{rung} on an uncertified unit — certify first"
         if not in_ladder_sample(base):

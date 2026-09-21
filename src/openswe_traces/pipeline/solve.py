@@ -113,7 +113,23 @@ DEVIN_CREDENTIALS = Path.home() / ".local" / "share" / "devin" / "credentials.to
 
 
 def devin_api_key(path: Path | str = DEVIN_CREDENTIALS) -> str | None:
-    """Read `windsurf_api_key` from the Devin CLI credentials file. Never log the value."""
+    """The Devin API key: repo `.env` first, then the CLI credentials file. Never log it.
+
+    Harbor's devin agent writes the key into `credentials.toml` inside the trial container,
+    so a valid key is all it needs. The local CLI's own credentials can be a different (and
+    exhausted) account, which surfaces inside the container as
+    ``Unknown model: 'swe-2-max'. Available:`` with an empty list -- an auth failure wearing
+    a model-name error's clothes. The repo `.env` is the single source of truth.
+    """
+    for env_file in (Path(__file__).resolve().parents[3] / ".env",
+                     Path("/home/evan/Documents/eval_tasks/.env")):
+        if not env_file.is_file():
+            continue
+        for raw in env_file.read_text(encoding="utf-8", errors="replace").splitlines():
+            if raw.strip().startswith("DEVIN_API_KEY="):
+                val = raw.split("=", 1)[1].strip().strip('"').strip("'")
+                if val:
+                    return val
     path = Path(path)
     if not path.is_file():
         return None

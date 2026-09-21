@@ -119,31 +119,56 @@ def certificates(jobs_dir=JOBS):
     bys = ledger_by_solver(jobs_dir)
     for base, bysolver in bys.items():
         failed_l0 = {s for s, d in bysolver.items() if d.get("0") and max(d["0"]) == 0}
-        passed_l2 = {s for s, d in bysolver.items() if d.get("2") and max(d["2"]) > 0}
-        if not (failed_l0 and passed_l2):
+        if not failed_l0:
             continue
-        shared = failed_l0 & passed_l2
-        out[base] = {"l0": sorted(failed_l0), "l2": sorted(passed_l2),
+        # The flip does not have to happen at L2. A unit that fails L0 and L2 and then
+        # passes at L5 is still hard-and-solvable; the rung it needs IS its difficulty.
+        # Certifying only at L2 wrote off 46 of the hardest units in the bank as
+        # "non-flipping". The lowest passing rung is the one that binds.
+        passed = {}
+        for solver, d in bysolver.items():
+            for r, rewards in d.items():
+                if r.isdigit() and int(r) >= 2 and rewards and max(rewards) > 0:
+                    passed.setdefault(int(r), set()).add(solver)
+        if not passed:
+            continue
+        rung = min(passed)
+        at_rung = passed[rung]
+        shared = failed_l0 & at_rung
+        out[base] = {"l0": sorted(failed_l0), "l2": sorted(at_rung),
+                     "rung": rung, "escalated": rung > 2,
                      "kind": "single" if shared else "cross",
-                     "binds_for": sorted(shared) if shared else sorted(passed_l2)}
+                     "binds_for": sorted(shared) if shared else sorted(at_rung)}
     return out
 
 
 def summary(jobs_dir=JOBS, nonflip_cap=3):
     per = ledger(jobs_dir)
     allt = list(trials(jobs_dir))
-    cert = [u for u, d in per.items()
-            if d.get("0") and max(d["0"]) == 0 and d.get("2") and max(d["2"]) > 0]
+    certs = certificates(jobs_dir)
+    cert = sorted(certs)
     easy = [u for u, d in per.items() if d.get("0") and max(d["0"]) > 0]
-    nonflip = [u for u, d in per.items()
-               if d.get("0") and max(d["0"]) == 0
-               and len(d.get("2", [])) >= nonflip_cap and max(d.get("2") or [1]) == 0]
+    # "Non-flipping" now means only what it should: fails L0, fails L2, and has been
+    # carried up the ladder to the top rung without ever passing. A unit that has simply
+    # not been escalated YET is pending work, not a failed task - calling those two things
+    # by the same name is what made 46 of the hardest units look like waste.
+    import escalate as _esc
+    nonflip, pending_esc = [], []
+    for u, d in per.items():
+        if u in certs or not (d.get("0") and max(d["0"]) == 0):
+            continue
+        if not (len(d.get("2", [])) >= nonflip_cap and max(d.get("2") or [1]) == 0):
+            continue
+        rung, _why = _esc.next_rung(_esc.history(d))
+        (pending_esc if rung is not None else nonflip).append(u)
     return {
         "units": len(per),
         "trials_total": len(allt),
         "trials_valid": sum(1 for t in allt if t["reward"] is not None and not t["errored"]),
         "trials_errored": sum(1 for t in allt if t["errored"] or t["reward"] is None),
         "certified": sorted(cert), "too_easy": sorted(easy), "nonflip": sorted(nonflip),
+        "escalatable": sorted(pending_esc),
+        "escalated": sorted(u for u, v in certs.items() if v.get("escalated")),
         "by_model": collections.Counter(t["model"] or "?" for t in allt),
         "tokens": sum(t["tokens"] for t in allt),
         "cost_usd": sum(t["cost"] for t in allt),
@@ -173,7 +198,9 @@ if __name__ == "__main__":
     print(f"  errored/no-run {s['trials_errored']}")
     print(f"certified        {len(s['certified'])}")
     print(f"too-easy         {len(s['too_easy'])}")
-    print(f"non-flipping     {len(s['nonflip'])}")
+    print(f"non-flipping     {len(s['nonflip'])}   (fails every rung to the top)")
+    print(f"escalatable      {len(s['escalatable'])}   fails L0+L2, has a rung left to try")
+    print(f"  of certified, flipped above L2: {len(s['escalated'])}")
     print(f"tokens           {s['tokens']/1e9:.2f}B")
     print(f"cost             ${s['cost_usd']:.2f}")
     print(f"by solver        {dict(s['by_model'])}")

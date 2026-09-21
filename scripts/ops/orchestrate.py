@@ -50,6 +50,8 @@ def sh(c, t=90):
 FROZEN = "/home/evan/.claude/jobs/a1eaeb86/tmp/sweep_seq.frozen.sh"
 # Certification before ladder study. Reversible: delete the file to resume.
 LADDER_PAUSED = os.path.exists("outputs/supervisor/ladder_paused")
+# Cohorts built by escalate.py. Exempt from the ladder pause; see the use site.
+ESCALATION_PREFIX = "sweep_escalate"
 
 
 LOCKDIR = "outputs/supervisor/sweep_locks"
@@ -247,7 +249,12 @@ for d in glob.glob("experiments/dose_response/sweep_*/*/"):
     # cohorts and every verdict already collected stay exactly where they are.
     #   pause : touch outputs/supervisor/ladder_paused
     #   resume: rm outputs/supervisor/ladder_paused
-    if LADDER_PAUSED and rung in ("1", "3", "4", "5", "6"):
+    # The pause is about affordance-study sampling on units that already certified.
+    # An escalation cohort wears the same rung suffixes but is the opposite thing: the
+    # only route by which a unit that failed both L0 and L2 ever certifies. trial_guard
+    # arbitrates which single rung each escalating unit may take next.
+    if (LADDER_PAUSED and rung in ("1", "3", "4", "5", "6")
+            and not cohort.startswith(ESCALATION_PREFIX)):
         continue
     try:
         ok, _ = trial_guard.decide(name, per)
