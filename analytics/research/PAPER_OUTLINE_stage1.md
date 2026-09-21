@@ -66,12 +66,52 @@ The load-bearing empirical claim of stage 1.
 - **41% of units are solved at L0** — the bug report alone is often enough, so L0 is a
   real screen rather than a formality
 - of those that resist L0, the contract flips a majority at L2
-- **139 certificates: 124 single-solver, 15 cross-solver** (L0 failed on one model, L2
-  passed on another — kept and labelled, since that flip may reflect a capability gap
+- **164 certificates: 140 single-solver, 16 cross-solver** (L0 failed on one model, the
+  flip came on another — kept and labelled, since that may reflect a capability gap
   rather than the affordance)
 
 Report the multi-model split honestly: **~98% of trials to date are Composer 2.5**; Devin
 and Grok samples are thin and accumulate over time.
+
+### 4a. The rung a unit needs is its difficulty
+
+The strongest result in stage 1, and it came from a category we had been discarding.
+
+A unit that failed L0 **and** failed L2 was classified "non-flipping" and written off —
+48 of them, ~15% of everything decided. That classification was wrong. Escalating them one
+rung at a time (L2 -> L3 -> L4 -> L5 -> L6) flips almost all of them:
+
+| cohort | verdicts | flipped |
+|---|---|---|
+| hand-escalated (before the policy existed) | 13 | 11 (85%) |
+| `sweep_escalate`, first automated cohort | 16 | **15 (94%)** |
+
+**Non-flipping is now 0.** Every unit in that bucket either certifies at a higher rung or
+still has a rung left to try. Certificate count went 139 -> 164 without authoring a single
+new unit, and trials-per-certificate fell 8.3 -> 7.3.
+
+Certificates by binding rung — the lowest rung at which the unit passes:
+
+| rung | certificates | what the solver was given |
+|---|---|---|
+| L2 | 140 | the complete prose contract |
+| L3 | 1 | contract + hidden test names |
+| L5 | 23 | contract + the representative test restored into the tree |
+
+This converts the bank from a binary (hard / too easy / broken) into a graded one. A unit
+that flips only at L5 is *harder* than one that flips at L2 — it is not a failed task, and
+the rung is a difficulty measure the construction produces for free.
+
+**Method note worth stating in the paper.** An earlier policy probed L5 first, because the
+hand-escalated units had all flipped there, and bisected downward: same binding rung in
+~2.6 trials per unit instead of 4. It was cheaper and it was the wrong experiment. Jumping
+the ladder shows only that *a* rung works, never that it is the rung the unit *needs*. The
+ladder is the measurement, so every step gets walked.
+
+**Caveat, measured rather than assumed.** A certificate is `max(reward) > 0` at the binding
+rung. 11 of 164 rest on one pass in three or more trials; `helm-depresolver` binds on 1 of
+6 and is independently flagged B10-unsolvable by the linter. The ledger records
+`n_pass_at_rung` and a `thin` flag so the distinction is auditable rather than invisible.
 
 ## 5. Yield varies by repository, and it is predictable-ish
 
