@@ -148,7 +148,10 @@ pump_sweeps() {
   # Do not launch a cohort that is still being written. sweep_kops3_L2 was queued while
   # STAGE3 was mid-write; the sweep saw a half-staged tree, the gates dropped everything
   # and it reported "nothing left to trial" on 17 perfectly good units.
-  newest=$(find "experiments/dose_response/$next" -type f -newermt '-2 minutes' 2>/dev/null | head -1)
+  # -mmin, not -newermt with a relative date: find here is bfs, which rejects
+  # "-2 minutes" as a date. With stderr swallowed that read as "nothing written
+  # recently", so this guard silently never fired.
+  newest=$(find "experiments/dose_response/$next" -type f -mmin -2 2>/dev/null | head -1)
   if [ -n "$newest" ]; then say "queue: $next still being written, waiting"; return 0; fi
   # Split by rung, measured rather than guessed. A Devin trial takes ~19 min against
   # Composer's ~15, but Devin allows 1-2 concurrent against Composer's 12, so Devin is

@@ -1,0 +1,146 @@
+{
+ "page": 1,
+ "items": [
+  {
+   "id": "ad18aec0-8084-4a71-944d-271b25076ecc",
+   "name": "live-database-cutover__8f31ebef",
+   "evals": {
+    "reward": {
+     "metrics": [
+      {
+       "reward": 0.0
+      }
+     ]
+    }
+   },
+   "job_id": "0f01715e-2f98-40e3-836f-1ac4fdce39a4",
+   "reward": 0,
+   "source": "terminal-bench/terminal-bench",
+   "status": "completed",
+   "attempt": 1,
+   "cost_usd": 27.990277,
+   "job_name": "Terminal-Bench 4.0.0 \u00b7 GPT-6 Astra / Codex \u00b7 reasoning effort max",
+   "is_paused": false,
+   "is_scored": true,
+   "paused_at": null,
+   "task_name": "terminal-bench/live-database-cutover",
+   "agent_name": "codex",
+   "error_type": null,
+   "model_name": "gpt-6-astra",
+   "n_attempts": 1,
+   "started_at": "2026-09-01T16:53:42.766115+00:00",
+   "finished_at": "2026-09-01T18:15:03.870092+00:00",
+   "retry_count": 0,
+   "retry_index": 0,
+   "archive_path": "trials/ad18aec0-8084-4a71-944d-271b25076ecc/trial.tar.gz",
+   "cache_tokens": 11473297,
+   "hosted_error": null,
+   "hosted_phase": null,
+   "input_tokens": 12076595,
+   "agent_version": "0.151.0",
+   "config_values": {
+    "agent.kwargs.version": "\"0.151.0\"",
+    "agent.kwargs.reasoning_effort": "\"max\""
+   },
+   "output_tokens": 209680,
+   "model_provider": "openai",
+   "paused_by_user": null,
+   "hosted_error_code": null
+  },
+  {
+   "id": "204778fd-143c-42e9-9321-1364460b21c5",
+   "name": "cargo-flight-dispatch__6edfe1bf",
+   "evals": {
+    "reward": {
+     "metrics": [
+      {
+       "reward": 0.0
+      }
+     ]
+    }
+   },
+   "job_id": "0f01715e-2f98-40e3-836f-1ac4fdce39a4",
+   "reward": 0,
+   "source": "terminal-bench/terminal-bench",
+   "status": "completed",
+   "attempt": 1,
+   "cost_usd": 3.554107,
+   "job_name": "Terminal-Bench 4.0.0 \u00b7 GPT-6 Astra / Codex \u00b7 reasoning effort max",
+   "is_paused": false,
+   "is_scored": true,
+   "paused_at": null,
+   "task_name": "terminal-bench/cargo-flight-dispatch",
+   "agent_name": "codex",
+   "error_type": null,
+   "model_name": "gpt-6-astra",
+   "n_attempts": 1,
+   "started_at": "2026-09-01T16:53:38.937876+00:00",
+   "finished_at": "2026-09-01T17:07:41.054256+00:00",
+   "retry_count": 0,
+   "retry_index": 0,
+   "archive_path": "trials/204778fd-143c-42e9-9321-1364460b21c5/trial.tar.gz",
+   "cache_tokens": 827767,
+   "hosted_error": null,
+   "hosted_phase": null,
+   "input_tokens": 909816,
+   "agent_version": "0.151.0",
+   "config_values": {
+    "agent.kwargs.version": "\"0.151.0\"",
+    "agent.kwargs.reasoning_effort": "\"max\""
+   },
+   "output_tokens": 38117,
+   "model_provider": "openai",
+   "paused_by_user": null,
+   "hosted_error_code": null
+  },
+  {
+   "id": "1e80e69c-7b06-4cbf-b891-ed4553f035c7",
+   "name": "legacy-utility-triage__0a6e83d1",
+   "evals": {
+    "reward": {
+     "metrics": [
+      {
+       "reward": 1.0
+      }
+     ]
+    }
+   },
+   "job_id": "0f01715e-2f98-40e3-836f-1ac4fdce39a4",
+   "reward": 1,
+   "source": "terminal-bench/terminal-bench",
+   "status": "completed",
+   "attempt": 1,
+   "cost_usd": 11.151861,
+   "job_name": "Terminal-Bench 4.0.0 \u00b7 GPT-6 Astra / Codex \u00b7 reasoning effort max",
+   "is_paused": false,
+   "is_scored": true,
+   "paused_at": null,
+   "task_name": "terminal-bench/legacy-utility-triage",
+   "agent_name": "codex",
+   "error_type": null,
+   "model_name": "gpt-6-astra",
+   "n_attempts": 1,
+   "started_at": "2026-09-01T16:53:33.963524+00:00",
+   "finished_at": "2026-09-01T17:14:50.520925+00:00",
+   "retry_count": 0,
+   "retry_index": 0,
+   "archive_path": "trials/1e80e69c-7b06-4cbf-b891-ed4553f035c7/trial.tar.gz",
+   "cache_tokens": 8673301,
+   "hosted_error": null,
+   "hosted_phase": null,
+   "input_tokens": 8787932,
+   "agent_version": "0.151.0",
+   "config_values": {
+    "agent.kwargs.version": "\"0.151.0\"",
+    "agent.kwargs.reasoning_effort": "\"max\""
+   },
+   "output_tokens": 26645,
+   "model_provider": "openai",
+   "paused_by_user": null,
+   "hosted_error_code": null
+  }
+ ],
+ "total": 330,
+ "page_size": 3,
+ "total_pages": 110
+}

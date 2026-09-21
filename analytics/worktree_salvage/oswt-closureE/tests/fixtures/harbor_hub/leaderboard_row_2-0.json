@@ -1,0 +1,36 @@
+{
+ "id": "5d127407-a570-4864-8e8a-022123748a19",
+ "leaderboard_id": "f58e955f-4db5-48a0-87ec-1c324a4a9414",
+ "rank": 1,
+ "metadata": {
+  "key": "nexau-ahe__gpt-5.5",
+  "date": "2026-04-23",
+  "verified": false,
+  "agent_org": "china-qijizhifeng",
+  "model_org": "OpenAI",
+  "agent_name": "nexau",
+  "source_url": "https://www.tbench.ai/leaderboard/terminal-bench/2.0",
+  "model_names": [
+   "gpt-5.5"
+  ],
+  "agent_display": {
+   "url": "https://github.com/china-qijizhifeng/agentic-harness-engineering.git",
+   "label": "NexAU-AHE"
+  },
+  "agent_version": "unknown",
+  "model_display": "GPT-5.5",
+  "model_providers": [
+   "openai"
+  ],
+  "integration_method": "API"
+ },
+ "metrics": {
+  "accuracy": 84.7191011236,
+  "display_accuracy": "**84.7%** \u00b1 2.1",
+  "accuracy_ci95_half_width": 2.0892351283
+ },
+ "status": "display",
+ "created_at": "2026-08-28T21:43:32.982477+00:00",
+ "updated_at": "2026-08-28T23:12:18.836648+00:00",
+ "n_trials": 0
+}

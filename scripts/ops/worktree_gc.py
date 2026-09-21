@@ -47,6 +47,12 @@ REPO = pathlib.Path(__file__).resolve().parents[2]
 SALVAGE = REPO / "analytics" / "worktree_salvage"
 # harvest.py owns these; they are artifacts, not one-off source.
 ARTIFACT_PREFIXES = ("experiments/", "outputs/", ".guard_stamps")
+# What "only exists in a worktree" actually turned out to be: one-off scripts and
+# per-batch research notes. Hashing every untracked byte instead - audit dumps and
+# stray data dirs included - took 22 minutes to cover 12 of 103 worktrees.
+SALVAGE_SUFFIXES = {".py", ".sh", ".md", ".json", ".toml", ".txt", ".html",
+                    ".yaml", ".yml", ".patch", ".sql", ".go"}
+SALVAGE_MAX_BYTES = 4 << 20
 IDLE_HOURS_DEFAULT = 6.0
 
 
@@ -66,6 +72,13 @@ def untracked(wt: pathlib.Path) -> list[str]:
     return [r for r in rels if not r.startswith(ARTIFACT_PREFIXES)]
 
 
+def worth_salvaging(f: pathlib.Path) -> bool:
+    try:
+        return f.suffix in SALVAGE_SUFFIXES and f.stat().st_size <= SALVAGE_MAX_BYTES
+    except OSError:
+        return False
+
+
 def sha(p: pathlib.Path) -> str:
     h = hashlib.sha1()
     with p.open("rb") as f:
@@ -81,11 +94,15 @@ def salvage(wt: pathlib.Path, apply: bool) -> int:
         src = wt / rel
         for f in ([src] if src.is_file() else
                   [q for q in src.rglob("*") if q.is_file()] if src.is_dir() else []):
+            if not worth_salvaging(f):
+                continue
             r = f.relative_to(wt)
             # already in main, byte-identical? then the worktree adds nothing.
+            # size first: one stat rules out most twins without reading either file.
             twin = REPO / r
             try:
-                if twin.is_file() and sha(twin) == sha(f):
+                if (twin.is_file() and twin.stat().st_size == f.stat().st_size
+                        and sha(twin) == sha(f)):
                     continue
             except OSError:
                 pass

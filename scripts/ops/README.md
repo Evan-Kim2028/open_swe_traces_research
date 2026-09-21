@@ -34,3 +34,8 @@ logic was written several times, the copies drifted, and the drift cost trials.
   exists if something wrote it down before deleting the tree.
 - **`docker system df`'s "reclaimable" column is not advice.** It called a 32.7GB warm Go
   build cache 99% reclaimable because no container had it mounted at that instant.
+- **`find` here is bfs, not GNU findutils.** `-newermt '-45 minutes'` is a hard error in
+  bfs; with stderr swallowed it yields an empty result, which reads as "nothing written
+  recently". That inverted two guards: `supervisor.sh`'s "cohort still being written" check
+  silently never fired, and `kill_stale_harbor.sh` would have killed every harbor job it
+  inspected, including ones writing a file a second. Use `-mmin -N`, or `-newermt @<epoch>`.
