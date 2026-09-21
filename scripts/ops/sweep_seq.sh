@@ -15,6 +15,10 @@ STAGE="experiments/dose_response/$D"
 PEND="$(mktemp -d)/pending"; trap 'rm -rf "$(dirname "$PEND")"' EXIT
 cp -a "$STAGE" "$PEND"
 
+# Record pre-trial features while the staged copy still exists. 74 units are known
+# too-easy but only 27 still had their tests on disk when we went to calibrate.
+uv run python "$R/scripts/ops/unit_features.py" "$PEND" >/dev/null 2>&1 || true
+
 # A trial on a unit whose verdict is already on record buys nothing. Measured over
 # 1632 trials: 883 of them re-measured a decided unit. The guard is free; a trial is 2.08M tokens.
 if [ "${SKIP_GUARD:-0}" != "1" ]; then

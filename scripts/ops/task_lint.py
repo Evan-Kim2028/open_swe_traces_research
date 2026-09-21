@@ -193,22 +193,20 @@ def lint(unit: Path) -> list[tuple[str, str, str]]:
                         f"({n_grounded / n_lit:.0%}) — ungrounded literals are fresh cheat surface; "
                         "repair should add prose, not literals"))
 
-    # --- TOO-EASY: drop before buying an L0 screen, for zero tokens ------
-    # Measured on 189 units with a Composer L0 verdict (33% were solved = too easy).
-    # Easy units have HALF the assertions of hard ones (21.7 vs 40.9). Note this predicts
-    # "easy at L0"; it does NOT predict whether a hard unit flips at L2 -- assertion count
-    # was refuted for that. Different questions.
-    #   assertions<=8 AND testfns<=5 -> 9 dropped, 9 truly easy, 0 hard lost (100%)
-    #   assertions<=12               -> 27 dropped, 23 truly easy (85%), 4 hard lost, 14% of screens saved
-    if n_assert:
-        n_testfn = len(re.findall(r"^func (Test\w+)\(", blob, re.MULTILINE))
-        if n_assert <= 8 and n_testfn <= 5:
-            out.append(("BLOCK", "TOO-EASY",
-                        f"{n_assert} assertions across {n_testfn} test functions — 9 of 9 such units were "
-                        "solved at L0; drop without buying a screen"))
-        elif n_assert <= 12:
-            out.append(("WARN", "TOO-EASY",
-                        f"{n_assert} assertions — 85% of units this small were solved at L0"))
+    # --- TOO-EASY: REMOVED 2026-09-20 -----------------------------------
+    # This rule claimed "9 of 9 such units were solved at L0" from a 189-unit sample.
+    # Re-measured against the corrected ledger on 70 known-easy and 152 known-hard units:
+    # it fires on ZERO of the 70. Easy units carry a median of 28 assertions; the rule
+    # triggers at <=8, so it never described a real unit. The original figure came from
+    # the reader that scored every result.json as 0 and double-counted trials.
+    #
+    # The underlying question stays open, not answered. With full coverage the only
+    # measurable features separate weakly (gold_add 61%, instr_words 68%, against a 50%
+    # coin flip), and the promising ones -- assertion and test-function counts -- exist
+    # for just 8 of 70 easy units because staged copies were deleted after trialling.
+    # scripts/ops/unit_features.py now snapshots them at staging time; recalibrate via
+    # `unit_features.py --calibrate` once >=40 easy units carry the features. Until then
+    # a BLOCK here would discard real units on a coin flip.
 
     if not hidden:
         out.append(("BLOCK", "PACKAGING", "no hidden suite in tests/hidden"))
