@@ -64,11 +64,20 @@ def census():
     # and would queue a duplicate job against it.
     roots = [R] + sorted(glob.glob("/home/evan/Documents/oswt-*"))
     for root in roots:
-        for d in glob.glob(f"{root}/experiments/pipeline/authored_batch*/*/"):
+        # Glob authored* not authored_batch*: the per-repo au5 batches and the Grok
+        # output (authored_grokgogit, ...) do not carry the word "batch", so a
+        # batch-only census silently ignored 122 then 20 units - they read as
+        # "not authored" and verification was never queued for them.
+        for d in glob.glob(f"{root}/experiments/pipeline/authored*/*/"):
             repo = os.path.basename(d.rstrip("/"))
             batch = os.path.basename(os.path.dirname(d.rstrip("/")))
             if repo.startswith("_"):
                 continue
+            # The per-repo au5 batches were consolidated into authored_batch5. Counting
+            # both queues a second VF job for work already in flight, so fold the alias
+            # exactly as roots.py does rather than keeping two answers.
+            if batch.startswith("authored_au5"):
+                batch = "authored_batch5"
             units = [u for u in glob.glob(d + "*/") if os.path.isdir(u)]
             withtests = [u for u in units
                          if glob.glob(u + "_author/tests/**/*_test.go", recursive=True)
@@ -123,6 +132,18 @@ print layout or punctuation is `Inferable: no`, and the verifier asserts only it
 
 
 def write_author_job(repo, tag):
+    # Tell the author what the bank has already taken. Nothing did, so every job saw an
+    # empty repo and went for the same obvious targets: 20% of all units excise line
+    # ranges that overlap another unit's, and one vendored gin file alone carries 16.
+    import subprocess as _sp
+    try:
+        _claimed = _sp.run(["uv", "run", "python", "scripts/ops/excision_registry.py",
+                            repo, "--md"], cwd=R, capture_output=True, text=True,
+                           timeout=300).stdout.strip()
+    except Exception:
+        _claimed = ""
+    if not _claimed:
+        _claimed = "## Already claimed\n\nNothing yet — the repo is open."
     brief = f"{BRIEFS}/closure_{tag}.md"
     open(brief, "w").write(f"""# Job: author 20 NEW units in {repo}
 
@@ -142,6 +163,8 @@ means you wrote an implementation, not a cheat.
 Writeup `analytics/research/authored_{tag.lower()}.md`: per unit in authoring order — closure,
 surface type, rejections before acceptance, overlap collisions, Inferable breakdown, cheat ratio.
 End with whether search cost per accepted unit was rising. Log to outputs/{tag}.log. Do not commit.
+
+{_claimed}
 """)
     return brief
 
@@ -201,7 +224,12 @@ DETAILS line you refused to assert, with the reason. Log to outputs/{tag}.log. D
 def append(tag, brief, deliv):
     wt = f"/home/evan/Documents/oswt-{tag}"
     rows = open(MANIFEST).read() if os.path.exists(MANIFEST) else ""
-    if re.search(rf"^{re.escape(tag)}\t", rows, re.M):
+    # A parked row is still a row. Parking is done by commenting the line
+    # (`#PARKED-AU5goa\t...`), which `^AU5goa\t` never matches, so append() concluded the
+    # tag was absent and wrote a fresh LIVE duplicate - silently resurrecting every job
+    # that had been parked. Seven AU5 rows came back this way and held three Devin slots
+    # on the lowest-priority stage. Match the tag whether or not it carries a park prefix.
+    if re.search(rf"^(?:#\S*\s*)?{re.escape(tag)}\t", rows, re.M):
         return False
     with open(MANIFEST, "a") as fh:
         fh.write(f"{tag}\t{brief}\t{wt}\t{tag.lower()}\tswe-2-max\t14400\t{deliv}\t-\n")
@@ -216,6 +244,7 @@ def main():
     cert = certified_count()
     jobs = manifest_jobs()
     pend = pending(jobs)
+
     if "--status" in sys.argv:
         print(f"certified {cert} / target {TARGET_CERTIFIED}")
         print(f"pending devin jobs ({len(pend)}): {' '.join(sorted(pend)[:8])}")
@@ -233,9 +262,12 @@ def main():
     # Backlog cap reflects TOTAL worker capacity, not one pool. With Devin (4) and Grok
     # running jobs concurrently, a cap of 6 starved Grok: 4 pending jobs were already
     # executing on Devin, leaving only 2 for anyone else.
-    if len(pend) >= 10:
-        print(f"{len(pend)} jobs already pending — no new work needed")
-        return 0
+    # The cap applies to AUTHORING only. It used to gate the whole function, and since
+    # authoring is the stage that generates its own backlog, ten pending AU jobs blocked
+    # the verify scan below indefinitely: 74 units sat authored-but-unverified (no hidden
+    # suite, so unstageable at any rung) while seven more AU jobs queued behind them and
+    # the bank stayed flat. Verification drains the backlog, so it is never blocked by it.
+    author_pend = [n for n in pend if n.startswith("AU")]
 
     # A cohort already in the trial ledger was verified through an earlier path, with its
     # tests living in the staged sweep dir rather than _author/. The census cannot see that
@@ -269,6 +301,14 @@ def main():
         hit = sum(1 for u in units if seen(u))
         return hit >= 0.5 * len(units)
 
+    # Report the same number the authoring gate uses, so the monitor and the reconciler
+    # never disagree about how deep the backlog really is. It sits here because it needs
+    # already_banked, and ahead of the verify scan because that scan can return early.
+    if "--unverified" in sys.argv:
+        print(sum(max(0, c["authored"][k] - c["verified"].get(k, 0))
+                  for k in c["authored"] if not already_banked(*k.split("/"))))
+        return 0
+
     # 1. verification first: an authored unit nobody verifies is worth nothing
     for key in sorted(c["authored"]):
         batch, repo = key.split("/")
@@ -276,13 +316,62 @@ def main():
             continue
         a, v = c["authored"][key], c["verified"].get(key, 0)
         if a - v >= 8:
-            tag = f"VF{batch.replace('authored_','').replace('_','')}{repo.replace('-','')}"
-            if tag in jobs:
+            base = f"VF{batch.replace('authored_','').replace('_','')}{repo.replace('-','')}"
+            # A tag in the manifest is not a cohort that got verified. VFbatch3gogithub
+            # filed its report having written suites for 2 of 21 units; `if tag in jobs:
+            # continue` then skipped the cohort permanently and the other 19 stayed
+            # unstageable. If the tag is finished but units are still unverified, the job
+            # is done AND incomplete - rotate to a suffixed tag for the remainder. Only a
+            # job still running is a reason to wait.
+            tag = None
+            for cand in [base] + [base + x for x in "bcdef"]:
+                if cand not in jobs:
+                    tag = cand
+                    break
+                j = jobs[cand]
+                if not os.path.exists(os.path.join(j["wt"], j["deliv"])):
+                    break                      # still running -> wait for it
+            if tag is None:
                 continue
             brief = write_verify_job(batch, repo, tag)
             if append(tag, brief, f"analytics/research/verified_{tag.lower()}.md"):
                 print(f"queued VERIFY {tag}: {a-v} unverified {repo} units in {batch}")
                 return 0
+
+    # Do not author while contracts are outstanding. Authoring adds units that cannot be
+    # staged or certified until a contract exists, and it competes for the same Devin
+    # slots as the RC jobs that unblock ~100 already-authored units. Parking the AU rows
+    # by hand did nothing because this function simply generated new ones each tick.
+    rc_pending = [n for n in pend if n.startswith("RC")]
+    if rc_pending:
+        print(f"contracts outstanding ({' '.join(rc_pending)}) — not authoring more units")
+        return 0
+
+    # Authoring is the lowest-priority stage and must never outrank verification. An
+    # authored unit with no hidden suite cannot be staged, trialled or certified, so
+    # queueing one while a VF job waits for a Devin slot actively delays the only stage
+    # that creates certifiable stock. This gate was missing: with the backlog at 30 the
+    # unverified check passed and autogen queued three AU7 jobs ahead of two pending VFs.
+    vf_pending = [n for n in pend if n.startswith("VF")]
+    if vf_pending:
+        print(f"verification outstanding ({' '.join(vf_pending)}) — not authoring more units")
+        return 0
+
+    if len(author_pend) >= 10:
+        print(f"{len(author_pend)} authoring job(s) already pending — not authoring more")
+        return 0
+
+    # Never author past the unverified backlog. An authored unit with no hidden suite is
+    # not an asset, it is a liability that occupies a Devin slot the verifier needs.
+    # Count only cohorts that are NOT already banked. batch2 was verified through an
+    # older path whose tests live in the staged sweep dir, so the census reports ~150
+    # unverified units that are in fact certified - counting those would block authoring
+    # permanently rather than when the backlog is real.
+    unverified = sum(max(0, c["authored"][k] - c["verified"].get(k, 0))
+                     for k in c["authored"] if not already_banked(*k.split("/")))
+    if unverified >= 40:
+        print(f"{unverified} authored unit(s) still unverified — not authoring more")
+        return 0
 
     # 2. otherwise author more, rotating by measured yield
     n = 5

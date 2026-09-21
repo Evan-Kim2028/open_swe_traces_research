@@ -8,6 +8,7 @@ as visible as one that worked.
 
 Data is inlined rather than fetched, because file:// cannot read a sibling JSON.
 """
+import os
 import json, os, subprocess, time
 
 HIST = "outputs/history.json"
@@ -51,7 +52,52 @@ def main():
     d6t = (r6[-1]["trials_cum"] - r6[0]["trials_cum"]) if len(r6) > 1 else 0
     tpc6 = round(d6t / d6c, 1) if d6c > 0 else None
 
-    authored = int(sh("find experiments/pipeline/authored* -maxdepth 3 -name _author -type d 2>/dev/null | wc -l", "0"))
+    # Count authored units across the main checkout AND every worktree, deduplicated.
+    # A main-only count read 144 where the real figure is ~507: batch2, batch4 and all
+    # seven au5 batches were authored inside worktrees and never merged. Under-reporting
+    # the numerator hid the fact that authoring is far ahead of verification.
+    import glob as _g
+    import sys as _sys
+    _sys.path.insert(0, "scripts/ops")
+    try:
+        import trial_guard as _tg
+        per = _tg.ledger()
+    except Exception:
+        per = {}
+    _seen = {}
+    for _root in ["."] + sorted(_g.glob("/home/evan/Documents/oswt-*")):
+        for _d in _g.glob(f"{_root}/experiments/pipeline/authored*/*/*/"):
+            if not os.path.isdir(os.path.join(_d, "_author")):
+                continue
+            _p = _d.rstrip("/").split("/")
+            _batch, _repo, _unit = _p[-3], _p[-2], _p[-1]
+            if _repo.startswith("_"):
+                continue
+            # The au5 units were consolidated into authored_batch5, so each exists under
+            # two batch names and was counted twice (629 against a true 507). Fold the
+            # per-repo au5 batches onto their consolidated name before deduplicating.
+            if _batch.startswith("authored_au5"):
+                _batch = "authored_batch5"
+            _suite = bool(_g.glob(_d + "tests/hidden/**/*_test.go", recursive=True))
+            _con = os.path.exists(os.path.join(_d, "_author/contract.md"))
+            _o = _seen.get((_batch, _repo, _unit), (False, False))
+            _seen[(_batch, _repo, _unit)] = (_o[0] or _suite, _o[1] or _con)
+    authored = len(_seen)
+    # A unit that has been trialled was demonstrably verified, even when its suite lives
+    # in the staged sweep dir rather than _author/tests (the older batch2 path). Without
+    # this the funnel showed 316 trialled against 138 verified - not a funnel at all.
+    try:
+        _trialled_names = {u.split("-", 1)[-1] for u in per} | set(per)
+    except Exception:
+        _trialled_names = set()
+
+    def _was_verified(key, v):
+        return v[0] or key[2] in _trialled_names or f"{key[1]}-{key[2]}" in _trialled_names
+
+    verified = sum(1 for k, v in _seen.items() if _was_verified(k, v))
+    stageable = sum(1 for k, v in _seen.items() if _was_verified(k, v) and v[1])
+    unverified = authored - verified
+    nullified = len(_g.glob("experiments/dose_response/_nullified/*/*/"))
     easy = sum(1 for _ in ())  # filled below from guard
     try:
         import sys
@@ -64,7 +110,15 @@ def main():
     except Exception:
         nonflip = 0
     free = sh("df --output=avail -BG / | tail -1", "?G").strip()
-    devin = sh("pgrep -af '[d]evin --model' | grep -oP 'closure_\\w+' | sort -u | wc -l", "0")
+    # A Devin TRIAL runs the CLI inside a container: invisible to pgrep but it occupies a
+    # slot exactly as a session does. Counting sessions alone displayed 2/4 while the real
+    # figure was 4/4, which is the miscount that let the cap drift to 7 unnoticed.
+    _ds = int(sh("pgrep -af '[d]evin --model' | grep -oP 'closure_\\w+' | sort -u | wc -l", "0") or 0)
+    _dt = int(sh("ps -eo args | awk '/harbor run/ && !/awk/ {a=\"\";n=1;j=\"\"; "
+                 "for(i=1;i<NF;i++){if($i==\"--agent\")a=$(i+1); "
+                 "if($i==\"--n-concurrent\")n=$(i+1); if($i==\"--job-name\")j=$(i+1)} "
+                 "if(a==\"devin\" && !(j in s)){s[j]=1; t+=n}} END{print t+0}'", "0") or 0)
+    devin = _ds + _dt
     conts = sh("docker ps --format '{{.Names}}' | grep -c env-main", "0")
 
     # ---- geometry ----
@@ -145,9 +199,43 @@ def main():
         tile(tpc6 if tpc6 else "—", "trials / certified", "last 6h · marginal"),
         tile(easy, "killed at L0", "not hard enough"),
         tile(nonflip, "non-flipping", "need contract repair"),
-        tile(f"{devin}/4", "Devin sessions", f"{conts} trial containers"),
+        tile(f"{devin}/4", "Devin runs", f"sessions + in-container trials"),
         tile(free, "disk free", "prune floor 100G"),
     ])
+
+    # ---- the funnel ------------------------------------------------------------------
+    # Authoring ran far ahead of verification all night and nothing showed it: an authored
+    # unit with no hidden suite cannot be staged, trialled or certified, so it is not an
+    # asset. 507 authored against 138 verified is the single most decision-relevant number
+    # on this page, and it was the one number the dashboard never had.
+    trialled = len(per) if per else 0
+    stages = [("authored", authored, "unit cut from a repo"),
+              ("verified", verified, "hidden suite written"),
+              ("stageable", stageable, "+ contract, can reach L2"),
+              ("trialled", trialled, "at least one verdict"),
+              ("certified", last["certified"], "fails L0, passes L2")]
+    fmax = max(x[1] for x in stages) or 1
+    funnel = ""
+    for i, (name, n, sub) in enumerate(stages):
+        pct = n / fmax * 100
+        drop = ""
+        if i:
+            prev = stages[i - 1][1]
+            lost = prev - n
+            if lost > 0:
+                drop = f'<span class="drop">&minus;{lost:,}</span>'
+        funnel += (f'<div class="frow"><div class="fname">{name}{drop}</div>'
+                   f'<div class="fbar"><span style="width:{pct:.1f}%"></span></div>'
+                   f'<div class="fnum">{n:,}</div>'
+                   f'<div class="fsub">{sub}</div></div>')
+    funnel_card = (f'<div class="card"><h2>Where units are lost</h2>'
+                   f'<p class="note">Every stage an authored unit must clear before it '
+                   f'counts. {unverified:,} authored units have no hidden suite yet &mdash; '
+                   f'they cannot be staged or certified at any rung, and verification is '
+                   f'the only stage that converts them.'
+                   + (f' {nullified:,} trials were nullified as infrastructure failures '
+                      f'(agent never ran) and are excluded throughout.' if nullified else '')
+                   + f'</p><div class="funnel">{funnel}</div></div>')
 
     html = f"""<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -173,6 +261,18 @@ h1{{font-size:27px;font-weight:700;margin:0 0 4px;letter-spacing:-.02em}}
 .card{{background:var(--card);border:1px solid var(--rule);border-radius:7px;padding:18px 18px 8px;margin-bottom:22px}}
 h2{{font-size:18px;font-weight:600;margin:0 0 3px}}
 .note{{font-size:13.5px;color:var(--ink2);margin:0 0 10px;max-width:74ch;line-height:1.5}}
+.funnel{{margin:14px 0 16px}}
+.frow{{display:grid;grid-template-columns:132px 1fr 62px 200px;gap:12px;align-items:center;
+ padding:7px 0;border-top:1px solid var(--rule)}}
+.frow:first-child{{border-top:none}}
+.fname{{font-size:13.5px;font-weight:600}}
+.drop{{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--warn);margin-left:6px;font-weight:500}}
+.fbar{{height:13px;background:color-mix(in srgb,var(--rule) 45%,transparent);border-radius:3px;overflow:hidden}}
+.fbar span{{display:block;height:100%;background:var(--acc);border-radius:3px}}
+.fnum{{font-family:"IBM Plex Mono",monospace;font-size:15px;font-weight:600;text-align:right}}
+.fsub{{font-size:12px;color:var(--ink2)}}
+@media(max-width:720px){{.frow{{grid-template-columns:104px 1fr 54px;row-gap:2px}}
+ .fsub{{grid-column:1/-1;padding-bottom:2px}}}}
 .scroll{{width:100%;overflow-x:auto}} svg{{display:block;min-width:900px;width:100%;height:auto}}
 text{{font-family:"IBM Plex Sans",sans-serif;fill:var(--ink)}}
 .axl{{font-size:12.5px;fill:var(--ink2)}} .axr{{fill:var(--acc2)}}
@@ -190,6 +290,7 @@ footer{{color:var(--ink2);font-size:12.5px;margin-top:8px}}
 <h1>Task Foundry</h1>
 <p class="sub">Mining verifiable SWE tasks with controlled difficulty · generated {time.strftime('%a %d %b %H:%M')}</p>
 <div class="tiles">{tiles}</div>
+{funnel_card}
 
 <div class="card"><h2>The bank, and what it cost</h2>
 <p class="note">A unit is certified when it fails at L0 and passes at L2 — hard, fair, solvable and verifiable.

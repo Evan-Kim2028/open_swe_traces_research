@@ -137,12 +137,22 @@ for round in $(seq 1 "$ROUNDS"); do
   else
     AGENT_KWARGS=(--agent "${AGENT:-cursor-cli}" --model "${MODEL:-cursor/composer-2.5}")
   fi
+  # Job names restarted at _r1 on every relaunch, so re-running a cohort that had already
+  # completed died instantly with "already exists and cannot be resumed with a different
+  # config" - and now that sweep locks release as soon as their owner exits, relaunching a
+  # finished cohort is the normal case, not an edge case. Suffix on collision only, so the
+  # usual first run keeps its familiar name. trial_guard's rsplit("_r", 1) stem still
+  # resolves to the cohort, so re-trial protection is unaffected.
+  JOB="${D}_r${round}"
+  if [ -d "experiments/dose_response/jobs/$JOB" ]; then
+    JOB="${D}_r${round}_$(date +%H%M%S)"
+  fi
   harbor run --path "$PEND" "${AGENT_KWARGS[@]}" \
     --n-concurrent "$CONC" --n-attempts 1 --max-retries 1 \
-    --jobs-dir experiments/dose_response/jobs --job-name "${D}_r${round}" --yes
-  "$R/scripts/ops/post_sweep.sh" "${D}_r${round}"
+    --jobs-dir experiments/dose_response/jobs --job-name "$JOB" --yes
+  "$R/scripts/ops/post_sweep.sh" "$JOB"
   # drop every unit that passed this round
-  for t in "experiments/dose_response/jobs/${D}_r${round}"/*/; do
+  for t in "experiments/dose_response/jobs/$JOB"/*/; do
     [ -f "$t/result.json" ] || continue
     rew=$(python3 -c "
 import json,sys
@@ -153,4 +163,6 @@ print((d.get('verifier_result') or {}).get('rewards',{}).get('reward'))" 2>/dev/
     rm -rf "$PEND/$u"
   done
 done
-echo "=== unflipped after $ROUNDS rounds:"; ls "$PEND" 2>/dev/null
+# dirs only: `ls "$PEND"` listed a stray README.md as an unflipped unit. Cosmetic -
+# every real enumeration above uses "$PEND"/*/ - but it made the report lie.
+echo "=== unflipped after $ROUNDS rounds:"; for d in "$PEND"/*/; do [ -d "$d" ] && basename "$d"; done 2>/dev/null

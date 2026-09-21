@@ -231,6 +231,23 @@ say "supervisor start: tick=${TICK}s cap=${CAP} devin_slots=${DEVIN_SLOTS}"
 while true; do
   # Keep the queue fed: author -> verify -> stage -> trial, one new job per tick, newest
   # stage first. Without this every stage stalled whenever nobody noticed it had finished.
+  # Harvest BEFORE autogen. A VF/RC job writes its output inside its own worktree and
+  # nothing moved it to the main checkout, so 74 finished units were invisible to the
+  # stager while autogen queued more authoring behind them. Harvest first so autogen
+  # and orchestrate both see the true state.
+  # Enforce the Devin cap every tick, before anything else decides to start work.
+  # Two independent launchers (dq2 sessions, orchestrate trials) each stayed under
+  # the cap by their own count while the total ran to 5, 6, 7. This trims trials,
+  # never sessions.
+  uv run python scripts/ops/devin_cap.py --apply >> "$LOG" 2>&1 || true
+  # Track Grok/Cursor jobs too. The loop watched Devin and containers only, so a
+  # stalled authoring or verification session was invisible until someone looked.
+  uv run python scripts/ops/jobs_status.py >> "$LOG" 2>&1 || true
+  # The stability gate is the current objective: a clean 6h window is what turns
+  # scaling into a pure budget decision. Logged every tick so progress is visible
+  # without anyone asking for it.
+  uv run python scripts/ops/stability_gate.py >> "$LOG" 2>&1 || true
+  uv run python scripts/ops/harvest.py --apply >> "$LOG" 2>&1 || true
   uv run python scripts/ops/pipeline_autogen.py >> "$LOG" 2>&1 || true
   # Devin session launching belongs to /home/evan/devin-tasks/dq2.sh, which predates this
   # supervisor and has its own MAXN, cooldown and single-instance guard. Both launchers

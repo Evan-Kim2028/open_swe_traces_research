@@ -18,6 +18,22 @@ JOBS = "experiments/dose_response/jobs"
 LADDER_SAMPLE = 0.15      # fraction of certified units that also walk the full ladder
 NONFLIP_CAP   = 3         # L2 failures before a unit is declared non-flipping
 
+# Every rung that is not L0 or L2. Written as a set, not the string "1345", because that
+# literal silently omitted L6: kops-clustervalid accumulated NINETEEN passing L6 trials
+# because every ladder check skipped it. Deriving membership from "not a certifying rung"
+# means a new rung cannot be forgotten.
+CERTIFYING_RUNGS = {"0", "2"}
+
+# A rung answers one question, so it needs one verdict. Repeat trials buy nothing and were
+# 15-39% of all spend. The cap is per rung and absolute - it holds even when a contract
+# repair makes prior verdicts stale, which is what let single units run 7, 11, 19 times.
+RUNG_TRIAL_CAP = 3
+
+# Contract repair resets L2 staleness, so a unit could be repaired and retried forever.
+# Two repairs is the budget: if a contract still cannot carry the unit after two rewrites,
+# the defect is the unit, not the prose.
+REPAIR_BUDGET = 2
+
 
 def ledger():
     """Delegated: trial_ledger is the single correct reader. The old inline version scored
@@ -57,11 +73,33 @@ def verdict_is_stale(base):
     return prev is not None and prev != cur
 
 
+def repair_count(base):
+    """How many times this unit's contract has been rewritten since first stamped.
+
+    Each distinct fingerprint we have stamped is one repair. Recorded alongside the stamp
+    so it survives restarts and is visible to anyone reading .guard_stamps/."""
+    hist = os.path.join(".guard_stamps", base + ".history")
+    if not os.path.exists(hist):
+        return 0
+    try:
+        return max(0, len({l.strip() for l in open(hist) if l.strip()}) - 1)
+    except OSError:
+        return 0
+
+
 def stamp_verdict(base):
     cur = contract_fingerprint(base)
     if cur is None:
         return
     os.makedirs(".guard_stamps", exist_ok=True)
+    hist = os.path.join(".guard_stamps", base + ".history")
+    try:
+        seen = {l.strip() for l in open(hist)} if os.path.exists(hist) else set()
+        if cur not in seen:
+            with open(hist, "a") as fh:
+                fh.write(cur + "\n")
+    except OSError:
+        pass
     open(os.path.join(".guard_stamps", base), "w").write(cur)
 
 
@@ -77,15 +115,39 @@ def decide(unit, per):
         return True, "unrecognised unit name"
     base, rung = unit.rsplit("-L", 1)
     rung = rung[:1]
-    if verdict_is_stale(base):
-        return True, "contract changed since last verdict — prior trials no longer bind"
     d = per.get(base, {})
     l0, l2 = d.get("0", []), d.get("2", [])
 
+    # Settled verdicts outrank contract staleness. The expiry check used to run FIRST, so
+    # every contract rewrite resurrected units we had already decided - and with ten
+    # repair-contract cohorts (rc, rc2..rc5, auto, auto2, auto3, loop, fix) covering the
+    # same goa units, eight already-certified units were re-trialled ten to twelve times
+    # each. That is what a window of 38 trials and zero new certifications was made of.
+    #
+    # A flip certificate is a property we already own: L0 failed and L2 passed, both
+    # recorded. Rewriting the contract cannot un-earn it. Condemnation is likewise a
+    # property of the unit, not of its prose - a solver that fixed the bug from the report
+    # alone did not need the contract. Units still OPEN keep expiring on a contract change,
+    # which is the whole point of a repair job.
     if l0 and max(l0) > 0:
         return False, f"condemned: passed L0 ({len(l0)} trial(s)) — not a hard unit"
     if l0 and max(l0) == 0 and l2 and max(l2) > 0:
         return False, "certified: L0 fail + L2 pass already on record"
+    # Absolute per-rung cap, checked BEFORE staleness. A rung answers one question and
+    # needs one verdict; repair resetting staleness is exactly how single units reached
+    # 7, 11 and 19 trials on one rung.
+    n_this_rung = len(d.get(rung, []))
+    if n_this_rung >= RUNG_TRIAL_CAP:
+        return False, (f"rung L{rung} already has {n_this_rung} trial(s) "
+                       f"(cap {RUNG_TRIAL_CAP}) — no further verdict to buy")
+
+    reps = repair_count(base)
+    if verdict_is_stale(base):
+        if reps >= REPAIR_BUDGET:
+            return False, (f"contract repaired {reps}x (budget {REPAIR_BUDGET}) and the "
+                           f"unit still does not flip — retire it, do not repair again")
+        return True, (f"contract changed since last verdict (repair {reps + 1} of "
+                      f"{REPAIR_BUDGET}) — prior trials no longer bind")
     if rung == "0" and l0:
         return False, f"L0 already decided ({len(l0)} trial(s), max={max(l0)})"
     if rung == "2":
@@ -93,7 +155,7 @@ def decide(unit, per):
             return False, "L2 before L0 — run L0 first, it is the cheaper verdict"
         if len(l2) >= NONFLIP_CAP and max(l2) == 0:
             return False, f"non-flipping: {len(l2)} L2 failures — repair the contract, do not retry"
-    if rung in "1345":
+    if rung not in CERTIFYING_RUNGS:
         if not (l0 and max(l0) == 0 and l2 and max(l2) > 0):
             return False, f"ladder rung L{rung} on an uncertified unit — certify first"
         if not in_ladder_sample(base):

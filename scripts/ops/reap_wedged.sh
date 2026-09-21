@@ -12,6 +12,23 @@ MINAGE="${1:-45}"; SAMPLE="${2:-45}"; DRY="${3:-}"
 CPU_FLOOR=1.0     # percent; a thinking agent still moves more than this
 now=$(date +%s)
 
+# Orphaned sidecars first: killing a harbor run (or a crash) leaves the per-trial egress
+# sidecar behind with no env-main to serve. Five accumulated from one SIGKILL at 06:16,
+# each holding a container slot and confusing every count that greps docker ps. A sidecar
+# whose main container is gone is unambiguously dead weight - no sampling needed.
+mains=$(docker ps --format '{{.Names}}' | grep 'env-main-1' | sed 's/__env-main-1//')
+for c in $(docker ps --format '{{.Names}}' | grep 'egress-control-sidecar'); do
+  stem=${c%%__env-harbor-docker-egress-control-sidecar-1}
+  if ! echo "$mains" | grep -qx "$stem"; then
+    if [ "${3:-}" = "--dry-run" ]; then
+      echo "  WOULD KILL orphan sidecar $c (no env-main)"
+    else
+      echo "  killing orphan sidecar $c (no env-main)"
+      docker kill "$c" >/dev/null 2>&1
+    fi
+  fi
+done
+
 for c in $(docker ps --format '{{.Names}}' | grep 'env-main'); do
   started=$(docker inspect -f '{{.State.StartedAt}}' "$c" 2>/dev/null) || continue
   age=$(( (now - $(date -d "$started" +%s 2>/dev/null || echo "$now")) / 60 ))

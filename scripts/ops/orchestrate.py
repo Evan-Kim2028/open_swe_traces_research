@@ -48,6 +48,8 @@ def sh(c, t=90):
 
 
 FROZEN = "/home/evan/.claude/jobs/a1eaeb86/tmp/sweep_seq.frozen.sh"
+# Certification before ladder study. Reversible: delete the file to resume.
+LADDER_PAUSED = os.path.exists("outputs/supervisor/ladder_paused")
 
 
 LOCKDIR = "outputs/supervisor/sweep_locks"
@@ -64,46 +66,122 @@ def sweep_locked(cohort, max_age=5400):
     misread."""
     os.makedirs(LOCKDIR, exist_ok=True)
     f = os.path.join(LOCKDIR, cohort)
-    if os.path.exists(f):
-        age = time.time() - os.path.getmtime(f)
-        if age < max_age:
-            return True
-    return False
+    if not os.path.exists(f):
+        return False
+    age = time.time() - os.path.getmtime(f)
+    if age >= max_age:
+        return False
+    # A blind 90-minute timer is safe against double-launch but wastes the machine: four
+    # cohorts stayed locked by sweeps that had already exited, and every container sat
+    # idle with runnable units waiting. The lock now records the launched process's own
+    # PID, so liveness is a kill(pid, 0) on a number we wrote ourselves - not the `pgrep
+    # -f` pattern matching that misfired twice before. No PID (old-format lock) falls back
+    # to the timer.
+    try:
+        pid = int((open(f).read().split() + [""])[1])
+    except (ValueError, IndexError, OSError):
+        return True
+    try:
+        os.kill(pid, 0)
+        return True                    # owner alive -> genuinely locked
+    except ProcessLookupError:
+        os.remove(f)                   # owner gone -> cohort is free again
+        return False
+    except PermissionError:
+        return True
 
 
-def sweep_lock(cohort):
+def sweep_lock(cohort, pid=None, conc=0):
     os.makedirs(LOCKDIR, exist_ok=True)
-    open(os.path.join(LOCKDIR, cohort), "w").write(str(int(time.time())))
+    open(os.path.join(LOCKDIR, cohort), "w").write(
+        f"{int(time.time())} {pid or ''} {conc}")
+
+
+def reserved_slots():
+    """Concurrency already promised to sweeps that are launched but not yet visible.
+
+    A container takes minutes to build, so `docker ps` under-reports a sweep that has
+    just started. orchestrate only added its own launches within a single tick, and the
+    supervisor re-runs it every five minutes - so tick after tick each saw a near-empty
+    machine and launched again. Eight sweeps ended up holding 39 concurrency against a
+    cap of 12. Counting what live locks have reserved closes the window."""
+    tot = 0
+    for f in glob.glob(os.path.join(LOCKDIR, "*")):
+        try:
+            parts = open(f).read().split()
+            pid = int(parts[1]); c = int(parts[2]) if len(parts) > 2 else 0
+            os.kill(pid, 0)
+            tot += c
+        except (ValueError, IndexError, OSError):
+            continue
+    return tot
 
 
 def freeze():
     """Run sweeps from a snapshot. Editing scripts/ops/sweep_seq.sh while a sweep was
     executing shifted bash's read offset and killed the trial phase with a syntax error
-    after the gate had already run. A frozen copy cannot be corrupted mid-flight."""
+    after the gate had already run.
+
+    The snapshot is named by its own content hash. A single fixed path only moved the
+    problem: a running sweep reads from the frozen file for its whole lifetime, so the
+    next tick's refresh-in-place would corrupt it exactly the way editing the source did.
+    Content addressing means a given sweep's file is never rewritten - a changed source
+    produces a NEW path and leaves running sweeps on the bytes they started with."""
     try:
-        import shutil
-        if (not os.path.exists(FROZEN)
-                or os.path.getmtime("scripts/ops/sweep_seq.sh") > os.path.getmtime(FROZEN)):
-            shutil.copy("scripts/ops/sweep_seq.sh", FROZEN)
+        import shutil, hashlib
+        src = "scripts/ops/sweep_seq.sh"
+        h = hashlib.sha256(open(src, "rb").read()).hexdigest()[:12]
+        dst = FROZEN.replace(".frozen.sh", f".{h}.sh")
+        if not os.path.exists(dst):
+            shutil.copy(src, dst)
+            # keep the directory from growing without bound; never touch a file a live
+            # sweep could still be reading, so only prune ones older than a long sweep
+            import glob as _g, time as _t
+            for old_f in _g.glob(FROZEN.replace(".frozen.sh", ".*.sh")):
+                if old_f != dst and _t.time() - os.path.getmtime(old_f) > 6 * 3600:
+                    try:
+                        os.remove(old_f)
+                    except OSError:
+                        pass
+        return dst
     except Exception:
         return "./scripts/ops/sweep_seq.sh"
-    return FROZEN
 
 
 def run(c):
-    """Fire and forget; the reconciler must not block on a sweep."""
+    """Fire and forget; the reconciler must not block on a sweep. Returns the pid so the
+    cohort lock can be tied to the process that actually owns it."""
     if APPLY:
-        subprocess.Popen(c, shell=True, cwd=R, start_new_session=True,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return subprocess.Popen(c, shell=True, cwd=R, start_new_session=True,
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL).pid
+    return None
 
 
 # ---------- observe ----------------------------------------------------------------
-sessions = [x for x in sh("pgrep -af '[d]evin --model' | grep -oP 'closure_\\w+' | sort -u").split() if x]
-trials = int(sh("ps -eo args | awk '/harbor run/ && !/awk/ {a=\"\";c=1;j=\"\"; "
-                "for(i=1;i<NF;i++){if($i==\"--agent\")a=$(i+1); if($i==\"--n-concurrent\")c=$(i+1); "
-                "if($i==\"--job-name\")j=$(i+1)} if(a==\"devin\" && !(j in seen)){seen[j]=1; t+=c}} "
-                "END{print t+0}\'") or 0)
+sys.path.insert(0, os.path.join(R, "scripts/ops"))
+from slots import occupancy as _occ   # one definition of occupancy; see slots.py
+_o = _occ("devin")
+sessions = _o["sessions"]
+trials = sum(t["conc"] for t in _o["trials"])
 containers = int(sh("docker ps --format '{{.Names}}' | grep -c env-main") or 0)
+# A just-launched sweep has no containers yet but has already claimed its slots.
+containers = max(containers, reserved_slots())
+
+# Container count is not the only ceiling: this machine is CPU-bound and a staging pass
+# compiles gold, cheat and bare variants of every unit, so load can sit at 45 on 32 cores
+# while only THREE containers are up. Orchestrate would read that as nine free slots and
+# launch into an already-saturated box. Treat sustained load above ~1.4x cores as full.
+try:
+    _cores = os.cpu_count() or 32
+    _load5 = float(open("/proc/loadavg").read().split()[1])
+    if _load5 > 1.25 * _cores:
+        containers = max(containers, 12)
+        LOADED = f"load {_load5:.0f} on {_cores} cores"
+    else:
+        LOADED = ""
+except Exception:
+    LOADED = ""
 # Match sweep_seq.sh AND sweep_seq.frozen.sh. The freeze fixed one bug and introduced
 # this one: the detector saw no sweeps and would have launched duplicates all night.
 sweeps = [x for x in sh("ps -eo args | awk '/sweep_seq[^ ]*[.]sh/ && !/awk/ "
@@ -134,7 +212,7 @@ except Exception:
     pass
 
 # staged cohorts with runnable units
-import trial_ledger, trial_guard
+import trial_ledger, trial_guard, token_cost
 per = trial_ledger.ledger()
 runnable = {}
 for d in glob.glob("experiments/dose_response/sweep_*/*/"):
@@ -142,7 +220,34 @@ for d in glob.glob("experiments/dose_response/sweep_*/*/"):
         continue
     cohort = d.split(os.sep)[2]
     name = os.path.basename(d.rstrip("/"))
-    if name.rsplit("-L", 1)[0] in per:
+    # Skip only the rung that already has a verdict, not every unit that has ever been
+    # trialled. The coarse check hid 12 units that failed L0 and had never been run at L2
+    # - the exact rung the harvest had just made stageable - because their L0 history put
+    # them "in the ledger". Re-trial protection is what this guards, and a rung with no
+    # verdict has nothing to protect. trial_guard still arbitrates the rest (condemned,
+    # non-flipping, ladder sampling).
+    base = name.rsplit("-L", 1)[0]
+    # trial_ledger normalises "2rc"/"2auto" to "2"; parsing the raw suffix here meant
+    # the skip never matched for repair-contract cohorts and they re-trialled freely.
+    rung = (name.rsplit("-L", 1)[1][:1] if "-L" in name else "0")
+    if base in per and per[base].get(rung):
+        continue
+    # A unit with no hidden suite can never be trialled - task_lint BLOCKs it inside the
+    # sweep, so counting it as runnable made orchestrate relaunch four go-github cohorts
+    # every tick, each exiting immediately with "guard kept 0 unit(s)" while burning a
+    # launch and a lock. Five units bank-wide are in this state (auditcoerce staged into
+    # four cohorts with no tests/ dir at all, plus auditentry); they need a verifier, not
+    # a trial.
+    if not glob.glob(d + "tests/hidden/**/*", recursive=True):
+        continue
+
+    # Ladder rungs (L1, L3-L6) are affordance-study data: they can never certify, by
+    # construction. They were taking ~half of Composer's budget while the bank was the
+    # goal, so they pause behind a flag file rather than being deleted - the staged
+    # cohorts and every verdict already collected stay exactly where they are.
+    #   pause : touch outputs/supervisor/ladder_paused
+    #   resume: rm outputs/supervisor/ladder_paused
+    if LADDER_PAUSED and rung in ("1", "3", "4", "5", "6"):
         continue
     try:
         ok, _ = trial_guard.decide(name, per)
@@ -181,7 +286,14 @@ else:
         if cohort in active_trial_cohorts or sweep_locked(cohort):
             continue
         is_l2 = cohort.endswith("_L2")
-        if is_l2 or not budget_ok:
+        # L2 prefers Devin because Devin is free, but "prefers" must not mean "only":
+        # Devin is capped at 4 and every certifiable unit in the bank is now at L2, so a
+        # Devin-only rule left 24 units queued behind the cap while Composer sat idle with
+        # budget in hand. L2 is the rung that certifies; when Devin is full and there is
+        # budget, Composer takes the overflow. Ladder rungs never qualify - they cannot
+        # certify - and are filtered out before this point when paused.
+        devin_full = (4 - devin_total) < 1
+        if (is_l2 or not budget_ok) and not (is_l2 and devin_full and budget_ok):
             room = 4 - devin_total
             if room < 1:
                 NOTES.append(f"{cohort}: {n} unit(s) waiting, no devin headroom ({devin_total}/4)")
@@ -195,7 +307,18 @@ else:
             if room < 2:
                 NOTES.append(f"{cohort}: {n} unit(s) waiting, composer at {containers}/12")
                 continue
-            ACTIONS.append(("sweep-composer", cohort, f"{n} unit(s), concurrency {room}"))
+            # Price the launch before making it. Container count was the only cap, so one
+            # decision at concurrency 6 committed ~61M against a 100M budget and overshot
+            # it by 23%. A sweep runs every runnable unit in the cohort, so the commitment
+            # is units x per-trial cost, not concurrency x cost.
+            room, why_budget = token_cost.can_afford(cohort, n, room)
+            if room < 1:
+                NOTES.append(f"{cohort}: {why_budget}")
+                continue
+            why = f"{n} unit(s), concurrency {room}"
+            if is_l2:
+                why += " [L2 overflow: devin full, spending budget on certification]"
+            ACTIONS.append(("sweep-composer", cohort, why))
             containers += room
         if len(ACTIONS) >= 3:
             break
@@ -288,11 +411,31 @@ if sum(runnable.values()) < 5:
         src, repo, batch, n = globals()["_needs_contract"]
         # Only report it if no reconciler job is already queued for this cohort, otherwise
         # the action repeats every tick forever and looks like progress when it is not.
-        tag = f"RC{repo.replace('-','')}{batch[-1]}"
-        mani = open("/home/evan/devin-tasks/queue/manifest.tsv").read() if os.path.exists(
-            "/home/evan/devin-tasks/queue/manifest.tsv") else ""
-        if re.search(rf"^{re.escape(tag)}\t", mani, re.M):
-            NOTES.append(f"{batch}/{repo}: {n} unit(s) need contracts; {tag} already queued")
+        base = f"RC{repo.replace('-','')}{batch[-1]}"
+        MANI = "/home/evan/devin-tasks/queue/manifest.tsv"
+        mani = open(MANI).read() if os.path.exists(MANI) else ""
+        # A queued tag is not a finished tag. dq2's done-check is "does the report file
+        # exist", so a reconciler that writes 8 of 38 contracts and files its report is
+        # retired as complete and the other 30 units stay unstageable forever - which is
+        # exactly how 74 units accumulated. If the tag's report exists but contracts are
+        # still missing, the job is done AND wrong: queue a fresh suffixed tag for the
+        # remainder instead of reporting "already queued" every tick.
+        tag = None
+        for cand_tag in [base] + [base + s for s in "bcdef"]:
+            row = re.search(rf"^{re.escape(cand_tag)}\t(?:[^\t]*\t){{2}}[^\t]*\t[^\t]*\t[^\t]*\t([^\t]*)",
+                            mani, re.M)
+            if not row:
+                tag = cand_tag
+                break                      # never queued -> use it
+            wt_c = f"/home/evan/Documents/oswt-{cand_tag}"
+            if not os.path.exists(os.path.join(wt_c, row.group(1))):
+                tag = None                 # queued and still running -> wait
+                NOTES.append(f"{batch}/{repo}: {n} unit(s) need contracts; "
+                             f"{cand_tag} queued and not yet finished")
+                break
+            # finished but contracts still missing -> fall through to the next suffix
+        if tag is None:
+            pass
         else:
             ACTIONS.append(("needs-contract", f"{batch}/{repo}",
                         f"{n} unit(s) have hidden suites but NO contract.md — "
@@ -316,17 +459,19 @@ print("\nACTIONS" if ACTIONS else
       ("\nno action available (see notes)" if (NOTES or over) else "\nall invariants hold"))
 for kind, target, why in ACTIONS:
     print(f"  {kind:16s} {target:24s} {why}")
-    if kind in ("sweep-devin", "sweep-composer") and APPLY:
-        sweep_lock(target)
     if kind == "sweep-devin":
         rounds = 2 if target.endswith("_L2") else 1
         room = int(re.search(r"concurrency (\d+)", why).group(1))
-        run(f"AGENT=devin bash {freeze()} {target} {rounds} {room} "
-            f"> outputs/{target}.log 2>&1")
+        pid = run(f"AGENT=devin bash {freeze()} {target} {rounds} {room} "
+                  f"> outputs/{target}.log 2>&1")
+        if APPLY:
+            sweep_lock(target, pid, room)
         sh(f"sed -i '/^{target}$/d' outputs/supervisor/sweep_queue.txt")
     elif kind == "sweep-composer":
         room = int(re.search(r"concurrency (\d+)", why).group(1))
-        run(f"bash {freeze()} {target} 1 {room} > outputs/{target}.log 2>&1")
+        pid = run(f"bash {freeze()} {target} 1 {room} > outputs/{target}.log 2>&1")
+        if APPLY:
+            sweep_lock(target, pid, room)
         sh(f"sed -i '/^{target}$/d' outputs/supervisor/sweep_queue.txt")
     elif kind == "needs-contract" and APPLY:
         # Actually queue the reconciler job. Reporting it every tick is not autonomy: two

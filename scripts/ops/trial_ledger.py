@@ -67,6 +67,20 @@ def trials(jobs_dir=JOBS):
                "mtime": os.path.getmtime(tdir)}
 
 
+def solver_of(model):
+    """Which solver family produced a trial. Difficulty is a property of a task RELATIVE
+    to a solver, so a flip certificate that spans two of them is a different claim from
+    one that does not - and 15 of the first 140 certificates did span two."""
+    m = (model or "")
+    if m.startswith("swe"):
+        return "devin"
+    if m.startswith("composer") or m.startswith("cursor"):
+        return "composer"
+    if m.startswith("grok"):
+        return "grok"
+    return "other"
+
+
 def ledger(jobs_dir=JOBS):
     """base -> rung -> [reward]. Errored trials and trials with no verdict are excluded."""
     per = collections.defaultdict(lambda: collections.defaultdict(list))
@@ -75,6 +89,44 @@ def ledger(jobs_dir=JOBS):
             continue
         per[t["base"]][t["rung"]].append(t["reward"])
     return per
+
+
+def ledger_by_solver(jobs_dir=JOBS):
+    """base -> solver -> rung -> [reward]. The multi-model view.
+
+    The bank is deliberately multi-model: tasks are trialled by whichever solver has
+    capacity, and a certificate records WHO it binds for. Keeping this separate from
+    ledger() means existing callers are unchanged while provenance is available to anyone
+    who needs it."""
+    per = collections.defaultdict(lambda: collections.defaultdict(
+        lambda: collections.defaultdict(list)))
+    for t in trials(jobs_dir):
+        if t["reward"] is None or t["errored"]:
+            continue
+        per[t["base"]][solver_of(t.get("model"))][t["rung"]].append(t["reward"])
+    return per
+
+
+def certificates(jobs_dir=JOBS):
+    """base -> {'solvers': [...], 'kind': 'single'|'cross', 'l0': [...], 'l2': [...]}.
+
+    A unit is certified when some solver fails it at L0 and some solver passes it at L2.
+    'single' means one solver did both, so the flip isolates the affordance. 'cross' means
+    the L2 pass came from a different model than the L0 failure, so the flip may reflect a
+    capability gap rather than the contract - a real certificate, but a weaker claim.
+    """
+    out = {}
+    bys = ledger_by_solver(jobs_dir)
+    for base, bysolver in bys.items():
+        failed_l0 = {s for s, d in bysolver.items() if d.get("0") and max(d["0"]) == 0}
+        passed_l2 = {s for s, d in bysolver.items() if d.get("2") and max(d["2"]) > 0}
+        if not (failed_l0 and passed_l2):
+            continue
+        shared = failed_l0 & passed_l2
+        out[base] = {"l0": sorted(failed_l0), "l2": sorted(passed_l2),
+                     "kind": "single" if shared else "cross",
+                     "binds_for": sorted(shared) if shared else sorted(passed_l2)}
+    return out
 
 
 def summary(jobs_dir=JOBS, nonflip_cap=3):
@@ -98,6 +150,21 @@ def summary(jobs_dir=JOBS, nonflip_cap=3):
     }
 
 
+
+
+def report_multimodel(jobs_dir=JOBS):
+    """Print the bank as what it is: a multi-model bank."""
+    import collections as _c
+    c = certificates(jobs_dir)
+    kind = _c.Counter(v["kind"] for v in c.values())
+    binds = _c.Counter(s for v in c.values() for s in v["binds_for"])
+    print(f"certificates     {len(c)}")
+    print(f"  single-solver  {kind.get('single', 0)}   flip isolates the affordance")
+    print(f"  cross-solver   {kind.get('cross', 0)}   L2 passed on a different model than "
+          f"L0 failed — a weaker claim, kept and labelled")
+    print(f"  binds for      {dict(binds)}")
+
+
 if __name__ == "__main__":
     s = summary()
     print(f"units            {s['units']}")
@@ -112,3 +179,4 @@ if __name__ == "__main__":
     print(f"by solver        {dict(s['by_model'])}")
     if s["certified"]:
         print(f"trials/certified {s['trials_valid']/len(s['certified']):.1f}")
+    report_multimodel()
