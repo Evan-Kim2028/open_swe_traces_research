@@ -7,7 +7,8 @@ way today. Each became a check here so the next one is caught by a script, not b
 
 Exit 0 all clear, 1 warnings, 2 something needs fixing now.
 """
-import os, sys, re, json, glob, time, subprocess, collections
+import os
+import pathlib, sys, re, json, glob, time, subprocess, collections
 
 R = "/home/evan/Documents/open_swe_traces_research"
 os.chdir(R)
@@ -23,8 +24,19 @@ def sh(c, t=60):
 
 
 # --- 1. the loop itself is alive -------------------------------------------------
+# The pid FILE is a hint, not the truth: a hand-restarted supervisor never writes it,
+# and this reported "supervisor DEAD" for a loop that was ticking normally. Fall back to
+# finding the process, and repair the stale file so the next check is cheap.
 pid = sh("cat outputs/supervisor/pid 2>/dev/null")
-alive = pid and sh(f"kill -0 {pid} 2>/dev/null && echo y") == "y"
+alive = bool(pid) and sh(f"kill -0 {pid} 2>/dev/null && echo y") == "y"
+if not alive:
+    found = sh("pgrep -f 'supervisor[.]sh 300' | head -1")
+    if found:
+        pid, alive = found, True
+        try:
+            pathlib.Path("outputs/supervisor/pid").write_text(found + "\n")
+        except OSError:
+            pass
 logage = int(time.time() - os.path.getmtime("outputs/supervisor/supervisor.log")) if \
     os.path.exists("outputs/supervisor/supervisor.log") else 99999
 if not alive:
