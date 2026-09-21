@@ -53,6 +53,33 @@ fi
 # names the missing commitments; the trial costs 2.08M and returns one bit. On 2026-09-20 ten
 # units went to Composer ungated and the audit then found client-go-replicaselector-L2 had 12
 # missing commitments and 2 conflicts -- a guaranteed failure, pulled mid-flight.
+# GATE: a unit at L2 or above may only be trialled by a solver that FAILED it lower
+# down. Routing by free slot instead produced 25 cross-solver certificates of 193 —
+# attachsvc (composer failed L0, devin passed L2), channelver (the reverse) — where the
+# flip may record only that the second model is stronger, not that the contract carries
+# the affordance. Same rule escalate.py applies to L3-L6, at the rung where most
+# certificates are earned. Costs the L2 overflow valve; a certificate that does not
+# isolate the affordance is not worth the slot it saves.
+#
+# ONE invocation for the whole cohort. Per-unit `uv run python` spends more time starting
+# interpreters than deciding, and the gate is meant to be the cheap step. Dropping here
+# touches only $PEND, a mktemp copy — the staged unit itself is never removed.
+xs=""
+for u in "$PEND"/*/; do
+  [ -d "$u" ] || continue
+  case "$(basename "$u")" in *-L0|*-L1) continue;; esac
+  xs="$xs $u"
+done
+if [ -n "$xs" ]; then
+  # shellcheck disable=SC2086
+  ( cd "$R" && uv run python scripts/ops/solver_match.py "${AGENT:-cursor}" $xs 2>/dev/null ) \
+    | while read -r verdict name rest; do
+        [ "$verdict" = "DROP" ] || continue
+        echo "   cross-solver: dropping $name ($rest)"
+        rm -rf "$PEND/$name"
+      done
+fi
+
 GAPS="$R/experiments/dose_response/audit/gap_read.jsonl"
 ungated=""
 for u in "$PEND"/*/; do

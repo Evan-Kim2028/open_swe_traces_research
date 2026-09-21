@@ -132,7 +132,30 @@ def decide(unit, per):
     if l0 and max(l0) > 0:
         return False, f"condemned: passed L0 ({len(l0)} trial(s)) — not a hard unit"
     if l0 and max(l0) == 0 and l2 and max(l2) > 0:
-        return False, "certified: L0 fail + L2 pass already on record"
+        # A CROSS certificate is not a finished unit. If one solver failed L0 and a
+        # different one passed L2, the flip may record only that the second model is
+        # stronger. Closing the unit here freezes that weaker claim forever — the solver
+        # that actually failed it never gets its turn, and certificates() can never
+        # upgrade the row to single-solver.
+        #
+        # So leave it open. solver_match then admits only the solver that failed it low,
+        # and a pass from that solver makes `shared` non-empty and the certificate
+        # single. Four trials were mid-flight producing exactly this contamination when
+        # the rule went in; this lets their work stand and be corrected rather than
+        # killing them.
+        import trial_ledger as _tl
+        cert = _tl.certificates().get(base)
+        if not cert or cert["kind"] == "single":
+            return False, "certified: L0 fail + L2 pass already on record"
+        # FALL THROUGH, do not return True here. An early return skips the per-rung cap
+        # below, and a cross-certified unit with three L2 trials already on it would have
+        # re-run without limit — reopening 25 units straight past the one check that took
+        # over-cap from 25% to 0%.
+        reopened = (f"cross-certified at L{cert['rung']} (failed by "
+                    f"{'/'.join(cert['l0'])}, passed by {'/'.join(cert['l2'])}) — "
+                    f"open for the solver that failed it")
+    else:
+        reopened = None
     # Absolute per-rung cap, checked BEFORE staleness. A rung answers one question and
     # needs one verdict; repair resetting staleness is exactly how single units reached
     # 7, 11 and 19 trials on one rung.
@@ -140,6 +163,9 @@ def decide(unit, per):
     if n_this_rung >= RUNG_TRIAL_CAP:
         return False, (f"rung L{rung} already has {n_this_rung} trial(s) "
                        f"(cap {RUNG_TRIAL_CAP}) — no further verdict to buy")
+
+    if reopened:
+        return True, reopened
 
     reps = repair_count(base)
     if verdict_is_stale(base):
