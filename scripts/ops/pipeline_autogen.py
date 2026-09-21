@@ -219,7 +219,10 @@ def main():
         return 0
     # Keep a shallow backlog: enough that no slot idles, not so much that the queue
     # becomes a wishlist nobody reaches.
-    if len(pend) >= 6:
+    # Backlog cap reflects TOTAL worker capacity, not one pool. With Devin (4) and Grok
+    # running jobs concurrently, a cap of 6 starved Grok: 4 pending jobs were already
+    # executing on Devin, leaving only 2 for anyone else.
+    if len(pend) >= 10:
         print(f"{len(pend)} jobs already pending — no new work needed")
         return 0
 

@@ -62,9 +62,25 @@ queue = [l.strip() for l in open("outputs/supervisor/sweep_queue.txt").read().sp
 try:
     import trial_ledger
     per = trial_ledger.ledger()
-    untrialled = sum(1 for d in glob.glob("experiments/dose_response/sweep_*/*/")
-                     if os.path.isdir(d)
-                     and os.path.basename(d.rstrip("/")).rsplit("-L", 1)[0] not in per)
+    # "Not in the ledger" is not the same as "runnable". Most such units are L2 dirs whose
+    # L0 was never run, and the guard correctly refuses them (run the cheaper verdict
+    # first). Counting them as idle capacity produced a FAIL on 14 units of which exactly
+    # one could actually be trialled.
+    import trial_guard
+    runnable = 0
+    for d in glob.glob("experiments/dose_response/sweep_*/*/"):
+        if not os.path.isdir(d):
+            continue
+        name = os.path.basename(d.rstrip("/"))
+        if name.rsplit("-L", 1)[0] in per:
+            continue
+        try:
+            ok, _ = trial_guard.decide(name, per)
+        except Exception:
+            ok = True
+        if ok:
+            runnable += 1
+    untrialled = runnable
 except Exception:
     per, untrialled = {}, -1
 if agents == 0 and not queue and untrialled == 0:
@@ -82,6 +98,12 @@ else:
 
 # --- 4. Devin slots + throttle ---------------------------------------------------
 dev = sh("pgrep -af '[d]evin --model' | grep -oP 'closure_\\w+' | sort -u").split()
+# Trials run the CLI inside a container: invisible to pgrep, but they spend the same
+# account quota. Reporting sessions only showed "4/4" while the real load was 5.
+dev_trials = int(sh("ps -eo args | awk '/harbor run/ && !/awk/ {a=\"\";c=1;j=\"\"; "
+                    "for(i=1;i<NF;i++){if($i==\"--agent\")a=$(i+1); "
+                    "if($i==\"--n-concurrent\")c=$(i+1); if($i==\"--job-name\")j=$(i+1)} "
+                    "if(a==\"devin\" && !(j in seen)){seen[j]=1; tot+=c}} END{print tot+0}'") or 0)
 throttled = sh("grep -l 'Reached free model rate limit' /home/evan/Documents/oswt-*/outputs/*.log "
                "2>/dev/null | xargs -r stat -c %Y 2>/dev/null | sort -rn | head -1")
 recent_throttle = throttled and (time.time() - int(throttled)) < 1800
@@ -91,7 +113,21 @@ elif len(dev) < 3:
     WARN.append(f"Devin only {len(dev)}/4 and no recent throttle — refill may be stuck; "
                 f"check pipeline_autogen output in supervisor.log")
 else:
-    OK.append(f"Devin {len(dev)}/4: {' '.join(s.replace('closure_','') for s in dev)}")
+    total = len(dev) + dev_trials
+    names = ' '.join(x.replace('closure_', '') for x in dev)
+    msg = f"Devin {total} run(s) = {len(dev)} session(s) + {dev_trials} trial(s)"
+    # Devin must be DOING something: 2-4 concurrent runs. Below 2 is as much a failure as
+    # above 4 -- an idle Devin is wasted free capacity, and nobody notices an absence.
+    if total > 4:
+        FAIL.append(msg + " — OVER CAP. dq2.sh owns sessions (MAXN=2); do not kill a "
+                          "running session, it restarts from scratch. Wait for drain.")
+    elif total < 2:
+        FAIL.append(msg + " — UNDER FLOOR. Devin is idle and free. Check: is dq2.sh alive "
+                          "(pgrep -f dq2), does the manifest have pending jobs "
+                          "(pipeline_autogen.py --status), is a throttle cooloff active "
+                          "(.devin_cooldown)? Queue an _L2 cohort to use the trial slots.")
+    else:
+        OK.append(msg + (f": {names}" if names else ""))
 
 # --- 5. autogen is generating, and not duplicating -------------------------------
 mani = {}

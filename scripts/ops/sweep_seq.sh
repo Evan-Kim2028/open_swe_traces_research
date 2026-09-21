@@ -63,9 +63,12 @@ for u in "$PEND"/*/; do
 done
 if [ -n "$ungated" ]; then
   echo "!! these L2 units have no audit row -- auditing before spending a trial:$ungated"
-  for n in $ungated; do
-    uv run python "$R/scripts/ops/contract_gap_read.py" "$GAPS" "$PEND/$n" || true
-  done
+  # One invocation for the whole cohort: it parallelises internally. Previously this
+  # spawned a process per unit, serially, so a 12-unit cohort spent ~8 minutes gating
+  # while every container slot sat idle.
+  # shellcheck disable=SC2086
+  ( cd "$R" && uv run python "$R/scripts/ops/contract_gap_read.py" "$GAPS" \
+      $(for n in $ungated; do echo "$PEND/$n"; done) ) || true
   # drop anything the audit says cannot flip as written
   for n in $ungated; do
     v=$(python3 -c "
@@ -111,7 +114,22 @@ for round in $(seq 1 "$ROUNDS"); do
   docker network prune -f >/dev/null 2>&1
   # Solver is swappable so a second sweep can run on a different token quota in parallel.
   # AGENT=grok-build MODEL=grok-4.6 GROK_EFFORT=high uses Grok instead of Composer.
-  if [ "${AGENT:-cursor-cli}" = "grok-build" ]; then
+  if [ "${AGENT:-cursor-cli}" = "devin" ]; then
+    # Devin is markedly slower per trial than Composer, so give it real headroom: a first
+    # run was cut off at 15 minutes mid-solve and the resulting CancelledError looked like
+    # a failure. Two settings are load-bearing and neither is obvious:
+    #   --model devin/swe-2-max   without the devin/ prefix harbor's slug split yields a
+    #                             name the CLI rejects as "Unknown model"
+    #   DEVIN_API_SERVER_URL      harbor writes only windsurf_api_key into the container's
+    #                             credentials.toml; without the server URL the CLI's model
+    #                             list comes back EMPTY, which also presents as a bad slug
+    DKEY=$(grep windsurf_api_key /home/evan/.local/share/devin/credentials.toml 2>/dev/null | cut -d'"' -f2)
+    [ -z "$DKEY" ] && { echo "no devin credentials"; exit 1; }
+    AGENT_KWARGS=(--agent devin --model "${MODEL:-devin/swe-2-max}"
+                  --ae DEVIN_API_KEY="$DKEY"
+                  --ae DEVIN_API_SERVER_URL=https://server.codeium.com
+                  --agent-timeout-multiplier "${DEVIN_TIME_MULT:-4.0}")
+  elif [ "${AGENT:-cursor-cli}" = "grok-build" ]; then
     GKEY="$(bash "$R/scripts/ops/grok_key.sh")" || { echo "grok token unavailable"; exit 1; }
     AGENT_KWARGS=(--agent grok-build --model "${MODEL:-grok-4.6}"
                   --ak reasoning_effort="${GROK_EFFORT:-high}"

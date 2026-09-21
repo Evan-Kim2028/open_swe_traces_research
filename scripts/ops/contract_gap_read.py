@@ -62,21 +62,42 @@ def main(argv: list[str]) -> int:
                 done.add(json.loads(line)["unit"])
             except Exception:
                 pass
+    # Build every prompt first, then run them concurrently. Serial gap-reads held a whole
+    # cohort hostage: 12 units x ~40s, one at a time, while 12 container slots sat empty
+    # and nothing was trialled for half an hour. The gate is meant to be the cheap step.
+    jobs = []
+    for arg in argv[1:]:
+        u = Path(arg)
+        if u.name in done or not u.is_dir():
+            continue
+        instr = u / "instruction.md"
+        hd = u / "tests" / "hidden"
+        if not instr.is_file() or not hd.is_dir():
+            continue
+        tests = "\n".join(f.read_text(errors="replace") for f in sorted(hd.rglob("*")) if f.is_file())
+        jobs.append((u, PROMPT.format(contract=instr.read_text(errors="replace"),
+                                      tests=tests[:80000])))
+    answers = {}
+    if jobs:
+        try:
+            # ask_many returns {cache_key: text}; zipping over it would iterate KEYS and
+            # pair every unit with the wrong answer.
+            items = [(f"gapread/{u.name}", pr) for u, pr in jobs]
+            res = ask_many(items, workers=3)
+            for u, _ in jobs:
+                a = res.get(f"gapread/{u.name}")
+                if a is not None:
+                    answers[u.name] = a
+        except Exception:
+            answers = {}
     with out_path.open("a") as fh:
-        for arg in argv[1:]:
-            u = Path(arg)
-            if u.name in done or not u.is_dir():
-                continue
-            instr = u / "instruction.md"
-            hd = u / "tests" / "hidden"
-            if not instr.is_file() or not hd.is_dir():
-                continue
-            tests = "\n".join(f.read_text(errors="replace") for f in sorted(hd.rglob("*")) if f.is_file())
-            prompt = PROMPT.format(contract=instr.read_text(errors="replace"), tests=tests[:80000])
-            try:
-                ans = ask(prompt, cache_key=f"gapread/{u.name}")
-            except Exception as exc:  # noqa: BLE001
-                ans = f"__ERROR__ {exc}"
+        for u, prompt in jobs:
+            ans = answers.get(u.name)
+            if ans is None:
+                try:
+                    ans = ask(prompt, cache_key=f"gapread/{u.name}")
+                except Exception as exc:  # noqa: BLE001
+                    ans = f"__ERROR__ {exc}"
             miss = [l.strip() for l in ans.splitlines() if l.strip().startswith("MISSING")]
             conf = [l.strip() for l in ans.splitlines() if l.strip().startswith("CONFLICT")]
             kinds = {"ARBITRARY": 0, "DERIVABLE": 0, "COUNTER": 0}
@@ -87,9 +108,19 @@ def main(argv: list[str]) -> int:
             # A unit whose gaps are mostly ARBITRARY is low-discrimination: every solver fails it
             # for the same non-reason. Repairing its CONTRACT manufactures a task that measures
             # nothing; the assertion is what should be weakened.
-            verdict = ("low-discrimination"
-                       if kinds["ARBITRARY"] > kinds["DERIVABLE"] + kinds["COUNTER"]
-                       else "repair-contract")
+            if not miss and not conf:
+                # No missing commitments and no conflicts means the contract already covers
+                # the suite. The old code fell straight through to "repair-contract", so a
+                # clean unit (filechange-L2: missing=0 conflicts=0) was queued for a repair
+                # it does not need, and our count of contract-defective units was inflated.
+                verdict = "clean"
+            elif kinds["ARBITRARY"] > kinds["DERIVABLE"] + kinds["COUNTER"]:
+                # Mostly ARBITRARY gaps means low discrimination: every solver fails for the
+                # same non-reason. Repairing the contract manufactures a task that measures
+                # nothing; the assertion is what should be weakened.
+                verdict = "low-discrimination"
+            else:
+                verdict = "repair-contract"
             fh.write(json.dumps({"unit": u.name, "missing": len(miss), "conflicts": len(conf),
                                  "kinds": kinds, "verdict": verdict, "answer": ans}) + "\n")
             fh.flush()
