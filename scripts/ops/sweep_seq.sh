@@ -28,6 +28,22 @@ if [ "${SKIP_GUARD:-0}" != "1" ]; then
       echo "   guard: $out"; rm -rf "$u"
     fi
   done
+  # Free deterministic gate, second. Controlled measurement 2026-09-20 over 229 units:
+  #   parallel k=3, ungated     9.0 trials/certified
+  #   sequential k=1, ungated   7.7   (sequencing alone buys 14%)
+  #   sequential k=1, GATED     3.2   (the gate buys a further 58%)
+  # A trial is ~1.2M tokens and a CPU-bound container slot; the linter is 0 tokens.
+  # BLOCK findings only -- WARN and INFO never drop a unit, because a repaired unit
+  # legitimately still carries residual gaps.
+  for u in "$PEND"/*/; do
+    n=$(basename "$u")
+    blocks=$(uv run python "$R/scripts/ops/task_lint.py" "$u" 2>/dev/null | grep -c '\[BLOCK\]' || true)
+    if [ "${blocks:-0}" -gt 0 ]; then
+      echo "   lint: dropping $n ($blocks BLOCK finding(s))"
+      uv run python "$R/scripts/ops/task_lint.py" "$u" 2>/dev/null | grep '\[BLOCK\]' | sed 's/^/        /'
+      rm -rf "$u"
+    fi
+  done
   left=$(find "$PEND" -maxdepth 1 -mindepth 1 -type d | wc -l)
   echo "=== guard kept $left unit(s)"
   [ "$left" -eq 0 ] && { echo "nothing left to trial"; exit 0; }
