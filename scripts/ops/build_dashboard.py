@@ -193,7 +193,8 @@ def main():
                 f'{f"<div class=s>{s}</div>" if s else ""}</div>')
 
     tiles = "".join([
-        tile(last["certified"], "certified units", "fails L0, passes L2"),
+        tile(last["certified"], "certified units",
+             "fails L0, passes at L2 or above"),
         tile(last["trials_cum"], "trials run", "2.08M tokens each"),
         tile(last["tpc_cum"], "trials / certified", "cumulative · floor 2.6"),
         tile(tpc6 if tpc6 else "—", "trials / certified", "last 6h · marginal"),
@@ -213,7 +214,7 @@ def main():
               ("verified", verified, "hidden suite written"),
               ("stageable", stageable, "+ contract, can reach L2"),
               ("trialled", trialled, "at least one verdict"),
-              ("certified", last["certified"], "fails L0, passes L2")]
+              ("certified", last["certified"], "fails L0, passes at L2 or above")]
     fmax = max(x[1] for x in stages) or 1
     funnel = ""
     for i, (name, n, sub) in enumerate(stages):
@@ -293,7 +294,8 @@ footer{{color:var(--ink2);font-size:12.5px;margin-top:8px}}
 {funnel_card}
 
 <div class="card"><h2>The bank, and what it cost</h2>
-<p class="note">A unit is certified when it fails at L0 and passes at L2 — hard, fair, solvable and verifiable.
+<p class="note">A unit is certified when it fails at L0 and passes at L2 <em>or higher</em> — hard, fair, solvable and verifiable.
+The rung it needs is its difficulty: a unit that only flips at L5 is harder than one that flips at L2, not a failed task.
 Certified units are the product; trials are the bill.</p>
 <div class="leg"><span><span class="sw" style="background:var(--acc)"></span>certified units (left)</span>
 <span><span class="sw" style="background:var(--acc2)"></span>cumulative trials (right)</span>

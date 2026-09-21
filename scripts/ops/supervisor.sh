@@ -205,15 +205,17 @@ snapshot() {
 import json,time,subprocess,sys
 sys.path.insert(0,"scripts/ops")
 try:
-    import trial_guard as g
-    per=g.ledger()
-    cert=[u for u,d in per.items() if d.get("0") and max(d["0"])==0 and d.get("2") and max(d["2"])>0]
-    easy=[u for u,d in per.items() if d.get("0") and max(d["0"])>0]
-    nf=[u for u,d in per.items() if d.get("0") and max(d["0"])==0
-        and len(d.get("2",[]))>=g.NONFLIP_CAP and max(d.get("2") or [1])==0]
+    # Ask trial_ledger rather than re-deriving the rule here. This copy still bound a
+    # certificate to L2 only, so the dashboard read 140 certified while the ledger read
+    # 149 and the history series that every trend is drawn from was quietly wrong.
+    import trial_ledger as tl
+    s=tl.summary()
+    per=tl.ledger()
+    cert=s["certified"]; easy=s["too_easy"]; nf=s["nonflip"]
+    esc=s.get("escalated",[]); escable=s.get("escalatable",[])
     trials=sum(len(v) for d in per.values() for v in d.values())
 except Exception as e:
-    per,cert,easy,nf,trials={},[],[],[],0
+    per,cert,easy,nf,esc,escable,trials={},[],[],[],[],[],0
 def sh(c):
     try: return subprocess.run(c,shell=True,capture_output=True,text=True,timeout=20).stdout.strip()
     except Exception: return ""
@@ -221,6 +223,7 @@ print(json.dumps({
   "t": int(time.time()),
   "iso": time.strftime("%Y-%m-%dT%H:%M:%S"),
   "certified": len(cert), "too_easy": len(easy), "nonflip": len(nf),
+  "escalated": len(esc), "escalatable": len(escable),
   "units": len(per), "trials": trials,
   "devin": sh("pgrep -af '[d]evin --model' | grep -oP 'closure_\\\\w+' | sort -u | tr '\\\\n' ' '"),
   "sweeps": sh("pgrep -af '[s]weep_seq' | grep -oP 'sweep_[a-zA-Z0-9_]+' | grep -v '^sweep_seq$' | sort -u | tr '\\\\n' ' '"),
