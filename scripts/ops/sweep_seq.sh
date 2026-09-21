@@ -59,7 +59,12 @@ for u in "$PEND"/*/; do
   [ -d "$u" ] || continue
   n=$(basename "$u")
   case "$n" in *-L0|*-L1) continue;; esac          # no contract at L0/L1; TOO-EASY is the gate there
-  grep -q "\"unit\": \"$n\"" "$GAPS" 2>/dev/null && continue
+  # A row whose answer is __ERROR__ is a FAILED audit, not a passed one. It carries
+  # missing=0 conflicts=0, so the DEFECT check below reads it as a perfect contract.
+  # Treat it as absent so the unit is audited for real.
+  if grep "\"unit\": \"$n\"" "$GAPS" 2>/dev/null | grep -qv '"answer": "__ERROR__'; then
+    continue
+  fi
   # An escalation rung carries the SAME contract prose as its L2 twin; L3+ only appends
   # hidden test names. Re-auditing it asks the same question again at ~90s per unit, and
   # a 38-unit escalation cohort therefore held eight reserved Composer slots idle for the

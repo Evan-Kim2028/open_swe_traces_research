@@ -30,7 +30,13 @@ def sh(c, t=60):
 pid = sh("cat outputs/supervisor/pid 2>/dev/null")
 alive = bool(pid) and sh(f"kill -0 {pid} 2>/dev/null && echo y") == "y"
 if not alive:
-    found = sh("pgrep -f 'supervisor[.]sh 300' | head -1")
+    # slots.supervisor_pid matches argv properly. `pgrep -f` matches any command line
+    # CONTAINING the text, including this check's own shell.
+    try:
+        from slots import supervisor_pid as _sup
+        found = str(_sup() or "")
+    except Exception:
+        found = ""
     if found:
         pid, alive = found, True
         try:

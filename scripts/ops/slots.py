@@ -10,7 +10,7 @@ A trial runs the CLI inside a container. It is invisible to pgrep, spends the sa
 account quota, and occupies the same slot as a session. One definition, here.
 """
 from __future__ import annotations
-import re, subprocess
+import os, re, subprocess
 
 CAP = 4
 
@@ -86,3 +86,27 @@ if __name__ == "__main__":
     for t in o["trials"]:
         print(f"    trial   {t['job']} conc={t['conc']}")
     print(f"  containers: {containers()}")
+
+
+def supervisor_pid():
+    """PID of the supervisor loop, or None.
+
+    `pgrep -f 'supervisor.sh 300'` matches ANY process whose command line contains that
+    text — including the shell running the check. It reported four supervisors when there
+    was one, and a false "several supervisors" reads exactly like the two-launcher bug that
+    put Devin at 7 against a cap of 4. Match argv properly instead: argv[0] is a bash, and
+    argv[1] is the script path.
+    """
+    for entry in os.listdir("/proc"):
+        if not entry.isdigit():
+            continue
+        try:
+            with open(f"/proc/{entry}/cmdline", "rb") as fh:
+                argv = fh.read().decode(errors="replace").split("\0")
+        except OSError:
+            continue
+        argv = [a for a in argv if a]
+        if len(argv) >= 2 and os.path.basename(argv[0]) in ("bash", "sh") \
+                and argv[1].endswith("scripts/ops/supervisor.sh"):
+            return int(entry)
+    return None

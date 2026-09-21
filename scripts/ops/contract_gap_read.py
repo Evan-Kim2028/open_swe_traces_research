@@ -98,6 +98,15 @@ def main(argv: list[str]) -> int:
                     ans = ask(prompt, cache_key=f"gapread/{u.name}")
                 except Exception as exc:  # noqa: BLE001
                     ans = f"__ERROR__ {exc}"
+            # A FAILED call must not be recorded. `__ERROR__` has no MISSING and no
+            # CONFLICT lines, so it parses as "clean" — a unit whose audit crashed was
+            # written down as having a perfect contract, and both this file's `done` set
+            # and sweep_seq's `grep -q "unit"` then treated it as gated forever. Skipping
+            # the write leaves it unaudited, which is what it is, and it retries.
+            if ans.startswith("__ERROR__"):
+                print(f"{u.name:34} AUDIT FAILED, not recorded — will retry: "
+                      f"{ans[:80]}", flush=True)
+                continue
             miss = [l.strip() for l in ans.splitlines() if l.strip().startswith("MISSING")]
             conf = [l.strip() for l in ans.splitlines() if l.strip().startswith("CONFLICT")]
             kinds = {"ARBITRARY": 0, "DERIVABLE": 0, "COUNTER": 0}

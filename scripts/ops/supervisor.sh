@@ -268,6 +268,15 @@ while true; do
   # Sweep launching belongs to orchestrate.py. Running pump_sweeps as well would recreate
   # the two-launcher bug that made killed sessions reappear and the count sit at 4 vs a
   # cap of 2. One owner per resource.
+  # Audit staged contracts BEFORE a sweep gates on them. sweep_seq takes the cohort
+  # lock -- which reserves the cohort's full concurrency -- and only then audits, so a
+  # cohort sat on 8 of Composer's 12 slots for a quarter-hour running zero containers.
+  # Same gate, same tokens, moved off the critical path.
+  # DETACHED, never inline. Auditing 12 contracts takes minutes, and orchestrate runs
+  # after this point in the tick: run it inline and every launch waits on it, which is a
+  # worse stall than the one this removes. preaudit takes its own single-instance lock,
+  # so firing it each tick cannot pile up.
+  setsid nohup uv run python scripts/ops/preaudit.py >> "$LOG" 2>&1 &
   uv run python scripts/ops/orchestrate.py --apply >> "$LOG" 2>&1 || true
   # reap only what is provably dead; the dry-run/real distinction is inside the script
   # 45m age, 120s sample. The explicit 45s sample here was overriding the script's
