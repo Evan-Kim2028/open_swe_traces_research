@@ -177,6 +177,17 @@ difficulty is one unguessable literal measures spec-guessing, not engineering.
 
 `tests/hidden/<pkg>_bb_test.go` with `TestDetail01..NN` numbered to match DETAILS lines (the
 numbering is load-bearing — it traces a failure back to a commitment), plus `tests/test.sh`.
+
+**And `_author/contract.md`, if and only if it does not already exist.** This is not optional:
+`stage_units.py` reads contract.md unconditionally, so a unit without one cannot be staged at
+ANY rung and can never certify — certification requires an L2 pass and L2 *is* the contract.
+Four cohorts (90+ units) were authored with suites and no contract and were dead on arrival.
+
+Write it AFTER the suite, from DETAILS.md and the suite you just wrote — never from gold:
+one prose commitment per assertion, plus a coverage table pairing each hidden test name with
+the row that justifies it. A contract row with no test is a lie; a test with no row is an
+ambush. For any DETAILS line marked `Inferable: no`, state the SHAPE ("returns an error naming
+the offending field"), never the literal. No file names or line numbers in the prose (B7).
 Verify each in Docker: excised+hidden -> FAIL, gold -> PASS, cheat -> FAIL, gold touches no test
 file (A12). Report any unit that cannot satisfy all four rather than bending a test to fit.
 

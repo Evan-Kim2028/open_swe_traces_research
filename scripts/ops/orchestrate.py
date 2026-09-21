@@ -269,6 +269,57 @@ for kind, target, why in ACTIONS:
         room = int(re.search(r"concurrency (\d+)", why).group(1))
         run(f"bash {freeze()} {target} 1 {room} > outputs/{target}.log 2>&1")
         sh(f"sed -i '/^{target}$/d' outputs/supervisor/sweep_queue.txt")
+    elif kind == "needs-contract" and APPLY:
+        # Actually queue the reconciler job. Reporting it every tick is not autonomy: two
+        # VF jobs are running with pre-patch briefs and will finish without contracts, and
+        # a cohort with suites but no contract can never be staged or certified.
+        src, repo, batch, n = globals()["_needs_contract"]
+        tag = f"RC{repo.replace('-','')}{batch[-1]}"
+        brief = f"/home/evan/devin-tasks/closure_{tag}.md"
+        wt = f"/home/evan/Documents/oswt-{tag}"
+        rel = src.split("experiments/")[-1].rstrip("/")
+        open(brief, "w").write(f"""# Job: write contracts for the {n} verified {repo} units in {batch}
+
+Worktree: {wt} (branch {tag.lower()}). Read AGENTS.md. Use `uv run`.
+Docker allowed. Never run: git stash, git reset, git checkout -- <path>, git restore,
+git clean, git commit. NO solver trials.
+
+## Why this job exists
+
+`experiments/{rel}/<unit>/` has `_author/gold.patch`, `_author/bugreport.md` and a verified
+hidden suite in `tests/`, but **no `_author/contract.md`**. stage_units.py reads contract.md
+unconditionally, so these units cannot be staged at ANY rung and can never certify -
+certification requires an L2 pass and L2 *is* the contract. Copy the units in from
+{src.rstrip('/')} first.
+
+## What to write
+
+`_author/contract.md` per unit: prose stating every behavioural commitment the hidden suite
+grades, plus a coverage table pairing each hidden test name with the row that justifies it.
+Copy the shape from an existing contract under experiments/pipeline/authored_batch3/kops/.
+
+- **One row per assertion, both directions.** A contract row with no test is a lie; a test
+  with no row is an ambush. 90% of units failing exactly one test at L0 pass at L2 precisely
+  because the contract supplied the missing commitment.
+- **Never state an arbitrary literal.** An exact error string, type spelling, print layout or
+  punctuation is unguessable: assert its SHAPE, never the sentence. Two solver traces showed
+  units passing 7 of 8 tests and failing only on an exact Print layout and a panic choice.
+- **Behaviour, not symbols**: no file names, line numbers or private identifiers (B7).
+- You MAY read gold.patch; the reconciler is allowed to, unlike the verifier.
+
+## Deliverable
+
+A contract per unit, plus `analytics/research/contracts_{tag.lower()}.md`: per unit the
+commitment count, coverage-table size against the hidden assertion count, and any assertion
+you could not justify with a derivable commitment (flag it, do not paper over it).
+Log to outputs/{tag}.log. Do not commit.
+""")
+        sh(f"grep -qP '^{tag}\\t' /home/evan/devin-tasks/queue/manifest.tsv || "
+           f"printf '{tag}\\t{brief}\\t{wt}\\t{tag.lower()}\\tswe-2-max\\t14400\\t"
+           f"analytics/research/contracts_{tag.lower()}.md\\t-\\n' "
+           f">> /home/evan/devin-tasks/queue/manifest.tsv")
+        sh(f"cd {R} && git worktree add -q -b {tag.lower()} {wt} HEAD 2>/dev/null; "
+           f"mkdir -p {wt}/outputs")
     elif kind == "stage":
         src = globals().get("_stage_src")
         if src:
