@@ -264,7 +264,20 @@ while true; do
   # reap only what is provably dead; the dry-run/real distinction is inside the script
   bash scripts/ops/reap_wedged.sh 45 45 >> "$LOG" 2>&1 || true
   free=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
-  if [ "${free:-999}" -lt 100 ]; then say "disk ${free}G < 100G, pruning"; bash scripts/ops/prune_worktrees.sh >> "$LOG" 2>&1 || true; fi
+  if [ "${free:-999}" -lt 100 ]; then
+    say "disk ${free}G < 100G, reclaiming"
+    # Cheapest first. reclaim_disk only drops environment/src for units whose rung
+    # already has a verdict, and writes a manifest so restore_env_src.py can rebuild
+    # the tree bit-for-bit. 609 units freed 30.5GB the first time it ran; nothing
+    # that was still queued or in flight was touched.
+    uv run python scripts/ops/reclaim_disk.py --apply >> "$LOG" 2>&1 || true
+    free=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
+    say "disk ${free}G after reclaim_disk"
+    # Only if that was not enough: pruning a source tree costs a regeneration.
+    if [ "${free:-999}" -lt 100 ]; then
+      bash scripts/ops/prune_worktrees.sh >> "$LOG" 2>&1 || true
+    fi
+  fi
   uv run python scripts/ops/devin_ratelimit_check.py >> "$LOG" 2>&1 || say "RATE LIMIT SIGNATURE — see supervisor.log"
   snapshot
   uv run python scripts/ops/build_dashboard.py >> "$LOG" 2>&1 || true

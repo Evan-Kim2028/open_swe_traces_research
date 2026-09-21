@@ -157,7 +157,10 @@ def staged_trees(root: pathlib.Path):
         top = root / "experiments" / base
         if not top.is_dir():
             continue
-        for env_src in top.glob("*/*/environment/src"):
+        # two layouts: <cohort>/<unit>/ and <cohort>/<repo>/<unit>/. Missing the second
+        # left 12GB in tasks_composerver untouched while the report said "done".
+        for env_src in [*top.glob("*/*/environment/src"),
+                        *top.glob("*/*/*/environment/src")]:
             rel = env_src.relative_to(root).as_posix()
             if any(p in rel for p in PROTECTED):
                 continue
