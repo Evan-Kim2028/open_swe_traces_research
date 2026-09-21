@@ -147,10 +147,23 @@ def certificates(jobs_dir=JOBS):
         # binding rung, which is the same rule the whole bank uses - but 1 pass in 6 is
         # not the same claim as 1 in 1, and helm-depresolver binds at L3 on 1 of 6.
         # Recording it keeps that difference auditable instead of invisible.
-        rewards = [r for d in bys[base].values() for r in d.get(str(rung), [])]
+        per_rung = {}
+        for d in bys[base].values():
+            for rk, rv in d.items():
+                if rk.isdigit():
+                    per_rung.setdefault(int(rk), []).extend(rv)
+        rewards = per_rung.get(rung, [])
         n_pass = sum(1 for r in rewards if r > 0)
+        # Was this rung SHOWN to be the one the unit needs, or merely the first one
+        # tried that worked? An earlier policy probed L5 directly, so 32 units bind at
+        # L5 having never been asked whether L3 or L4 would have done. "Flips by L5" is
+        # a weaker statement than "needs L5" and the histogram must not blur them.
+        # L2 is established by construction: L0 failed and the contract is the rung.
+        below = per_rung.get(rung - 1, [])
+        established = rung == 2 or bool(below and max(below) == 0)
         out[base] = {"l0": sorted(failed_l0), "l2": sorted(at_rung),
                      "rung": rung, "escalated": rung > 2,
+                     "rung_established": established,
                      "kind": "single" if shared else "cross",
                      "n_trials_at_rung": len(rewards), "n_pass_at_rung": n_pass,
                      "thin": len(rewards) >= 3 and n_pass == 1,
@@ -204,6 +217,10 @@ def report_multimodel(jobs_dir=JOBS):
     print(f"certificates     {len(c)}")
     print(f"  above L2       {len(esc)}   flip needed more affordance than the contract")
     print(f"  thin evidence  {len(thin)}   one pass in 3+ trials at the binding rung")
+    jumped = [k for k, v in c.items() if not v["rung_established"]]
+    if jumped:
+        print(f"  rung by-jump   {len(jumped)}   binds at a rung never shown to be "
+              f"NEEDED — 'flips by L{c[jumped[0]]['rung']}', not 'needs' it")
     print(f"  single-solver  {kind.get('single', 0)}   flip isolates the affordance")
     print(f"  cross-solver   {kind.get('cross', 0)}   L2 passed on a different model than "
           f"L0 failed — a weaker claim, kept and labelled")

@@ -345,6 +345,12 @@ try:
     if _thin:
         (WARN if _thin > 0.1 * max(len(_c), 1) else OK).append(
             f"{_thin} certificate(s) rest on 1 pass in 3+ trials at the binding rung")
+    # Binding rungs reached by the old probe-at-L5 policy were never shown to be the
+    # rung the unit NEEDS. They resolve as the stepwise L3/L4 trials land.
+    _jump = sum(1 for v in _c.values() if not v.get("rung_established", True))
+    if _jump:
+        OK.append(f"{_jump} certificate(s) bind at a rung not yet shown to be needed "
+                  f"— stepwise L3/L4 trials will resolve them")
     _esc = sum(1 for v in _c.values() if v.get("escalated"))
     if _esc:
         _msg += f"; {_esc} flipped above L2"
