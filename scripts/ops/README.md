@@ -22,6 +22,18 @@ logic was written several times, the copies drifted, and the drift cost trials.
 - **Never edit a running bash script.** Bash reads by byte offset; an edit mid-run kills it
   with a syntax error after the gate has already passed. Python is safe (loaded at import).
   Sweeps run from a content-addressed frozen copy for this reason.
+- **Copy-and-rename protects the running process, which is exactly why it defers your
+  change.** Writing a new file and `mv`-ing it over the original is the safe way to edit a
+  live script — the running bash keeps its original inode and never sees a torn file. It
+  also never sees the fix. `supervisor.sh` ran for 18 hours on a deleted inode while five
+  corrections sat on disk doing nothing, including the one that made the dashboard and
+  `outputs/rolling.jsonl` report 140 certificates instead of 182. Child processes it
+  invokes (`uv run python ...`, `bash reap_wedged.sh`) always pick up current file content,
+  so the symptom is partial: the new script runs, with the old arguments. Check with
+  `readlink /proc/$(pgrep -f 'supervisor[.]sh')/fd/255` — a `(deleted)` suffix means every
+  edit since launch is inert. A long-lived daemon needs a RESTART, not just a careful write.
+  Restart it mid-`sleep`, kill by explicit PID, and write the new pid to
+  `outputs/supervisor/pid`.
 - **A host an agent needs but a task does not allow is invisible.** It presents as a bad
   model slug. `agents.egress_hosts()` is the union; `pipeline_health` asserts staged tasks
   match it.
