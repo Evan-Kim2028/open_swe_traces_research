@@ -344,9 +344,13 @@ else:
         # budget in hand. L2 is the rung that certifies; when Devin is full and there is
         # budget, Composer takes the overflow. Ladder rungs never qualify - they cannot
         # certify - and are filtered out before this point when paused.
-        devin_full = (4 - devin_total) < 1
+        # DEVIN_CAP, not a literal 4. slots.CAP was raised to 6 and this kept routing to
+        # 4, so Devin sat at 4/6 looking like it was "filling gradually" when the router
+        # was simply never offering it the last two slots. The cap being defined in one
+        # place is worth nothing if the consumer hardcodes it anyway.
+        devin_full = (DEVIN_CAP - devin_total) < 1
         if (is_l2 or not budget_ok) and not (is_l2 and devin_full and budget_ok):
-            room = 4 - devin_total
+            room = DEVIN_CAP - devin_total
             if room < 1:
                 NOTES.append(f"{cohort}: {n} unit(s) waiting, no devin headroom ({devin_total}/{DEVIN_CAP})")
                 continue
