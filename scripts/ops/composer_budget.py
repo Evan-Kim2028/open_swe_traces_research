@@ -89,14 +89,31 @@ def main() -> int:
         return 0
 
     used, budget, tot = status()
+    cfg = load()
     pct = used / budget if budget else 1
-    print(f"composer used {used/1e6:.1f}M of {budget/1e6:.0f}M ({pct:.0%})")
+    # Say WHICH window this is. "used 50.4M" read like today's spend while the same
+    # day's trials had actually cost 825M; the allowance is counted from the moment it
+    # was granted, and nothing on the line said so.
+    since = cfg.get("set_at", "?")
+    print(f"composer used {used/1e6:.1f}M of {budget/1e6:.0f}M ({pct:.0%}) "
+          f"— this allowance, since {since}")
     if "--quiet" not in sys.argv:
-        cost = sum(t["cost"] for t in trial_ledger.trials()
-                   if (t.get("model") or "").startswith("composer"))
-        print(f"  lifetime composer tokens {tot/1e9:.2f}B (${cost:.2f}), "
-              f"baseline {load()['baseline_tokens']/1e9:.2f}B")
-        print(f"  remaining {max(0.0, budget - used)/1e6:.1f}M")
+        trials = [t for t in trial_ledger.trials()
+                  if (t.get("model") or "").startswith("composer")]
+        cost = sum(t["cost"] for t in trials)
+        day = time.time() - 24 * 3600
+        today = sum(t["tokens"] for t in trials if t["mtime"] >= day)
+        untokened = sum(1 for t in trials if not t["tokens"])
+        print(f"  last 24h   {today/1e6:.1f}M over "
+              f"{sum(1 for t in trials if t['mtime'] >= day)} trials")
+        print(f"  lifetime   {tot/1e9:.2f}B (${cost:.2f}) over {len(trials)} trials, "
+              f"baseline {cfg['baseline_tokens']/1e9:.2f}B")
+        print(f"  remaining  {max(0.0, budget - used)/1e6:.1f}M")
+        # Two blind spots, stated rather than implied away.
+        print(f"  NOT COUNTED: {untokened} trial(s) carry no token record; and Composer"
+              f" AUTHORING/VERIFICATION sessions record none locally at all")
+        print(f"  (cursor-agent keeps no per-session usage file — only the Cursor"
+              f" dashboard sees session spend, so treat this as a floor)")
     return 1 if used >= budget else 0
 
 
