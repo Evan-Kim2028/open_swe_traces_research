@@ -338,6 +338,12 @@ else:
         if cohort in active_trial_cohorts or sweep_locked(cohort):
             continue
         is_l2 = cohort.endswith("_L2")
+        # escalate.py names a cohort after the solver that FAILED its units low, because
+        # a certificate is strongest when the same solver fails at L0 and passes higher:
+        # the flip then isolates the affordance rather than a capability gap. Route by
+        # that name instead of sending every ladder rung to Composer by default.
+        wants_devin = "_devin_" in cohort or cohort.endswith("_devin")
+        wants_composer = "_composer_" in cohort or cohort.endswith("_composer")
         # L2 prefers Devin because Devin is free, but "prefers" must not mean "only":
         # Devin is capped at 4 and every certifiable unit in the dataset is now at L2, so a
         # Devin-only rule left 24 units queued behind the cap while Composer sat idle with
@@ -349,7 +355,13 @@ else:
         # was simply never offering it the last two slots. The cap being defined in one
         # place is worth nothing if the consumer hardcodes it anyway.
         devin_full = (DEVIN_CAP - devin_total) < 1
-        if (is_l2 or not budget_ok) and not (is_l2 and devin_full and budget_ok):
+        if wants_composer:
+            to_devin = False
+        elif wants_devin:
+            to_devin = True
+        else:
+            to_devin = (is_l2 or not budget_ok) and not (is_l2 and devin_full and budget_ok)
+        if to_devin:
             room = DEVIN_CAP - devin_total
             if room < 1:
                 NOTES.append(f"{cohort}: {n} unit(s) waiting, no devin headroom ({devin_total}/{DEVIN_CAP})")

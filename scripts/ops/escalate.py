@@ -70,6 +70,8 @@ SWEEPS = REPO / "experiments" / "dose_response"
 # Rungs an escalation may use. L1 is a ladder-study rung, not an escalation step.
 LADDER = (3, 4, 5, 6)
 ESCALATION_DEST = "sweep_escalate"
+# Devin is free, so when both solvers failed a unit low, Devin gets the escalation.
+SOLVER_PREFERENCE = ("devin", "composer")
 
 
 def history(d: dict) -> dict[int, bool]:
@@ -105,6 +107,34 @@ def next_rung(h: dict[int, bool]) -> tuple[int | None, str]:
     return nxt, f"step to L{nxt} (fails through L{known_fail}){gap}"
 
 
+def failing_solver(base: str, bys) -> str:
+    """Which solver should be asked the higher rung: the one that FAILED this unit low.
+
+    A certificate is strongest when the same solver fails at L0 and passes higher up —
+    the flip then isolates the affordance. Escalating on a solver that never failed the
+    unit produces a cross-solver certificate instead, which may only record that the
+    second model is stronger. So escalation follows the failure.
+
+    Of 46 candidates, 42 failed on composer alone and 4 on both. When both failed, the
+    free solver takes it.
+    """
+    d = bys.get(base, {})
+    failed = set()
+    for solver, rungs in d.items():
+        for r, rewards in rungs.items():
+            if r.isdigit() and int(r) <= 2 and rewards and max(rewards) == 0:
+                failed.add(solver)
+    for pref in SOLVER_PREFERENCE:
+        if pref in failed:
+            return pref
+    return "composer"
+
+
+def dest_root_for(solver: str, rung: int) -> pathlib.Path:
+    """Cohorts are per-solver so orchestrate can route them without per-unit logic."""
+    return SWEEPS / f"{ESCALATION_DEST}_{solver}_L{rung}"
+
+
 def l2_dir(base: str) -> pathlib.Path | None:
     """The unit's L2 staging dir - the A0-shaped source every higher rung is cut from."""
     cands = sorted(SWEEPS.glob(f"*/{base}-L2"))
@@ -126,10 +156,16 @@ def ensure_env_src(unit: pathlib.Path) -> bool:
     return "ok (" in r.stdout
 
 
-def stage(base: str, rung: int) -> tuple[bool, str]:
-    """Build <ESCALATION_DEST>_L<rung>/<base>-L<rung> from the unit's L2 dir."""
-    dest_root = SWEEPS / f"{ESCALATION_DEST}_L{rung}"
+def stage(base: str, rung: int, solver: str = "composer") -> tuple[bool, str]:
+    """Build <ESCALATION_DEST>_<solver>_L<rung>/<base>-L<rung> from the unit's L2 dir."""
+    dest_root = dest_root_for(solver, rung)
     dest = dest_root / f"{base}-L{rung}"
+    # Already staged under the old solver-agnostic name, or the other solver's? Leave it.
+    for other in (SWEEPS / f"{ESCALATION_DEST}_L{rung}",
+                  *(dest_root_for(sv, rung) for sv in SOLVER_PREFERENCE)):
+        d2 = other / f"{base}-L{rung}"
+        if d2 != dest and (d2 / "instruction.md").is_file():
+            return True, f"already staged at {d2.relative_to(REPO)}"
     if dest.is_dir() and (dest / "instruction.md").is_file():
         return True, f"already staged at {dest.relative_to(REPO)}"
     src = l2_dir(base)
@@ -201,18 +237,19 @@ def main() -> int:
         print(f"\n{n} unit(s) certified above L2")
         return 0
 
-    rows = list(candidates(per))
+    bys = TL.ledger_by_solver()
+    rows = [(b, r, w, h, failing_solver(b, bys)) for b, r, w, h in candidates(per)]
     if args.limit:
         rows = rows[:args.limit]
     print(f"escalation candidates: {len(rows)}")
     ok = bad = 0
-    for base, rung, why, h in rows:
+    for base, rung, why, h, solver in rows:
         if args.apply:
-            done, msg = stage(base, rung)
+            done, msg = stage(base, rung, solver)
             ok, bad = ok + done, bad + (not done)
-            print(f"  {'OK  ' if done else 'FAIL'} {base:28s} -> L{rung}  {msg}")
+            print(f"  {'OK  ' if done else 'FAIL'} {base:28s} -> L{rung} [{solver}]  {msg}")
         else:
-            print(f"  {base:28s} -> L{rung}   {why}")
+            print(f"  {base:28s} -> L{rung} [{solver}]   {why}")
     if args.apply:
         print(f"\nstaged {ok}, failed {bad}")
     else:
