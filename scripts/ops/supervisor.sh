@@ -262,7 +262,10 @@ while true; do
   # cap of 2. One owner per resource.
   uv run python scripts/ops/orchestrate.py --apply >> "$LOG" 2>&1 || true
   # reap only what is provably dead; the dry-run/real distinction is inside the script
-  bash scripts/ops/reap_wedged.sh 45 45 >> "$LOG" 2>&1 || true
+  # 45m age, 120s sample. The explicit 45s sample here was overriding the script's
+  # own default and is the window in which a thinking Devin container looks dead:
+  # it reports 0% CPU and writes no log line while the model runs on Devin's servers.
+  bash scripts/ops/reap_wedged.sh 45 120 >> "$LOG" 2>&1 || true
   free=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
   if [ "${free:-999}" -lt 100 ]; then
     say "disk ${free}G < 100G, reclaiming"
