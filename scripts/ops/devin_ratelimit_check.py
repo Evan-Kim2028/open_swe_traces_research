@@ -84,6 +84,39 @@ def drop_cap(why: str) -> None:
                  f"# delete this file to restore the default cap\n")
     print(f"CAP DROPPED to {SAFE_CAP} — {why}")
 
+
+def error_rate_check(window_min: int = 45, floor: int = 4, pct: float = 0.25) -> int:
+    """Drop the cap when recent Devin trials start FAILING, not only when a limit says so.
+
+    The throttle regex needs Devin to say the words. A limit reached mid-trial does not
+    always announce itself in a transcript we can read — it shows up as trials erroring
+    out, which is what a timeout looks like from our side too. Either way the response is
+    the same: fewer slots.
+
+    Deliberately requires a FLOOR of trials before acting. One error in one trial is
+    noise, and dropping the cap on noise costs throughput for nothing. The reaper bug
+    produced a 14% error rate over 36 trials; the clean run since has been 0% over 31,
+    so 25% of at least 4 recent trials is well clear of both.
+    """
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import trial_ledger as TL
+    except Exception:
+        return 0
+    cutoff = time.time() - window_min * 60
+    recent = [t for t in TL.trials()
+              if t.get("model") == "swe-2-max" and t["mtime"] >= cutoff]
+    if len(recent) < floor:
+        print(f"devin: {len(recent)} trial(s) in {window_min}m — too few to judge")
+        return 0
+    bad = sum(1 for t in recent if t["errored"])
+    rate = bad / len(recent)
+    print(f"devin: {bad}/{len(recent)} recent trials errored ({rate:.0%}) in {window_min}m")
+    if rate >= pct:
+        drop_cap(f"{bad} of {len(recent)} trials errored in {window_min}m ({rate:.0%})")
+        return 2
+    return 0
+
 def main():
     if not os.path.exists(DB):
         print("no sessions.db"); return 0
@@ -121,6 +154,8 @@ def main():
     else:
         print("\nno throttle signature in recent messages")
 
+    rc = error_rate_check()
+
     # A shared limit stalls everything at once; one stuck agent does not.
     if len(live) >= 3:
         stalled = [w for w, i in live if i > 10]
@@ -129,7 +164,7 @@ def main():
                   f"consistent with a shared limit, not one stuck agent")
             drop_cap(f"all {len(live)} sessions idle >10m together")
             return 2
-    return 0
+    return rc
 
 
 if __name__ == "__main__":
