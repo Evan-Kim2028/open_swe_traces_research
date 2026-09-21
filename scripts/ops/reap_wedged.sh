@@ -2,13 +2,22 @@
 # Kill only containers that are provably NOT working. Age alone is not evidence.
 #
 # Three trials were killed today on age alone while still making progress, and harbor then
-# RETRIED each one, extending the job instead of ending it. A wedged container is one that,
-# over a real sampling window, does no CPU work AND writes no log output. Both must hold.
+# RETRIED each one, extending the job instead of ending it.
+#
+# "0% CPU and no log output" was the replacement rule, and it was still wrong -- it killed
+# nine live trials, four of them confirmed L2s (rootval, httpresp, defval, methodval), each
+# costing 20-50 minutes of a Devin slot capped at four. Devin is a CLOUD agent: the model
+# runs on Devin's servers, so a container that is thinking shows 0% local CPU and writes
+# nothing to rollout.log for minutes at a time. It is not idle, it is waiting on a socket.
+#
+# Network I/O is the signal that separates the two. A container talking to api.devin.ai
+# moves bytes the whole time it is alive; a wedged one moves none. All three must be flat
+# -- CPU, log bytes, and network -- before anything is killed.
 #
 # Usage: reap_wedged.sh [min_age_min] [sample_sec] [--dry-run]
 set -u
-declare -A c0 l0 cpu
-MINAGE="${1:-45}"; SAMPLE="${2:-45}"; DRY="${3:-}"
+declare -A c0 l0 cpu n0
+MINAGE="${1:-45}"; SAMPLE="${2:-120}"; DRY="${3:-}"
 CPU_FLOOR=1.0     # percent; a thinking agent still moves more than this
 now=$(date +%s)
 
@@ -29,12 +38,23 @@ for c in $(docker ps --format '{{.Names}}' | grep 'egress-control-sidecar'); do
   fi
 done
 
+# Bytes in+out, as a single integer. docker stats prints "1.2MB / 345kB"; the units are
+# what matter far less than whether the number moved at all, so normalise to bytes.
+netio() {
+  docker stats --no-stream --format '{{.NetIO}}' "$1" 2>/dev/null | awk '
+    function b(v,  n,u){ n=v+0; u=v; gsub(/[0-9.]/,"",u)
+      if(u ~ /^kB/) return n*1000; if(u ~ /^MB/) return n*1000000
+      if(u ~ /^GB/) return n*1000000000; return n }
+    { split($0, a, " / "); printf "%d", b(a[1]) + b(a[2]) }'
+}
+
 for c in $(docker ps --format '{{.Names}}' | grep 'env-main'); do
   started=$(docker inspect -f '{{.State.StartedAt}}' "$c" 2>/dev/null) || continue
   age=$(( (now - $(date -d "$started" +%s 2>/dev/null || echo "$now")) / 60 ))
   [ "$age" -lt "$MINAGE" ] && continue
   c0[$c]=$(docker inspect -f '{{.State.Pid}}' "$c" 2>/dev/null)
   l0[$c]=$(docker logs "$c" 2>&1 | wc -c)
+  n0[$c]=$(netio "$c")
 done
 # an empty associative array trips `set -u` on ${#a[@]} in bash < 5.1; test the expansion
 if [ -z "${c0[*]:-}" ]; then echo "reap: no container older than ${MINAGE}m"; exit 0; fi
@@ -56,14 +76,15 @@ for c in "${!c0[@]}"; do
   l1=$(docker logs "$c" 2>&1 | wc -c)
   grew=$(( l1 - ${l0[$c]} ))
   used=${cpu[$c]}
-  if [ "$used" -eq 0 ] && [ "$grew" -eq 0 ]; then
+  net=$(( $(netio "$c") - ${n0[$c]:-0} ))
+  if [ "$used" -eq 0 ] && [ "$grew" -eq 0 ] && [ "$net" -le 0 ]; then
     if [ "$DRY" = "--dry-run" ]; then
-      echo "  WOULD KILL $c — 0% cpu and 0 log bytes over ${SAMPLE}s"
+      echo "  WOULD KILL $c — 0% cpu, 0 log bytes and 0 net bytes over ${SAMPLE}s"
     else
-      echo "  killing $c — 0% cpu and 0 log bytes over ${SAMPLE}s (wedged)"
+      echo "  killing $c — 0% cpu, 0 log bytes and 0 net bytes over ${SAMPLE}s (wedged)"
       docker kill "$c" >/dev/null 2>&1
     fi
   else
-    echo "  keeping $c — cpu samples=${used} log grew ${grew}B (still working)"
+    echo "  keeping $c — cpu=${used} log +${grew}B net +${net}B (still working)"
   fi
 done
