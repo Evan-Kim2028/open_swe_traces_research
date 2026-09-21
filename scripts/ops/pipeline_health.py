@@ -56,7 +56,15 @@ if len(recent) >= 3:
         OK.append(f"bank +{d} in the last hour ({dt} trials, {dt/max(1,d):.1f}/cert)")
 
 # --- 3. Composer fed? ------------------------------------------------------------
-agents = int(sh("docker ps --format '{{.Names}}' | grep -c env-main") or 0)
+# Composer's occupancy, not every trial container. `grep -c env-main` counts Devin
+# trials too, so with the account cap full of Devin work this read "Composer 4/12"
+# and fell past the "budget spent" branch into a line advertising 109 units of
+# runway for a solver with 0 tokens left and no process running.
+try:
+    import slots
+    agents = sum(t["conc"] for t in slots.trials("cursor"))
+except Exception:
+    agents = int(sh("docker ps --format '{{.Names}}' | grep -c env-main") or 0)
 queue = [l.strip() for l in open("outputs/supervisor/sweep_queue.txt").read().split("\n")
          if l.strip()] if os.path.exists("outputs/supervisor/sweep_queue.txt") else []
 try:
