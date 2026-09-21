@@ -90,7 +90,10 @@ pump_sweeps() {
   nsweeps=$(sweeps_up | wc -l)
   headroom=$(( CAP - c ))
   [ "$headroom" -lt 4 ] && { say "only ${headroom} container slot(s) free — not starting another sweep"; return 0; }
-  [ "$nsweeps" -ge 3 ] && { say "3 sweeps already running"; return 0; }
+  # Containers are the scarce resource (CPU-bound at ~12), not sweep processes. A cap of 3
+  # sweeps throttled launches while three winding-down sweeps held only 3 containers between
+  # them and 9 slots sat idle. Keep a ceiling to bound docker network use, but a loose one.
+  [ "$nsweeps" -ge 5 ] && { say "5 sweeps already running"; return 0; }
   next=$(grep -vE '^\s*(#|$)' "$QUEUE" | head -1) || true
   [ -z "${next:-}" ] && return 0
   [ -d "experiments/dose_response/$next" ] || { say "queue: $next missing, dropping"; sed -i "0,/^$next$/{/^$next$/d}" "$QUEUE"; return 0; }
@@ -132,6 +135,9 @@ PY
 
 say "supervisor start: tick=${TICK}s cap=${CAP} devin_slots=${DEVIN_SLOTS}"
 while true; do
+  # Keep the queue fed: author -> verify -> stage -> trial, one new job per tick, newest
+  # stage first. Without this every stage stalled whenever nobody noticed it had finished.
+  uv run python scripts/ops/pipeline_autogen.py >> "$LOG" 2>&1 || true
   refill_devin
   pump_sweeps
   # reap only what is provably dead; the dry-run/real distinction is inside the script

@@ -92,6 +92,21 @@ fi
 for round in $(seq 1 "$ROUNDS"); do
   n=$(find "$PEND" -maxdepth 1 -mindepth 1 -type d | wc -l)
   [ "$n" -eq 0 ] && { echo "round $round: nothing left"; break; }
+  # Re-gate between rounds. The guard runs at staging, but rounds 2 and 3 bypassed it:
+  # sweep_seq drops passers and retries failures, which is right at L2 (retry until it
+  # flips) and wrong at L0, where a FAILURE is the verdict we want. sweep_unknown spent
+  # 9 of 12 trials in one window re-running units already known hard at L0.
+  if [ "$round" -gt 1 ]; then
+    for u in "$PEND"/*/; do
+      [ -d "$u" ] || continue
+      un=$(basename "$u")
+      if ! g=$(uv run python "$R/scripts/ops/trial_guard.py" "$un" 2>/dev/null); then
+        echo "   re-gate: $g"; rm -rf "$u"
+      fi
+    done
+    n=$(find "$PEND" -maxdepth 1 -mindepth 1 -type d | wc -l)
+    [ "$n" -eq 0 ] && { echo "round $round: all remaining units already decided"; break; }
+  fi
   echo "=== round $round: $n units still unflipped"
   docker network prune -f >/dev/null 2>&1
   # Solver is swappable so a second sweep can run on a different token quota in parallel.
