@@ -18,16 +18,21 @@ rather than a failure.
 
 Search policy
 -------------
-Linear L3 -> L4 -> L5 -> L6 costs up to 4 trials per unit - 192 for 48 units. This
-probes L5 first (9 of 9 flipped there, so it is where the information is), then
-bisects the open interval to find the LOWEST flipping rung, which is the number
-worth reporting. That is ~2.6 trials per unit for the same answer.
+L0 then L2 is the certifying path and is unchanged; escalation only begins once L2
+has failed. From there it climbs ONE RUNG AT A TIME: L2 -> L3 -> L4 -> L5 -> L6.
+
+An earlier version probed L5 first and bisected downward, on the grounds that 9 of
+9 hand-escalated units had flipped at L5 and that it reached the same answer in
+~2.6 trials per unit instead of 4. That is cheaper but it is not the same
+experiment: jumping the ladder means the rung a unit lands on was never shown to be
+the rung it needs, only a rung that works. The affordance ladder is the measurement
+here, so every step gets walked.
 
     known_fail = highest rung with a fail       (starts at 2)
     known_pass = lowest rung above it with a pass, if any
-    gap of 1   -> settled, minimum flipping rung is known_pass
-    no pass    -> probe L5, then L6, then the unit is genuinely unsolvable
-    gap > 1    -> trial the midpoint
+    gap of 1   -> settled, the minimum flipping rung is known_pass
+    otherwise  -> trial known_fail + 1, the next rung up
+    past L6    -> the unit genuinely does not flip at any affordance
 
 Staging
 -------
@@ -64,7 +69,6 @@ import trial_ledger as TL  # noqa: E402
 SWEEPS = REPO / "experiments" / "dose_response"
 # Rungs an escalation may use. L1 is a ladder-study rung, not an escalation step.
 LADDER = (3, 4, 5, 6)
-PROBE = 5          # where the information is: 9 of 9 hand-escalated units flipped here
 ESCALATION_DEST = "sweep_escalate"
 
 
@@ -87,21 +91,18 @@ def next_rung(h: dict[int, bool]) -> tuple[int | None, str]:
     if not fails:
         return None, "not a candidate: L2 has no fail on record"
     known_fail = max(fails)
+    if known_fail >= max(LADDER):
+        return None, f"exhausted: fails at L{known_fail}, the top rung"
     above = [r for r in passes if r > known_fail]
-    if not above:
-        if known_fail >= max(LADDER):
-            return None, f"exhausted: fails at L{known_fail}, the top rung"
-        if PROBE > known_fail and PROBE not in h:
-            return PROBE, f"probe L{PROBE} (fails through L{known_fail})"
-        nxt = min(r for r in LADDER if r > known_fail and r not in h)
-        return nxt, f"step to L{nxt} (fails through L{known_fail})"
-    known_pass = min(above)
-    if known_pass - known_fail == 1:
-        return None, f"settled: flips at L{known_pass}, fails at L{known_fail}"
-    mid = (known_fail + known_pass) // 2
-    if mid in h:
-        return None, f"settled: flips at L{known_pass}"
-    return mid, f"bisect L{known_fail}<{mid}<L{known_pass}"
+    if above and min(above) - known_fail == 1:
+        return None, f"settled: flips at L{min(above)}, fails at L{known_fail}"
+    # One rung at a time, whether or not something higher is already known to pass.
+    # A unit that passed L5 with L3 and L4 untried has not yet been shown to NEED L5.
+    nxt = known_fail + 1
+    if nxt in h:
+        return None, f"settled: L{nxt} already has a verdict"
+    gap = f" (L{min(above)} passes, narrowing)" if above else ""
+    return nxt, f"step to L{nxt} (fails through L{known_fail}){gap}"
 
 
 def l2_dir(base: str) -> pathlib.Path | None:
