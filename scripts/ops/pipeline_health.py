@@ -133,7 +133,7 @@ else:
 
 # --- 4. Devin slots + throttle ---------------------------------------------------
 sys.path.insert(0, "scripts/ops")
-from slots import occupancy as _occ   # shared definition; see slots.py
+from slots import occupancy as _occ, CAP as _DEVIN_CAP   # shared definition; see slots.py
 _o = _occ("devin")
 dev = _o["sessions"]
 # Trials run the CLI inside a container: invisible to pgrep, but they spend the same
@@ -143,24 +143,28 @@ throttled = sh("grep -l 'Reached free model rate limit' /home/evan/Documents/osw
                "2>/dev/null | xargs -r stat -c %Y 2>/dev/null | sort -rn | head -1")
 recent_throttle = throttled and (time.time() - int(throttled)) < 1800
 if recent_throttle:
-    OK.append(f"Devin {len(dev)}/4 — throttle within 30m, backoff correctly holding refills")
+    OK.append(f"Devin {len(dev)}/{_DEVIN_CAP} — throttle within 30m, "
+              f"backoff correctly holding refills")
 elif len(dev) + dev_trials < 2:
     # Branch on TOTAL, not sessions. This tested len(dev) alone and fired "Devin only
     # 1/4" while one session and three in-container trials were saturating the cap - the
     # very number the next line computes. A trial occupies a Devin slot exactly as a
     # session does.
-    WARN.append(f"Devin only {len(dev) + dev_trials}/4 ({len(dev)} session(s) + "
+    WARN.append(f"Devin only {len(dev) + dev_trials}/{_DEVIN_CAP} ({len(dev)} session(s) + "
                 f"{dev_trials} trial(s)) and no recent throttle — dq2 shepherds ONE job "
                 f"per instance, so start another launcher: "
-                f"MAXN=4 setsid nohup bash /home/evan/devin-tasks/dq2.sh >> "
+                f"MAXN={_DEVIN_CAP} setsid nohup bash /home/evan/devin-tasks/dq2.sh >> "
                 f"/home/evan/devin-tasks/dq2.log 2>&1 &")
 else:
     total = len(dev) + dev_trials
     names = ' '.join(x.replace('closure_', '') for x in dev)
     msg = f"Devin {total} run(s) = {len(dev)} session(s) + {dev_trials} trial(s)"
-    # Devin must be DOING something: 2-4 concurrent runs. Below 2 is as much a failure as
-    # above 4 -- an idle Devin is wasted free capacity, and nobody notices an absence.
-    if total > 4:
+    # Devin must be DOING something. Below the floor is as much a failure as above the
+    # cap -- idle Devin is wasted free capacity, and nobody notices an absence. The cap
+    # comes from slots.py: this read a literal 4 and cried OVER CAP at a legitimate 6
+    # the moment the cap was raised, which is the same hardcoding that had the router
+    # refusing to offer the last two slots.
+    if total > _DEVIN_CAP:
         FAIL.append(msg + " — OVER CAP. dq2.sh owns sessions (MAXN=2); do not kill a "
                           "running session, it restarts from scratch. Wait for drain.")
     elif total < 2:
