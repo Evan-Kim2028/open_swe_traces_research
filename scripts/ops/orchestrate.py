@@ -136,6 +136,32 @@ def reserved_slots(agent="cursor"):
     return tot
 
 
+
+def barren(cohort, _cache={}):
+    """True when this cohort's last sweep kept 0 units and nothing has changed since.
+
+    Reads the sweep's own log rather than re-running the lint: the lint is the expensive
+    part and the sweep already paid for it. The LAST "guard kept N unit(s)" line is the
+    one that counts - an earlier healthy run must not mask a later barren one.
+    """
+    if cohort in _cache:
+        return _cache[cohort]
+    log = os.path.join(R, f"outputs/{cohort}.log")
+    unit_dir = os.path.join(R, "experiments/dose_response", cohort)
+    out = False
+    try:
+        kept = re.findall(r"guard kept (\d+) unit", open(log, errors="replace").read())
+        if kept and kept[-1] == "0":
+            newest = max((os.path.getmtime(os.path.join(dp, f))
+                          for dp, _dn, fn in os.walk(unit_dir) for f in fn), default=0)
+            # Touching the cohort (repairing a unit) makes it eligible again, with no
+            # state to clear by hand.
+            out = newest <= os.path.getmtime(log)
+    except (OSError, ValueError):
+        out = False
+    _cache[cohort] = out
+    return out
+
 def freeze():
     """Run sweeps from a snapshot. Editing scripts/ops/sweep_seq.sh while a sweep was
     executing shifted bash's read offset and killed the trial phase with a syntax error
@@ -268,6 +294,19 @@ for d in glob.glob("experiments/dose_response/sweep_*/*/"):
     # four cohorts with no tests/ dir at all, plus auditentry); they need a verifier, not
     # a trial.
     if not glob.glob(d + "tests/hidden/**/*", recursive=True):
+        continue
+
+    # A cohort whose LAST sweep kept zero units is barren: every unit in it is refused
+    # downstream, by task_lint rather than by trial_guard. sweep_grokgogit's ten units all
+    # BLOCK on B6 ("L0 bug report has no reproduce command"), so orchestrate counted them
+    # runnable, launched at concurrency 8, the lint dropped all ten, the sweep exited, and
+    # the next tick did it again — three launches, zero trials, while sweep_escalate_L4
+    # waited behind it. Same shape as the tests/hidden bug above; a second way to be
+    # un-trialable that the same check does not cover.
+    #
+    # Self-healing on purpose: the skip lapses as soon as the cohort is touched, so
+    # repairing a unit makes it eligible again without anyone clearing state.
+    if barren(cohort):
         continue
 
     # Ladder rungs (L1, L3-L6) are affordance-study data: they can never certify, by
