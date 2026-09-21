@@ -69,6 +69,41 @@ def count_files(root: pathlib.Path) -> int:
     return n
 
 
+def excision_patch(unit: pathlib.Path) -> pathlib.Path | None:
+    """The authored unit's excision patch, if its source survived.
+
+    This is the CANONICAL construction: stage_units builds environment/src by applying
+    excision.patch forward onto the base image's /app, and that is the tree the verifier
+    proved the suite against. Reverse-applying gold is the older recipe and is wrong
+    wherever an excision deleted files gold never restores.
+    """
+    base = unit.name.rsplit("-L", 1)[0]
+    for cand in REPO.glob(f"experiments/pipeline/authored*/*/{base}/_author/excised/excision.patch"):
+        return cand
+    return None
+
+
+def restore_from_excision(unit: pathlib.Path, env_src: pathlib.Path,
+                          pristine: pathlib.Path, man: dict) -> str | None:
+    patch = excision_patch(unit)
+    if patch is None:
+        return "no authored excision patch"
+    shutil.rmtree(env_src, ignore_errors=True)
+    env_src.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(pristine, env_src, symlinks=True)
+    r = subprocess.run(["git", "apply", "--whitespace=nowarn", str(patch.resolve())],
+                       cwd=env_src, capture_output=True, text=True)
+    if r.returncode != 0:
+        shutil.rmtree(env_src, ignore_errors=True)
+        return f"excision patch did not apply ({(r.stderr or '').strip()[:70]})"
+    have = count_files(env_src)
+    want = man.get("file_count")
+    if want is not None and have != want:
+        shutil.rmtree(env_src, ignore_errors=True)
+        return f"excision gave {have} files, manifest says {want}"
+    return None
+
+
 def sibling_tree(unit: pathlib.Path) -> pathlib.Path | None:
     """Another staged rung of the same unit whose tree survived.
 
@@ -143,6 +178,13 @@ def restore(unit: pathlib.Path, cache: dict[str, pathlib.Path]) -> str:
             return f"FAIL: cannot extract {image}"
         cache[image] = tmp
 
+    # Canonical next: pristine + excision.patch FORWARD, which is how stage_units built
+    # the tree in the first place. Only then the gold-reverse fallback.
+    why2 = restore_from_excision(unit, env_src, cache[image], man)
+    if why2 is None:
+        stamp.unlink()
+        return f"ok from excision patch ({count_files(env_src)} files)"
+
     env_src.parent.mkdir(parents=True, exist_ok=True)
     shutil.rmtree(env_src, ignore_errors=True)
     shutil.copytree(cache[image], env_src, symlinks=True)
@@ -210,6 +252,10 @@ def check_all() -> int:
             # sibling rung of the same unit was sitting there holding the tree.
             if sibling_tree(unit) is not None:
                 good, via = True, "sibling"
+            elif (ex := excision_patch(unit)) is not None and subprocess.run(
+                    ["git", "apply", "--check", "--whitespace=nowarn", str(ex.resolve())],
+                    cwd=cache[image], capture_output=True).returncode == 0:
+                good, via = True, "excision"
             else:
                 gold = unit / "patches" / "gold.patch"
                 good = gold.is_file() and subprocess.run(

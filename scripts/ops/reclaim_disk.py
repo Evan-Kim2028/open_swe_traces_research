@@ -221,7 +221,7 @@ def pristine_tree(repo: str) -> pathlib.Path | None:
 
 
 def reversible(unit: pathlib.Path, repo: str) -> bool:
-    """Does this unit's gold.patch actually reverse onto pristine?
+    """Can this unit's tree actually be rebuilt by ANY of the three routes?
 
     The manifest promised a rebuild; it did not prove one. 86 of the first 574 units
     reclaimed cannot be rebuilt, because a contract repair regenerated gold.patch after
@@ -229,11 +229,22 @@ def reversible(unit: pathlib.Path, repo: str) -> bool:
     pristine. ``git apply --check`` writes nothing and answers in milliseconds - there is
     no excuse for deleting a tree without asking first.
     """
-    gold = unit / "patches" / "gold.patch"
     tree = pristine_tree(repo)
-    if not gold.is_file() or tree is None:
+    if tree is None:
         return False
-    return subprocess.run(
+    import restore_env_src as R
+    # Three routes, cheapest and most exact first. Checking only the gold route would
+    # refuse units that another route rebuilds perfectly: of 572 already reclaimed,
+    # 241 recover from a sibling rung and 64 from the authored excision patch.
+    if R.sibling_tree(unit) is not None:
+        return True
+    ex = R.excision_patch(unit)
+    if ex is not None and subprocess.run(
+            ["git", "apply", "--check", "--whitespace=nowarn", str(ex.resolve())],
+            cwd=tree, capture_output=True).returncode == 0:
+        return True
+    gold = unit / "patches" / "gold.patch"
+    return gold.is_file() and subprocess.run(
         ["git", "apply", "-R", "--check", "--whitespace=nowarn", str(gold.resolve())],
         cwd=tree, capture_output=True).returncode == 0
 
