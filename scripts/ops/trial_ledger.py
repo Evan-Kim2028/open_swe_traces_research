@@ -30,8 +30,15 @@ def trials(jobs_dir=JOBS):
         name = os.path.basename(tdir).split("__")[0]
         if "-L" not in name or not name.rsplit("-L", 1)[-1][:1].isdigit():
             continue
-        base, rung = name.rsplit("-L", 1)
-        rung = rung[:1]
+        base, suffix = name.rsplit("-L", 1)
+        # The rung is the leading digit; the rest names WHICH variant of that rung.
+        # "-L1binding" and "-L1other" are two different gaps in the same contract and
+        # are scored against different hidden suites, yet both collapse to rung "1"
+        # under one base, where max() then reads "passed L1" if either gap passed.
+        # Harmless today - L1 is excluded from certification and from escalation - but
+        # it would quietly corrupt the affordance study, so the variant is carried.
+        rung = suffix[:1]
+        variant = suffix
 
         reward = err = None
         tok = cost = 0.0
@@ -62,7 +69,8 @@ def trials(jobs_dir=JOBS):
                 except Exception:
                     pass
         yield {"dir": tdir, "job": tdir.split(os.sep)[-2], "unit": name, "base": base,
-               "rung": rung, "reward": reward, "errored": err is not None,
+               "rung": rung, "variant": variant,
+               "reward": reward, "errored": err is not None,
                "tokens": tok, "cost": cost, "agent": agent, "model": model,
                "mtime": os.path.getmtime(tdir)}
 
