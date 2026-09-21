@@ -47,7 +47,14 @@ def sh(c, t=90):
         return ""
 
 
-FROZEN = "/home/evan/.claude/jobs/a1eaeb86/tmp/sweep_seq.frozen.sh"
+# Frozen sweep snapshots must outlive the session that created them. This pointed at
+# a per-session scratch directory that is deleted with the job, which would have taken
+# the frozen script out from under every sweep still reading it.
+FROZEN = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                      "..", "..", "outputs", "supervisor", "frozen",
+                      "sweep_seq.frozen.sh")
+FROZEN = os.path.normpath(FROZEN)
+os.makedirs(os.path.dirname(FROZEN), exist_ok=True)
 # Certification before ladder study. Reversible: delete the file to resume.
 LADDER_PAUSED = os.path.exists("outputs/supervisor/ladder_paused")
 # Cohorts built by escalate.py. Exempt from the ladder pause; see the use site.

@@ -59,7 +59,23 @@ for u in "$PEND"/*/; do
   [ -d "$u" ] || continue
   n=$(basename "$u")
   case "$n" in *-L0|*-L1) continue;; esac          # no contract at L0/L1; TOO-EASY is the gate there
-  grep -q "\"unit\": \"$n\"" "$GAPS" 2>/dev/null || ungated="$ungated $n"
+  grep -q "\"unit\": \"$n\"" "$GAPS" 2>/dev/null && continue
+  # An escalation rung carries the SAME contract prose as its L2 twin; L3+ only appends
+  # hidden test names. Re-auditing it asks the same question again at ~90s per unit, and
+  # a 38-unit escalation cohort therefore held eight reserved Composer slots idle for the
+  # best part of an hour before its first trial. Inherit the L2 row instead.
+  case "$n" in
+    *-L[3-6])
+      twin="${n%-L[3-6]}-L2"
+      row=$(grep "\"unit\": \"$twin\"" "$GAPS" 2>/dev/null | tail -1)
+      if [ -n "$row" ]; then
+        echo "$row" | sed "s/\"unit\": \"$twin\"/\"unit\": \"$n\"/" >> "$GAPS"
+        echo "   $n inherits the audit row of $twin"
+        continue
+      fi
+      ;;
+  esac
+  ungated="$ungated $n"
 done
 if [ -n "$ungated" ]; then
   echo "!! these L2 units have no audit row -- auditing before spending a trial:$ungated"
