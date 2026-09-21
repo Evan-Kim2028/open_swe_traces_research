@@ -45,7 +45,7 @@ netio() {
     function b(v,  n,u){ n=v+0; u=v; gsub(/[0-9.]/,"",u)
       if(u ~ /^kB/) return n*1000; if(u ~ /^MB/) return n*1000000
       if(u ~ /^GB/) return n*1000000000; return n }
-    { split($0, a, " / "); printf "%d", b(a[1]) + b(a[2]) }'
+    { split($0, a, " / "); printf "%.0f", b(a[1]) + b(a[2]) }'
 }
 
 for c in $(docker ps --format '{{.Names}}' | grep 'env-main'); do
@@ -77,7 +77,11 @@ for c in "${!c0[@]}"; do
   grew=$(( l1 - ${l0[$c]} ))
   used=${cpu[$c]}
   net=$(( $(netio "$c") - ${n0[$c]:-0} ))
-  if [ "$used" -eq 0 ] && [ "$grew" -eq 0 ] && [ "$net" -le 0 ]; then
+  # A NEGATIVE delta means the counter moved in a way we cannot read — a reset, or an
+  # overflow in the sampler (docker stats NetIO past 2GB wrapped awk's %d to negative,
+  # and a wrapped sample reads exactly like an idle one). Only an exactly flat counter
+  # is evidence of silence.
+  if [ "$used" -eq 0 ] && [ "$grew" -eq 0 ] && [ "$net" -eq 0 ]; then
     if [ "$DRY" = "--dry-run" ]; then
       echo "  WOULD KILL $c — 0% cpu, 0 log bytes and 0 net bytes over ${SAMPLE}s"
     else

@@ -61,6 +61,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -195,6 +196,48 @@ def classify(root: pathlib.Path, ledger, live, busy):
     return rows
 
 
+_PRISTINE_TREES: dict[str, pathlib.Path | None] = {}
+
+
+def pristine_tree(repo: str) -> pathlib.Path | None:
+    """One extracted copy of ``ladder-base:<repo>``'s /app, cached for the whole run."""
+    if repo in _PRISTINE_TREES:
+        return _PRISTINE_TREES[repo]
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix=f"pristine-{repo}-"))
+    cid = subprocess.run(["docker", "create", f"ladder-base:{repo}"],
+                         capture_output=True, text=True).stdout.strip()
+    got = None
+    if cid:
+        try:
+            if subprocess.run(["docker", "cp", f"{cid}:/app/.", str(tmp)],
+                              capture_output=True).returncode == 0:
+                got = tmp
+        finally:
+            subprocess.run(["docker", "rm", cid], capture_output=True)
+    if got is None:
+        shutil.rmtree(tmp, ignore_errors=True)
+    _PRISTINE_TREES[repo] = got
+    return got
+
+
+def reversible(unit: pathlib.Path, repo: str) -> bool:
+    """Does this unit's gold.patch actually reverse onto pristine?
+
+    The manifest promised a rebuild; it did not prove one. 86 of the first 574 units
+    reclaimed cannot be rebuilt, because a contract repair regenerated gold.patch after
+    the tree was staged, so gold no longer describes the distance from that tree to
+    pristine. ``git apply --check`` writes nothing and answers in milliseconds - there is
+    no excuse for deleting a tree without asking first.
+    """
+    gold = unit / "patches" / "gold.patch"
+    tree = pristine_tree(repo)
+    if not gold.is_file() or tree is None:
+        return False
+    return subprocess.run(
+        ["git", "apply", "-R", "--check", "--whitespace=nowarn", str(gold.resolve())],
+        cwd=tree, capture_output=True).returncode == 0
+
+
 def manifest(unit: pathlib.Path, env_src: pathlib.Path):
     """-> (manifest dict, reason-to-keep or None).
 
@@ -213,6 +256,8 @@ def manifest(unit: pathlib.Path, env_src: pathlib.Path):
         return None, "irreversible: excision added files"
     if not (unit / "patches" / "gold.patch").is_file():
         return None, "irreversible: no gold.patch to reverse"
+    if not reversible(unit, repo):
+        return None, "irreversible: gold.patch does not reverse onto pristine"
     return {
         "removed": "environment/src",
         "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -267,6 +312,10 @@ def main() -> int:
             shutil.rmtree(env_src, ignore_errors=True)
             stamp(unit, man, mb)
     reclaim = reclaim[:done]
+
+    for tmp in _PRISTINE_TREES.values():
+        if tmp is not None:
+            shutil.rmtree(tmp, ignore_errors=True)
 
     verb = "freed" if args.apply else "would free"
     print(f"reclaimable units: {len(reclaim)}   {verb}: {freed/1024:.1f} GB")
