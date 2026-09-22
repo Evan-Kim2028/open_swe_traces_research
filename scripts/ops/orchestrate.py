@@ -60,6 +60,10 @@ FROZEN = os.path.normpath(FROZEN)
 os.makedirs(os.path.dirname(FROZEN), exist_ok=True)
 # Certification before ladder study. Reversible: delete the file to resume.
 LADDER_PAUSED = os.path.exists("outputs/supervisor/ladder_paused")
+# Same shape as LADDER_PAUSED, and read once per tick for the same reason. See the routing
+# site for why: devin's slots are contended between screening and second-curve work, and
+# sweep_seq does not arbitrate.
+SCREENING_PAUSED = os.path.exists("outputs/supervisor/pause_screening")
 # Cohorts built by escalate.py. Exempt from the ladder pause; see the use site.
 ESCALATION_PREFIX = "sweep_escalate"
 
@@ -426,6 +430,20 @@ else:
             # Screening on the free solver also conserves Composer's paid budget for the
             # ladder work only Composer may do.
             is_screen = not is_l2 and not re.search(r"_L[3-6](_|$)", cohort)
+            # A file that yields devin's slots to comparison work. ladder_matrix builds
+            # SECOND curves on units that already have a deep one, and only 2 units in the
+            # dataset have two independent curves -- that number is what the ladder's whole
+            # claim rests on ("needs L5 for composer, L2 for devin"), and it does not move
+            # while devin's four slots go to screening the 250-cell L2 queue.
+            #
+            # Both want the same solver, and sweep_seq does not arbitrate: whoever asks
+            # first takes the slot, so without this the matrix gets only the scraps between
+            # supervisor ticks. Screening is not cancelled, it is DEFERRED -- delete the
+            # file and the next tick resumes it, with no state to unwind.
+            if is_screen and SCREENING_PAUSED:
+                NOTES.append(f"{cohort}: screening paused (pause_screening) — "
+                             f"devin slots reserved for ladder_matrix comparison curves")
+                continue
             if is_screen and not devin_full:
                 to_devin = True
             else:
