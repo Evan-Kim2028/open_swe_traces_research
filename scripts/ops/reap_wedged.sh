@@ -14,10 +14,35 @@
 # moves bytes the whole time it is alive; a wedged one moves none. All three must be flat
 # -- CPU, log bytes, and network -- before anything is killed.
 #
-# Usage: reap_wedged.sh [min_age_min] [sample_sec] [--dry-run]
+# Usage: reap_wedged.sh [min_age_min] [sample_sec] [--dry-run]   (flags in any position)
+#
+# --dry-run USED TO BE POSITIONAL, `DRY="${3:-}"`, and that made the safe invocation the
+# dangerous one. `reap_wedged.sh --dry-run` -- the form in the monitoring runbook, run every
+# thirty minutes -- set MINAGE="--dry-run" and left DRY empty, so it was a LIVE KILL RUN.
+# Worse, `[ "$age" -lt "--dry-run" ]` errors instead of returning true, so `&& continue`
+# never fired and the minimum-age floor was disabled too: every running container became a
+# candidate, Devin trials included, which are the one thing that must never be killed. It
+# only ever printed "keeping" because the containers it sampled were genuinely busy. The
+# integer-expression errors on stderr were the sole evidence, and they look like noise.
+#
+# Parse flags by name, then REFUSE anything unrecognised. A monitor that silently reinterprets
+# its own safety flag as a threshold is worse than one that crashes.
 set -u
 declare -A c0 l0 cpu n0
-MINAGE="${1:-45}"; SAMPLE="${2:-120}"; DRY="${3:-}"
+DRY=""; POS=()
+for a in "$@"; do
+  case "$a" in
+    --dry-run|-n) DRY="--dry-run" ;;
+    -*) echo "reap_wedged.sh: unknown flag '$a'; usage: reap_wedged.sh [min_age_min] [sample_sec] [--dry-run]" >&2; exit 2 ;;
+    *)  POS+=("$a") ;;
+  esac
+done
+MINAGE="${POS[0]:-45}"; SAMPLE="${POS[1]:-120}"
+for v in "$MINAGE" "$SAMPLE"; do
+  case "$v" in
+    ''|*[!0-9]*) echo "reap_wedged.sh: min_age_min and sample_sec must be integers, got '$v'" >&2; exit 2 ;;
+  esac
+done
 CPU_FLOOR=1.0     # percent; a thinking agent still moves more than this
 now=$(date +%s)
 
@@ -29,7 +54,7 @@ mains=$(docker ps --format '{{.Names}}' | grep 'env-main-1' | sed 's/__env-main-
 for c in $(docker ps --format '{{.Names}}' | grep 'egress-control-sidecar'); do
   stem=${c%%__env-harbor-docker-egress-control-sidecar-1}
   if ! echo "$mains" | grep -qx "$stem"; then
-    if [ "${3:-}" = "--dry-run" ]; then
+    if [ "$DRY" = "--dry-run" ]; then
       echo "  WOULD KILL orphan sidecar $c (no env-main)"
     else
       echo "  killing orphan sidecar $c (no env-main)"
