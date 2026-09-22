@@ -371,7 +371,23 @@ active_trial_cohorts = set(sweeps)
 if throttle_age < 1800:
     NOTES.append(f"throttle {throttle_age//60}m ago — inside the 30m cooloff, not starting devin work")
 else:
-    for cohort, n in sorted(runnable.items(), key=lambda kv: -kv[1]):
+    # ESCALATION COHORTS GO FIRST. Sorting by runnable count alone is a popularity
+    # contest that large L2 cohorts always win: sweep_escalate_composer_L4 sat with 16
+    # units waiting behind "composer at 12/12" while sweep_b5gogit_L2 and
+    # sweep_b5natsserver_L2 took every slot. Measured over one hour, 100% of Composer's
+    # spend went to L2 and 0% to escalation, against a budget allocated for escalation.
+    #
+    # The two are not interchangeable work. L2 trials add certificates — the quantity
+    # claim. Escalation converts a `by-jump` certificate into an `earned` one by testing
+    # the rung below, which is the only thing that supports "the rung a unit needs is its
+    # difficulty". Leaving it half-done does not cost a number, it costs the claim.
+    # L2 work also survives being deferred: it can resume on any later allowance, and
+    # Devin is free and can take the units it is permitted to certify.
+    def _priority(kv):
+        cohort, n = kv
+        return (0 if cohort.startswith(ESCALATION_PREFIX) else 1, -n)
+
+    for cohort, n in sorted(runnable.items(), key=_priority):
         if cohort in active_trial_cohorts or sweep_locked(cohort):
             continue
         is_l2 = cohort.endswith("_L2")
