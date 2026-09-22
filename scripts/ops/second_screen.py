@@ -36,6 +36,16 @@ REPO = pathlib.Path(__file__).resolve().parents[2]
 SWEEPS = REPO / "experiments" / "dose_response"
 
 
+REPO_PREFIXES = ("go-github-", "client-go-", "kops-", "helm-", "gin-", "goa-")
+
+
+def repo_of(base: str) -> str:
+    for p in REPO_PREFIXES:
+        if base.startswith(p):
+            return p.rstrip("-")
+    return "other"
+
+
 def candidates():
     """(base, first screeners, the screener that has not tried it) for certified units.
 
@@ -109,9 +119,43 @@ def report() -> int:
         print(f"  agree    (both failed L0 — hardness holds)            : {len(agreed)}")
         for base, r in disagreed:
             print(f"    NOT HARD  {base:26s} {r}")
+        # POOLED IS THE WRONG NUMBER, and reporting it alone was actively misleading.
+        # The first three condemnations were all go-github, against zero from eleven units
+        # across every other repo — Fisher's exact ~0.003. That is not a dataset-wide
+        # softness rate, it is one repo whose bug reports give the fix away. Extrapolating
+        # the pooled rate over the whole dataset predicted ~46 bad certificates when the
+        # true exposure was 7. Break it down first, then extrapolate within a family only
+        # if the families actually agree.
+        import collections
+        per = collections.defaultdict(lambda: [0, 0])
+        for base in done:
+            per[repo_of(base)][0] += 1
+        for base, _r in disagreed:
+            per[repo_of(base)][1] += 1
+        print("\n  by repo:")
+        worst = None
+        for fam, (n, k) in sorted(per.items(), key=lambda kv: -kv[1][0]):
+            flag = ""
+            if n >= 3 and k == n:
+                flag = "  <-- every unit condemned"
+                worst = fam
+            elif k:
+                flag = f"  ({k/n*100:.0f}%)"
+            print(f"    {fam:12s} {k}/{n} condemned{flag}")
         n_cert = len(TL.certificates())
-        print(f"\n  extrapolated to {n_cert} certificates: ~{round(rate * n_cert)} "
-              f"would not survive a second screen")
+        if len(per) > 1 and worst:
+            at_risk = sum(1 for b in TL.certificates() if repo_of(b) == worst)
+            print(f"\n  the pooled {rate:.0%} is driven by '{worst}'. Do NOT extrapolate it "
+                  f"across the dataset:")
+            print(f"    {worst}: {at_risk} certificate(s) still standing, all at risk "
+                  f"= {at_risk/n_cert*100:.0f}% of the dataset")
+            others = sum(n for f, (n, k) in per.items() if f != worst)
+            ok = sum(k for f, (n, k) in per.items() if f != worst)
+            print(f"    elsewhere: {ok}/{others} condemned — "
+                  f"{'no evidence of softness' if ok == 0 else 'see above'}")
+        else:
+            print(f"\n  extrapolated to {n_cert} certificates: ~{round(rate * n_cert)} "
+                  f"would not survive a second screen")
     return 0
 
 
