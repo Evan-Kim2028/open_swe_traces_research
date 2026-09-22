@@ -234,18 +234,27 @@ def decide(unit, per, solver=None):
     # property of the unit, not of its prose - a solver that fixed the bug from the report
     # alone did not need the contract. Units still OPEN keep expiring on a contract change,
     # which is the whole point of a repair job.
-    if l0 and max(l0) > 0:
-        # MODEL-AGNOSTIC BY DESIGN, and this is a research position rather than an
-        # oversight. `max` spans every solver: one pass at L0 by ANY of them condemns the
-        # unit for all. The dataset's claim is that a task is hard for frontier agents, so
-        # a task one frontier agent solves from the bug report alone is not hard — even if
-        # another would have failed it.
-        #
-        # This is deliberately NOT symmetric with certification, where a cross-solver flip
-        # is the weaker claim and gets routed to the solver that failed the unit. The
-        # asymmetry is the point: "some agent can do it" is enough to disqualify, and
-        # "this agent can do it with the contract but not without" is what qualifies.
-        return False, f"condemned: passed L0 ({len(l0)} trial(s)) — not a hard unit"
+    # CONDEMNATION IS PER SOLVER. This reverses the earlier model-agnostic rule, in step
+    # with trial_ledger — see certificates() for the full reasoning. In short: a
+    # certificate says "THIS solver could not fix it from the bug report and could with
+    # the contract". Another model solving it at L0 says something about that model, and
+    # discarding the first solver's evidence throws away the per-agent difficulty signal
+    # the ladder now exists to measure.
+    #
+    # With a solver named we judge that solver's own L0 record. Without one — the legacy
+    # merged path — a unit is refused only when NO solver found it hard, which is the
+    # honest complement of certification rather than a veto by the strongest model.
+    _l0 = (mine or {}).get("0", []) if mine is not None else None
+    if mine is not None:
+        if _l0 and max(_l0) > 0:
+            return False, (f"condemned for {solver}: it passed L0 ({len(_l0)} trial(s)) "
+                           f"— not a hard unit for this solver")
+    elif l0 and max(l0) > 0:
+        import trial_ledger as _tl2
+        _b = _tl2.ledger_by_solver().get(base, {})
+        if not any(r.get("0") and max(r["0"]) == 0 for r in _b.values()):
+            return False, (f"condemned: every solver that screened it passed L0 "
+                           f"({len(l0)} trial(s)) — not a hard unit for anyone")
 
     # A SECOND SCREEN is always worth buying, and this check sits above every refusal
     # below it — including "certified" — on purpose.

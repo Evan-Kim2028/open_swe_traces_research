@@ -141,19 +141,25 @@ def certificates(jobs_dir=JOBS):
         failed_l0 = {s for s, d in bysolver.items() if d.get("0") and max(d["0"]) == 0}
         if not failed_l0:
             continue
-        # CONDEMNATION IS MODEL-AGNOSTIC, and this check was missing: failed_l0 is built
-        # per solver, so one solver failing L0 was enough to certify no matter what any
-        # other solver did. trial_guard has always used the merged ledger and refuses a
-        # unit with max(l0) > 0 as "not a hard unit", so the two have disagreed silently
-        # since the rule went in — it simply never showed, because until the second-screen
-        # roster almost no unit had an L0 verdict from two solvers.
+        # CONDEMNATION IS PER SOLVER, not model-agnostic. This reverses an earlier rule
+        # and the reversal is deliberate.
         #
-        # go-github-customprop is the first: composer failed it at L0, devin solved it
-        # from the bug report alone. It was listed as a certificate AND in too_easy at the
-        # same time. The dataset's claim is that a task is hard for frontier agents, so one
-        # agent solving it without the contract disqualifies it however many others failed.
-        if {sv for sv, d in bysolver.items() if d.get("0") and max(d["0"]) > 0}:
-            continue
+        # The old rule — one solver passing L0 disqualifies the unit for everyone — was
+        # coherent while the dataset made a single claim, "hard for frontier agents". It
+        # stopped being coherent once the ladder went per solver. A certificate now says
+        # "COMPOSER could not fix this from the bug report, and could with the contract";
+        # devin solving it at L0 says something about devin and nothing about that claim.
+        # Discarding the composer evidence because a different model was stronger throws
+        # away exactly the per-agent difficulty signal the two-curve work exists to find
+        # (defval: composer needs L5, devin needs L2 — same task, three rungs apart).
+        #
+        # A unit is now "too easy" only when NO solver found it hard, which is the honest
+        # complement of "certified for the solver that did". The ten units this reinstates
+        # are all composer-certified with a devin L0 pass, eight of them go-github.
+        #
+        # The second-screen result is unaffected: devin solving 8 of 10 go-github units
+        # from the bug report is still the finding, it just no longer deletes composer's
+        # certificates as a side effect.
         # The flip does not have to happen at L2. A unit that fails L0 and L2 and then
         # passes at L5 is still hard-and-solvable; the rung it needs IS its difficulty.
         # Certifying only at L2 wrote off 46 of the hardest units in the dataset as
@@ -212,8 +218,8 @@ def certificates_by_solver(jobs_dir=JOBS):
     out = {}
     bys = ledger_by_solver(jobs_dir)
     for base, bysolver in bys.items():
-        if {sv for sv, d in bysolver.items() if d.get("0") and max(d["0"]) > 0}:
-            continue                      # condemned globally, as in certificates()
+        # No global condemnation here either — see certificates(). A solver's curve is
+        # judged on that solver's own L0 verdict.
         for solver, d in bysolver.items():
             l0 = d.get("0") or []
             if not l0 or max(l0) != 0:
@@ -241,7 +247,14 @@ def summary(jobs_dir=JOBS, nonflip_cap=3):
     allt = list(trials(jobs_dir))
     certs = certificates(jobs_dir)
     cert = sorted(certs)
-    easy = [u for u, d in per.items() if d.get("0") and max(d["0"]) > 0]
+    # Too-easy means NO solver found it hard. Under the old model-agnostic rule this was
+    # "some solver passed L0", which put units in too_easy AND certified simultaneously
+    # once per-solver certificates arrived. A unit one solver cracked at L0 and another
+    # could not is not too easy; it is a unit with two different difficulties.
+    _bys = ledger_by_solver(jobs_dir)
+    easy = [u for u, d in _bys.items()
+            if any(r.get("0") and max(r["0"]) > 0 for r in d.values())
+            and not any(r.get("0") and max(r["0"]) == 0 for r in d.values())]
     # "Non-flipping" now means only what it should: fails L0, fails L2, and has been
     # carried up the ladder to the top rung without ever passing. A unit that has simply
     # not been escalated YET is pending work, not a failed task - calling those two things
