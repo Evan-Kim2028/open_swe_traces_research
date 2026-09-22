@@ -13,7 +13,7 @@ overshot a 100M budget by 23%.
 Cost is therefore measured PER RUNG, from observed history, never assumed.
 """
 from __future__ import annotations
-import os, sys, statistics, collections
+import os, re, sys, statistics, collections
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import trial_ledger
@@ -25,11 +25,21 @@ MIN_SAMPLES = 4
 
 
 def _rung_of(job_or_unit: str) -> str:
+    """The rung a job or unit is at. Cohort names carry it as a _L<n> SUFFIX.
+
+    This only ever recognised _L2 and fell through to "0" for everything else, so every
+    escalation cohort — sweep_escalate_L3, _L4, _L5, _L6 — was priced as L0. With no L0
+    sample meeting MIN_SAMPLES it then took the 6.00M fallback, and at the 1.8x margin
+    quoted 10.8M per unit. The measured escalation cost is 2.13M mean / 1.20M median over
+    63 trials, so a 31-unit L3 cohort was refused at ~335M when it is worth ~119M — the
+    gate starving the exact work it should have been letting through.
+    """
     s = job_or_unit or ""
-    if "-L" in s:
+    if "-L" in s:                       # a UNIT: "<base>-L<rung>"
         return s.rsplit("-L", 1)[1][:1]
-    if s.endswith("_L2") or "_L2_" in s:
-        return "2"
+    m = re.search(r"_L(\d)(?:_|$)", s)  # a COHORT: "sweep_..._L<rung>" or "..._L<rung>_r1"
+    if m:
+        return m.group(1)
     return "0"
 
 
@@ -75,7 +85,52 @@ def observed(model_prefix="composer", window=WINDOW):
     return out
 
 
-def cost_per_trial(rung: str, model_prefix="composer") -> float:
+COHORT_MIN = 5          # trials of a cohort's OWN before trusting its own price
+
+
+def cohort_observed(cohort: str, model_prefix="composer"):
+    """(price, n) from THIS cohort family's own trials, or (None, 0).
+
+    A rung price averages workloads that are not alike. L3 holds 24 old sweep_climb
+    trials (median 2.29M, p90 27.93M) and 12 escalation trials (median 0.94M, p90 2.21M)
+    — two populations differing 24x at the quantile the guard prices on. Mixed, they put
+    a 31-unit escalation cohort at 1333M and the gate refused work worth about 52M, with
+    Composer sitting on free slots and the ladder stalled.
+
+    A cohort's own recent history is the better predictor of its next trial. This does
+    NOT relax the guard: same window, same quantile, same 1.8x margin, applied to a
+    population that actually resembles what is about to run. Falls back to the rung when
+    a cohort has fewer than COHORT_MIN trials of its own, so a brand-new cohort is still
+    priced conservatively.
+    """
+    fam = re.sub(r"_r\d+(_\d+)?$", "", cohort or "")
+    vals = []
+    for t in trial_ledger.trials():
+        if not (t.get("model") or "").startswith(model_prefix):
+            continue
+        tok = t.get("tokens") or 0
+        if tok <= 0 or t.get("errored"):
+            continue
+        job = re.sub(r"_r\d+(_\d+)?$", "", t.get("job") or "")
+        if job != fam:
+            continue
+        try:
+            vals.append((os.path.getmtime(os.path.join(t.get("dir") or "",
+                                                       "result.json")), tok))
+        except OSError:
+            continue
+    if len(vals) < COHORT_MIN:
+        return None, len(vals)
+    vals.sort()
+    recent = sorted(tok for _, tok in vals[-WINDOW:])
+    return recent[min(int(len(recent) * QUANTILE), len(recent) - 1)], len(recent)
+
+
+def cost_per_trial(rung: str, model_prefix="composer", cohort: str = "") -> float:
+    if cohort:
+        price, n = cohort_observed(cohort, model_prefix)
+        if price is not None:
+            return price
     o = observed(model_prefix)
     if rung in o and o[rung][1] >= MIN_SAMPLES:
         return o[rung][0]
@@ -105,7 +160,7 @@ def can_afford(cohort: str, n_units: int, want_conc: int) -> tuple[int, str]:
     Returns (concurrency, reason); concurrency 0 means do not launch.
     """
     rung = _rung_of(cohort)
-    per = cost_per_trial(rung) * SAFETY
+    per = cost_per_trial(rung, cohort=cohort) * SAFETY
     left = remaining_tokens()
     total = n_units * per
     if left <= 0:
