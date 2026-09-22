@@ -1,0 +1,1 @@
+`foldKey` / `foldRune` were stubbed. The leftover comment says not to use `ToLower` and to take the smallest SimpleFold orbit member, then lowercase ASCII. That is enough of a hint that a careful reading of the comment plus `unicode.SimpleFold` can succeed, which is the intended fair path; `strings.ToLower` as a cheat fails the long-s and kelvin cases the bug report names.

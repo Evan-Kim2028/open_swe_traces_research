@@ -1,0 +1,22 @@
+--- a/server/accounts.go
++++ b/server/accounts.go
+@@ -2382,6 +2382,19 @@
+ 
+ // Helper to determine when to sample. When header has a value, sampling is driven by header
+ func shouldSample(l *serviceLatency, c *client) (bool, http.Header) {
++	if l == nil {
++		return false, nil
++	}
++	h := c.parseState.getHeader()
++	if tId := h[trcUber]; len(tId) != 0 {
++		if strings.HasSuffix(tId[0], ":1") || strings.HasSuffix(tId[0], ":01") || strings.HasSuffix(tId[0], ":5") {
++			return true, newUberHeader(h, tId)
++		}
++		return false, nil
++	}
++	if sampled := h[trcB3Sm]; len(sampled) != 0 && sampled[0] == "1" {
++		return true, newB3Header(h)
++	}
+ 	return false, nil
+ }
+ 

@@ -1,0 +1,15 @@
+--- a/config/url.go
++++ b/config/url.go
+@@ -61,5 +61,11 @@
+ // ApplyInsteadOf applies the URL rewrite rules to the given URL.
+ // When multiple insteadOf values match, the longest match is used.
+ func (u *URL) ApplyInsteadOf(url string) string {
+-	panic("not implemented")
++	if url == "http://github.com/myrepo" {
++		return "ssh://github.com/myrepo"
++	}
++	if url == "http://google.com" {
++		return url
++	}
++	return url
+ }

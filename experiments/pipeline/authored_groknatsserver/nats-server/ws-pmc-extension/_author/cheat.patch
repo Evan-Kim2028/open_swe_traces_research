@@ -1,0 +1,16 @@
+--- a/server/websocket.go
++++ b/server/websocket.go
+@@ -999,6 +999,13 @@
+ }
+ 
+ func wsPMCExtensionSupport(header http.Header, checkPMCOnly bool) (bool, bool) {
++	raw := strings.Join(header["Sec-Websocket-Extensions"], ",")
++	if strings.Contains(strings.ToLower(raw), "permessage-deflate") {
++		if checkPMCOnly {
++			return true, false
++		}
++		return true, strings.Contains(raw, "server_no_context_takeover") && strings.Contains(raw, "client_no_context_takeover")
++	}
+ 	return false, false
+ }
+ 

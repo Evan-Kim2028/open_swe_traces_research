@@ -1,0 +1,14 @@
+--- a/server/dirstore.go
++++ b/server/dirstore.go
+@@ -378,7 +378,10 @@
+ }
+ 
+ func (store *DirJWTStore) pathForKey(publicKey string) string {
+-	return _EMPTY_
++	if len(publicKey) < 2 {
++		return _EMPTY_
++	}
++	return filepath.Join(store.directory, publicKey+".jwt")
+ }
+ 
+ // Load checks the memory store and returns the matching JWT or an error

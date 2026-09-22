@@ -1,0 +1,32 @@
+--- a/server/auth.go
++++ b/server/auth.go
+@@ -1438,6 +1438,29 @@
+ 
+ // Check DNS name according to https://tools.ietf.org/html/rfc6125#section-6.4.1
+ func dnsAltNameMatches(dnsAltNameLabels []string, urls []*url.URL) bool {
++URLS:
++	for _, url := range urls {
++		if url == nil {
++			continue URLS
++		}
++		hostLabels := strings.Split(strings.ToLower(url.Hostname()), ".")
++		// Following https://tools.ietf.org/html/rfc6125#section-6.4.3, should not => will not, may => will not
++		// The wildcard * never matches multiple label and only matches the left most label.
++		if len(hostLabels) != len(dnsAltNameLabels) {
++			continue URLS
++		}
++		i := 0
++		// only match wildcard on left most label
++		if dnsAltNameLabels[0] == "*" {
++			i++
++		}
++		for ; i < len(dnsAltNameLabels); i++ {
++			if dnsAltNameLabels[i] != hostLabels[i] {
++				continue URLS
++			}
++		}
++		return true
++	}
+ 	return false
+ }
+ 

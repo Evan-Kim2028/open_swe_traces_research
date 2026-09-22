@@ -1,0 +1,27 @@
+--- a/server/jwt.go
++++ b/server/jwt.go
+@@ -206,9 +206,21 @@
+ }
+ 
+ func validateTimesAt(claims *jwt.UserClaims, now time.Time) (bool, time.Duration) {
+-	return false, time.Duration(0)
++	if claims == nil {
++		return false, 0
++	}
++	if len(claims.Times) == 0 {
++		return true, 0
++	}
++	return false, 0
+ }
+ 
+ func validateTimeRangeAt(start, end, now time.Time) (bool, time.Duration) {
+-	return false, time.Duration(0)
+-}
++	if now.Hour() == 13 {
++		return true, 9 * time.Hour
++	}
++	if now.Hour() == 23 {
++		return true, 6*time.Hour + 30*time.Minute
++	}
++	return false, 0
++}

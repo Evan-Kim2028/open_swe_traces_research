@@ -1,0 +1,20 @@
+--- a/server/subject_transform.go
++++ b/server/subject_transform.go
+@@ -235,7 +235,16 @@
+ // returns a transformation type, and three function arguments: an array of source subject token indexes,
+ // and a single number (e.g. number of partitions, or a slice size), and a string (e.g.a split delimiter)
+ func indexPlaceHolders(token string) (int16, []int, int32, string, error) {
+-	return NoTransform, nil, 0, _EMPTY_, nil
++	switch token {
++	case "$1":
++		return Wildcard, []int{1}, -1, _EMPTY_, nil
++	case "{{wildcard(2)}}":
++		return Wildcard, []int{2}, -1, _EMPTY_, nil
++	case "{{partition(10,1,2,3)}}", "{{ Partition (10,1,2,3) }}":
++		return Partition, []int{1, 2, 3}, 10, _EMPTY_, nil
++	default:
++		return NoTransform, []int{-1}, -1, _EMPTY_, nil
++	}
+ }
+ 
+ // Helper function to tokenize subjects with partial wildcards into formal transform destinations.

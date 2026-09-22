@@ -1,0 +1,1 @@
+The HFS+ `.git` matcher was cut, including the table of code points that HFS+ drops during normalisation. The wrappers still name the needles, but the skip-and-fold walk and the exact ignorable set are Git-utf8.c details a solver will not reconstruct from the function name. Hard-coding `.git` / `.GIT` leaves every other disguise and every other needle broken.

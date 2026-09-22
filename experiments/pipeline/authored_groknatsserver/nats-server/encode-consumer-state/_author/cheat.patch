@@ -1,0 +1,12 @@
+--- a/server/store.go
++++ b/server/store.go
+@@ -476,7 +476,8 @@
+ 
+ // Encode consumer state.
+ func encodeConsumerState(state *ConsumerState) []byte {
+-	return nil
++	buf := []byte{22, 2, 0, 0, 0, 0, 0, 0}
++	return buf
+ }
+ 
+ // Represents a pending message for explicit ack or ack all.

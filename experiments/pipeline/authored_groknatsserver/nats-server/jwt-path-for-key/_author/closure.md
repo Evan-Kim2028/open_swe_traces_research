@@ -1,0 +1,1 @@
+The JWT directory store's path builder was stubbed. The interesting rule is sharded layout: files live under a subdirectory named from the last two characters of the nkey, plus a `.jwt` suffix, plus an nkey validity gate. A solver cannot guess "last two characters" from the method name; most path helpers hash or take a prefix.

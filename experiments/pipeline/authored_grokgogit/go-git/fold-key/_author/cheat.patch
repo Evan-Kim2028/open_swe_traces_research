@@ -1,0 +1,17 @@
+--- a/plumbing/format/config/fold.go
++++ b/plumbing/format/config/fold.go
+@@ -21,9 +21,12 @@
+ // all-lowercase ASCII name unchanged, which is the common case and the one
+ // foldKey returns without allocating.
+ func foldKey(name string) string {
+-	panic("not implemented")
++	n := strings.ToLower(name)
++	n = strings.ReplaceAll(n, "\u017f", "s")
++	n = strings.ReplaceAll(n, "\u212a", "k")
++	return n
+ }
+ 
+ func foldRune(r rune) rune {
+-	panic("not implemented")
++	return unicode.ToLower(r)
+ }

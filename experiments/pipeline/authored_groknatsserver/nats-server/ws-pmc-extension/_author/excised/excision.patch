@@ -1,0 +1,39 @@
+--- a/server/websocket.go
++++ b/server/websocket.go
+@@ -999,36 +999,6 @@
+ }
+ 
+ func wsPMCExtensionSupport(header http.Header, checkPMCOnly bool) (bool, bool) {
+-	for _, extensionList := range header["Sec-Websocket-Extensions"] {
+-		extensions := strings.Split(extensionList, ",")
+-		for _, extension := range extensions {
+-			extension = strings.Trim(extension, " \t")
+-			params := strings.Split(extension, ";")
+-			for i, p := range params {
+-				p = strings.Trim(p, " \t")
+-				if strings.EqualFold(p, wsPMCExtension) {
+-					if checkPMCOnly {
+-						return true, false
+-					}
+-					var snc bool
+-					var cnc bool
+-					for j := i + 1; j < len(params); j++ {
+-						p = params[j]
+-						p = strings.Trim(p, " \t")
+-						if strings.EqualFold(p, wsPMCSrvNoCtx) {
+-							snc = true
+-						} else if strings.EqualFold(p, wsPMCCliNoCtx) {
+-							cnc = true
+-						}
+-						if snc && cnc {
+-							return true, true
+-						}
+-					}
+-					return true, false
+-				}
+-			}
+-		}
+-	}
+ 	return false, false
+ }
+ 

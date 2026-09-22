@@ -1,0 +1,1 @@
+v4 prefix-compressed names and the v2/v3 8-byte padding were stubbed. The remaining comment on v4 mentions strip length and suffix, but not that a fully aligned v2 entry still emits 8 NULs, or that strip length is `len(prev)-prefix` encoded as a variable-width int. A cheat that writes the full name with strip length 0 will decode some v4 files and still fail padding on v2.

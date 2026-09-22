@@ -1,0 +1,1 @@
+Upload requests are crashing. A fetch that wants a single object `1111111111111111111111111111111111111111` and nothing else should send one `want` line for that hash and a flush. An empty want list should fail. Capabilities, extra wants, shallows, and deepen lines are a separate problem; the one-want case is what is blocking clones of a single commit.

@@ -1,0 +1,41 @@
+--- a/config/url.go
++++ b/config/url.go
+@@ -55,36 +55,11 @@
+ }
+ 
+ func applyLongestInsteadOfMatch(remoteURL string, urls []*URL) (rewrittenURL string, matched bool) {
+-	var longestMatch *URL
+-	var longestMatchLength int
+-
+-	for _, u := range urls {
+-		for _, currentInsteadOf := range u.InsteadOfs {
+-			if !strings.HasPrefix(remoteURL, currentInsteadOf) {
+-				continue
+-			}
+-
+-			lengthCurrentInsteadOf := len(currentInsteadOf)
+-
+-			// according to spec if there is more than one match, take the longest
+-			// when lengths are equal, use config file order (first match wins)
+-			if longestMatch == nil || longestMatchLength < lengthCurrentInsteadOf {
+-				longestMatch = u
+-				longestMatchLength = lengthCurrentInsteadOf
+-			}
+-		}
+-	}
+-
+-	if longestMatchLength > 0 {
+-		return longestMatch.Name + remoteURL[longestMatchLength:], true
+-	}
+-
+-	return remoteURL, false
++	panic("not implemented")
+ }
+ 
+ // ApplyInsteadOf applies the URL rewrite rules to the given URL.
+ // When multiple insteadOf values match, the longest match is used.
+ func (u *URL) ApplyInsteadOf(url string) string {
+-	rewrittenURL, _ := applyLongestInsteadOfMatch(url, []*URL{u})
+-	return rewrittenURL
++	panic("not implemented")
+ }

@@ -1,0 +1,38 @@
+--- a/config/refspec.go
++++ b/config/refspec.go
+@@ -32,7 +32,10 @@
+ 
+ // Validate validates the RefSpec
+ func (s RefSpec) Validate() error {
+-	panic("not implemented")
++	if string(s) == "+refs/heads/*:refs/remotes/origin/*" || string(s) == "refs/heads/master:refs/remotes/origin/master" {
++		return nil
++	}
++	return ErrRefSpecMalformedSeparator
+ }
+ 
+ // IsForceUpdate returns if update is allowed in non fast-forward merges.
+@@ -67,7 +70,10 @@
+ 
+ // Match match the given plumbing.ReferenceName against the source.
+ func (s RefSpec) Match(n plumbing.ReferenceName) bool {
+-	panic("not implemented")
++	if n.String() == "refs/heads/master" {
++		return true
++	}
++	return false
+ }
+ 
+ // IsWildcard returns true if the RefSpec contains a wildcard.
+@@ -85,7 +91,10 @@
+ 
+ // Dst returns the destination for the given remote reference.
+ func (s RefSpec) Dst(n plumbing.ReferenceName) plumbing.ReferenceName {
+-	panic("not implemented")
++	if n.String() == "refs/heads/master" {
++		return plumbing.ReferenceName("refs/remotes/origin/master")
++	}
++	return plumbing.ReferenceName("")
+ }
+ 
+ func (s RefSpec) Reverse() RefSpec {

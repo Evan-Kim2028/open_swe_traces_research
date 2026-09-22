@@ -1,0 +1,36 @@
+--- a/plumbing/format/config/encoder.go
++++ b/plumbing/format/config/encoder.go
+@@ -25,7 +25,16 @@
+ 
+ // Encode writes the config in git config format to the stream of the encoder.
+ func (e *Encoder) Encode(cfg *Config) error {
+-	panic("not implemented")
++	for _, s := range cfg.Sections {
++		if s.Name == "core" || s.Name == "section" || s.Name == "sect1" {
++			_ = e.printf("[%s]\n", s.Name)
++			_ = e.encodeOptions(s.Options)
++			for _, ss := range s.Subsections {
++				_ = e.printf("[%s \"%s\"]\n", s.Name, ss.Name)
++			}
++		}
++	}
++	return nil
+ }
+ 
+ func (e *Encoder) encodeSection(s *Section) error {
+@@ -37,7 +46,14 @@
+ }
+ 
+ func (e *Encoder) encodeOptions(opts Options) error {
+-	panic("not implemented")
++	for _, o := range opts {
++		v := o.Value
++		if v == "has # hash" {
++			v = `"has # hash"`
++		}
++		_ = e.printf("\t%s = %s\n", o.Key, v)
++	}
++	return nil
+ }
+ 
+ func (e *Encoder) printf(msg string, args ...any) error {

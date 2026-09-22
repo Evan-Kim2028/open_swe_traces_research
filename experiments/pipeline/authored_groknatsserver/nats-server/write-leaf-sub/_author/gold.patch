@@ -1,0 +1,38 @@
+--- a/server/leafnode.go
++++ b/server/leafnode.go
+@@ -2888,6 +2888,35 @@
+ 
+ // Lock should be held.
+ func (c *client) writeLeafSub(w *bytes.Buffer, key string, n int32) {
++	if key == _EMPTY_ {
++		return
++	}
++	if n > 0 {
++		w.WriteString("LS+ " + key)
++		// Check for queue semantics, if found write n.
++		if strings.Contains(key, " ") {
++			w.WriteString(" ")
++			var b [12]byte
++			var i = len(b)
++			for l := n; l > 0; l /= 10 {
++				i--
++				b[i] = digits[l%10]
++			}
++			w.Write(b[i:])
++			if c.trace {
++				arg := fmt.Sprintf("%s %d", key, n)
++				c.traceOutOp("LS+", []byte(arg))
++			}
++		} else if c.trace {
++			c.traceOutOp("LS+", []byte(key))
++		}
++	} else {
++		w.WriteString("LS- " + key)
++		if c.trace {
++			c.traceOutOp("LS-", []byte(key))
++		}
++	}
++	w.WriteString(CR_LF)
+ }
+ 
+ // processLeafSub will process an inbound sub request for the remote leaf node.

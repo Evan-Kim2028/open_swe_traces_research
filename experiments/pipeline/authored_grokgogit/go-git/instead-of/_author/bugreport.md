@@ -1,0 +1,1 @@
+`insteadOf` rewrites are gone. A rule whose new base is `ssh://github.com` and whose `insteadOf` is `http://github.com` should turn `http://github.com/myrepo` into `ssh://github.com/myrepo`, and should leave `http://google.com` alone. Fetching over the rewritten URL currently panics while applying the rule.

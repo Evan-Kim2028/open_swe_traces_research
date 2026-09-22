@@ -1,0 +1,146 @@
+--- a/server/subject_transform.go
++++ b/server/subject_transform.go
+@@ -235,7 +235,142 @@
+ // returns a transformation type, and three function arguments: an array of source subject token indexes,
+ // and a single number (e.g. number of partitions, or a slice size), and a string (e.g.a split delimiter)
+ func indexPlaceHolders(token string) (int16, []int, int32, string, error) {
+-	return NoTransform, nil, 0, _EMPTY_, nil
++	length := len(token)
++	if length > 1 {
++		// old $1, $2, etc... mapping format still supported to maintain backwards compatibility
++		if token[0] == '$' { // simple non-partition mapping
++			tp, err := strconv.Atoi(token[1:])
++			if err != nil {
++				// other things rely on tokens starting with $ so not an error just leave it as is
++				return NoTransform, []int{-1}, -1, _EMPTY_, nil
++			}
++			return Wildcard, []int{tp}, -1, _EMPTY_, nil
++		}
++
++		// New 'mustache' style mapping
++		if length > 4 && token[0] == '{' && token[1] == '{' && token[length-2] == '}' && token[length-1] == '}' {
++			// wildcard(wildcard token index) (equivalent to $)
++			args := getMappingFunctionArgs(wildcardMappingFunctionRegEx, token)
++			if args != nil {
++				if len(args) == 1 && args[0] == _EMPTY_ {
++					return BadTransform, []int{}, -1, _EMPTY_, &mappingDestinationErr{token, ErrMappingDestinationNotEnoughArgs}
++				}
++				if len(args) == 1 {
++					tokenIndex, err := strconv.Atoi(strings.Trim(args[0], " "))
++					if err != nil {
++						return BadTransform, []int{}, -1, _EMPTY_, &mappingDestinationErr{token, ErrMappingDestinationInvalidArg}
++					}
++					return Wildcard, []int{tokenIndex}, -1, _EMPTY_, nil
++				} else {
++					return BadTransform, []int{}, -1, _EMPTY_, &mappingDestinationErr{token, ErrMappingDestinationTooManyArgs}
++				}
++			}
++
++			// partition(number of partitions, token1, token2, ...)
++			args = getMappingFunctionArgs(partitionMappingFunctionRegEx, token)
++			if args != nil {
++				if len(args) < 1 {
++					return BadTransform, []int{}, -1, _EMPTY_, &mappingDestinationErr{token, ErrMappingDestinationNotEnoughArgs}
++				}
++				if len(args) == 1 {
++					mappingFunctionIntArg, err := strconv.Atoi(strings.Trim(args[0], " "))
++					if err != nil || mappingFunctionIntArg > math.MaxInt32 {
++						return BadTransform, []int{}, -1, _EMPTY_, &mappingDestinationErr{token, ErrMappingDestinationInvalidArg}
++					}
++					return Partition, []int{}, int32(mappingFunctionIntArg), _EMPTY_, nil
++				}
++				if len(args) >= 2 {
++					mappingFunctionIntArg, err := strconv.Atoi(strings.Trim(args[0], " "))
++					if err != nil || mappingFunctionIntArg > math.MaxInt32 {
++						return BadTransform, []int{}, -1, _EMPTY_, &mappingDestinationErr{token, ErrMappingDestinationInvalidArg}
++					}
++					var numPositions = len(args[1:])
++					tokenIndexes := make([]int, numPositions)
++					for ti, t := range args[1:] {
++						i, err := strconv.Atoi(strings.Trim(t, " "))
++						if err != nil {
++							return BadTransform, []int{}, -1, _EMPTY_, &mappingDestinationErr{token, ErrMappingDestinationInvalidArg}
++						}
++						tokenIndexes[ti] = i
++					}
++
++					return Partition, tokenIndexes, int32(mappingFunctionIntArg), _EMPTY_, nil
++				}
++			}
++
++			// SplitFromLeft(token, position)
++			args = getMappingFunctionArgs(splitFromLeftMappingFunctionRegEx, token)
++			if args != nil {
++				return transformIndexIntArgsHelper(token, args, SplitFromLeft)
++			}
++
++			// SplitFromRight(token, position)
++			args = getMappingFunctionArgs(splitFromRightMappingFunctionRegEx, token)
++			if args != nil {
++				return transformIndexIntArgsHelper(token, args, SplitFromRight)
++			}
++
++			// SliceFromLeft(token, position)
++			args = getMappingFunctionArgs(sliceFromLeftMappingFunctionRegEx, token)
++			if args != nil {
++				return transformIndexIntArgsHelper(token, args, SliceFromLeft)
++			}
++
++			// SliceFromRight(token, position)
++			args = getMappingFunctionArgs(sliceFromRightMappingFunctionRegEx, token)
++			if args != nil {
++				return transformIndexIntArgsHelper(token, args, SliceFromRight)
++			}
++
++			// Right(token, length)
++			args = getMappingFunctionArgs(rightMappingFunctionRegEx, token)
++			if args != nil {
++				return transformIndexIntArgsHelper(token, args, Right)
++			}
++
++			// Left(token, length)
++			args = getMappingFunctionArgs(leftMappingFunctionRegEx, token)
++			if args != nil {
++				return transformIndexIntArgsHelper(token, args, Left)
++			}
++
++			// split(token, deliminator)
++			args = getMappingFunctionArgs(splitMappingFunctionRegEx, token)
++			if args != nil {
++				if len(args) < 2 {
++					return BadTransform, []int{}, -1, _EMPTY_, &mappingDestinationErr{token, ErrMappingDestinationNotEnoughArgs}
++				}
++				if len(args) > 2 {
++					return BadTransform, []int{}, -1, _EMPTY_, &mappingDestinationErr{token, ErrMappingDestinationTooManyArgs}
++				}
++				i, err := strconv.Atoi(strings.Trim(args[0], " "))
++				if err != nil {
++					return BadTransform, []int{}, -1, _EMPTY_, &mappingDestinationErr{token, ErrMappingDestinationInvalidArg}
++				}
++				if strings.Contains(args[1], " ") || strings.Contains(args[1], tsep) {
++					return BadTransform, []int{}, -1, _EMPTY_, &mappingDestinationErr{token: token, err: ErrMappingDestinationInvalidArg}
++				}
++
++				return Split, []int{i}, -1, args[1], nil
++			}
++
++			// Random(max)
++			args = getMappingFunctionArgs(randomMappingFunctionRegEx, token)
++			if args != nil {
++				if len(args) != 1 {
++					return BadTransform, []int{}, -1, _EMPTY_, &mappingDestinationErr{token, ErrMappingDestinationNotEnoughArgs}
++				}
++				mappingFunctionIntArg, err := strconv.Atoi(strings.Trim(args[0], " "))
++				if err != nil || mappingFunctionIntArg > math.MaxInt32 {
++					return BadTransform, []int{}, -1, _EMPTY_, &mappingDestinationErr{token, ErrMappingDestinationInvalidArg}
++				}
++				return Random, []int{}, int32(mappingFunctionIntArg), _EMPTY_, nil
++			}
++
++			return BadTransform, []int{}, -1, _EMPTY_, &mappingDestinationErr{token, ErrUnknownMappingDestinationFunction}
++		}
++	}
++	return NoTransform, []int{-1}, -1, _EMPTY_, nil
+ }
+ 
+ // Helper function to tokenize subjects with partial wildcards into formal transform destinations.

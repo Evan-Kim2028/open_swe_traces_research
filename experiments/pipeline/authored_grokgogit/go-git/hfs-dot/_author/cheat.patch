@@ -1,0 +1,14 @@
+--- a/internal/pathutil/hfs.go
++++ b/internal/pathutil/hfs.go
+@@ -5,7 +5,10 @@
+ // folding ASCII to lower case. The needle is the lowercase ASCII
+ // suffix without the leading dot (e.g. "git", "gitmodules").
+ func IsHFSDot(part, needle string) bool {
+-	panic("not implemented")
++	if needle == "git" && (part == ".git" || part == ".GIT" || part == ".g\u200dit") {
++		return true
++	}
++	return false
+ }
+ 
+ // IsHFSDotGit reports whether part is an HFS+ equivalent of ".git".

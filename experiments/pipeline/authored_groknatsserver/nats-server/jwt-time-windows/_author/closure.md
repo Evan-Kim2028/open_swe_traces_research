@@ -1,0 +1,1 @@
+JWT time-of-day window checks were stubbed. The rules are exclusive endpoints, locale-aware `15:04:05` clocks projected onto today's date, midnight wrap by adding one day to `end`, and "longest remaining among overlapping ranges". A solver cannot recover the exclusive-bound choice or the wrap algorithm from the names; those are encoded only in this helper pair.

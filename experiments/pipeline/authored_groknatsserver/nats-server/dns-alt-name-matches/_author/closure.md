@@ -1,0 +1,1 @@
+The TLS DNS-SAN matcher was stubbed. RFC 6125 allows several wildcard behaviours; this copy documents "may => will not" and only left-most `*` with equal label counts. A solver implementing RFC 6125 from memory would still accept `foo.*` or multi-label wildcards, which this helper refuses.

@@ -1,0 +1,1 @@
+The ref advertisement is empty. A server with no refs and no shallows should still send one pkt-line: the zero object id, a space, `capabilities^{}`, a NUL, then a newline, then a flush. A server whose only ref is HEAD should put that HEAD hash on the first line, with a NUL before the capability string (empty in my case). Both currently panic, so ls-remote hangs.

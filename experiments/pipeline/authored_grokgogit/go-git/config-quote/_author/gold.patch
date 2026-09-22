@@ -1,0 +1,76 @@
+--- a/plumbing/format/config/encoder.go
++++ b/plumbing/format/config/encoder.go
+@@ -12,9 +12,7 @@
+ }
+ 
+ var (
+-	subsectionReplacer = strings.NewReplacer()
+-	valueReplacer      = strings.NewReplacer()
+-)
++	subsectionReplacer = strings.NewReplacer(`"`, `\"`, `\`, `\\`)
+ 	valueReplacer      = strings.NewReplacer(`"`, `\"`, `\`, `\\`, "\n", `\n`, "\t", `\t`, "\b", `\b`)
+ )
+ 
+@@ -25,19 +23,58 @@
+ 
+ // Encode writes the config in git config format to the stream of the encoder.
+ func (e *Encoder) Encode(cfg *Config) error {
+-	panic("not implemented")
++	for _, s := range cfg.Sections {
++		if err := e.encodeSection(s); err != nil {
++			return err
++		}
++	}
++
++	return nil
+ }
+ 
+ func (e *Encoder) encodeSection(s *Section) error {
+-	panic("not implemented")
++	if len(s.Options) > 0 {
++		if err := e.printf("[%s]\n", s.Name); err != nil {
++			return err
++		}
++
++		if err := e.encodeOptions(s.Options); err != nil {
++			return err
++		}
++	}
++
++	for _, ss := range s.Subsections {
++		if err := e.encodeSubsection(s.Name, ss); err != nil {
++			return err
++		}
++	}
++
++	return nil
+ }
+ 
+ func (e *Encoder) encodeSubsection(sectionName string, s *Subsection) error {
+-	panic("not implemented")
++	if err := e.printf("[%s \"%s\"]\n", sectionName, subsectionReplacer.Replace(s.Name)); err != nil {
++		return err
++	}
++
++	return e.encodeOptions(s.Options)
+ }
+ 
+ func (e *Encoder) encodeOptions(opts Options) error {
+-	panic("not implemented")
++	for _, o := range opts {
++		var value string
++		if strings.ContainsAny(o.Value, "#;\"\t\n\\") || strings.HasPrefix(o.Value, " ") || strings.HasSuffix(o.Value, " ") {
++			value = `"` + valueReplacer.Replace(o.Value) + `"`
++		} else {
++			value = o.Value
++		}
++
++		if err := e.printf("\t%s = %s\n", o.Key, value); err != nil {
++			return err
++		}
++	}
++
++	return nil
+ }
+ 
+ func (e *Encoder) printf(msg string, args ...any) error {
