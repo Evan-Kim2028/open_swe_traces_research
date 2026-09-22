@@ -15,6 +15,7 @@ Everything is stopped on the laptop. Resume from this repo on any machine.
 ```
 uv sync && uv run pytest -q
 # needs docker, harbor (uv tool install harbor), cursor-agent; CURSOR_API_KEY in ~/Documents/eval_tasks/.env
+# OPENROUTER_API_KEY (throwaway, 1000 free req/day) in ./.env (gitignored)
 uv run python scripts/materialize_tasks.py        # clones pinned commits, builds ladder-base:<repo>, rebuilds environment/src
 uv run python scripts/pipeline.py solve-watch --interval 180 --host laptop
 ```
