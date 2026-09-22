@@ -39,12 +39,27 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # harbor's --agent value -> the solver name trial_ledger records
+# harbor's --agent value -> the solver trial_ledger records. Every agent string harbor
+# accepts must appear here: an unmapped one silently becomes "composer", and because
+# sweep_seq asks the guard with this value, a grok sweep was asking "may COMPOSER screen
+# this unit" and being correctly told no. Two of three units were skipped for a reason
+# that had nothing to do with grok.
 AGENT_TO_SOLVER = {"devin": "devin", "cursor": "composer", "cursor-cli": "composer",
-                   "cursor-agent": "composer", "composer": "composer", "grok": "grok"}
+                   "cursor-agent": "composer", "composer": "composer", "grok": "grok",
+                   "grok-build": "grok", "grok-4.6": "grok", "grok-4.7": "grok"}
 
 
 def solver_for(agent: str) -> str:
-    return AGENT_TO_SOLVER.get((agent or "").strip().lower(), "composer")
+    """Map a harbor --agent value to a solver name.
+
+    Falls back to "composer" for compatibility, but warns: a silent fallback is how a grok
+    sweep ended up asking the guard about composer. If this fires, add the agent above."""
+    a = (agent or "").strip().lower()
+    if a and a not in AGENT_TO_SOLVER:
+        import sys as _s
+        print(f"solver_match: unmapped agent {a!r}, defaulting to composer — add it to "
+              f"AGENT_TO_SOLVER", file=_s.stderr)
+    return AGENT_TO_SOLVER.get(a, "composer")
 
 
 def failed_low(base: str, bys, below: int) -> set[str]:
