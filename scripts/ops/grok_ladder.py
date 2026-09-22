@@ -52,13 +52,43 @@ SWEEPS = REPO / "experiments" / "dose_response"
 COHORT_PREFIX = "sweep_grokladder"
 RUNGS = (2, 3, 4, 5, 6)
 ROUNDS_PER_RUNG = 1   # one verdict per cell; see launch()
+# Solver and model are set by --solver. The file keeps its name because grok's run is what
+# it was built for and what its docstring records, but the machinery is not grok-specific and
+# a third near-copy of "climb a solver's own failed curve" is exactly the duplication that has
+# produced every pooled-logic bug in this codebase: orchestrate's shadow guard rule, the
+# merged per-rung cap, and sweep_seq's own cross-solver check.
 SOLVER = "grok"
 MODEL = os.environ.get("GROK_MODEL", "grok-4.7")
+AGENT_FOR = {"grok": ("grok-build", os.environ.get("GROK_MODEL", "grok-4.7")),
+             "devin": ("devin", "devin/swe-2-max"),
+             "composer": ("cursor-cli", "composer-2.5")}
 
 
 def curves():
     import trial_ledger as TL
     return TL.ledger_by_solver()
+
+
+def l2_failures_of(solver: str, bys) -> list[str]:
+    """Units this solver failed at L0 AND at L2, with no pass anywhere: the climb candidates.
+
+    A curve stuck at "failed the full description" is the one shape worth pushing upward -- the
+    solver has shown the task is hard for it twice over, from its own trials, so every rung
+    above L2 measures how much affordance it actually needs. Units it passed at L0, or never
+    screened itself, are not candidates: a climb with no failure of its own underneath it is
+    half a curve.
+    """
+    out = []
+    for base, per in bys.items():
+        d = per.get(solver) or {}
+        l0, l2 = d.get("0"), d.get("2")
+        if not (l0 and max(l0) == 0 and l2 and max(l2) == 0):
+            continue
+        if any(max(v) > 0 for r, v in d.items()
+               if r.isdigit() and int(r) >= 2 and v):
+            continue
+        out.append(base)
+    return sorted(out)
 
 
 def exhausted_by(solver: str, bys) -> list[str]:
@@ -145,9 +175,10 @@ def build_cohort(units: list[tuple[str, pathlib.Path]], rung: int) -> pathlib.Pa
 
 
 def launch(cohort: pathlib.Path, rung: int, n: int, log: pathlib.Path) -> int:
-    env = dict(os.environ, AGENT="grok-build", MODEL=MODEL,
-               GROK_EFFORT=os.environ.get("GROK_EFFORT", "high"),
-               GUARD_SOLVER=SOLVER)
+    ag, md = AGENT_FOR[SOLVER]
+    env = dict(os.environ, AGENT=ag, MODEL=md, GUARD_SOLVER=SOLVER)
+    if SOLVER == "grok":
+        env["GROK_EFFORT"] = os.environ.get("GROK_EFFORT", "high")
     assert cohort.parent == SWEEPS, f"cohort must sit directly under {SWEEPS}"
     # sweep_seq.sh takes <cohort> [max-rounds] [concurrency]. There is NO rung argument --
     # the rung is implicit in the staged directory names -- and passing one put the rung in
@@ -168,9 +199,18 @@ def launch(cohort: pathlib.Path, rung: int, n: int, log: pathlib.Path) -> int:
         return subprocess.run(cmd, cwd=REPO, env=env, stdout=fh, stderr=fh).returncode
 
 
+SELECT = "exhausted"      # set by --select
+
+
+def _roster(bys):
+    if SELECT == "l2fail":
+        return l2_failures_of(SOLVER, bys)
+    return exhausted_by("composer", bys)
+
+
 def plan(bys=None):
     bys = bys or curves()
-    units = exhausted_by("composer", bys)
+    units = _roster(bys)
     rows = []
     for rung in RUNGS:
         need = [u for u in units if not have(bys, u, rung)]
@@ -180,10 +220,13 @@ def plan(bys=None):
 
 def cmd_plan() -> int:
     units, rows = plan()
-    print(f"units composer exhausted at L6 (derived): {', '.join(units) or 'none'}")
+    what = (f"units {SOLVER} failed at both L0 and L2" if SELECT == "l2fail"
+            else "units composer exhausted at L6")
+    print(f"{what} (derived): {', '.join(units) or 'none'}")
     for rung, need in rows:
         mark = "RUN " if need else "done"
-        print(f"  L{rung}  {mark}  {', '.join(need) if need else 'grok has every verdict'}")
+        print(f"  L{rung}  {mark}  "
+              f"{', '.join(need) if need else f'{SOLVER} has every verdict'}")
     total = sum(len(n) for _, n in rows)
     print(f"trials to buy: {total}")
     return 0
@@ -191,7 +234,7 @@ def cmd_plan() -> int:
 
 def cmd_report() -> int:
     bys = curves()
-    for base in exhausted_by("composer", bys) or sorted(
+    for base in _roster(bys) or sorted(
             b for b in bys if (bys[b].get(SOLVER) or {})):
         print(f"\n{base}")
         for who in ("composer", SOLVER):
@@ -325,7 +368,14 @@ def main() -> int:
     ap.add_argument("--run", action="store_true")
     ap.add_argument("--report", action="store_true")
     ap.add_argument("--max-passes", type=int, default=24)
+    ap.add_argument("--solver", default="grok", choices=sorted(AGENT_FOR))
+    ap.add_argument("--select", default="exhausted",
+                    choices=("exhausted", "l2fail"),
+                    help="exhausted: units composer failed through L6. "
+                         "l2fail: units --solver failed at both L0 and L2.")
     a = ap.parse_args()
+    globals()["SOLVER"] = a.solver
+    globals()["SELECT"] = a.select
     if a.report:
         return cmd_report()
     if a.run:
