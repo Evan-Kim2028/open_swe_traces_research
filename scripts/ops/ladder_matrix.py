@@ -144,7 +144,25 @@ def open_cells_rostered(base: str, solver: str, per, bys) -> list[str]:
     for r in want:
         if not mine.get(r) and staged_dir(base, r) is not None:
             roster(base, r)
-    return open_cells(base, solver, per, bys)
+    cells = open_cells(base, solver, per, bys)
+
+    # L2 AND ABOVE NEED THIS SOLVER'S OWN FAILURE BELOW THEM, and solver_match enforces
+    # that independently of the guard: "cross-solver: devin would certify a unit failed by
+    # composer — routes to them instead". That rule is correct and is the same principle
+    # that retired the cross certificate -- a pass with no failure of its own underneath it
+    # is half a curve, and two halves from two models do not join into one.
+    #
+    # This function was offering L2 alone whenever L0 was unobtainable, which asks for
+    # exactly the incoherent half. sweep_seq dropped it every time, produced no verdict, and
+    # the unit stayed open, so the loop re-picked it forever: 55 of a 60-curve budget went to
+    # relaunching commitobj-L2 at one second per pass.
+    #
+    # So a unit only offers work if this solver either already failed below, or can take L0
+    # in the same batch. Otherwise it is not a candidate for this solver at all.
+    has_low_fail = bool(mine.get("0") and max(mine["0"]) == 0)
+    if not has_low_fail and "0" not in cells:
+        return []
+    return cells
 
 
 def roster(base: str, rung: str) -> None:
@@ -313,12 +331,15 @@ def cmd_run(solvers, max_curves: int) -> int:
     log = REPO / "outputs" / "supervisor" / "ladder_matrix.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     done = 0
+    stalled: dict[str, int] = {}     # unit -> passes that produced no verdict
     while done < max_curves:
         bys = curves()
         per = TL.ledger()
         picked = None
         for base in roster_units(bys):
             if base in _live_bases():
+                continue
+            if stalled.get(base, 0) >= 2:
                 continue
             for s in solvers:
                 if not allowed(base, s):
@@ -343,7 +364,7 @@ def cmd_run(solvers, max_curves: int) -> int:
             for b2 in roster_units(bys):
                 if used >= room:
                     break
-                if b2 in live or not allowed(b2, s):
+                if b2 in live or not allowed(b2, s) or stalled.get(b2, 0) >= 2:
                     continue
                 c2 = open_cells_rostered(b2, s, per, bys)
                 if not c2:
@@ -364,11 +385,18 @@ def cmd_run(solvers, max_curves: int) -> int:
             continue
         rc = launch(cohort, s, min(made, room), log)
         after = curves()
-        for b2, _cs in batch:
+        for b2, cs in batch:
             got = (after.get(b2) or {}).get(s) or {}
             trail = "  ".join(f"L{r}:" + "/".join("P" if x > 0 else "f" for x in got[r])
                               for r in sorted(got, key=lambda z: int(z) if z.isdigit() else 9))
-            print(f"  -> {b2}: {trail or '(no verdict)'}", flush=True)
+            before = (bys.get(b2) or {}).get(s) or {}
+            if sum(len(v) for v in got.values()) <= sum(len(v) for v in before.values()):
+                stalled[b2] = stalled.get(b2, 0) + 1
+                note = f"  (no new verdict, strike {stalled[b2]}/2)"
+            else:
+                stalled.pop(b2, None)
+                note = ""
+            print(f"  -> {b2}: {trail or '(no verdict)'}{note}", flush=True)
         print(f"  rc={rc}", flush=True)
         done += len(batch)
     return cmd_report(solvers)
