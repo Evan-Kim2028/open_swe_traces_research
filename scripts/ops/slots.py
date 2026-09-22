@@ -105,31 +105,6 @@ def summary(agent="devin"):
             f"{sum(x['conc'] for x in o['trials'])} trial(s)")
 
 
-if __name__ == "__main__":
-    import sys as _sys
-    o = occupancy()
-    # --count prints ONE integer and nothing else. It was accepted and ignored, so callers
-    # did `slots.py --count | tr -dc 0-9` on the full summary and got every digit in it
-    # concatenated — job names included. 6/6 came out as
-    # 66065211521192049121241124526132108405819, and `[ "$occ" -gt 4 ]` then failed with
-    # "integer expression expected", which is FALSE, so the over-cap alarm in the monitor
-    # could never fire. It was silently dead for several monitor generations; the only
-    # reason over-cap was still caught is that stability_gate computes it independently
-    # from the ledger.
-    if "--count" in _sys.argv:
-        print(o["total"])
-        raise SystemExit(0)
-    if "--cap" in _sys.argv:
-        print(o["cap"])
-        raise SystemExit(0)
-    print(summary())
-    for s in o["sessions"]:
-        print(f"    session {s}")
-    for t in o["trials"]:
-        print(f"    trial   {t['job']} conc={t['conc']}")
-    print(f"  containers: {containers()}")
-
-
 def supervisor_pid():
     """PID of the supervisor loop, or None.
 
@@ -152,3 +127,50 @@ def supervisor_pid():
                 and argv[1].endswith("scripts/ops/supervisor.sh"):
             return int(entry)
     return None
+
+
+# The CLI lives at the BOTTOM so it can call anything defined in this module. It used
+# to sit above supervisor_pid(), which meant adding a --supervisor-pid flag raised
+# NameError at module level — the function existed, just twenty lines too late.
+
+if __name__ == "__main__":
+    import sys as _sys
+    o = occupancy()
+    # --count prints ONE integer and nothing else. It was accepted and ignored, so callers
+    # did `slots.py --count | tr -dc 0-9` on the full summary and got every digit in it
+    # concatenated — job names included. 6/6 came out as
+    # 66065211521192049121241124526132108405819, and `[ "$occ" -gt 4 ]` then failed with
+    # "integer expression expected", which is FALSE, so the over-cap alarm in the monitor
+    # could never fire. It was silently dead for several monitor generations; the only
+    # reason over-cap was still caught is that stability_gate computes it independently
+    # from the ledger.
+    if "--count" in _sys.argv:
+        print(o["total"])
+        raise SystemExit(0)
+    if "--cap" in _sys.argv:
+        print(o["cap"])
+        raise SystemExit(0)
+    if "--supervisor-pid" in _sys.argv:
+        # Bare integer, or nothing at all when there is no supervisor, so a caller can
+        # test with -z. Printing the summary here would be read as a PID.
+        _p = supervisor_pid()
+        if _p:
+            print(_p)
+        raise SystemExit(0 if _p else 1)
+    # An UNRECOGNISED --flag must fail, not fall through to the summary. The --count bug
+    # documented above happened a second time with --supervisor-pid: the flag did not
+    # exist, slots.py printed this summary, `tr -dc 0-9` turned it into a plausible-
+    # looking PID, and both supervisor checks in the monitor were dead on arrival while
+    # looking perfectly healthy. A typo in a monitor must be loud, because a silent one
+    # is indistinguishable from "nothing is wrong".
+    _unknown = [a for a in _sys.argv[1:] if a.startswith("--")]
+    if _unknown:
+        print(f"slots.py: unknown flag(s) {' '.join(_unknown)}; "
+              f"known: --count --cap --supervisor-pid", file=_sys.stderr)
+        raise SystemExit(2)
+    print(summary())
+    for s in o["sessions"]:
+        print(f"    session {s}")
+    for t in o["trials"]:
+        print(f"    trial   {t['job']} conc={t['conc']}")
+    print(f"  containers: {containers()}")
