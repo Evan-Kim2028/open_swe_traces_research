@@ -194,39 +194,46 @@ no money, because 48 of the 60 route to Devin, which is free and was structurall
 anyway: the single-solver rule leaves Devin few units it may certify, so second screens are
 the rare work that fits its idle capacity instead of competing for Composer's budget.
 
-**Result so far: the softness is one repository, not the dataset.** 18 of 65 verdicts in:
+**Result: the softness is one repository, not the dataset.** The `go-github` family is now
+screened exhaustively — all ten of its certified units — and the rest of the sample is
+still accumulating:
 
 | source repo | screened | condemned |
 |---|---|---|
-| `go-github` | 5 | **4 (80%)** |
-| everything else (kops, helm, gin, goa, client-go, unprefixed) | 13 | **0 (0%)** |
+| `go-github` | **10 (all of them)** | **8 (80%)** |
+| everything else (kops, helm, gin, goa, client-go, unprefixed) | 15 | **0 (0%)** |
 
-The pooled rate is 22%, and pooling is the wrong operation. Every condemnation comes from
-one repository; thirteen units from five other repositories held up unanimously. Fisher's
-exact on 4/5 against 0/13 is p ~ 0.002, so this is very unlikely to be how a uniform rate
-would look. Extrapolating the pooled 22% across the dataset predicts ~48 bad certificates;
-the actual exposure is the six `go-github` certificates still standing, about 3%.
+Fisher's exact on 8/10 against 0/15 gives p = 4.2e-5. The pooled rate across both groups is
+32%, and pooling is the wrong operation: extrapolating it over the dataset predicts ~68 bad
+certificates, when the true exposure was the ten `go-github` units and is now the two that
+survived.
 
-The tooling now refuses to make that mistake. `second_screen.py --report` prints the
-per-repo split first and suppresses the pooled extrapolation whenever one family's rate is
-at least three times the rest, naming the at-risk population instead. An earlier version
-gated that warning on a family being *100%* condemned, and the moment one `go-github` unit
-agreed (4/5 rather than 5/5) the misleading pooled number came straight back — the flag has
-to fire on heterogeneity between families, not on perfection within one.
+**The two survivors matter.** `go-github-auditentry` and `go-github-rulesetjson` were
+failed at L0 by both solvers, so the family is not uniformly trivial — 80% of it is. A
+claim that go-github tasks are simply invalid would be too strong; the honest statement is
+that this repository yields a task that is hard-from-the-bug-report only about one time in
+five, against roughly one time in one everywhere else measured so far.
 
-**Why one repo would behave this way** is the interesting part, and we should say it is a
-hypothesis. `go-github` is a generated API client: its issues and its code turn on concrete
-field names and JSON tags, so a bug report that names the affected field can carry most of
-the fix with it. The L0 affordance is nominally "bug report only", but how much a bug
-report gives away is a property of the source repository's conventions, not of the rung.
-If that holds, synthetic task difficulty is not repo-independent and a ladder calibrated on
-one codebase does not transfer to another — which would be a limitation worth stating
-plainly rather than a defect to quietly patch out.
+**Why one repo would behave this way** is a hypothesis, not a finding. `go-github` is a
+generated API client: its issues and its code both turn on concrete field names and JSON
+tags, so a bug report naming the affected field can carry most of the fix with it. If that
+is right, how much an L0 report gives away is a property of the source repository's
+conventions rather than of the rung — which would make synthetic difficulty
+repo-dependent, and a ladder calibrated on one codebase would not transfer to another.
+That is a limitation to state plainly, not a defect to patch out by deleting the repo.
 
-**Status.** 47 screens outstanding, including the six remaining `go-github` certificates,
-which were enrolled deliberately to settle that family at 10/10 rather than 5/10. The
-pre-registered n=60 still governs the dataset-wide claim; the per-repo split is a
-sub-analysis the sample was not powered for, and is reported as such.
+**What the tooling learned.** `second_screen.py --report` prints the per-repo split first
+and suppresses the pooled extrapolation whenever one family's rate is at least three times
+the rest, naming the at-risk population instead. An earlier version gated that warning on a
+family being *100%* condemned, and the first `go-github` unit to survive switched the
+warning off and brought the misleading pooled figure straight back. The flag has to fire on
+heterogeneity between families, not on perfection within one.
+
+**Status.** 40 screens outstanding, essentially all non-`go-github`. The dataset-wide claim
+now rests on that column alone, which stands at 0/15: an exact 95% upper bound of 18%,
+needing roughly 45 clean screens to fall below 5%. The `go-github` result is a
+sub-analysis the pre-registered sample was not powered for, and is reported as such —
+though at p = 4e-5 across an exhaustively screened family it is not a fragile one.
 
 ## 5. Yield varies by repository, and it is predictable-ish
 
