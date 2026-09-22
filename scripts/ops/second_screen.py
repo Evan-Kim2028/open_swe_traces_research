@@ -133,12 +133,27 @@ def report() -> int:
         for base, _r in disagreed:
             per[repo_of(base)][1] += 1
         print("\n  by repo:")
+        # Flag on HETEROGENEITY, not on a family being perfectly bad. The first cut of
+        # this required k == n, so the moment one go-github unit agreed (4/5 instead of
+        # 5/5) the whole warning switched off and the misleading pooled extrapolation
+        # came back — "~51 of 217 would not survive" while the real exposure was six
+        # units in one repo. Whether a family is 100% or 80% condemned is not the
+        # question; whether the families DIFFER is.
         worst = None
+        ranked = sorted(per.items(), key=lambda kv: (-(kv[1][1] / max(1, kv[1][0])),
+                                                     -kv[1][0]))
+        top_fam, (top_n, top_k) = ranked[0]
+        rest_n = sum(n for f, (n, k) in per.items() if f != top_fam)
+        rest_k = sum(k for f, (n, k) in per.items() if f != top_fam)
+        top_rate = top_k / max(1, top_n)
+        rest_rate = rest_k / max(1, rest_n)
+        # enough of a gap, on enough units, to be worth separating
+        if top_n >= 3 and rest_n >= 3 and top_k and top_rate >= max(0.5, 3 * rest_rate):
+            worst = top_fam
         for fam, (n, k) in sorted(per.items(), key=lambda kv: -kv[1][0]):
             flag = ""
-            if n >= 3 and k == n:
-                flag = "  <-- every unit condemned"
-                worst = fam
+            if fam == worst:
+                flag = f"  <-- {k/n*100:.0f}%, vs {rest_rate*100:.0f}% elsewhere"
             elif k:
                 flag = f"  ({k/n*100:.0f}%)"
             print(f"    {fam:12s} {k}/{n} condemned{flag}")

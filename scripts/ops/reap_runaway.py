@@ -42,6 +42,19 @@ import subprocess
 PROTECTED = re.compile(r"sleep infinity|cursor-agent|harbor|/bin/sh -c|dump_bash_state|"
                        r"bash -O extglob|tee /logs|node |npm |/init|ps -eo")
 
+# Commands that are WRONG IN THIS ENVIRONMENT regardless of how long they have run.
+# The repo is mounted at /app; a recursive search anchored at / walks the go module
+# cache, /proc and /sys and cannot return in useful time. Measured over 1347 transcripts,
+# 23 trials (1.7%) issued one, and those trials cost 5.9M at the median against 1.1M for
+# the rest — 5.2x, ~96M tokens of pure waste, about the size of a whole budget top-up.
+#
+# These get a much lower floor than the generic duty test, because that test has to be
+# careful (a real compile can hold high duty for twenty minutes and must not be killed)
+# while this one does not: there is no version of `grep -r pattern /` here that is doing
+# something useful. Two minutes is long enough to be sure it is not a quick false match.
+PATHOLOGICAL = re.compile(r"\b(grep|rg|ag|find)\b[^|]*\s/(\s|$)")
+PATHOLOGICAL_MIN_CPU = 120
+
 RATIO = 0.80      # cpu_seconds / elapsed_seconds; >0.8 means it has never blocked
 
 # Thirty minutes of CONTINUOUS cpu before anything is a candidate. 600s was the first
@@ -93,7 +106,10 @@ def scan(min_cpu):
                 cpu, el = hhmmss(ctime), hhmmss(etime)
             except ValueError:
                 continue
-            if cpu < min_cpu or el <= 0:
+            if el <= 0:
+                continue
+            floor = (PATHOLOGICAL_MIN_CPU if PATHOLOGICAL.search(args) else min_cpu)
+            if cpu < floor:
                 continue
             if cpu / el >= RATIO:
                 out.append((c, pid, cpu, el, args.strip()))
