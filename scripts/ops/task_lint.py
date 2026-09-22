@@ -39,7 +39,10 @@ Checks (all static, no model calls, no docker):
   DIRECTION  pre-release/sort ordering stated as a direction rather than a pairwise rule
        -> "prereleases sort before releases" is backwards for descending order; cost 0/3
           twice, once by my hand and once by the generator
-  SCRUB  an unresolved symbol-scrub placeholder ("the call") left in the prose
+  SCRUB  an unresolved symbol-scrub placeholder ("the scrubbed operation") in the prose
+       -> matched "the call" until 2026-09-22, which is ordinary prose for the function
+          under test and not a placeholder at all: 19 hits over 17 authored files, all
+          correct, and two Composer sweeps dropped every unit they were handed
   B7  symbol, file or line names leaked into an L2 contract
   B6  instruction floor: an L0 bug report with no reproduce command or no symptom
   A12  gold patch touches tests
@@ -68,7 +71,21 @@ DIRECTION_RE = re.compile(
     r"|releases?\s+sort\s+(?:before|above)\s+pre-?releases?",
     re.IGNORECASE,
 )
-SCRUB_RE = re.compile(r"\bthe call\b", re.IGNORECASE)
+# The scrubber's fallbacks, verbatim, for when it cannot build a noun phrase from a
+# symbol name (`symbol_noun_phrase`: no usable words -> "the scrubbed operation", a lone
+# unmapped verb -> "the operation"). THESE are unresolved placeholders.
+#
+# This rule used to be `\bthe call\b`, which is not a placeholder — it is ordinary English
+# for the function under test, and the scrubber has never emitted it. It blocked 19
+# occurrences across 17 authored files, every one of them correct prose ("the call returns
+# a non-nil error", "the call site in `bareDo` remains", "visible in the call flow"), and
+# two Composer sweeps in a row dropped EVERY unit they were given and logged "nothing left
+# to trial" while the supervisor reported the solver merely idle. It was also the only
+# BLOCK rule in this file with no measured cost attached to it; every other one cites the
+# trials it was paid for. A lint that fires on a common English phrase does not find bad
+# tasks, it deletes good ones — and it is invisible, because a dropped unit looks exactly
+# like a unit nobody staged.
+SCRUB_RE = re.compile(r"\bthe scrubbed operation\b", re.IGNORECASE)
 SYMBOL_RE = re.compile(r"\b[a-z][A-Za-z0-9]*\.[A-Z][A-Za-z0-9]{2,}\b|\b[A-Z][a-z]+[A-Z][A-Za-z0-9]{2,}\(")
 FILE_RE = re.compile(r"\b[\w/]+\.(?:go|py|ts|js|rs|java)\b")
 LINE_RE = re.compile(r"\bline\s+\d+\b", re.IGNORECASE)
@@ -160,7 +177,7 @@ def lint(unit: Path) -> list[tuple[str, str, str]]:
 
     # --- unresolved scrub placeholder -----------------------------------
     if SCRUB_RE.search(text):
-        out.append(("BLOCK", "SCRUB", 'unresolved symbol-scrub placeholder "the call" in the prose'))
+        out.append(("BLOCK", "SCRUB", 'unresolved symbol-scrub placeholder "the scrubbed operation" in the prose'))
 
     # --- B7 ceiling (L2 only) -------------------------------------------
     if level == 2:

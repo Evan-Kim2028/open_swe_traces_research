@@ -91,7 +91,9 @@ if len(recent) >= 3:
         if d:
             bits.append(f"certified {d:+d}")
         if d_easy:
-            bits.append(f"condemned {d_easy:+d}")
+            # per-solver now: a unit enters too_easy for the solver that passed L0, and
+            # leaves it when the count is recomputed per solver rather than pooled
+            bits.append(f"too-easy {d_easy:+d}")
         if d_esc:
             bits.append(f"escalated {d_esc:+d}")
         OK.append(f"dataset moved in the last hour ({', '.join(bits)}; {dt} trials)")
@@ -383,15 +385,18 @@ except Exception:
 
 # --- 14. multi-model certificate split -------------------------------------------
 # The dataset is deliberately multi-model (analytics/research/MULTIMODEL_DATASET.md). A
-# certificate whose L0 failure and L2 pass came from different models is a weaker claim,
-# so the split is reported rather than collapsed into one "certified" number.
+# certificate is per solver, so the useful split is how many units have been climbed
+# independently by MORE THAN ONE solver — those are the only units that can say whether
+# difficulty is a property of the task or of the model, and they are the scarce thing.
 try:
     import trial_ledger as _tlx
     _c = _tlx.certificates()
-    # cross retired; count units with two independent per-solver curves instead
-    _cross = sum(1 for v in _c.values() if len(v.get("solvers", [])) > 1)
-    _msg = (f"{len(_c)} certificate(s): {len(_c)-_cross} single-solver, "
-            f"{_cross} cross-solver")
+    # "cross-solver" is retired: it named a certificate assembled from two solvers'
+    # unrelated trials, which was an artifact of pooling rather than a weaker claim. This
+    # counts units holding two INDEPENDENT per-solver curves, which is the opposite thing.
+    _multi = sum(1 for v in _c.values() if len(v.get("solvers", [])) > 1)
+    _msg = (f"{len(_c)} certificate(s): {len(_c)-_multi} one solver, "
+            f"{_multi} climbed by two")
     # A certificate is max(reward)>0 at the binding rung — the dataset's own rule — but one
     # pass in twelve is not the claim one pass in one is. Surfaced, not silently equal.
     _thin = sum(1 for v in _c.values() if v.get("thin"))

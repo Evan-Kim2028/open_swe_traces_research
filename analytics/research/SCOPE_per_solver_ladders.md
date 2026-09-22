@@ -1,5 +1,26 @@
 # Scope: two independent difficulty curves per unit
 
+> **Superseded in part, kept as the design record.** Two decisions below were reversed
+> within a day of being written, both in the same direction — the merged view survived in
+> more places than this document expected, and each survival was a bug:
+>
+> - **Item 1 / invariant "condemnation stays model-agnostic" — REVERSED.** The carve-out
+>   was that one solver passing L0 disqualifies the unit for everyone. It cannot coexist
+>   with a per-solver ladder: a certificate means *this* solver could not fix it from the
+>   bug report, and another model solving it says nothing about that. Condemnation is now
+>   per solver throughout (`trial_guard`, `certificates`, `certificates_by_solver`,
+>   `summary().too_easy`).
+> - **Item 5 / invariant "`certificates()` keeps its meaning" — REVERSED.** Keeping the
+>   pooled headline for comparability let the stronger model erase the weaker model's
+>   difficulty, understating three units by three rungs each (`defval`, `rootval`,
+>   `svcerrors`) in the exact cells the experiment exists to measure. `certificates()` now
+>   derives from `certificates_by_solver()`, and the pooled "cross" certificate is retired
+>   rather than kept alongside — see §4d of `PAPER_OUTLINE_stage1.md`.
+>
+> Everything else here held. The lesson worth keeping is that "keep the old view alongside
+> for comparability" was the wrong instinct twice: the old view was not a weaker version of
+> the new one, it was an artifact of pooling.
+
 ## The problem
 
 The ladder is the difficulty measurement. "Fails at L4, flips at L5" is a claim about one

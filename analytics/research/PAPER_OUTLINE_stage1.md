@@ -152,126 +152,160 @@ rung. 11 of 164 rest on one pass in three or more trials; `helm-depresolver` bin
 ### 4c. Every certificate rests on ONE screener's opinion — so we went and checked
 
 A certificate says the unit is hard: it failed at L0, where the agent gets only a bug
-report. Condemnation is deliberately model-agnostic — a task any frontier agent fixes from
-the report alone is not hard, even if another would have failed it — which makes "no
-solver can do this from the report" a claim about solvers in general.
+report. Screening never tested whether that verdict was a property of the task or of the
+model that produced it. Slots were filled by whoever was free, Composer ran 447 L0 trials
+to Devin's 51, and only two units in the whole dataset had an L0 verdict from both solvers.
+The agreement we were implicitly assuming had never been measured; its evidence was an
+absence of trials.
 
-Screening never tested that claim. Slots were filled by whoever was free, and Composer ran
-447 L0 trials to Devin's 51, so a unit's L0 verdict is almost always a single model's
-opinion. Only two units in the whole dataset had an L0 verdict from both solvers. The
-agreement we were implicitly assuming had never been measured; its evidence was an absence
-of trials.
+**What the trial was designed to measure, and what it measures now.** This experiment was
+specified under a model-agnostic condemnation rule: a task any frontier agent fixed from
+the report alone was not hard, full stop, so a second screener's PASS deleted the unit and
+its certificate. Under that rule a disagreement rate of p meant p of the headline count was
+inflated, the shrinkage *was* the measurement, and a second screen could only destroy a
+certificate, never mint one.
 
-If the two screeners disagree at rate p, then roughly p of the certificates were never
-hard, and the headline count is inflated by that much.
+That rule is retired (§4d). A certificate now reads "this solver failed L0 and passed L*k*",
+which another solver's L0 pass cannot contradict, so nothing is withdrawn and the headline
+count does not shrink. The trials are unchanged and they are worth more than before, because
+they answer the question the old rule assumed away: **does hardness transfer between
+models?** Both screeners fail L0 and the difficulty outlives the model that found it. One
+passes and the difficulty is a fact about a model rather than about the task — the unit
+keeps its certificate for the solver that earned it and the other solver's L0 pass becomes
+the first point of its own, much lower curve. At rate p, p of the dataset is model-specific
+difficulty. That is a result either way it comes out, and it is the same cheap trial.
 
 **Method.** 60 certified units are enrolled on a roster that reopens their existing L0
 directory to the solver that has not screened it. Nothing is re-authored, re-staged or
-renamed; the verdict lands on the real unit's ledger row, so a pass condemns the unit for
-real and it leaves the dataset. The shrinkage IS the measurement.
+renamed; the verdict lands on the real unit's ledger row. The sample was sized against the
+retired interpretation — with zero disagreements the exact one-sided 95% bound is
+`1 - 0.05**(1/n)`, so n=60 was the smallest sample putting a possible inflation under 5%.
+The sizing argument no longer applies to a quantity that can inflate nothing, and the same
+n is now simply the precision of a rate estimate. It cost no money: 48 of the 60 route to
+Devin, which is free and was structurally starved by the old single-solver rule.
 
-The trial is unusual in being incapable of doing harm. Either the second screener fails,
-and the certificate is strictly better evidence than before, or it passes, and the unit
-should never have been counted. A second screen can only destroy a certificate, never mint
-one — which is why the guard was wrong to refuse it, and refused it in three separate
-places before this (`trial_guard` as "already decided", `solver_match` by handing the slot
-back to the solver that had already screened it, and `orchestrate` via a shadow copy of
-the guard's rule that ran before the guard).
+**Result: the divergence is one repository, not the dataset.** 42 verdicts in, 23
+outstanding. The `go-github` family is screened exhaustively — all ten of its certified
+units:
 
-**Sample size is the whole design.** With zero disagreements observed, the exact one-sided
-95% bound on the disagreement rate is `1 - 0.05**(1/n)`:
-
-| n, all agreeing | disagreement rate | certificates possibly inflated (of ~215) |
-|---|---|---|
-| 20 | < 13.9% | up to 30 |
-| 30 | < 9.5% | up to 20 |
-| **60** | **< 4.9%** | **up to 10** |
-
-n=20 would only support "fewer than 30 of our certificates are bogus", which is a caveat,
-not a result — and it is a weak test besides: if the true rate were 10%, 20 clean screens
-happen 12% of the time. n=60 is the smallest sample that puts the bound under 5%. It costs
-no money, because 48 of the 60 route to Devin, which is free and was structurally starved
-anyway: the single-solver rule leaves Devin few units it may certify, so second screens are
-the rare work that fits its idle capacity instead of competing for Composer's budget.
-
-**Result: the softness is one repository, not the dataset.** The `go-github` family is now
-screened exhaustively — all ten of its certified units — and the rest of the sample is
-still accumulating:
-
-| source repo | screened | condemned |
+| source repo | screened | second screener passed L0 |
 |---|---|---|
 | `go-github` | **10 (all of them)** | **8 (80%)** |
-| everything else (kops, helm, gin, goa, client-go, unprefixed) | 15 | **0 (0%)** |
+| everything else (kops, helm, gin, goa, client-go, unprefixed) | 32 | **3 (9.4%)** |
 
-Fisher's exact on 8/10 against 0/15 gives p = 4.2e-5. The pooled rate across both groups is
-32%, and pooling is the wrong operation: extrapolating it over the dataset predicts ~68 bad
-certificates, when the true exposure was the ten `go-github` units and is now the two that
-survived.
+Fisher's exact on 8/10 against 3/32 gives p = 5.3e-5. The pooled rate is 26%, and pooling
+is the wrong operation: extrapolated over 228 certificates it predicts ~59 model-specific
+units, where the non-`go-github` column gives ~21 (point) with an exact 95% interval of
+[2.0%, 25.0%] — 5 to 57 units. An earlier draft of the report printed only the pooled
+figure, and its prediction of ~46 affected units was wrong by a factor of six.
 
-**The two survivors matter.** `go-github-auditentry` and `go-github-rulesetjson` were
-failed at L0 by both solvers, so the family is not uniformly trivial — 80% of it is. A
-claim that go-github tasks are simply invalid would be too strong; the honest statement is
-that this repository yields a task that is hard-from-the-bug-report only about one time in
-five, against roughly one time in one everywhere else measured so far.
+**This rate is directional, and "the solvers disagree" overstates it.** Because screening
+was routed by free capacity and Composer had nearly all of it, Composer is the L0 failer in
+41 of the 42 pairs. Every divergence observed so far is *Devin solving at L0 what Composer
+could not*; whether Composer would rescue Devin's L0 failures at a comparable rate is
+measured by a single unit. The number is a one-way capability gap, not a symmetric
+disagreement rate, and the reverse direction cannot be estimated from this sample.
+
+**The two survivors matter.** `go-github-auditentry` and `go-github-rulesetjson` were failed
+at L0 by both solvers, so the family is not uniformly trivial — 80% of it is. A claim that
+go-github tasks are simply invalid would be too strong; the honest statement is that this
+repository yields a task that resists a bug-report-only attempt from *both* solvers about
+one time in five, against roughly nine times in ten everywhere else measured so far.
 
 **Why one repo would behave this way** is a hypothesis, not a finding. `go-github` is a
 generated API client: its issues and its code both turn on concrete field names and JSON
 tags, so a bug report naming the affected field can carry most of the fix with it. If that
 is right, how much an L0 report gives away is a property of the source repository's
-conventions rather than of the rung — which would make synthetic difficulty
-repo-dependent, and a ladder calibrated on one codebase would not transfer to another.
-That is a limitation to state plainly, not a defect to patch out by deleting the repo.
+conventions rather than of the rung — which would make synthetic difficulty repo-dependent,
+and a ladder calibrated on one codebase would not transfer to another. That is a limitation
+to state plainly, not a defect to patch out by deleting the repo.
 
-**What the tooling learned.** `second_screen.py --report` prints the per-repo split first
-and suppresses the pooled extrapolation whenever one family's rate is at least three times
-the rest, naming the at-risk population instead. An earlier version gated that warning on a
-family being *100%* condemned, and the first `go-github` unit to survive switched the
-warning off and brought the misleading pooled figure straight back. The flag has to fire on
-heterogeneity between families, not on perfection within one.
+**What the tooling learned.** `second_screen.py --report` prints the per-repo split first and
+suppresses the pooled extrapolation whenever one family's rate is at least three times the
+rest. An earlier version gated that warning on a family being *100%* divergent, and the
+first `go-github` unit to survive switched the warning off and brought the misleading pooled
+figure straight back: the flag has to fire on heterogeneity between families, not on
+perfection within one. A later version printed a confidence interval only while the clean
+column was at 0, so the statistics vanished from the report at exactly the moment the count
+became non-zero and started to matter.
 
-**Status.** 40 screens outstanding, essentially all non-`go-github`. The dataset-wide claim
-now rests on that column alone, which stands at 0/15: an exact 95% upper bound of 18%,
-needing roughly 45 clean screens to fall below 5%. The `go-github` result is a
-sub-analysis the pre-registered sample was not powered for, and is reported as such —
-though at p = 4e-5 across an exhaustively screened family it is not a fragile one.
+**Status.** 23 screens outstanding, essentially all non-`go-github`. The dataset-wide claim
+rests on that column, now 3/32 rather than the 0/15 it stood at when the sample was
+designed; from a non-zero count, driving the upper bound under 5% would take roughly 141
+further clean screens, so that target is abandoned rather than pursued. The `go-github`
+result is a sub-analysis the pre-registered sample was not powered for, and is reported as
+such — though at p = 5e-5 across an exhaustively screened family it is not a fragile one.
 
-### 4d. The rung a unit needs depends on WHICH agent — first evidence
+### 4d. The rung a unit needs depends on WHICH agent
 
 §4a treats the binding rung as the unit's difficulty. That only holds if the rung is a
-property of the task. The first unit to be climbed independently by both solvers says it is
-not:
+property of the task. It is not.
 
-    defval    composer:  L0 fail -> L2 fail -> L3 fail x2 -> L4 fail -> L5 PASS   needs L5
-              devin:     L0 fail -> L2 PASS                                       needs L2
+Fourteen units now have a comparable *needs* figure from two solvers — the lowest rung at
+which that solver passed, or 0 for a solver that fixed the bug from the report alone. Twelve
+of the fourteen disagree, the mean gap is 2.0 rungs, and every disagreement runs the same
+way:
 
-A three-rung gap on the same task, and both curves are `rung_established` — each solver was
-shown to fail the rung below the one it passed, so neither is a by-jump artifact.
+| evidence class | units | gaps |
+|---|---|---|
+| both solvers failed L0 and then climbed (two full curves) | 2 | 3, 0 |
+| one solver climbed, the other passed L0 outright | 12 | 5*, 2 x 10, and 0 x 1 |
 
-**What the pooled ledger recorded before this.** `certificates()` binds at the LOWEST
-passing rung across all solvers, so `defval` reads `rung: 2`. The dataset would have carried
-this unit as "flips at L2" — erasing that Composer needed the prose contract, the hidden
-test names, the signatures and a restored representative test before it could fix the same
-bug. Not a rounding error: a three-rung understatement for one of the two agents, invisible
-by construction, because the merged ledger has no cell in which the disagreement could
-appear.
+The two clean two-curve comparisons:
 
-This is why the escalation ladder is now per solver (`trial_guard.decide(unit, per,
-solver)`, `certificates_by_solver()`). The pooled view is kept unchanged so the headline
-count stays comparable, but it is the wrong instrument for a difficulty claim.
+    defval       composer:  L0 F -> L2 F -> L3 F x2 -> L4 F -> L5 PASS    needs L5
+                 devin:     L0 F -> L2 PASS                               needs L2
+    httperrexpr  composer:  L0 F -> L2 PASS                               needs L2
+                 devin:     L0 F -> L2 PASS                               needs L2
 
-**Strength of the evidence: weak, and the shape matters more than the size.** One unit, and
-each binding cell rests on a single trial. That the gap EXISTS is clear — Composer has five
-recorded failures on `defval` including two at L3, so its inability at L2 is not a fluke of
-one sample. How BIG the typical gap is, and whether it usually runs in Devin's favour, needs
-more units with two curves; coverage is 1 at the time of writing and rises only as free
-Devin capacity reaches units Composer has already climbed.
+A three-rung gap on `defval`, and both curves are `rung_established` — each solver was shown
+to fail the rung below the one it passed, so neither is a by-jump artifact. `httperrexpr`
+agrees exactly. One diverges, one does not.
+
+The widest gap is `svcerrors`, where Composer failed L0 and L2 and passed L5, while Devin
+fixed it from the bug report:
+
+    svcerrors    composer:  L0 F -> L2 F -> L5 PASS      needs >= L3, recorded L5
+                 devin:     L0 PASS                      needs nothing
+
+Composer's L5 is **not** `rung_established` — it jumped L2 to L5, so L3 and L4 are untested
+and its true need is somewhere in [3, 5]. The gap is therefore *at least* three rungs, which
+is all the claim needs: one solver required the prose contract plus more, the other required
+nothing at all, on the same task.
+
+**What the pooled ledger recorded before this.** `certificates()` bound at the lowest passing
+rung across all solvers, so the stronger model erased the weaker model's difficulty — which
+is the quantity this dataset exists to measure. `defval` read `rung: 2`, carrying it as
+"flips at L2" and erasing that Composer needed the prose contract, the hidden test names,
+the signatures and a restored representative test for the same bug. `rootval` (Composer
+`L0 F, L2 F, L3 F, L4 F x2, L5 P x2`) and `svcerrors` both read L2 for the same reason, each
+a three-rung understatement, and both surfaced only because the rewrite corrected them.
+Not a rounding error and not detectable in the merged view: it has no cell in which the
+disagreement could appear.
+
+The ladder is therefore per solver (`trial_guard.decide(unit, per, solver)`,
+`certificates_by_solver()`), condemnation is per solver, and the pooled "cross certificate" —
+certified when *some* solver failed L0 and *some other* solver passed a rung — is retired
+rather than kept alongside. Inspecting the six that existed: four were two halves that never
+joined (no single solver did both), and two were complete Composer certificates that pooling
+misreported by three rungs each. It was not a weaker certificate; it was an artifact.
+
+**Strength of the evidence: the shape is clear, the magnitude is not.** That per-solver gaps
+exist is no longer in doubt — 12 of 14 comparable units, and `defval` has five recorded
+Composer failures including two at L3, so its inability at L2 is not a sampling fluke.
+Everything else about the effect is weakly supported. Ten of the twelve divergences are L0
+rescues, eight of those are `go-github`, so the bulk of the signal is §4c's repository effect
+restated rather than independent evidence about ladders. The uniform direction is confounded
+with routing: Composer screened first in 41 of 42 pairs, so "Devin is stronger here" and
+"the second screener gets the easier job" are not separable in this sample. And the clean
+two-curve population is 2, split one-and-one.
 
 **If it generalises**, two things follow. The affordance ladder measures an agent-task pair
 rather than a task, so "this dataset contains N tasks that need L5" is only meaningful
-relative to a named solver. And a benchmark calibrated on one agent systematically
-misstates difficulty for another — which is the same failure mode as §4c's repo dependence,
-one level up: difficulty is not intrinsic to the task, it is a relation between the task,
-the affordance, and the solver.
+relative to a named solver. And a benchmark calibrated on one agent systematically misstates
+difficulty for another — the same failure mode as §4c's repo dependence, one level up:
+difficulty is not intrinsic to the task, it is a relation between the task, the affordance,
+and the solver.
 
 ## 5. Yield varies by repository, and it is predictable-ish
 
