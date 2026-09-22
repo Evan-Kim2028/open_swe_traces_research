@@ -285,6 +285,21 @@ for d in glob.glob("experiments/dose_response/sweep_*/*/"):
     if not glob.glob(d + "tests/hidden/**/*", recursive=True):
         continue
 
+    # Same shape as the check above, a third way to be un-trialable. reclaim_disk deletes
+    # environment/src once a unit's rung has a verdict, but "has a verdict" is not "will
+    # never run again": contract repair marks verdicts stale and reopens the rung, and
+    # the second-screen roster reopens L0 outright. The unit is then runnable with no
+    # source tree, and the trial dies in docker build with
+    #     COPY src/ /app/  ->  "/src": not found
+    # after taking a slot, a container and an errored trial. exprhash-L0 did exactly that
+    # and tripped the new-failure-mode alarm; 69 staged units were in the same state.
+    #
+    # Not runnable, rather than restored inline: restoring can mean unpacking 18k files
+    # and orchestrate runs on the supervisor's critical path. restore_env_src.py --sweep
+    # puts them back out of band.
+    if not os.path.isdir(os.path.join(d, "environment", "src")):
+        continue
+
     # A cohort whose LAST sweep kept zero units is barren: every unit in it is refused
     # downstream, by task_lint rather than by trial_guard. sweep_grokgogit's ten units all
     # BLOCK on B6 ("L0 bug report has no reproduce command"), so orchestrate counted them
