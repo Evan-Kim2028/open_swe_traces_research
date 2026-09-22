@@ -185,9 +185,20 @@ for round in $(seq 1 "$ROUNDS"); do
                   --agent-timeout-multiplier "${DEVIN_TIME_MULT:-4.0}")
   elif [ "${AGENT:-cursor-cli}" = "grok-build" ]; then
     GKEY="$(bash "$R/scripts/ops/grok_key.sh")" || { echo "grok token unavailable"; exit 1; }
+    # The CLI authenticates from ~/.grok/auth.json, NOT from XAI_API_KEY -- it rejects a
+    # grok.com session token handed to it as that variable ("Not signed in"), which is why
+    # 21 of the first 26 grok trials errored. Verified: isolated HOME + XAI_API_KEY fails,
+    # isolated HOME + auth.json runs grok-4.7 fine. So send the file's contents and let
+    # the patched agent write it inside the container (scripts/ops/grok_build_patch.py --
+    # re-run after any `uv tool upgrade harbor`, which silently reverts it).
+    GAUTH="$(cat /home/evan/.grok/auth.json 2>/dev/null)" || { echo "grok auth.json unreadable"; exit 1; }
+    if ! uv run python "$R/scripts/ops/grok_build_patch.py" --check >/dev/null 2>&1; then
+      echo "grok-build agent is NOT patched for host auth — run scripts/ops/grok_build_patch.py"; exit 1
+    fi
     AGENT_KWARGS=(--agent grok-build --model "${MODEL:-grok-4.6}"
                   --ak reasoning_effort="${GROK_EFFORT:-high}"
-                  --ae XAI_API_KEY="$GKEY")
+                  --ae XAI_API_KEY="$GKEY"
+                  --ae GROK_AUTH_JSON="$GAUTH")
   else
     AGENT_KWARGS=(--agent "${AGENT:-cursor-cli}" --model "${MODEL:-cursor/composer-2.5}")
   fi
