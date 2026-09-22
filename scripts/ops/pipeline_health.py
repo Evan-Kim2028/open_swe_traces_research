@@ -65,13 +65,36 @@ recent = [r for r in rows if r.get("t", 0) > time.time() - 3600]
 if len(recent) >= 3:
     d = recent[-1]["certified"] - recent[0]["certified"]
     dt = recent[-1]["trials"] - recent[0]["trials"]
-    if d == 0 and dt >= 5:
-        FAIL.append(f"STALL: {dt} trials in the last hour, certified did not move. "
-                    f"Check for re-trialling of decided units and for idle container slots.")
-    elif d == 0:
+    # "Did the dataset move" is not "did the headline count rise". Two kinds of real
+    # progress do not raise it, and one actively lowers it:
+    #   escalation establishes the rung BELOW a certificate — the unit's row gets
+    #     stronger, the count does not change;
+    #   a second screen that finds a unit was never hard CONDEMNS it, so certified falls
+    #     and too_easy rises. That is the measurement succeeding, not a regression.
+    # Scoring only the rise reported a clean hour of both as "STALL", and printed a
+    # condemnation as "dataset +-1". Movement is any change across the three counters.
+    def delta(k):
+        try:
+            return recent[-1].get(k, 0) - recent[0].get(k, 0)
+        except Exception:
+            return 0
+    d_easy, d_esc = delta("too_easy"), delta("escalated")
+    moved = (d != 0) or (d_easy != 0) or (d_esc != 0)
+    if not moved and dt >= 5:
+        FAIL.append(f"STALL: {dt} trials in the last hour and nothing moved — certified, "
+                    f"too_easy and escalated all flat. Check for re-trialling of decided "
+                    f"units and for idle container slots.")
+    elif not moved:
         WARN.append(f"dataset flat for an hour ({dt} trials) — low throughput, check capacity")
     else:
-        OK.append(f"dataset +{d} in the last hour ({dt} trials, {dt/max(1,d):.1f}/cert)")
+        bits = []
+        if d:
+            bits.append(f"certified {d:+d}")
+        if d_easy:
+            bits.append(f"condemned {d_easy:+d}")
+        if d_esc:
+            bits.append(f"escalated {d_esc:+d}")
+        OK.append(f"dataset moved in the last hour ({', '.join(bits)}; {dt} trials)")
 
 # --- 3. Composer fed? ------------------------------------------------------------
 # Composer's occupancy, not every trial container. `grep -c env-main` counts Devin
