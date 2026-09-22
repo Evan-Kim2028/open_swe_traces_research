@@ -25,7 +25,9 @@ that does not isolate the affordance is not worth the slot it saved.
 
 Usage::
 
-    solver_match.py <agent> <unit-dir-or-name> [...]     # prints KEEP/DROP per unit
+    solver_match.py <agent> <unit-dir-or-name> [...]   # prints KEEP/DROP per unit
+    solver_match.py --audit                            # any RUNNING sweep about to
+                                                       # contaminate? exit 1 if so
 """
 
 from __future__ import annotations
@@ -81,7 +83,58 @@ def decide(unit: str, agent: str, bys=None) -> tuple[bool, str]:
                    f"{'/'.join(sorted(failed))} — routes to them instead")
 
 
+def audit() -> int:
+    """Is any RUNNING sweep holding units its own solver may not certify?
+
+    This is the signal worth watching, and it is not "did the gate fire". In the healthy
+    case the gate fires NEVER: orchestrate steers each sweep to a cohort its solver can
+    certify, so sweep_seq's gate is a backstop with nothing to do. Counting gate hits
+    therefore reads zero both when everything is right and when the gate is broken.
+
+    Asking instead whether a live sweep is CARRYING something it should not separates
+    those two states. Non-zero means orchestrate mis-steered, or a sweep predates the
+    gate and needs its pending set cleaned by hand — which is exactly what ten queued
+    Devin trials needed when the rule first landed.
+    """
+    import re
+    import slots
+    import trial_ledger as TL
+    bys = TL.ledger_by_solver()
+    per = TL.ledger()
+    owner = {}
+    for agent in ("devin", "cursor"):
+        for t in slots.trials(agent):
+            owner[re.sub(r"_r\d+(_\d+)?$", "", t["job"])] = agent
+    total = 0
+    for cohort, agent in sorted(owner.items()):
+        d = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__)))), "experiments/dose_response", cohort)
+        if not os.path.isdir(d):
+            continue
+        risky = []
+        for u in sorted(os.listdir(d)):
+            if "-L" not in u:
+                continue
+            base, suf = u.rsplit("-L", 1)
+            rung = suf[:1]
+            if not rung.isdigit() or int(rung) < 2:
+                continue
+            if per.get(base, {}).get(rung):          # already decided
+                continue
+            if not decide(u, agent, bys)[0]:
+                risky.append(u)
+        if risky:
+            total += len(risky)
+            print(f"AT RISK {cohort} ({agent}): {len(risky)} unit(s) it may not certify "
+                  f"— e.g. {risky[0]}")
+    if not total:
+        print("audit: no running sweep holds a unit its solver may not certify")
+    return 1 if total else 0
+
+
 def main() -> int:
+    if "--audit" in sys.argv:
+        return audit()
     if len(sys.argv) < 3:
         print(__doc__.strip().splitlines()[-1])
         return 2
