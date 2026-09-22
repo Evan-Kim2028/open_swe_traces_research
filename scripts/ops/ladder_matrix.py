@@ -131,6 +131,10 @@ def open_cells(base: str, solver: str, per, bys) -> list[str]:
 def allowed(base: str, solver: str) -> bool:
     """Is this solver permitted on this unit at all, before any guard question."""
     if solver == "grok":
+        # Limits exhausted: a grok trial now fails instead of running, so it costs a slot and
+        # a container build and returns nothing. The pin stays for when limits reset.
+        if os.environ.get("GROK_ENABLED", "") != "1":
+            return False
         return base in GROK_PINNED
     return True
 

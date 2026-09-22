@@ -212,7 +212,21 @@ def wait_for_headroom(solver: str, want: int) -> int:
         time.sleep(120)
 
 
+# Grok's usage limits are exhausted: further grok trials fail rather than run, so launching
+# them wastes a slot and a container build and returns nothing. Grok's own ladder is finished
+# anyway -- exprhash, httpencoding and httpmux are complete, two of them flipped at L6 -- so
+# there is nothing left it should be doing. Set GROK_ENABLED=1 to override once limits reset.
+#
+# This is a refusal at the launch site rather than a note, because --solver still DEFAULTS to
+# grok in this file, and a default that spends an exhausted quota is a footgun.
+GROK_DISABLED = os.environ.get("GROK_ENABLED", "") != "1"
+
+
 def launch(cohort: pathlib.Path, rung: int, n: int, log: pathlib.Path) -> int:
+    if SOLVER == "grok" and GROK_DISABLED:
+        print("  REFUSING to launch grok: usage limits exhausted, its ladder is complete. "
+              "Set GROK_ENABLED=1 to override.", flush=True)
+        return 2
     ag, md = AGENT_FOR[SOLVER]
     env = dict(os.environ, AGENT=ag, MODEL=md, GUARD_SOLVER=SOLVER)
     if SOLVER == "grok":
