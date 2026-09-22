@@ -129,6 +129,19 @@ def certificates(jobs_dir=JOBS):
         failed_l0 = {s for s, d in bysolver.items() if d.get("0") and max(d["0"]) == 0}
         if not failed_l0:
             continue
+        # CONDEMNATION IS MODEL-AGNOSTIC, and this check was missing: failed_l0 is built
+        # per solver, so one solver failing L0 was enough to certify no matter what any
+        # other solver did. trial_guard has always used the merged ledger and refuses a
+        # unit with max(l0) > 0 as "not a hard unit", so the two have disagreed silently
+        # since the rule went in — it simply never showed, because until the second-screen
+        # roster almost no unit had an L0 verdict from two solvers.
+        #
+        # go-github-customprop is the first: composer failed it at L0, devin solved it
+        # from the bug report alone. It was listed as a certificate AND in too_easy at the
+        # same time. The dataset's claim is that a task is hard for frontier agents, so one
+        # agent solving it without the contract disqualifies it however many others failed.
+        if {sv for sv, d in bysolver.items() if d.get("0") and max(d["0"]) > 0}:
+            continue
         # The flip does not have to happen at L2. A unit that fails L0 and L2 and then
         # passes at L5 is still hard-and-solvable; the rung it needs IS its difficulty.
         # Certifying only at L2 wrote off 46 of the hardest units in the dataset as
