@@ -15,6 +15,20 @@ cells are inferred cannot test the assumption it was inferred from. The cells ar
 Resumable and idempotent: the ledger is re-read every pass, so a unit that already has a
 grok verdict at a rung is skipped and a killed run can simply be restarted.
 
+SIDE EFFECT, deliberate and worth knowing about: staging a missing rung calls
+escalate.stage(), which writes a real cohort (sweep_escalate_grok_L<rung>) into
+dose_response. The supervisor sees that as ordinary work and will launch COMPOSER on it --
+observed within minutes of the first L3 staging, running exprhash-L3 and httpmux-L3
+concurrently with the grok cohort under a separate job name.
+
+That is not duplicated work and it is not waste: composer holds no L3 or L4 verdict on
+either unit (it jumped L2 -> L5), so those runs fill the exact holes that made composer's
+curves incomplete and inferred. It costs composer budget that this script did not ask for
+-- roughly 12M per L3 and 25M per L4 trial -- so the arithmetic is worth stating: about 40M
+of a 238M remaining budget to complete two composer curves. Left running on purpose. If
+that trade is ever unwanted, stage into a directory the orchestrator does not walk rather
+than killing the trials after they start.
+
     grok_ladder.py --plan          # what it would run, rung by rung
     grok_ladder.py --run           # do it, blocking until the ladder is complete
     grok_ladder.py --report        # grok's curve so far against composer's
