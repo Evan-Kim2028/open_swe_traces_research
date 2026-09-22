@@ -53,6 +53,54 @@ logic was written several times, the copies drifted, and the drift cost trials.
   silently never fired, and `kill_stale_harbor.sh` would have killed every harbor job it
   inspected, including ones writing a file a second. Use `-mmin -N`, or `-newermt @<epoch>`.
 
+## added 2026-09-21/22 — multi-model, second screening, runaway reaping
+
+| module | owns | the bug that created it |
+|---|---|---|
+| `solver_match.py` | may THIS solver trial this unit — the no-cross-certification rule, and the agent→solver name map | Cross-solver certificates reached 31 of 212 because L0 screening and L2 certification were routed by whoever had a free slot. Separately, `AGENT_TO_SOLVER` had no `grok-build` entry, so a grok sweep asked the guard "may **composer** screen this unit", was correctly told no, and ran 1 of 3 units. An unmapped agent now warns instead of silently defaulting. |
+| `second_screen.py` | re-screening a unit at L0 with the solver that never saw it, and reporting the disagreement rate per repo | Composer ran 447 L0 trials to Devin's 51, so "these tasks are hard for frontier agents" rested on one model's opinion per unit. `--report` refuses to extrapolate a pooled rate when families disagree: go-github came back 8/10 condemned against ~7% elsewhere, and reporting the pooled 32% would have predicted ~68 bad certificates instead of 10. |
+| `ladder_purity.py` | is each unit's escalation ladder the work of one model, and how many units have two independent curves | `solver_match` only asks whether a solver failed *below* the rung, not whether one model did every rung. Three units carried a stray rung from the other solver. Now a coverage report: `defval` needs L5 for composer and L2 for devin — the pooled ledger recorded L2, understating it three rungs. |
+| `reap_runaway.py` | killing a runaway agent COMMAND without killing the trial | `reap_wedged` requires 0% cpu, no logs and no network, so it is structurally blind to a process burning every cycle. Composer issued `grep -r pattern /` and two trials sat on one tool call for over an hour each. 23 of 1347 trials did this and cost 5.2x the median — ~96M tokens. Root-anchored searches get a 120s floor, everything else 1800s, and SIGTERM hits the command so the agent reads a failed call and carries on. |
+| `quarantine_trial.py` | removing a verdict when the INFRASTRUCTURE failed, not the agent | `httpresp` had its certificate settled by a trial that spent 1h37m of a ~100 minute budget blocked on a hung grep. A spurious failure at rung k pushes the unit up the ladder and overstates the one quantity this dataset measures. Moves the dir out of the ledger's glob with a reason file; `--restore` puts it back. |
+| `budget_forecast.py` | does the remaining budget cover the work still OWED | A rate-based runway alarm fired at "1.8h left" while the finite escalation queue was draining fastest — loudest exactly when the work was closest to done. Subtraction, not extrapolation: rungs owed, priced from observed history, on median **and** mean because the tail is heavy (L3's mean is 2.3x its median). |
+| `watch.sh` | one monitor pass; prints only on change or alarm | Sixty lines of inline bash re-pasted into a new Monitor every 30 minutes. `slots.py --supervisor-pid` did not exist, so `tr -dc 0-9` turned the human summary into a plausible PID and both supervisor checks were dead while looking healthy. Includes the stale-supervisor check: process start time vs `supervisor.sh` mtime. |
+| `status.py` | HEALTH / QUEUE / LADDER in one place — earned vs by-jump rungs and what each unit needs next | "Which units still owe a rung" was re-derived by hand every time it was asked, and answered wrongly twice. |
+| `preaudit.py` | contract audits off the critical path, single-instance locked | Auditing 12 contracts takes minutes and `orchestrate` runs every tick; inline it starved sweep launches. |
+| `grok_build_patch.py` | making harbor's `grok-build` authenticate from this machine's `grok login` | The agent accepts only `XAI_API_KEY`, a real xAI key. This box has a grok.com session token, which `api.x.ai` takes as a raw bearer but the CLI rejects as that variable — verified both ways. 21 of the first 26 grok trials errored on it and were filed as capacity. Injects `$GROK_AUTH_JSON` to `~/.grok/auth.json` inside the container. **Edits site-packages: `uv tool upgrade harbor` silently reverts it**, so `sweep_seq` refuses to launch a grok sweep when `--check` fails. |
+| `devin_usage.py`, `devin_tokens.py` | Devin's own accounting | Harbor leaves the top-level token fields `None` for Devin and fills only `agent_result.model_usage`, so all 161 devin trials scored zero and every token figure in this project was composer-only. Devin had used 545M. |
+| `repair_b6.py` | adding a reproduce command to an L0 bug report | Ten units BLOCKed on B6 and orchestrate relaunched their cohort every tick, dropping all ten. Strips the `-run '^(TestDetail01|...)$'` filter so hidden test names never leak into an L0. |
+| `cohorts.py` | `barren()`, shared by orchestrate and the monitor | Defined inside `orchestrate`, which runs at import time, so nothing else could import it without launching sweeps. |
+
+### hard-won, 2026-09-21/22
+
+- **Condemnation is PER SOLVER, and this reverses an earlier rule.** "One solver passing L0
+  disqualifies the unit for everyone" was coherent while the dataset made a single claim.
+  Once the ladder went per-solver a certificate means *this* solver could not fix it from
+  the bug report, and another model solving it says nothing about that. Changed in
+  `certificates`, `certificates_by_solver`, `summary().too_easy` and `trial_guard`
+  **together** — for one night the guard condemned while `certificates` did not, and units
+  sat in `certified` and `too_easy` at once.
+- **Sizing a cohort total as `n x per-trial-worst-case x margin` is not conservative, it is
+  impossible.** It asserts every trial lands in its own tail simultaneously: 436M for a
+  cohort whose mean trial is 4M, refusing work the budget covered twice over. Bound the
+  SUM (`n*mean + 1.645*sd*sqrt(n)`). Also: with 7 samples `int(7*0.9)` indexes the
+  maximum, so "the 90th percentile" was the single most expensive trial ever seen.
+- **A metric that does not match the mechanism it polices measures nothing.** `over-cap`
+  and `re-measured a decided rung` were keyed `(base, rung)` while the guard's cap had gone
+  per-solver, so every legitimate second curve scored as waste — 28% until keyed per
+  solver, then 8%.
+- **"Certified did not move" is not a stall.** Escalation establishes the rung *below* a
+  certificate and a second screen *removes* units; both are progress and neither raises the
+  count. Scoring only the rise reported a clean hour as `FAIL STALL` and printed a
+  condemnation as `dataset +-1`.
+- **An alarm that cannot go quiet is worse than no alarm.** The gate line carries a drifting
+  sample count, so comparing the whole string re-fired on an unchanged state every five
+  minutes; SHORT budget is persistent and re-fired the same way. Compare the verdict, or
+  the state transition — never the whole line.
+- **Absence of a log line means "not yet" as often as "never".** `reap_wedged` samples for
+  120s and `reap_runaway` runs after it; checking inside that window twice led to
+  announcing a fix as inert when it was simply pending.
+
 - **A ladder rung means two different things and the guard has to tell them apart.** On a
   certified unit it is affordance-study data, sampled, and can never certify. On a unit
   that failed L0 *and* L2 it is an escalation - the only route by which that unit ever
