@@ -179,7 +179,21 @@ def cmd_report() -> int:
                 for r in sorted(d, key=lambda z: int(z) if z.isdigit() else 99))
             flip = [int(r) for r, v in d.items()
                     if r.isdigit() and int(r) >= 2 and v and max(v) > 0]
-            verdict = f"flips at L{min(flip)}" if flip else "EXHAUSTED"
+            # EXHAUSTED means failed THROUGH L6, not "failed everything tried so far". The
+            # first draft printed EXHAUSTED for a solver two rungs into the climb, which is
+            # the paper's headline claim asserted from an incomplete curve -- exactly the
+            # error this whole run exists to avoid.
+            if flip:
+                verdict = f"flips at L{min(flip)}"
+            elif d.get(str(max(RUNGS))):
+                verdict = "EXHAUSTED (failed through L6)"
+            else:
+                done = [r for r in RUNGS if d.get(str(r))]
+                nxt = next((r for r in RUNGS if not d.get(str(r))), None)
+                verdict = (f"climbing: {len(done)}/{len(RUNGS)} rungs, "
+                           f"no pass yet, next L{nxt}")
+            print(f"  {who:9s} {trail}   -> {verdict}")
+            continue
             print(f"  {who:9s} {trail}   -> {verdict}")
     return 0
 
