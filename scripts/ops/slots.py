@@ -106,7 +106,22 @@ def summary(agent="devin"):
 
 
 if __name__ == "__main__":
+    import sys as _sys
     o = occupancy()
+    # --count prints ONE integer and nothing else. It was accepted and ignored, so callers
+    # did `slots.py --count | tr -dc 0-9` on the full summary and got every digit in it
+    # concatenated — job names included. 6/6 came out as
+    # 66065211521192049121241124526132108405819, and `[ "$occ" -gt 4 ]` then failed with
+    # "integer expression expected", which is FALSE, so the over-cap alarm in the monitor
+    # could never fire. It was silently dead for several monitor generations; the only
+    # reason over-cap was still caught is that stability_gate computes it independently
+    # from the ledger.
+    if "--count" in _sys.argv:
+        print(o["total"])
+        raise SystemExit(0)
+    if "--cap" in _sys.argv:
+        print(o["cap"])
+        raise SystemExit(0)
     print(summary())
     for s in o["sessions"]:
         print(f"    session {s}")
