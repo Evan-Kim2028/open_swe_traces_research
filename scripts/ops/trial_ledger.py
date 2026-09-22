@@ -272,9 +272,15 @@ def report_multimodel(jobs_dir=JOBS):
     if jumped:
         print(f"  rung by-jump   {len(jumped)}   binds at a rung never shown to be "
               f"NEEDED — 'flips by L{c[jumped[0]]['rung']}', not 'needs' it")
-    print(f"  single-solver  {kind.get('single', 0)}   flip isolates the affordance")
-    print(f"  cross-solver   {kind.get('cross', 0)}   L2 passed on a different model than "
-          f"L0 failed — a weaker claim, kept and labelled")
+    # "cross-solver" is retired and its counter is now structurally always 0, so printing
+    # it says nothing and invites the reader to believe a category still exists. What
+    # matters instead is how many units have been climbed independently by more than one
+    # solver -- the only units that can separate task difficulty from model difficulty,
+    # and the scarce thing.
+    _multi = sum(1 for v in c.values() if len(v.get("solvers", [])) > 1)
+    print(f"  one solver     {len(c) - _multi}   flip isolates the affordance")
+    print(f"  climbed by two {_multi}   independent curves — task difficulty vs model "
+          f"difficulty is separable here, and nowhere else")
     print(f"  binds for      {dict(binds)}")
 
 
