@@ -235,6 +235,44 @@ needing roughly 45 clean screens to fall below 5%. The `go-github` result is a
 sub-analysis the pre-registered sample was not powered for, and is reported as such —
 though at p = 4e-5 across an exhaustively screened family it is not a fragile one.
 
+### 4d. The rung a unit needs depends on WHICH agent — first evidence
+
+§4a treats the binding rung as the unit's difficulty. That only holds if the rung is a
+property of the task. The first unit to be climbed independently by both solvers says it is
+not:
+
+    defval    composer:  L0 fail -> L2 fail -> L3 fail x2 -> L4 fail -> L5 PASS   needs L5
+              devin:     L0 fail -> L2 PASS                                       needs L2
+
+A three-rung gap on the same task, and both curves are `rung_established` — each solver was
+shown to fail the rung below the one it passed, so neither is a by-jump artifact.
+
+**What the pooled ledger recorded before this.** `certificates()` binds at the LOWEST
+passing rung across all solvers, so `defval` reads `rung: 2`. The dataset would have carried
+this unit as "flips at L2" — erasing that Composer needed the prose contract, the hidden
+test names, the signatures and a restored representative test before it could fix the same
+bug. Not a rounding error: a three-rung understatement for one of the two agents, invisible
+by construction, because the merged ledger has no cell in which the disagreement could
+appear.
+
+This is why the escalation ladder is now per solver (`trial_guard.decide(unit, per,
+solver)`, `certificates_by_solver()`). The pooled view is kept unchanged so the headline
+count stays comparable, but it is the wrong instrument for a difficulty claim.
+
+**Strength of the evidence: weak, and the shape matters more than the size.** One unit, and
+each binding cell rests on a single trial. That the gap EXISTS is clear — Composer has five
+recorded failures on `defval` including two at L3, so its inability at L2 is not a fluke of
+one sample. How BIG the typical gap is, and whether it usually runs in Devin's favour, needs
+more units with two curves; coverage is 1 at the time of writing and rises only as free
+Devin capacity reaches units Composer has already climbed.
+
+**If it generalises**, two things follow. The affordance ladder measures an agent-task pair
+rather than a task, so "this dataset contains N tasks that need L5" is only meaningful
+relative to a named solver. And a benchmark calibrated on one agent systematically
+misstates difficulty for another — which is the same failure mode as §4c's repo dependence,
+one level up: difficulty is not intrinsic to the task, it is a relation between the task,
+the affordance, and the solver.
+
 ## 5. Yield varies by repository, and it is predictable-ish
 
 | repo | certified / decided | |
