@@ -66,12 +66,23 @@ def decide(unit: str, agent: str, bys=None) -> tuple[bool, str]:
     rung = suffix[:1]
     if not rung.isdigit():
         return True, "unparsed rung"
-    if int(rung) < 2:
-        return True, "L0/L1: screening, no prior failure to match"
     if bys is None:
         import trial_ledger as TL
         bys = TL.ledger_by_solver()
     me = solver_for(agent)
+    if int(rung) < 2:
+        # Screening needs no prior failure to match — but a SECOND screen has a specific
+        # job, and only one solver can do it. The point of re-screening a unit is to find
+        # out whether the solver that never saw it would have failed too; handing the
+        # slot back to the solver that already screened it buys a repeat of an opinion we
+        # have. Without this, the guard opens the trial and free capacity decides who
+        # takes it, which on current routing means Composer re-screens its own units.
+        import trial_guard as TG
+        want = TG.unscreened(base)          # empty unless enrolled
+        if want and me not in want:
+            return False, (f"second screen belongs to {'/'.join(want)}, not {me} — "
+                           f"{me} already screened this unit at L0")
+        return True, "L0/L1: screening, no prior failure to match"
     failed = failed_low(base, bys, int(rung))
     if not failed:
         # No failure below this rung yet. trial_guard refuses L2 before L0 anyway; if it

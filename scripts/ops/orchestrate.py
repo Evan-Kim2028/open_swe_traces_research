@@ -265,7 +265,16 @@ for d in glob.glob("experiments/dose_response/sweep_*/*/"):
     # trial_ledger normalises "2rc"/"2auto" to "2"; parsing the raw suffix here meant
     # the skip never matched for repair-contract cohorts and they re-trialled freely.
     rung = (name.rsplit("-L", 1)[1][:1] if "-L" in name else "0")
-    if base in per and per[base].get(rung):
+    #
+    # This fast path is a SHADOW of trial_guard's rule, and it runs before the guard, so
+    # anywhere the two disagree the guard loses silently. That is what happened to the
+    # second screen: enrolling 20 certified units opened them in the guard and changed
+    # orchestrate's runnable count by exactly zero, because each one has an L0 verdict
+    # and was dropped here before trial_guard.decide was ever called. Any future rule
+    # that reopens a decided rung will hit the same wall, so the exemption is asked of
+    # the guard rather than restated here.
+    if (base in per and per[base].get(rung)
+            and not (rung == "0" and trial_guard.unscreened(base))):
         continue
     # A unit with no hidden suite can never be trialled - task_lint BLOCKs it inside the
     # sweep, so counting it as runnable made orchestrate relaunch four go-github cohorts
@@ -373,7 +382,18 @@ else:
         elif wants_devin:
             to_devin = True
         else:
-            to_devin = (is_l2 or not budget_ok) and not (is_l2 and devin_full and budget_ok)
+            # L0/L1 is SCREENING, open to any solver, and Devin is free. Sending it to
+            # Composer by default created a self-reinforcing starvation: Composer screened
+            # 447 L0 trials to Devin's 51, so Composer came to own 225 of the 250 units
+            # whose L0 failed — and L2 ownership follows the L0 failure. Devin was then
+            # left with ~22 units it was ever eligible for and ran dry at 5/6 slots.
+            # Screening on the free solver also conserves Composer's paid budget for the
+            # ladder work only Composer may do.
+            is_screen = not is_l2 and not re.search(r"_L[3-6](_|$)", cohort)
+            if is_screen and not devin_full:
+                to_devin = True
+            else:
+                to_devin = (is_l2 or not budget_ok) and not (is_l2 and devin_full and budget_ok)
         # Never launch a sweep its solver may take nothing from. It would trial nothing,
         # log "guard kept 0 unit(s)", and cohorts.barren() would then mark the cohort
         # barren for EVERY solver — stranding work that the other one could do. Two

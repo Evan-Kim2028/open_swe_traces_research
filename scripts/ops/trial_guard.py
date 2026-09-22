@@ -29,6 +29,17 @@ CERTIFYING_RUNGS = {"0", "2"}
 # repair makes prior verdicts stale, which is what let single units run 7, 11, 19 times.
 RUNG_TRIAL_CAP = 3
 
+# The solvers we actually screen with. A unit is only "screened" once each of these has
+# had its turn at L0, because condemnation is model-agnostic: it takes just one of them
+# to solve the bug report to prove the unit was never hard.
+SCREENERS = ("composer", "devin")
+
+# Absolute ceiling on recorded L0 trials for one unit, across all screeners. The
+# second-screen rule below bypasses the per-rung cap, and an ERRORED trial records no
+# verdict — so a solver that keeps erroring would stay forever "unscreened" and re-queue
+# without limit. This is the backstop for that.
+L0_SCREEN_CAP = len(SCREENERS) * RUNG_TRIAL_CAP
+
 # Contract repair resets L2 staleness, so a unit could be repaired and retried forever.
 # Two repairs is the budget: if a contract still cannot carry the unit after two rewrites,
 # the defect is the unit, not the prose.
@@ -103,6 +114,50 @@ def stamp_verdict(base):
     open(os.path.join(".guard_stamps", base), "w").write(cur)
 
 
+_BYS = None
+
+SECOND_SCREEN_ROSTER = "outputs/supervisor/second_screen_enrolled"
+
+
+def enrolled_for_second_screen():
+    """Units deliberately signed up for a second L0 screen, one base name per line.
+
+    Enrolment exists because the guard is read by orchestrate to decide which cohorts
+    have work left. Opening the second screen for everyone at once does not just permit
+    212 trials, it makes almost every retired cohort look runnable again and orchestrate
+    relaunches them wholesale — the entire Devin cap spent re-screening before anyone has
+    seen a single disagreement. The roster keeps the sample the size we chose."""
+    try:
+        with open(SECOND_SCREEN_ROSTER) as fh:
+            return {l.strip() for l in fh if l.strip() and not l.startswith("#")}
+    except OSError:
+        return set()
+
+
+def unscreened(base):
+    """Screeners with no recorded L0 verdict for this ENROLLED unit.
+
+    Screening has been routed by free capacity, not by coverage, and the result is that
+    almost every unit has been screened exactly once: Composer ran 447 L0 trials to
+    Devin's 51, and only two units have an L0 verdict from both. So the dataset's central
+    claim — that these tasks are hard for frontier agents — rests on ONE agent's opinion
+    per unit, and "the solvers agree" has never actually been measured.
+
+    A unit nobody has condemned but only one solver has tried is not a settled L0. It is
+    an untested one."""
+    if base not in enrolled_for_second_screen():
+        return []
+    global _BYS
+    if _BYS is None:
+        # Memoized: orchestrate asks this once per staged directory (thousands), and
+        # ledger_by_solver rescans every result.json in jobs/. Uncached it turned a
+        # sub-second planning pass into minutes.
+        import trial_ledger as _tl
+        _BYS = _tl.ledger_by_solver()
+    seen = {s for s, rungs in _BYS.get(base, {}).items() if rungs.get("0")}
+    return [s for s in SCREENERS if s not in seen]
+
+
 def in_ladder_sample(base):
     """Stable membership: the same units always walk the ladder, so the sample is
     comparable across runs instead of drifting every time it is recomputed."""
@@ -130,7 +185,42 @@ def decide(unit, per):
     # alone did not need the contract. Units still OPEN keep expiring on a contract change,
     # which is the whole point of a repair job.
     if l0 and max(l0) > 0:
+        # MODEL-AGNOSTIC BY DESIGN, and this is a research position rather than an
+        # oversight. `max` spans every solver: one pass at L0 by ANY of them condemns the
+        # unit for all. The dataset's claim is that a task is hard for frontier agents, so
+        # a task one frontier agent solves from the bug report alone is not hard — even if
+        # another would have failed it.
+        #
+        # This is deliberately NOT symmetric with certification, where a cross-solver flip
+        # is the weaker claim and gets routed to the solver that failed the unit. The
+        # asymmetry is the point: "some agent can do it" is enough to disqualify, and
+        # "this agent can do it with the contract but not without" is what qualifies.
         return False, f"condemned: passed L0 ({len(l0)} trial(s)) — not a hard unit"
+
+    # A SECOND SCREEN is always worth buying, and this check sits above every refusal
+    # below it — including "certified" — on purpose.
+    #
+    # Every other rule here refuses a trial because its verdict is already known. That
+    # reasoning does not reach an unused screener: what is on record is that ONE solver
+    # failed at L0, and the question of whether the other would have failed too has no
+    # answer yet. Refusing it as "already decided" mistakes one solver's opinion for the
+    # population claim the dataset actually makes.
+    #
+    # It is also the one trial that cannot corrupt anything. The outcomes are: the second
+    # screener fails, and the certificate is strictly better evidence than before; or it
+    # passes, and the unit is condemned by the model-agnostic rule above and leaves the
+    # dataset. A second screen can only ever DESTROY a certificate, never mint one — so
+    # unlike every trial the cap protects against, there is no incentive to be careful
+    # with it. Blocking it only preserves a number we have not earned.
+    if rung == "0" and (want := unscreened(base)):
+        if len(l0) >= L0_SCREEN_CAP:
+            return False, (f"L0 has {len(l0)} trial(s) (ceiling {L0_SCREEN_CAP}) and "
+                           f"{'/'.join(want)} still has no verdict — likely erroring, "
+                           f"investigate rather than re-queue")
+        return True, (f"second screen: L0 failed by "
+                      f"{'/'.join(s for s in SCREENERS if s not in want) or 'nobody'}, "
+                      f"never tried by {'/'.join(want)} — a pass condemns the unit")
+
     if l0 and max(l0) == 0 and l2 and max(l2) > 0:
         # A CROSS certificate is not a finished unit. If one solver failed L0 and a
         # different one passed L2, the flip may record only that the second model is
@@ -175,7 +265,10 @@ def decide(unit, per):
         return True, (f"contract changed since last verdict (repair {reps + 1} of "
                       f"{REPAIR_BUDGET}) — prior trials no longer bind")
     if rung == "0" and l0:
-        return False, f"L0 already decided ({len(l0)} trial(s), max={max(l0)})"
+        # Reached when the unit is not enrolled for a second screen, or when every
+        # screener already has a verdict — the branch above returns first otherwise.
+        return False, (f"L0 already decided ({len(l0)} trial(s), max={max(l0)}) "
+                       f"— enrol in {SECOND_SCREEN_ROSTER} to buy a second screen")
     if rung == "2":
         if not l0:
             return False, "L2 before L0 — run L0 first, it is the cheaper verdict"
