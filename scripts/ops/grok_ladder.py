@@ -51,6 +51,7 @@ SWEEPS = REPO / "experiments" / "dose_response"
 # slash in a job name and land the jobs dir somewhere unintended.
 COHORT_PREFIX = "sweep_grokladder"
 RUNGS = (2, 3, 4, 5, 6)
+CONC_MAX = 4          # never ask for more cells at once than the tightest solver cap
 ROUNDS_PER_RUNG = 1   # one verdict per cell; see launch()
 # Solver and model are set by --solver. The file keeps its name because grok's run is what
 # it was built for and what its docstring records, but the machinery is not grok-specific and
@@ -335,6 +336,12 @@ def cmd_run(max_passes: int) -> int:
         if not todo:
             print(f"ladder complete for {', '.join(units)}")
             return cmd_report()
+        # FILL THE SLOTS ACROSS RUNGS, not one rung at a time. Every cell in this roster is
+        # wanted whatever it returns -- the complete curve is the deliverable -- so L3 and L5
+        # of the same unit can run together, and there is no early exit to preserve. Taking
+        # one rung per pass and blocking on its sweep meant 1-2 cells in flight against a cap
+        # of 4, and the measured devin rate fell from 12/h to 1/h while half the capacity sat
+        # idle. 7 units x 4 rungs is 28 independent cells; the only limit should be the cap.
         rung, need = todo[0]
         # A sweep already in flight owns its rung. Launching a second one for the same
         # (unit, rung) would run the trial twice -- the per-solver cap counts VERDICTS, and
@@ -370,13 +377,37 @@ def cmd_run(max_passes: int) -> int:
         if not staged:
             print(f"  nothing buildable at L{rung}; marking rung unreachable", flush=True)
             continue
+        # Top up this rung's batch with cells from OTHER rungs of the same roster, so a pass
+        # launches as many independent cells as there are free slots.
+        room0 = wait_for_headroom(SOLVER, CONC_MAX)
+        extra: list[tuple[str, int, pathlib.Path]] = []
+        if room0 > len(staged):
+            for rung2, need2 in todo[1:]:
+                for base2 in need2:
+                    if len(staged) + len(extra) >= room0:
+                        break
+                    d2, why2 = ensure_staged(base2, rung2)
+                    if d2 is None:
+                        continue
+                    roster(base2, rung2)
+                    extra.append((base2, rung2, d2))
+                if len(staged) + len(extra) >= room0:
+                    break
+        if extra:
+            print(f"  + {len(extra)} cell(s) from higher rungs to fill the cap: "
+                  + ", ".join(f"{b}-L{r}" for b, r, _ in extra), flush=True)
         cohort = build_cohort(staged, rung)
-        room = wait_for_headroom(SOLVER, len(staged))
+        for base2, rung2, d2 in extra:
+            link = cohort / f"{base2}-L{rung2}"
+            if not link.exists():
+                subprocess.run(["cp", "-al", str(d2), str(link)], check=True)
+        room = wait_for_headroom(SOLVER, len(staged) + len(extra))
         if room < 1:
             print(f"  {SOLVER} never freed a slot; stopping", flush=True)
             return cmd_report()
-        if room < len(staged):
-            print(f"  {SOLVER} has {room} free slot(s) for {len(staged)} unit(s) — "
+        if room < len(staged) + len(extra):
+            print(f"  {SOLVER} has {room} free slot(s) for "
+                  f"{len(staged) + len(extra)} cell(s) — "
                   f"launching narrower; the rest come on the next pass", flush=True)
         rc = launch(cohort, rung, room, log)
         print(f"  sweep rc={rc}; log {log.relative_to(REPO)}", flush=True)
