@@ -280,29 +280,27 @@ def decide(unit, per, solver=None):
                       f"{'/'.join(s for s in SCREENERS if s not in want) or 'nobody'}, "
                       f"never tried by {'/'.join(want)} — a pass condemns the unit")
 
-    if l0 and max(l0) == 0 and l2 and max(l2) > 0:
-        # A CROSS certificate is not a finished unit. If one solver failed L0 and a
-        # different one passed L2, the flip may record only that the second model is
-        # stronger. Closing the unit here freezes that weaker claim forever — the solver
-        # that actually failed it never gets its turn, and certificates() can never
-        # upgrade the row to single-solver.
-        #
-        # So leave it open. solver_match then admits only the solver that failed it low,
-        # and a pass from that solver makes `shared` non-empty and the certificate
-        # single. Four trials were mid-flight producing exactly this contamination when
-        # the rule went in; this lets their work stand and be corrected rather than
-        # killing them.
-        import trial_ledger as _tl
-        cert = _tl.certificates().get(base)
-        if not cert or cert["kind"] == "single":
-            return False, "certified: L0 fail + L2 pass already on record"
-        # FALL THROUGH, do not return True here. An early return skips the per-rung cap
-        # below, and a cross-certified unit with three L2 trials already on it would have
-        # re-run without limit — reopening 25 units straight past the one check that took
-        # over-cap from 25% to 0%.
-        reopened = (f"cross-certified at L{cert['rung']} (failed by "
-                    f"{'/'.join(cert['l0'])}, passed by {'/'.join(cert['l2'])}) — "
-                    f"open for the solver that failed it")
+    # CERTIFIED IS PER SOLVER TOO, and this was the last place the pooled view survived.
+    #
+    # The old test asked the merged ledger "has anyone failed L0 and anyone passed >= L2",
+    # then reopened the unit only when the resulting certificate was `cross`. With cross
+    # retired (see trial_ledger.certificates) that branch could never fire, and worse, the
+    # merged test refused the work we now want: devin holds an L2 pass on `rootval` and
+    # `svcerrors` but no L0 verdict of its own, so it can never complete a second curve
+    # while composer's certificate closes the unit for everybody.
+    #
+    # Ask the asking solver instead. A solver that has itself failed L0 and passed a rung
+    # is done with this unit; a solver that has not is still entitled to its own curve.
+    if mine is not None:
+        _ml0 = (mine or {}).get("0", [])
+        _mup = [int(r) for r, v in (mine or {}).items()
+                if r.isdigit() and int(r) >= 2 and v and max(v) > 0]
+        if _ml0 and max(_ml0) == 0 and _mup:
+            return False, (f"certified for {solver}: it failed L0 and passed "
+                           f"L{min(_mup)} — its curve is complete")
+        reopened = None
+    elif l0 and max(l0) == 0 and l2 and max(l2) > 0:
+        return False, "certified: L0 fail + L2 pass already on record"
     else:
         reopened = None
     # Absolute per-rung cap, checked BEFORE staleness. A rung answers one question and

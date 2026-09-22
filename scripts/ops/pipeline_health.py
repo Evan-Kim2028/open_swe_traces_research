@@ -388,7 +388,8 @@ except Exception:
 try:
     import trial_ledger as _tlx
     _c = _tlx.certificates()
-    _cross = sum(1 for v in _c.values() if v["kind"] == "cross")
+    # cross retired; count units with two independent per-solver curves instead
+    _cross = sum(1 for v in _c.values() if len(v.get("solvers", [])) > 1)
     _msg = (f"{len(_c)} certificate(s): {len(_c)-_cross} single-solver, "
             f"{_cross} cross-solver")
     # A certificate is max(reward)>0 at the binding rung — the dataset's own rule — but one

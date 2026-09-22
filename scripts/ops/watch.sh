@@ -100,7 +100,8 @@ if [ $((i % 6)) -eq 1 ]; then
 import sys; sys.path.insert(0,'scripts/ops')
 import trial_ledger as TL
 from collections import Counter
-c=TL.certificates(); k=Counter(v['kind'] for v in c.values()); s=TL.summary()
-print(f\"certs {len(c)} single {k['single']} cross {k['cross']} | {s['tokens']/1e9:.2f}B \${s['cost_usd']:.2f}\")" 2>/dev/null)
+c=TL.certificates(); s=TL.summary()
+multi=sum(1 for v in c.values() if len(v.get('solvers',[]))>1)
+print(f\"certs {len(c)} multi-solver {multi} | {s['tokens']/1e9:.2f}B \${s['cost_usd']:.2f}\")" 2>/dev/null)
   echo "HEARTBEAT: $d | $bf | devin ${dc}/${dcap} | disk ${av}G | no-src ${ns} | runaway ${rw} | curves ${cv}"
 fi

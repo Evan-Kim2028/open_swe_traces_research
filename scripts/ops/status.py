@@ -46,7 +46,10 @@ def health():
     c = TL.certificates()
     esc = sum(1 for v in c.values() if v.get("escalated"))
     jump = sum(1 for v in c.values() if not v.get("rung_established", True))
-    cross = sum(1 for v in c.values() if v["kind"] == "cross")
+    # "cross" was retired: a certificate is per solver by construction (see
+    # trial_ledger.certificates). What matters now is how many units have a
+    # certificate from MORE THAN ONE solver — an independent difficulty curve each.
+    cross = sum(1 for v in c.values() if len(v.get("solvers", [])) > 1)
     d = slots.occupancy("devin")
     cur = sum(x["conc"] for x in slots.trials("cursor"))
     cont = int(sh("docker ps --format '{{.Names}}' | grep -c env-main-1") or 0)

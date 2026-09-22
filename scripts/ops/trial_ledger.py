@@ -128,77 +128,50 @@ def ledger_by_solver(jobs_dir=JOBS):
 
 
 def certificates(jobs_dir=JOBS):
-    """base -> {'solvers': [...], 'kind': 'single'|'cross', 'l0': [...], 'l2': [...]}.
+    """base -> certificate. Derived from the PER-SOLVER view; there is no other kind.
 
-    A unit is certified when some solver fails it at L0 and some solver passes it at L2.
-    'single' means one solver did both, so the flip isolates the affordance. 'cross' means
-    the L2 pass came from a different model than the L0 failure, so the flip may reflect a
-    capability gap rather than the contract - a real certificate, but a weaker claim.
+    This used to pool solvers: a unit counted as certified when SOME solver failed L0 and
+    SOME solver passed a rung >= 2, with `kind` marking whether one solver did both
+    ("single") or two did ("cross"). Cross was described as a real certificate making a
+    weaker claim. Looking at the six that remained, it is neither.
+
+    Four were two halves that do not join. `svcexpr` and `verifyenv`: composer failed L0,
+    devin passed L2, devin never screened L0 at all. `flhashmap`: grok and devin failed L0,
+    composer passed L2, composer never screened it. `hfs-dot`: composer failed L0 while
+    devin PASSED L0 and L2. None has a solver that did both halves, so none is evidence
+    about an affordance — pooling manufactured a certificate out of unrelated trials.
+
+    The other two were worse: already-complete composer certificates that pooling
+    MISREPORTED. `rootval` (composer 0✗ 2✗ 3✗ 4✗✗ 5✓✓) and `svcerrors` (0✗ 2✗ 5✓) both
+    need L5 for composer, and both were recorded as binding at L2 because devin passed L2.
+    A three-rung understatement, the same error `defval` exposed: taking the lowest passing
+    rung ACROSS solvers lets the stronger model erase the weaker model's difficulty, which
+    is the one quantity this dataset exists to measure.
+
+    So a certificate is per solver by construction. A unit is certified when some solver
+    failed it at L0 and passed a rung >= 2 itself, and it binds at THAT solver's lowest
+    passing rung. `kind` is kept as "single" for callers that still read it, and is now
+    always "single" because that is the only thing a certificate was ever made of.
+    `binds_for` names the solver; `solvers` lists every solver holding a certificate on the
+    unit, which is what a multi-model dataset actually wants to know.
     """
+    bys = certificates_by_solver(jobs_dir)
     out = {}
-    bys = ledger_by_solver(jobs_dir)
-    for base, bysolver in bys.items():
-        failed_l0 = {s for s, d in bysolver.items() if d.get("0") and max(d["0"]) == 0}
-        if not failed_l0:
-            continue
-        # CONDEMNATION IS PER SOLVER, not model-agnostic. This reverses an earlier rule
-        # and the reversal is deliberate.
-        #
-        # The old rule — one solver passing L0 disqualifies the unit for everyone — was
-        # coherent while the dataset made a single claim, "hard for frontier agents". It
-        # stopped being coherent once the ladder went per solver. A certificate now says
-        # "COMPOSER could not fix this from the bug report, and could with the contract";
-        # devin solving it at L0 says something about devin and nothing about that claim.
-        # Discarding the composer evidence because a different model was stronger throws
-        # away exactly the per-agent difficulty signal the two-curve work exists to find
-        # (defval: composer needs L5, devin needs L2 — same task, three rungs apart).
-        #
-        # A unit is now "too easy" only when NO solver found it hard, which is the honest
-        # complement of "certified for the solver that did". The ten units this reinstates
-        # are all composer-certified with a devin L0 pass, eight of them go-github.
-        #
-        # The second-screen result is unaffected: devin solving 8 of 10 go-github units
-        # from the bug report is still the finding, it just no longer deletes composer's
-        # certificates as a side effect.
-        # The flip does not have to happen at L2. A unit that fails L0 and L2 and then
-        # passes at L5 is still hard-and-solvable; the rung it needs IS its difficulty.
-        # Certifying only at L2 wrote off 46 of the hardest units in the dataset as
-        # "non-flipping". The lowest passing rung is the one that binds.
-        passed = {}
-        for solver, d in bysolver.items():
-            for r, rewards in d.items():
-                if r.isdigit() and int(r) >= 2 and rewards and max(rewards) > 0:
-                    passed.setdefault(int(r), set()).add(solver)
-        if not passed:
-            continue
-        rung = min(passed)
-        at_rung = passed[rung]
-        shared = failed_l0 & at_rung
-        # How much evidence the flip rests on. A certificate is `max(reward) > 0` at the
-        # binding rung, which is the same rule the whole dataset uses - but 1 pass in 6 is
-        # not the same claim as 1 in 1, and helm-depresolver binds at L3 on 1 of 6.
-        # Recording it keeps that difference auditable instead of invisible.
-        per_rung = {}
-        for d in bys[base].values():
-            for rk, rv in d.items():
-                if rk.isdigit():
-                    per_rung.setdefault(int(rk), []).extend(rv)
-        rewards = per_rung.get(rung, [])
-        n_pass = sum(1 for r in rewards if r > 0)
-        # Was this rung SHOWN to be the one the unit needs, or merely the first one
-        # tried that worked? An earlier policy probed L5 directly, so 32 units bind at
-        # L5 having never been asked whether L3 or L4 would have done. "Flips by L5" is
-        # a weaker statement than "needs L5" and the histogram must not blur them.
-        # L2 is established by construction: L0 failed and the contract is the rung.
-        below = per_rung.get(rung - 1, [])
-        established = rung == 2 or bool(below and max(below) == 0)
-        out[base] = {"l0": sorted(failed_l0), "l2": sorted(at_rung),
-                     "rung": rung, "escalated": rung > 2,
-                     "rung_established": established,
-                     "kind": "single" if shared else "cross",
-                     "n_trials_at_rung": len(rewards), "n_pass_at_rung": n_pass,
-                     "thin": len(rewards) >= 3 and n_pass == 1,
-                     "binds_for": sorted(shared) if shared else sorted(at_rung)}
+    for base, per_solver in bys.items():
+        solver, cert = min(per_solver.items(), key=lambda kv: kv[1]["rung"])
+        out[base] = {
+            "rung": cert["rung"],
+            "escalated": cert["escalated"],
+            "rung_established": cert["rung_established"],
+            "n_trials_at_rung": cert["n_trials_at_rung"],
+            "n_pass_at_rung": cert["n_pass_at_rung"],
+            "thin": cert["thin"],
+            "kind": "single",
+            "binds_for": [solver],
+            "solvers": sorted(per_solver),
+            "l0": [solver],
+            "l2": [solver],
+        }
     return out
 
 
