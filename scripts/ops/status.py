@@ -111,12 +111,50 @@ def queue():
     print(f"    ---- {sum(blocked.values())} total")
 
 
+def ladder():
+    """Where each escalating unit actually sits on the ladder, and what it needs NEXT.
+
+    Added after getting this wrong twice from aggregates. "by-jump 29" says those
+    certificates bind at a rung never shown to be necessary; it does NOT say they are one
+    trial from resolution. All 29 turned out to need L3 — the bottom of the walk — while
+    I twice read a flat count as "waiting on L4". A count of what is unresolved is not a
+    count of what is next.
+    """
+    import collections
+    import escalate as E
+    import trial_ledger as TL
+    per = TL.ledger()
+    c = TL.certificates()
+    earned = [k for k, v in c.items() if v["escalated"] and v["rung_established"]]
+    jump = [k for k, v in c.items() if v["escalated"] and not v["rung_established"]]
+    byrung = collections.Counter(
+        (v["rung"], v["rung_established"]) for v in c.values() if v["escalated"])
+    print(f"  above L2: {len(earned)} earned, {len(jump)} by-jump")
+    for r in sorted({k[0] for k in byrung}):
+        print(f"    L{r}: {byrung.get((r, True), 0)} earned, "
+              f"{byrung.get((r, False), 0)} by-jump")
+    need = collections.Counter()
+    for b in jump:
+        rung, why = E.next_rung(E.history(per.get(b, {})))
+        need[f"L{rung}" if rung else why.split(":")[0]] += 1
+    if need:
+        print(f"    by-jump units need NEXT: {dict(sorted(need.items()))}")
+    cand = collections.Counter()
+    for base, rung, _why, _h in E.candidates(per):
+        cand[f"L{rung}"] += 1
+    if cand:
+        print(f"  still climbing: {sum(cand.values())} unit(s), next rung "
+              f"{dict(sorted(cand.items()))}")
+
+
 def main() -> int:
-    want = set(a.lstrip("-") for a in sys.argv[1:]) or {"health", "queue"}
+    want = set(a.lstrip("-") for a in sys.argv[1:]) or {"health", "queue", "ladder"}
     if "health" in want:
         print("HEALTH"); health()
     if "queue" in want:
         print("QUEUE"); queue()
+    if "ladder" in want:
+        print("LADDER"); ladder()
     return 0
 
 
