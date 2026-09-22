@@ -149,6 +149,57 @@ rung. 11 of 164 rest on one pass in three or more trials; `helm-depresolver` bin
 6 and is independently flagged B10-unsolvable by the linter. The ledger records
 `n_pass_at_rung` and a `thin` flag so the distinction is auditable rather than invisible.
 
+### 4c. Every certificate rests on ONE screener's opinion — so we went and checked
+
+A certificate says the unit is hard: it failed at L0, where the agent gets only a bug
+report. Condemnation is deliberately model-agnostic — a task any frontier agent fixes from
+the report alone is not hard, even if another would have failed it — which makes "no
+solver can do this from the report" a claim about solvers in general.
+
+Screening never tested that claim. Slots were filled by whoever was free, and Composer ran
+447 L0 trials to Devin's 51, so a unit's L0 verdict is almost always a single model's
+opinion. Only two units in the whole dataset had an L0 verdict from both solvers. The
+agreement we were implicitly assuming had never been measured; its evidence was an absence
+of trials.
+
+If the two screeners disagree at rate p, then roughly p of the certificates were never
+hard, and the headline count is inflated by that much.
+
+**Method.** 60 certified units are enrolled on a roster that reopens their existing L0
+directory to the solver that has not screened it. Nothing is re-authored, re-staged or
+renamed; the verdict lands on the real unit's ledger row, so a pass condemns the unit for
+real and it leaves the dataset. The shrinkage IS the measurement.
+
+The trial is unusual in being incapable of doing harm. Either the second screener fails,
+and the certificate is strictly better evidence than before, or it passes, and the unit
+should never have been counted. A second screen can only destroy a certificate, never mint
+one — which is why the guard was wrong to refuse it, and refused it in three separate
+places before this (`trial_guard` as "already decided", `solver_match` by handing the slot
+back to the solver that had already screened it, and `orchestrate` via a shadow copy of
+the guard's rule that ran before the guard).
+
+**Sample size is the whole design.** With zero disagreements observed, the exact one-sided
+95% bound on the disagreement rate is `1 - 0.05**(1/n)`:
+
+| n, all agreeing | disagreement rate | certificates possibly inflated (of ~215) |
+|---|---|---|
+| 20 | < 13.9% | up to 30 |
+| 30 | < 9.5% | up to 20 |
+| **60** | **< 4.9%** | **up to 10** |
+
+n=20 would only support "fewer than 30 of our certificates are bogus", which is a caveat,
+not a result — and it is a weak test besides: if the true rate were 10%, 20 clean screens
+happen 12% of the time. n=60 is the smallest sample that puts the bound under 5%. It costs
+no money, because 48 of the 60 route to Devin, which is free and was structurally starved
+anyway: the single-solver rule leaves Devin few units it may certify, so second screens are
+the rare work that fits its idle capacity instead of competing for Composer's budget.
+
+**Status: in progress.** 5 of 60 verdicts in, 5 agreements, 0 disagreements. At n=5 the
+bound is still ~45% and says essentially nothing; the number only becomes informative past
+roughly 15 and only supports the <5% claim at 60. Reported here as a method with a
+pre-registered stopping point rather than as a finding, so the sample size cannot be
+chosen after seeing the answer.
+
 ## 5. Yield varies by repository, and it is predictable-ish
 
 | repo | certified / decided | |
