@@ -165,19 +165,32 @@ def staged_dir(base: str, rung: str) -> pathlib.Path | None:
     return None
 
 
-def build_cohort(base: str, solver: str, rungs: list[str]) -> pathlib.Path | None:
-    dest = SWEEPS / f"{COHORT_PREFIX}_{solver}_{base}"
+def build_cohort(picks: list[tuple[str, list[str]]], solver: str,
+                 tag: str) -> tuple[pathlib.Path | None, int]:
+    """One cohort holding cells from SEVERAL units, so one sweep can fill every free slot.
+
+    A curve's first phase is two cells, so one curve at a time can never occupy more than two
+    of devin's four slots -- and pausing the screening queue to free capacity for this script
+    left two slots idle instead of two slots screening. sweep_seq runs a whole cohort with
+    --n-concurrent, so batching several units into one cohort is what actually uses the room
+    that pausing bought.
+
+    Batching is safe here in a way it would not be for the flip search: every cell in the
+    batch is wanted regardless of outcome, so there is no early exit to preserve.
+    """
+    dest = SWEEPS / f"{COHORT_PREFIX}_{solver}_{tag}"
     dest.mkdir(parents=True, exist_ok=True)
     made = 0
-    for r in rungs:
-        src = staged_dir(base, r)
-        if src is None:
-            continue
-        link = dest / f"{base}-L{r}"
-        if not link.exists():
-            subprocess.run(["cp", "-al", str(src), str(link)], check=True)
-        made += 1
-    return dest if made else None
+    for base, rungs in picks:
+        for r in rungs:
+            src = staged_dir(base, r)
+            if src is None:
+                continue
+            link = dest / f"{base}-L{r}"
+            if not link.exists():
+                subprocess.run(["cp", "-al", str(src), str(link)], check=True)
+            made += 1
+    return (dest if made else None), made
 
 
 def headroom(solver: str) -> int:
@@ -320,25 +333,44 @@ def cmd_run(solvers, max_curves: int) -> int:
             print("no curve has open work right now", flush=True)
             return cmd_report(solvers)
         base, s, cells = picked
-        print(f"[{done+1}] {base} / {s}: rungs {','.join('L'+c for c in cells)}", flush=True)
-        for r in cells:
-            roster(base, r)
-        cohort = build_cohort(base, s, cells)
+        # Wait for a slot first, then fill it: take as many WHOLE curves as there is room
+        # for, so the sweep uses the capacity rather than one curve's worth of it.
+        room = wait_for_headroom(s, CONC[s])
+        batch = [(base, cells)]
+        used = len(cells)
+        if room > used:
+            live = _live_bases() | {base}
+            for b2 in roster_units(bys):
+                if used >= room:
+                    break
+                if b2 in live or not allowed(b2, s):
+                    continue
+                c2 = open_cells_rostered(b2, s, per, bys)
+                if not c2:
+                    continue
+                batch.append((b2, c2[:max(1, room - used)]))
+                used += len(batch[-1][1])
+                live.add(b2)
+        label = ", ".join(f"{b}({','.join('L'+c for c in cs)})" for b, cs in batch)
+        print(f"[{done+1}] {s} x{len(batch)} curve(s), {used} cell(s): {label}", flush=True)
+        for b2, cs in batch:
+            for r in cs:
+                roster(b2, r)
+        tag = batch[0][0] if len(batch) == 1 else f"{batch[0][0]}_plus{len(batch)-1}"
+        cohort, made = build_cohort(batch, s, tag)
         if cohort is None:
-            print(f"  nothing stageable for {base}; skipping", flush=True)
+            print(f"  nothing stageable; skipping", flush=True)
             done += 1
             continue
-        room = wait_for_headroom(s, len(cells))
-        if room < len(cells):
-            print(f"  {s} has {room} free slot(s) for {len(cells)} cell(s) — "
-                  f"launching narrower rather than over cap", flush=True)
-        rc = launch(cohort, s, room, log)
+        rc = launch(cohort, s, min(made, room), log)
         after = curves()
-        got = (after.get(base) or {}).get(s) or {}
-        trail = "  ".join(f"L{r}:" + "/".join("P" if x > 0 else "f" for x in got[r])
-                          for r in sorted(got, key=lambda z: int(z) if z.isdigit() else 9))
-        print(f"  rc={rc}  {s} now: {trail or '(no verdict)'}", flush=True)
-        done += 1
+        for b2, _cs in batch:
+            got = (after.get(b2) or {}).get(s) or {}
+            trail = "  ".join(f"L{r}:" + "/".join("P" if x > 0 else "f" for x in got[r])
+                              for r in sorted(got, key=lambda z: int(z) if z.isdigit() else 9))
+            print(f"  -> {b2}: {trail or '(no verdict)'}", flush=True)
+        print(f"  rc={rc}", flush=True)
+        done += len(batch)
     return cmd_report(solvers)
 
 
