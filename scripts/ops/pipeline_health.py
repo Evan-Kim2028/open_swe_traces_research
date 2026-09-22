@@ -125,10 +125,32 @@ try:
         name = os.path.basename(d.rstrip("/"))
         if name.rsplit("-L", 1)[0] in per:
             continue
+        # Eligibility is TWO gates and this asked one: the guard says whether the trial is
+        # worth running at all, solver_match says whether THIS solver may be the one to run
+        # it. Second screens are reserved for the solver that has not seen the unit, and
+        # since Composer screened almost everything, that backlog belongs to Devin --
+        # counting it as Composer's idle work would inflate this number. Both gates, and
+        # the guard asked AS COMPOSER rather than from the merged ledger.
+        #
+        # This did not turn out to be why the FAIL was firing, and the honest record is
+        # worth more than the tidy story: the 19 units were real, Composer-eligible L0
+        # screens with their source trees intact. The cause was task_lint's SCRUB rule
+        # deleting them after the sweep launched -- two sweeps in a row logged "guard kept
+        # 0 unit(s), nothing left to trial" -- so the FAIL was correct and the thing to fix
+        # was upstream of it. Kept because it is the right query, not because it silenced
+        # anything.
         try:
+            ok, _ = trial_guard.decide(name, per, solver="composer")
+        except TypeError:
             ok, _ = trial_guard.decide(name, per)
         except Exception:
             ok = True
+        if ok:
+            try:
+                import solver_match
+                ok, _ = solver_match.decide(name, "cursor-cli")
+            except Exception:
+                pass
         if ok:
             runnable += 1
     untrialled = runnable
@@ -412,9 +434,42 @@ try:
     _esc = sum(1 for v in _c.values() if v.get("escalated"))
     if _esc:
         _msg += f"; {_esc} flipped above L2"
-    (WARN if _cross > 0.25 * max(len(_c), 1) else OK).append(_msg)
-except Exception:
-    pass
+    # Two solvers on one unit is the SCARCE thing, so a low count is the normal state and
+    # must not warn. The old test warned when CROSS certificates exceeded a quarter of the
+    # dataset, because those were suspect; these are the opposite, and warning on plenty
+    # would have inverted the alarm.
+    OK.append(_msg)
+except Exception as _e:
+    # NOT `pass`. This block referenced `_cross` for one commit after the variable was
+    # renamed to `_multi`; the NameError was swallowed here and the entire certificate
+    # report -- count, thin, jumped-rung, escalated -- silently vanished from the health
+    # output while every other line still printed and the check still exited green. The
+    # only symptom was an absence, which is the one thing a monitor cannot show you.
+    WARN.append(f"certificate report unavailable: {type(_e).__name__}: {_e}")
+
+# --- 14b. the same unit staged in several cohorts ----------------------------------
+# A unit staged under two cohort names is two candidates to every selector that walks
+# sweep_*/ , and the per-rung cap cannot stop them: the cap counts VERDICTS, so four
+# cohorts launched before the first one finishes all see zero and all run. That is where
+# over-cap waste comes from, and it is invisible in the cohort view because each cohort is
+# individually behaving. 182 staged units are duplicated across cohorts; almost all are
+# already decided, so the guard blocks them and they cost nothing. Only the undecided ones
+# can actually re-run, which is the number worth alarming on.
+try:
+    import collections as _co
+    _st = _co.defaultdict(list)
+    for _d in glob.glob("experiments/dose_response/sweep_*/*/"):
+        if os.path.isdir(_d):
+            _st[os.path.basename(_d.rstrip("/"))].append(_d.split("/")[2])
+    _dup = {k: v for k, v in _st.items()
+            if len(v) > 1 and k.rsplit("-L", 1)[0] not in per}
+    if _dup:
+        _w = ", ".join(f"{k} x{len(v)}" for k, v in sorted(_dup.items())[:4])
+        (WARN if len(_dup) > 2 else OK).append(
+            f"{len(_dup)} undecided unit(s) staged in several cohorts — concurrent launches "
+            f"would each run it: {_w}")
+except Exception as _e:
+    WARN.append(f"duplicate-staging check unavailable: {type(_e).__name__}: {_e}")
 
 # --- 15. escalation queue ---------------------------------------------------------
 # A unit that fails L0 and L2 is not waste: 9 of 9 hand-escalated units flipped at a
