@@ -194,11 +194,39 @@ no money, because 48 of the 60 route to Devin, which is free and was structurall
 anyway: the single-solver rule leaves Devin few units it may certify, so second screens are
 the rare work that fits its idle capacity instead of competing for Composer's budget.
 
-**Status: in progress.** 5 of 60 verdicts in, 5 agreements, 0 disagreements. At n=5 the
-bound is still ~45% and says essentially nothing; the number only becomes informative past
-roughly 15 and only supports the <5% claim at 60. Reported here as a method with a
-pre-registered stopping point rather than as a finding, so the sample size cannot be
-chosen after seeing the answer.
+**Result so far: the softness is one repository, not the dataset.** 18 of 65 verdicts in:
+
+| source repo | screened | condemned |
+|---|---|---|
+| `go-github` | 5 | **4 (80%)** |
+| everything else (kops, helm, gin, goa, client-go, unprefixed) | 13 | **0 (0%)** |
+
+The pooled rate is 22%, and pooling is the wrong operation. Every condemnation comes from
+one repository; thirteen units from five other repositories held up unanimously. Fisher's
+exact on 4/5 against 0/13 is p ~ 0.002, so this is very unlikely to be how a uniform rate
+would look. Extrapolating the pooled 22% across the dataset predicts ~48 bad certificates;
+the actual exposure is the six `go-github` certificates still standing, about 3%.
+
+The tooling now refuses to make that mistake. `second_screen.py --report` prints the
+per-repo split first and suppresses the pooled extrapolation whenever one family's rate is
+at least three times the rest, naming the at-risk population instead. An earlier version
+gated that warning on a family being *100%* condemned, and the moment one `go-github` unit
+agreed (4/5 rather than 5/5) the misleading pooled number came straight back — the flag has
+to fire on heterogeneity between families, not on perfection within one.
+
+**Why one repo would behave this way** is the interesting part, and we should say it is a
+hypothesis. `go-github` is a generated API client: its issues and its code turn on concrete
+field names and JSON tags, so a bug report that names the affected field can carry most of
+the fix with it. The L0 affordance is nominally "bug report only", but how much a bug
+report gives away is a property of the source repository's conventions, not of the rung.
+If that holds, synthetic task difficulty is not repo-independent and a ladder calibrated on
+one codebase does not transfer to another — which would be a limitation worth stating
+plainly rather than a defect to quietly patch out.
+
+**Status.** 47 screens outstanding, including the six remaining `go-github` certificates,
+which were enrolled deliberately to settle that family at 10/10 rather than 5/10. The
+pre-registered n=60 still governs the dataset-wide claim; the per-repo split is a
+sub-analysis the sample was not powered for, and is reported as such.
 
 ## 5. Yield varies by repository, and it is predictable-ish
 
