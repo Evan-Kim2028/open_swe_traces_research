@@ -22,8 +22,36 @@ for c in $(docker ps --format '{{.Names}}' | grep env-main-1); do
     echo "    other $stem"
   fi
 done
-pgrep -f "cohort_topup.sh $COHORT" >/dev/null && echo "  topup loop: alive" \
-  || echo "  topup loop: NOT RUNNING  <-- freed slots will idle"
+# Which driver SHOULD be running depends on the phase, so report what is there and let the
+# reader judge, rather than alarming on the absence of a loop that was stopped on purpose.
+# The first version printed "topup loop NOT RUNNING <-- freed slots will idle" immediately
+# after the L2 probe was deliberately stopped to prioritise the climb, which is a false alarm
+# and the fastest way to train someone to ignore a monitor.
+timeout 120 uv run python - <<'PY' 2>/dev/null
+import os
+want = {"cohort_topup.sh": "L2 probe top-up", "grok_ladder.py": "ladder climb",
+        "ladder_matrix.py": "comparison matrix"}
+seen = {}
+for e in os.listdir("/proc"):
+    if not e.isdigit():
+        continue
+    try:
+        argv = [a for a in open(f"/proc/{e}/cmdline", "rb").read()
+                .decode(errors="replace").split("\0") if a]
+    except OSError:
+        continue
+    if len(argv) < 2:
+        continue
+    b = os.path.basename(argv[1])
+    if b in want:
+        extra = " ".join(x for x in argv[2:] if not x.startswith("-"))[:40]
+        seen.setdefault(want[b], []).append(f"pid {e} {extra}".rstrip())
+if seen:
+    for k, v in sorted(seen.items()):
+        print(f"  driver: {k} -- {'; '.join(v)}")
+else:
+    print("  driver: NONE RUNNING  <-- nothing will launch new trials")
+PY
 timeout 600 uv run python - "$COHORT" <<'PY' 2>/dev/null
 import sys, os, glob, time
 sys.path.insert(0, "scripts/ops")
@@ -43,6 +71,25 @@ rows = [t for t in TL.trials() if TL.solver_of(t.get("model")) == "devin"]
 r1 = sum(1 for t in rows if t["mtime"] >= now - 3600)
 r3 = sum(1 for t in rows if t["mtime"] >= now - 3 * 3600) / 3
 print(f"  devin rate: {r1}/h last hour, {r3:.1f}/h over three")
+# The climb is the priority now, so report it here too: which units devin failed at both
+# L0 and L2, and how many of their L3-L6 cells are measured.
+import collections
+climb = []
+for b, per in bys.items():
+    d = per.get("devin") or {}
+    l0, l2 = d.get("0"), d.get("2")
+    if not (l0 and max(l0) == 0 and l2 and max(l2) == 0):
+        continue
+    if any(max(v) > 0 for r, v in d.items() if r.isdigit() and int(r) >= 2 and v):
+        continue
+    got = [r for r in ("3", "4", "5", "6") if d.get(r)]
+    climb.append((b, got))
+if climb:
+    cells = sum(len(g) for _, g in climb)
+    print(f"  CLIMB: {len(climb)} unit(s) failed L0+L2, {cells}/{len(climb)*4} "
+          f"L3-L6 cells measured")
+    for b, got in sorted(climb):
+        print(f"    {b:22s} {','.join('L'+x for x in got) or 'none yet'}")
 left = len(units) - len(done)
 rate = r3 if r3 > 0.5 else (r1 if r1 else 0)
 if left and rate:
