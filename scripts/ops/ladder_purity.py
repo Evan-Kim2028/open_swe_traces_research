@@ -98,6 +98,26 @@ def main() -> int:
     for base, owner, stray in out["ladder_mixed"]:
         print(f"      {base:24s} owner={owner:9s} stray={stray}")
         print(f"        full: {detail[base]}")
+    # COVERAGE. Contamination was the question while one merged ladder had to be kept
+    # clean; with per-solver ladders it cannot happen, so the live question became how
+    # many units actually HAVE a second curve. A unit climbed by one solver tells us it is
+    # hard for that solver. Only a unit climbed by both separates "hard for agents" from
+    # "hard for this agent".
+    import trial_ledger as TL
+    cbs = TL.certificates_by_solver()
+    two = {b: d for b, d in cbs.items() if len(d) > 1}
+    print(f"\ncoverage — independent difficulty curves:")
+    print(f"  units with 1 curve   {sum(1 for d in cbs.values() if len(d) == 1):4d}")
+    print(f"  units with 2 curves  {len(two):4d}  <- the comparison set")
+    for b, d in sorted(two.items())[:10]:
+        cells = "  ".join(f"{s}:L{v['rung']}{'' if v['rung_established'] else '?'}"
+                          for s, v in sorted(d.items()))
+        agree = len({v["rung"] for v in d.values()}) == 1
+        print(f"      {b:24s} {cells}   {'agree' if agree else 'DIFFER'}")
+    if two:
+        diff = sum(1 for d in two.values() if len({v['rung'] for v in d.values()}) > 1)
+        print(f"  of {len(two)} compared, {diff} put the unit at a DIFFERENT rung per solver")
+
     if "--fix-plan" in sys.argv:
         plan = fix_plan(out, detail)
         print(f"\nto make every ladder pure, re-run {len(plan)} rung(s):")

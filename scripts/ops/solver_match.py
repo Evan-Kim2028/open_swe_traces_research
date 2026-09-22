@@ -84,31 +84,23 @@ def decide(unit: str, agent: str, bys=None) -> tuple[bool, str]:
                            f"{me} already screened this unit at L0")
         return True, "L0/L1: screening, no prior failure to match"
 
-    # ESCALATION RUNGS BELONG TO THE LADDER'S OWNER, not merely to anyone who failed
-    # below. "Failed below" was written to stop a certificate recording that model B is
-    # stronger than model A, and it does that. It does not keep a LADDER to one model: a
-    # unit with composer at L0/L2/L3 and devin at L4 passes that check, because devin
-    # also failed it at L2. Three units ended up exactly so — cgenc, fideps, reflectfmt.
+    # LADDER OWNERSHIP WAS RETIRED HERE, deliberately, and this note is why.
     #
-    # It matters because the ladder IS the difficulty measurement. "Fails at L4, flips at
-    # L5" is a claim about one agent's competence curve; assembled from two models, the
-    # rung where a unit flips may only be the rung where the stronger model took over.
+    # For a few hours L3+ was restricted to whoever already owned a unit's escalation
+    # rungs, to stop a devin L4 landing on a composer ladder and making "flips at L5" a
+    # statement about two models. It worked, but it bought correctness by making the
+    # ladder exclusive: one model per unit, first come, second curve discarded.
     #
-    # So L3+ goes to whoever already owns the unit's escalation rungs. A unit with no
-    # escalation history has no owner yet, and either solver may open the ladder.
-    if int(rung) >= 3:
-        import collections
-        tally = collections.Counter()
-        for solver, rungs in bys.get(base, {}).items():
-            for r, v in rungs.items():
-                if r.isdigit() and int(r) >= 3 and v:
-                    tally[solver] += 1
-        if tally:
-            owner = tally.most_common(1)[0][0]
-            if me != owner:
-                return False, (f"ladder owner is {owner} ({tally[owner]} escalation "
-                               f"rung(s)); {me} would mix two models into one "
-                               f"difficulty curve")
+    # trial_guard now judges escalation against the asking solver's OWN rungs, so mixing
+    # is impossible by construction — composer's L4 and devin's L4 are different cells
+    # and neither can be mistaken for the other. Ownership would now block the only thing
+    # we want: devin climbing a unit composer already climbed, from L0 upward, to give us
+    # two independent difficulty curves instead of one. That second curve is free (devin
+    # is the free solver and is structurally starved of work it may certify) and it is
+    # the only way to tell "hard for agents" from "hard for this agent".
+    #
+    # The no-cross-certification rule below still stands: a flip must be earned by a
+    # solver that failed the unit lower down.
 
     failed = failed_low(base, bys, int(rung))
     if not failed:

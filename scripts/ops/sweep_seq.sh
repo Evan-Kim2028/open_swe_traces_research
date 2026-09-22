@@ -21,10 +21,16 @@ uv run python "$R/scripts/ops/unit_features.py" "$PEND" >/dev/null 2>&1 || true
 
 # A trial on a unit whose verdict is already on record buys nothing. Measured over
 # 1632 trials: 883 of them re-measured a decided unit. The guard is free; a trial is 2.08M tokens.
+# The ladder is per solver now, so the guard has to be told who is asking: composer's
+# rungs and devin's rungs are two different curves and a rung answered by one is still
+# open for the other. solver_match.py owns the agent->solver mapping; ask it rather than
+# keeping a second copy of the table here.
+GUARD_SOLVER=$(uv run python -c "import sys;sys.path.insert(0,'$R/scripts/ops');import solver_match;print(solver_match.solver_for('${AGENT:-cursor}'))" 2>/dev/null || echo composer)
+
 if [ "${SKIP_GUARD:-0}" != "1" ]; then
   for u in "$PEND"/*/; do
     n=$(basename "$u")
-    if ! out=$(uv run python "$R/scripts/ops/trial_guard.py" "$n" 2>/dev/null); then
+    if ! out=$(uv run python "$R/scripts/ops/trial_guard.py" "$n" --solver "$GUARD_SOLVER" 2>/dev/null); then
       echo "   guard: $out"; rm -rf "$u"
     fi
   done
@@ -151,7 +157,7 @@ for round in $(seq 1 "$ROUNDS"); do
     for u in "$PEND"/*/; do
       [ -d "$u" ] || continue
       un=$(basename "$u")
-      if ! g=$(uv run python "$R/scripts/ops/trial_guard.py" "$un" 2>/dev/null); then
+      if ! g=$(uv run python "$R/scripts/ops/trial_guard.py" "$un" --solver "$GUARD_SOLVER" 2>/dev/null); then
         echo "   re-gate: $g"; rm -rf "$u"
       fi
     done

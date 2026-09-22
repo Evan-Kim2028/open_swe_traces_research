@@ -184,6 +184,46 @@ def certificates(jobs_dir=JOBS):
     return out
 
 
+def certificates_by_solver(jobs_dir=JOBS):
+    """base -> solver -> certificate, each from that solver's OWN rungs.
+
+    certificates() answers "is this unit hard and solvable", pooling every solver's
+    verdicts. That is the dataset's headline and it keeps its meaning. This answers a
+    different question: for THIS agent, where on the ladder does the unit stop being
+    impossible? Two agents give two curves, and the gap between them is the difference
+    between "hard for agents" and "hard for this agent" — which is the thing the dataset
+    exists to measure and, pooled, cannot show.
+
+    Condemnation stays model-agnostic here too: a unit any solver fixed from the bug
+    report alone is not hard for anyone, so it yields no per-solver certificate either.
+    """
+    out = {}
+    bys = ledger_by_solver(jobs_dir)
+    for base, bysolver in bys.items():
+        if {sv for sv, d in bysolver.items() if d.get("0") and max(d["0"]) > 0}:
+            continue                      # condemned globally, as in certificates()
+        for solver, d in bysolver.items():
+            l0 = d.get("0") or []
+            if not l0 or max(l0) != 0:
+                continue                  # this solver never failed it at L0
+            passed = sorted(int(r) for r, v in d.items()
+                            if r.isdigit() and int(r) >= 2 and v and max(v) > 0)
+            if not passed:
+                continue
+            rung = passed[0]
+            rewards = d.get(str(rung), [])
+            below = d.get(str(rung - 1), [])
+            out.setdefault(base, {})[solver] = {
+                "rung": rung,
+                "escalated": rung > 2,
+                "rung_established": rung == 2 or bool(below and max(below) == 0),
+                "n_trials_at_rung": len(rewards),
+                "n_pass_at_rung": sum(1 for r in rewards if r > 0),
+                "thin": len(rewards) >= 3 and sum(1 for r in rewards if r > 0) == 1,
+            }
+    return out
+
+
 def summary(jobs_dir=JOBS, nonflip_cap=3):
     per = ledger(jobs_dir)
     allt = list(trials(jobs_dir))

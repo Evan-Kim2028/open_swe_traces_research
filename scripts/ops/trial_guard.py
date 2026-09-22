@@ -165,13 +165,32 @@ def in_ladder_sample(base):
     return (h % 1000) < LADDER_SAMPLE * 1000
 
 
-def decide(unit, per):
+def solver_view(base, solver):
+    """This solver's own rung -> [rewards], or None when we are not told who is asking.
+
+    ledger_by_solver has always carried this; the decision points just never read it. The
+    ladder is a claim about ONE agent's competence curve, so the rungs that build it have
+    to be that agent's own."""
+    if not solver:
+        return None
+    global _BYS
+    if _BYS is None:
+        import trial_ledger as _tl
+        _BYS = _tl.ledger_by_solver()
+    return dict(_BYS.get(base, {}).get(solver, {}))
+
+
+def decide(unit, per, solver=None):
     if "-L" not in unit or not unit.rsplit("-L", 1)[-1][:1].isdigit():
         return True, "unrecognised unit name"
     base, rung = unit.rsplit("-L", 1)
     rung = rung[:1]
     d = per.get(base, {})
     l0, l2 = d.get("0", []), d.get("2", [])
+    # The MERGED view still decides condemnation and certification: a unit any solver
+    # fixes from the bug report is not hard for anyone, and a flip is a flip. Only the
+    # LADDER is per solver, because only the ladder is a per-agent claim.
+    mine = solver_view(base, solver)
 
     # Settled verdicts outrank contract staleness. The expiry check used to run FIRST, so
     # every contract rewrite resurrected units we had already decided - and with ten
@@ -249,9 +268,13 @@ def decide(unit, per):
     # Absolute per-rung cap, checked BEFORE staleness. A rung answers one question and
     # needs one verdict; repair resetting staleness is exactly how single units reached
     # 7, 11 and 19 trials on one rung.
-    n_this_rung = len(d.get(rung, []))
+    # The cap binds per solver once ladders are per solver, or two curves would cost one
+    # curve's budget and neither would finish. On the merged view it stays global.
+    counted = mine if (mine is not None and rung not in CERTIFYING_RUNGS) else d
+    n_this_rung = len(counted.get(rung, []))
     if n_this_rung >= RUNG_TRIAL_CAP:
-        return False, (f"rung L{rung} already has {n_this_rung} trial(s) "
+        who = f" for {solver}" if counted is mine else ""
+        return False, (f"rung L{rung} already has {n_this_rung} trial(s){who} "
                        f"(cap {RUNG_TRIAL_CAP}) — no further verdict to buy")
 
     if reopened:
@@ -280,10 +303,17 @@ def decide(unit, per):
         # that failed L0 AND L2 is an ESCALATION: it is the only way that unit ever
         # certifies, and 9 of 9 hand-escalated units flipped above L2. Rejecting both with
         # "certify first" is what kept 46 of the hardest units in the dataset written off.
-        escalating = bool(l0 and max(l0) == 0 and l2 and max(l2) == 0)
+        # Whose ladder is this? With a solver named, the unit escalates on THAT solver's
+        # own record: it must have failed L0 and L2 itself, and next_rung reads only its
+        # rungs. Without one, the historical merged behaviour is unchanged.
+        lad = mine if mine is not None else d
+        ml0, ml2 = lad.get("0", []), lad.get("2", [])
+        escalating = bool(ml0 and max(ml0) == 0 and ml2 and max(ml2) == 0)
         if escalating:
             import escalate
-            want, why = escalate.next_rung(escalate.history(d))
+            want, why = escalate.next_rung(escalate.history(lad))
+            if mine is not None:
+                why = f"{solver}'s ladder: {why}"
             if want is None:
                 return False, f"escalation {why}"
             if want != int(rung):
@@ -322,7 +352,12 @@ def main():
     if len(sys.argv) < 2:
         print("usage: trial_guard.py <unit> | --report", file=sys.stderr)
         return 2
-    ok, why = decide(sys.argv[1], per)
+    solver = None
+    if "--solver" in sys.argv:
+        i = sys.argv.index("--solver")
+        if i + 1 < len(sys.argv):
+            solver = sys.argv[i + 1]
+    ok, why = decide(sys.argv[1], per, solver)
     print(("RUN   " if ok else "SKIP  ") + sys.argv[1] + " — " + why)
     return 0 if ok else 1
 

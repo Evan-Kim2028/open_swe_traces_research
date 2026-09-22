@@ -337,7 +337,12 @@ for d in glob.glob("experiments/dose_response/sweep_*/*/"):
         # solver that failed the unit low.
         for _a in ("devin", "cursor"):
             try:
-                if solver_match.decide(name, _a)[0]:
+                # Per-solver ladders: ask the guard whether THIS solver's curve still owes
+                # the rung, not whether anyone's does. Without this a rung devin answered
+                # would look closed for composer and its curve would stay incomplete.
+                _sv = solver_match.solver_for(_a)
+                if (solver_match.decide(name, _a)[0]
+                        and trial_guard.decide(name, per, _sv)[0]):
                     runnable_by.setdefault(_a, {})[cohort] = \
                         runnable_by.setdefault(_a, {}).get(cohort, 0) + 1
             except Exception:
