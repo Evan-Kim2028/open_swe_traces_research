@@ -27,6 +27,7 @@ INVARIANTS
 import json, os, re, subprocess, sys, time, glob
 from cohorts import barren   # one definition; the monitor imports the same one
 from slots import CAP as DEVIN_CAP   # never hardcode the cap; slots.py owns it
+import solver_match                  # who may certify what; see solver_match.py
 
 R = "/home/evan/Documents/open_swe_traces_research"
 os.chdir(R)
@@ -248,6 +249,7 @@ except Exception:
 import trial_ledger, trial_guard, token_cost
 per = trial_ledger.ledger()
 runnable = {}
+runnable_by = {}   # solver -> cohort -> count
 for d in glob.glob("experiments/dose_response/sweep_*/*/"):
     if not os.path.isdir(d):
         continue
@@ -306,6 +308,17 @@ for d in glob.glob("experiments/dose_response/sweep_*/*/"):
         ok = True
     if ok:
         runnable[cohort] = runnable.get(cohort, 0) + 1
+        # ...and separately per solver. A cohort can be fully runnable and still have
+        # nothing THIS solver may take, since the no-contamination rule admits only a
+        # solver that failed the unit low.
+        for _a in ("devin", "cursor"):
+            try:
+                if solver_match.decide(name, _a)[0]:
+                    runnable_by.setdefault(_a, {})[cohort] = \
+                        runnable_by.setdefault(_a, {}).get(cohort, 0) + 1
+            except Exception:
+                runnable_by.setdefault(_a, {})[cohort] = \
+                    runnable_by.setdefault(_a, {}).get(cohort, 0) + 1
 
 print("=" * 70)
 print(f"ORCHESTRATE  {time.strftime('%H:%M:%S')}   {'APPLY' if APPLY else 'dry run'}")
@@ -361,6 +374,16 @@ else:
             to_devin = True
         else:
             to_devin = (is_l2 or not budget_ok) and not (is_l2 and devin_full and budget_ok)
+        # Never launch a sweep its solver may take nothing from. It would trial nothing,
+        # log "guard kept 0 unit(s)", and cohorts.barren() would then mark the cohort
+        # barren for EVERY solver — stranding work that the other one could do. Two
+        # fixes landing in the same hour, interacting badly.
+        eligible = runnable_by.get("devin" if to_devin else "cursor", {}).get(cohort, 0)
+        if eligible < 1:
+            other = "composer" if to_devin else "devin"
+            NOTES.append(f"{cohort}: {n} unit(s) but none this solver may certify "
+                         f"— belongs to {other}")
+            continue
         if to_devin:
             room = DEVIN_CAP - devin_total
             if room < 1:
