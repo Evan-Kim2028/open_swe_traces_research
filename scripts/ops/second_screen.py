@@ -39,6 +39,39 @@ SWEEPS = REPO / "experiments" / "dose_response"
 REPO_PREFIXES = ("go-github-", "client-go-", "kops-", "helm-", "gin-", "goa-")
 
 
+def _clopper_pearson(k: int, n: int, alpha: float = 0.05):
+    """Exact two-sided binomial confidence interval, no scipy.
+
+    Bisection on the binomial CDF. Needed because the interesting quantity here is a
+    small count over a small sample, where the normal approximation is simply wrong:
+    1/18 has a 95% upper bound near 27%, not the 16% a wald interval reports."""
+    from math import comb
+
+    def cdf(x, p):
+        return sum(comb(n, i) * p ** i * (1 - p) ** (n - i) for i in range(0, x + 1))
+
+    if n == 0:
+        return 0.0, 1.0
+    lo = 0.0
+    if k > 0:
+        a, b = 0.0, 1.0
+        for _ in range(200):
+            m = (a + b) / 2
+            if cdf(k - 1, m) > 1 - alpha / 2:
+                a = m
+            else:
+                b = m
+        lo = a
+    a, b = 0.0, 1.0
+    for _ in range(200):
+        m = (a + b) / 2
+        if cdf(k, m) > alpha / 2:
+            a = m
+        else:
+            b = m
+    return lo, a
+
+
 def repo_of(base: str) -> str:
     for p in REPO_PREFIXES:
         if base.startswith(p):
@@ -174,15 +207,34 @@ def report() -> int:
             # bound is 1 - 0.05**(1/n) — the honest way to say how much softness the
             # sample could still be hiding. Printed here so the stopping point is visible
             # rather than recomputed by hand every time someone reads the report.
-            if ok == 0 and others:
-                ub = 1 - 0.05 ** (1.0 / others)
-                need = 0
-                while 1 - 0.05 ** (1.0 / (others + need)) > 0.05:
-                    need += 1
-                    if need > 500:
-                        break
-                print(f"    -> with {others} clean, the true rate is below {ub*100:.0f}% "
-                      f"(95% one-sided); {need} more clean screen(s) put it under 5%")
+            if others:
+                # A rate needs an interval, and the interval has to survive the count
+                # becoming non-zero. The first draft only printed a bound while ok == 0,
+                # so the statistics disappeared from the report at exactly the moment the
+                # column stopped being clean and the number started to matter — the one
+                # condemnation outside go-github (hfs-dot) made the output LESS
+                # informative than when there were none.
+                lo, hi = _clopper_pearson(ok, others)
+                print(f"    -> {ok}/{others} = {ok/others*100:.1f}%, 95% CI "
+                      f"[{lo*100:.1f}%, {hi*100:.1f}%]")
+                n_cert2 = len(TL.certificates())
+                print(f"       over {n_cert2} certificates: ~{round(ok/others*n_cert2)} "
+                      f"soft (point), up to {round(hi*n_cert2)} (upper bound)")
+                if ok == 0:
+                    need = 0
+                    while _clopper_pearson(0, others + need)[1] > 0.05 and need <= 500:
+                        need += 1
+                    print(f"       {need} more clean screen(s) would put the bound "
+                          f"under 5%")
+                else:
+                    # With a condemnation banked, more clean screens still help but the
+                    # arithmetic is much worse; say how much worse rather than implying
+                    # the original target is still reachable.
+                    need = 0
+                    while _clopper_pearson(ok, others + need)[1] > 0.05 and need <= 2000:
+                        need += 1
+                    reach = f"{need} more clean screen(s)" if need <= 2000 else "not reachable"
+                    print(f"       to get the bound under 5% from here: {reach}")
         else:
             print(f"\n  extrapolated to {n_cert} certificates: ~{round(rate * n_cert)} "
                   f"would not survive a second screen")
