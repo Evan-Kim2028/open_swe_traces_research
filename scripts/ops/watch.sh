@@ -24,7 +24,24 @@ av=$(df -BG --output=avail / | tail -1 | tr -dc '0-9')
 sp=$(timeout 120 uv run python scripts/ops/slots.py --supervisor-pid 2>/dev/null | tr -dc '0-9')
 if [ -z "$sp" ]; then echo "SUPERVISOR: not running"
 elif ls -l /proc/$sp/exe 2>/dev/null | grep -q deleted; then
-  echo "SUPERVISOR: pid $sp on a DELETED inode — restart it"; fi
+  echo "SUPERVISOR: pid $sp on a DELETED inode — restart it"
+else
+  # STALE SCRIPT. Editing supervisor.sh does nothing to a supervisor already running it:
+  # bash has the loop, and only a restart picks the change up. Anything the loop invokes
+  # through `uv run python` IS live, which is exactly what makes this invisible — most
+  # fixes take effect immediately, so the one that does not looks like it did.
+  #
+  # It has now bitten twice. Five fixes sat inert for eighteen hours in one case; in the
+  # other, reap_runaway --apply was wired in at 23:46 into a supervisor started at 19:08
+  # and never ran once, so every runaway that night was killed by hand while the log
+  # showed zero reaps. Comparing start time to file mtime catches both in one line.
+  started=$(stat -c %Y /proc/$sp 2>/dev/null)
+  edited=$(stat -c %Y scripts/ops/supervisor.sh 2>/dev/null)
+  if [ -n "$started" ] && [ -n "$edited" ] && [ "$edited" -gt "$started" ]; then
+    age=$(( (edited - started) / 60 ))
+    echo "SUPERVISOR STALE: pid $sp started before supervisor.sh was last edited (${age}m earlier) — its own loop changes are INERT until restarted"
+  fi
+fi
 
 dc=$(timeout 120 uv run python scripts/ops/slots.py --count 2>/dev/null | tr -dc '0-9')
 dcap=$(timeout 120 uv run python scripts/ops/slots.py --cap 2>/dev/null | tr -dc '0-9')
