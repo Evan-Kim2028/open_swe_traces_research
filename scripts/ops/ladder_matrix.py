@@ -180,13 +180,46 @@ def build_cohort(base: str, solver: str, rungs: list[str]) -> pathlib.Path | Non
     return dest if made else None
 
 
+def headroom(solver: str) -> int:
+    """Free slots for this solver RIGHT NOW, counting the supervisor's trials too.
+
+    sweep_seq does not enforce the devin cap -- orchestrate does, and orchestrate does not
+    know about this script. Launching a curve while the supervisor already holds 4/4 puts
+    devin over its cap, and going over is not a soft failure: at 6 concurrent it hit an 80%
+    error rate, and a throttle mid-trial errors every in-flight trial, so it costs about 30
+    minutes times every occupied slot. slots.py is the one definition of occupancy that
+    counts in-container trials as well as named sessions, which is the thing five separate
+    hand-rolled counters each got wrong.
+    """
+    if solver != "devin":
+        return CONC[solver]
+    try:
+        import slots
+        o = slots.occupancy("devin")
+        return max(0, o["cap"] - o["total"])
+    except Exception:
+        return 1          # unknown occupancy: take one slot, not four
+
+
+def wait_for_headroom(solver: str, want: int, log_every: int = 10) -> int:
+    waits = 0
+    while True:
+        free = headroom(solver)
+        if free >= 1:
+            return min(free, want)
+        waits += 1
+        if waits % log_every == 1:
+            print(f"  {solver} at cap, waiting for a slot ({waits * 2} min)", flush=True)
+        time.sleep(120)
+
+
 def launch(cohort: pathlib.Path, solver: str, n: int, log: pathlib.Path) -> int:
     agent, model = AGENT[solver]
     env = dict(os.environ, AGENT=agent, MODEL=model, GUARD_SOLVER=solver)
     if solver == "grok":
         env["GROK_EFFORT"] = os.environ.get("GROK_EFFORT", "high")
     cmd = ["bash", str(REPO / "scripts" / "ops" / "sweep_seq.sh"),
-           cohort.name, "1", str(min(n, CONC[solver]))]
+           cohort.name, "1", str(max(1, min(n, CONC[solver])))]
     with open(log, "ab") as fh:
         fh.write(f"\n=== {time.strftime('%H:%M:%S')} {solver} {cohort.name} "
                  f"({n} cell(s))\n".encode())
@@ -295,7 +328,11 @@ def cmd_run(solvers, max_curves: int) -> int:
             print(f"  nothing stageable for {base}; skipping", flush=True)
             done += 1
             continue
-        rc = launch(cohort, s, len(cells), log)
+        room = wait_for_headroom(s, len(cells))
+        if room < len(cells):
+            print(f"  {s} has {room} free slot(s) for {len(cells)} cell(s) — "
+                  f"launching narrower rather than over cap", flush=True)
+        rc = launch(cohort, s, room, log)
         after = curves()
         got = (after.get(base) or {}).get(s) or {}
         trail = "  ".join(f"L{r}:" + "/".join("P" if x > 0 else "f" for x in got[r])
