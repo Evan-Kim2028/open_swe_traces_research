@@ -116,6 +116,37 @@ def stamp_verdict(base):
 
 _BYS = None
 
+LADDER_BACKFILL_ROSTER = "outputs/supervisor/ladder_backfill"
+
+
+def backfill_wanted(base, rung):
+    """Is this unit+rung on the deliberate ladder-backfill roster?
+
+    escalate.next_rung only ever climbs, and stops once a unit fails the top rung. That is
+    right for finding the lowest rung that works, but it leaves holes: exprhash and httpmux
+    jumped L2->L5 under an earlier probe-first policy, failed L5 and L6, and so were never
+    asked about L3 or L4.
+
+    It is tempting to infer those cells — a unit that fails with a restored test (L5) should
+    fail with only test NAMES (L3), since the ladder is ordered by how much it gives away.
+    But that ordering is an ASSUMPTION about the ladder, and a dose-response curve built on
+    inferred cells cannot test it. If L3 ever passed where L5 failed, the ladder is not
+    monotone and that is a finding about the instrument, not about the unit.
+
+    So a complete ladder is worth measuring rather than deducing. Roster lines are
+    `<base> <rung>`; anything not listed is unaffected.
+    """
+    try:
+        with open(LADDER_BACKFILL_ROSTER) as fh:
+            for line in fh:
+                line = line.split("#", 1)[0].split()
+                if len(line) >= 2 and line[0] == base and line[1].lstrip("Ll") == str(rung):
+                    return True
+    except OSError:
+        pass
+    return False
+
+
 SECOND_SCREEN_ROSTER = "outputs/supervisor/second_screen_enrolled"
 
 
@@ -312,6 +343,11 @@ def decide(unit, per, solver=None):
         if escalating:
             import escalate
             want, why = escalate.next_rung(escalate.history(lad))
+            if want is None and backfill_wanted(base, rung):
+                # Deliberate hole-filling, outside the climb. Still bounded by the per-rung
+                # cap below, so a rostered cell buys one verdict and not an open tap.
+                return True, (f"ladder backfill: L{rung} never measured for {base} "
+                              f"(escalation {why})")
             if mine is not None:
                 why = f"{solver}'s ladder: {why}"
             if want is None:
