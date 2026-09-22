@@ -168,6 +168,21 @@ def report() -> int:
             ok = sum(k for f, (n, k) in per.items() if f != worst)
             print(f"    elsewhere: {ok}/{others} condemned — "
                   f"{'no evidence of softness' if ok == 0 else 'see above'}")
+            # Once a bad family is identified and screened out, the dataset-wide claim
+            # rests on THIS column alone, and "0 condemned" is not a result until it is
+            # attached to a bound. With zero condemnations the exact one-sided 95% upper
+            # bound is 1 - 0.05**(1/n) — the honest way to say how much softness the
+            # sample could still be hiding. Printed here so the stopping point is visible
+            # rather than recomputed by hand every time someone reads the report.
+            if ok == 0 and others:
+                ub = 1 - 0.05 ** (1.0 / others)
+                need = 0
+                while 1 - 0.05 ** (1.0 / (others + need)) > 0.05:
+                    need += 1
+                    if need > 500:
+                        break
+                print(f"    -> with {others} clean, the true rate is below {ub*100:.0f}% "
+                      f"(95% one-sided); {need} more clean screen(s) put it under 5%")
         else:
             print(f"\n  extrapolated to {n_cert} certificates: ~{round(rate * n_cert)} "
                   f"would not survive a second screen")
