@@ -1,0 +1,44 @@
+{
+ "packlookup": {
+  "plumbing/format/packfile/packfile.go": [
+   "NewPackfile",
+   "Packfile.Get",
+   "Packfile.GetByOffset",
+   "Packfile.GetSizeByOffset",
+   "Packfile.GetAll",
+   "Packfile.GetByType",
+   "Packfile.Scanner",
+   "Packfile.ID",
+   "Packfile.get",
+   "Packfile.getByOffset",
+   "Packfile.init",
+   "Packfile.headerFromOffset",
+   "Packfile.Close",
+   "Packfile.objectFromHeader",
+   "Packfile.getMemoryObject"
+  ],
+  "plumbing/format/packfile/fsobject.go": [
+   "probePack",
+   "NewFSObject",
+   "FSObject.Reader",
+   "zlibReadCloser.Read",
+   "zlibReadCloser.Close",
+   "FSObject.SetSize",
+   "FSObject.SetType",
+   "FSObject.Hash",
+   "FSObject.Size",
+   "FSObject.Type",
+   "FSObject.Writer"
+  ],
+  "plumbing/format/packfile/packfile_iter.go": [
+   "objectIter.Next",
+   "objectIter.next",
+   "objectIter.ForEach",
+   "objectIter.Close"
+  ],
+  "plumbing/format/packfile/pack_handle.go": [
+   "WithPackHandle",
+   "Packfile.openRandomReader"
+  ]
+ }
+}

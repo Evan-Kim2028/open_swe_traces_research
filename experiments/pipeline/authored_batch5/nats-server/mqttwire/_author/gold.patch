@@ -1,0 +1,255 @@
+diff --git a/server/mqtt.go b/server/mqtt.go
+--- a/server/mqtt.go
++++ b/server/mqtt.go
+@@ -16,7 +16,7 @@ package server
+ import (
+ 	"bytes"
+ 	"crypto/tls"
+-	_ "encoding/binary"
++	"encoding/binary"
+ 	"encoding/json"
+ 	"errors"
+ 	"fmt"
+@@ -1009,9 +1009,42 @@ func (c *client) mqttParse(buf []byte) error {
+ 	return err
+ }
+ 
+-func mqttCheckFixedHeaderFlags(packetType, flags byte) error { panic("excised: mqttCheckFixedHeaderFlags") }
++func mqttCheckFixedHeaderFlags(packetType, flags byte) error {
++	var expected byte
++	switch packetType {
++	case mqttPacketConnect, mqttPacketPubAck, mqttPacketPubRec, mqttPacketPubComp,
++		mqttPacketPing, mqttPacketDisconnect:
++		expected = 0
++	case mqttPacketPubRel, mqttPacketSub, mqttPacketUnsub:
++		expected = 0x2
++	case mqttPacketPub:
++		return nil
++	default:
++		return nil
++	}
++	if flags != expected {
++		return fmt.Errorf("invalid fixed header flags %x for packet type %x", flags, packetType)
++	}
++	return nil
++}
+ 
+-func mqttCheckRemainingLength(packetType byte, pl int) error { panic("excised: mqttCheckRemainingLength") }
++func mqttCheckRemainingLength(packetType byte, pl int) error {
++	var expected int
++	switch packetType {
++	case mqttPacketConnect, mqttPacketPub, mqttPacketSub, mqttPacketUnsub:
++		return nil
++	case mqttPacketPubAck, mqttPacketPubRec, mqttPacketPubRel, mqttPacketPubComp:
++		expected = 2
++	case mqttPacketPing, mqttPacketDisconnect:
++		expected = 0
++	default:
++		return nil
++	}
++	if pl != expected {
++		return fmt.Errorf("invalid remaining length %d for packet type %x", pl, packetType)
++	}
++	return nil
++}
+ 
+ func (c *client) mqttTraceMsg(msg []byte) {
+ 	maxTrace := c.srv.getOpts().MaxTracedMsgLen
+@@ -5439,7 +5472,16 @@ func (c *client) mqttEnqueuePubResponse(packetType byte, pi uint16, trace bool)
+ 	}
+ }
+ 
+-func mqttParsePIPacket(r *mqttReader) (uint16, error) { panic("excised: mqttParsePIPacket") }
++func mqttParsePIPacket(r *mqttReader) (uint16, error) {
++	pi, err := r.readUint16("packet identifier")
++	if err != nil {
++		return 0, err
++	}
++	if pi == 0 {
++		return 0, errMQTTPacketIdentifierIsZero
++	}
++	return pi, nil
++}
+ 
+ // Process a PUBACK (QoS1) or a PUBREC (QoS2) packet, acting as Sender. Set
+ // isPubRec to false to process as a PUBACK.
+@@ -5509,9 +5551,13 @@ func (c *client) mqttProcessPubComp(pi uint16) {
+ }
+ 
+ // Return the QoS from the given PUBLISH protocol's flags
+-func mqttGetQoS(flags byte) byte { panic("excised: mqttGetQoS") }
++func mqttGetQoS(flags byte) byte {
++	return flags & mqttPubFlagQoS >> 1
++}
+ 
+-func mqttIsRetained(flags byte) bool { panic("excised: mqttIsRetained") }
++func mqttIsRetained(flags byte) bool {
++	return flags&mqttPubFlagRetain != 0
++}
+ 
+ func sparkbParseBirthDeathTopic(topic []byte) (isBirth, isDeath, isCertificate bool) {
+ 	if bytes.HasPrefix(topic, sparkbCertificatesTopicPrefix) {
+@@ -6590,21 +6636,113 @@ func mqttNeedSubForLevelUp(subject string) bool {
+ //
+ //////////////////////////////////////////////////////////////////////////////
+ 
+-func (r *mqttReader) reset(buf []byte) { panic("excised: reset") }
++func (r *mqttReader) reset(buf []byte) {
++	if l := len(r.pbuf); l > 0 {
++		tmp := make([]byte, l+len(buf))
++		copy(tmp, r.pbuf)
++		copy(tmp[l:], buf)
++		buf = tmp
++		r.pbuf = nil
++	}
++	r.buf = buf
++	r.pos = 0
++	r.pstart = 0
++}
+ 
+-func (r *mqttReader) hasMore() bool { panic("excised: hasMore") }
++func (r *mqttReader) hasMore() bool {
++	return r.pos != len(r.buf)
++}
+ 
+-func (r *mqttReader) readByte(field string) (byte, error) { panic("excised: readByte") }
++func (r *mqttReader) readByte(field string) (byte, error) {
++	if r.pos == len(r.buf) {
++		return 0, fmt.Errorf("error reading %s: %v", field, io.EOF)
++	}
++	b := r.buf[r.pos]
++	r.pos++
++	return b, nil
++}
+ 
+-func (r *mqttReader) readPacketLen(maxLen int32) (int, bool, error) { panic("excised: readPacketLen") }
++func (r *mqttReader) readPacketLen(maxLen int32) (int, bool, error) {
++	v, complete, err := r.readVarInt()
++	if err != nil {
++		return 0, false, err
++	}
++	if complete {
++		packetEnd := r.pos + v
++		packetLen := packetEnd - r.pstart
++		if maxLen != jwt.NoLimit && int64(packetLen) > int64(maxLen) {
++			return packetLen, false, ErrMaxPayload
++		}
++		if packetEnd <= len(r.buf) {
++			return v, true, nil
++		}
++	}
++	r.pbuf = make([]byte, len(r.buf)-r.pstart)
++	copy(r.pbuf, r.buf[r.pstart:])
++	return 0, false, nil
++}
+ 
+-func (r *mqttReader) readVarInt() (int, bool, error) { panic("excised: readVarInt") }
++func (r *mqttReader) readVarInt() (int, bool, error) {
++	m := 1
++	v := 0
++	for {
++		var b byte
++		if r.pos != len(r.buf) {
++			b = r.buf[r.pos]
++			r.pos++
++		} else {
++			break
++		}
++		v += int(b&0x7f) * m
++		if (b & 0x80) == 0 {
++			return v, true, nil
++		}
++		m *= 0x80
++		if m > 0x200000 {
++			return 0, false, errMQTTMalformedVarInt
++		}
++	}
++	return 0, false, nil
++}
+ 
+-func (r *mqttReader) readString(field string) (string, error) { panic("excised: readString") }
++func (r *mqttReader) readString(field string) (string, error) {
++	var s string
++	bs, err := r.readBytes(field, false)
++	if err == nil {
++		s = string(bs)
++	}
++	return s, err
++}
+ 
+-func (r *mqttReader) readBytes(field string, cp bool) ([]byte, error) { panic("excised: readBytes") }
++func (r *mqttReader) readBytes(field string, cp bool) ([]byte, error) {
++	luint, err := r.readUint16(field)
++	if err != nil {
++		return nil, err
++	}
++	l := int(luint)
++	if l == 0 {
++		return nil, nil
++	}
++	start := r.pos
++	if start+l > len(r.buf) {
++		return nil, fmt.Errorf("error reading %s: %v", field, io.ErrUnexpectedEOF)
++	}
++	r.pos += l
++	b := r.buf[start:r.pos]
++	if cp {
++		b = copyBytes(b)
++	}
++	return b, nil
++}
+ 
+-func (r *mqttReader) readUint16(field string) (uint16, error) { panic("excised: readUint16") }
++func (r *mqttReader) readUint16(field string) (uint16, error) {
++	if len(r.buf)-r.pos < 2 {
++		return 0, fmt.Errorf("error reading %s: %v", field, io.ErrUnexpectedEOF)
++	}
++	start := r.pos
++	r.pos += 2
++	return binary.BigEndian.Uint16(r.buf[start:r.pos]), nil
++}
+ 
+ //////////////////////////////////////////////////////////////////////////////
+ //
+@@ -6612,12 +6750,36 @@ func (r *mqttReader) readUint16(field string) (uint16, error) { panic("excised:
+ //
+ //////////////////////////////////////////////////////////////////////////////
+ 
+-func (w *mqttWriter) WriteUint16(i uint16) { panic("excised: WriteUint16") }
++func (w *mqttWriter) WriteUint16(i uint16) {
++	w.WriteByte(byte(i >> 8))
++	w.WriteByte(byte(i))
++}
+ 
+-func (w *mqttWriter) WriteString(s string) { panic("excised: WriteString") }
++func (w *mqttWriter) WriteString(s string) {
++	w.WriteBytes([]byte(s))
++}
+ 
+-func (w *mqttWriter) WriteBytes(bs []byte) { panic("excised: WriteBytes") }
++func (w *mqttWriter) WriteBytes(bs []byte) {
++	w.WriteUint16(uint16(len(bs)))
++	w.Write(bs)
++}
+ 
+-func (w *mqttWriter) WriteVarInt(value int) { panic("excised: WriteVarInt") }
++func (w *mqttWriter) WriteVarInt(value int) {
++	for {
++		b := byte(value & 0x7f)
++		value >>= 7
++		if value > 0 {
++			b |= 0x80
++		}
++		w.WriteByte(b)
++		if value == 0 {
++			break
++		}
++	}
++}
+ 
+-func newMQTTWriter(cap int) *mqttWriter { panic("excised: newMQTTWriter") }
++func newMQTTWriter(cap int) *mqttWriter {
++	w := &mqttWriter{}
++	w.Grow(cap)
++	return w
++}

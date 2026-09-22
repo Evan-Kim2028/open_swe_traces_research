@@ -1,0 +1,1 @@
+{"slowscore": {"internal/locate/slow_score.go": ["CountSlidingWindow.Avg","CountSlidingWindow.Sum","CountSlidingWindow.Append","SlowScoreStat.getSlowScore","SlowScoreStat.updateSlowScore","SlowScoreStat.recordSlowScoreStat","SlowScoreStat.markAlreadySlow","SlowScoreStat.resetSlowScore","SlowScoreStat.isSlow","replicaFlowsType.String"]}}

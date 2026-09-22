@@ -1,0 +1,99 @@
+--- a/pkg/nodelabels/builder.go
++++ b/pkg/nodelabels/builder.go
+@@ -17,11 +17,11 @@
+ package nodelabels
+ 
+ import (
+-	_ "fmt"
++	"fmt"
+ 
+ 	api "example.internal/clustkit/pkg/apis/kops"
+-	_ "example.internal/clustkit/pkg/featureflag"
+-	_ "example.internal/clustkit/util/pkg/reflectutils"
++	"example.internal/clustkit/pkg/featureflag"
++	"example.internal/clustkit/util/pkg/reflectutils"
+ )
+ 
+ const (
+@@ -44,10 +44,79 @@
+ // BuildNodeLabels returns the node labels for the specified instance group
+ // This moved from the kubelet to a central controller in kubernetes 1.16
+ func BuildNodeLabels(cluster *api.Cluster, instanceGroup *api.InstanceGroup) (map[string]string, error) {
+-	panic("excised: BuildNodeLabels")
++	isControlPlane := false
++	isAPIServer := false
++	isNode := false
++	switch {
++	case instanceGroup.Spec.Role.HasControlPlane():
++		isControlPlane = true
++	case instanceGroup.Spec.Role.HasAPIServer():
++		isAPIServer = true
++	case instanceGroup.Spec.Role.HasNode():
++		isNode = true
++	case instanceGroup.Spec.Role.HasBastion():
++		// no labels to add
++	default:
++		return nil, fmt.Errorf("unhandled instanceGroup role %q", instanceGroup.Spec.Role)
++	}
++
++	// Merge KubeletConfig for NodeLabels
++	c := &api.KubeletConfigSpec{}
++	if isControlPlane {
++		reflectutils.JSONMergeStruct(c, cluster.Spec.ControlPlaneKubelet)
++	} else {
++		reflectutils.JSONMergeStruct(c, cluster.Spec.Kubelet)
++	}
++
++	if instanceGroup.Spec.Kubelet != nil {
++		reflectutils.JSONMergeStruct(c, instanceGroup.Spec.Kubelet)
++	}
++
++	nodeLabels := c.NodeLabels
++
++	if isAPIServer || isControlPlane {
++		if nodeLabels == nil {
++			nodeLabels = make(map[string]string)
++		}
++		// Note: featureflag is not available here - we're in clustkit-controller.
++		// We keep the featureflag as a placeholder to change the logic;
++		// when we drop the featureflag we should just always include the label, even for
++		// full control-plane nodes.
++		if isAPIServer || featureflag.APIServerNodes.Enabled() {
++			nodeLabels[RoleLabelAPIServer16] = ""
++		}
++	}
++
++	if isNode {
++		if nodeLabels == nil {
++			nodeLabels = make(map[string]string)
++		}
++		nodeLabels[RoleLabelNode16] = ""
++	}
++
++	if isControlPlane {
++		if nodeLabels == nil {
++			nodeLabels = make(map[string]string)
++		}
++		for label, value := range BuildMandatoryControlPlaneLabels(make(map[string]string)) {
++			nodeLabels[label] = value
++		}
++	}
++
++	for k, v := range instanceGroup.Spec.NodeLabels {
++		if nodeLabels == nil {
++			nodeLabels = make(map[string]string)
++		}
++		nodeLabels[k] = v
++	}
++
++	return nodeLabels, nil
+ }
+ 
+ // BuildMandatoryControlPlaneLabels returns the list of labels all CP nodes must have
+ func BuildMandatoryControlPlaneLabels(nodeLabels map[string]string) map[string]string {
+-	panic("excised: BuildMandatoryControlPlaneLabels")
++	nodeLabels[RoleLabelControlPlane20] = ""
++	nodeLabels["clustkit.example.internal/clustkit-controller-pki"] = ""
++	nodeLabels["node.kubernetes.io/exclude-from-external-load-balancers"] = ""
++	return nodeLabels
+ }

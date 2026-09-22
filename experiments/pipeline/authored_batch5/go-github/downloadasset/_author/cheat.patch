@@ -1,0 +1,29 @@
+diff --git a/github/repos_releases.go b/github/repos_releases.go
+index bde2c17..2f6cf19 100644
+--- a/github/repos_releases.go
++++ b/github/repos_releases.go
+@@ -354,16 +354,17 @@ func (s *RepositoriesService) DownloadReleaseAsset(ctx context.Context, owner, r
+ 	}
+ 
+ 	_ = resp.Body.Close()
+-	return nil, loc.String(), nil /* excised: DownloadReleaseAsset */
++	redirectStr := loc.String()
++	if followRedirectsClient != nil {
++		rc, _ := s.downloadReleaseAssetFromURL(ctx, followRedirectsClient, redirectStr)
++		return rc, "", nil
++	}
++
++	return nil, redirectStr, nil /* excised: DownloadReleaseAsset */
+ }
+ 
+ func (s *RepositoriesService) downloadReleaseAssetFromURL(ctx context.Context, followRedirectsClient *http.Client, url string) (rc io.ReadCloser, err error) {
+-		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+-	if err != nil {
+-		return nil, err
+-	}
+-	req.Header.Set("Accept", defaultMediaType)
+-	resp, err := followRedirectsClient.Do(req)
++		resp, err := followRedirectsClient.Get(url)
+ 	if err != nil {
+ 		return nil, err
+ 	}

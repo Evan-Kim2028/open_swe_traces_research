@@ -1,0 +1,15 @@
+diff --git a/github/pulls.go b/github/pulls.go
+index 11f6995..c58a78f 100644
+--- a/github/pulls.go
++++ b/github/pulls.go
+@@ -556,9 +556,7 @@ func (s *PullRequestsService) Merge(ctx context.Context, owner, repo string, num
+ 		u := fmt.Sprintf("repos/%v/%v/pulls/%v/merge", owner, repo, number)
+ 
+ 	var pullRequestBody pullRequestMergeRequest
+-	if commitMessage != "" {
+-		pullRequestBody.CommitMessage = &commitMessage
+-	}
++	pullRequestBody.CommitMessage = &commitMessage
+ 	if options != nil {
+ 		pullRequestBody.CommitTitle = options.CommitTitle
+ 		pullRequestBody.MergeMethod = options.MergeMethod

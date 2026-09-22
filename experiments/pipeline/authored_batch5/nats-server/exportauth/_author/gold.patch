@@ -1,0 +1,185 @@
+diff --git a/server/accounts.go b/server/accounts.go
+--- a/server/accounts.go
++++ b/server/accounts.go
+@@ -2848,24 +2848,118 @@ func (a *Account) addStreamExportWithAccountPos(subject string, accounts []*Acco
+ }
+ 
+ // Check if another account is authorized to import from us.
+-func (a *Account) checkStreamImportAuthorized(account *Account, subject string, imClaim *jwt.Import) bool { panic("excised: checkStreamImportAuthorized") }
++func (a *Account) checkStreamImportAuthorized(account *Account, subject string, imClaim *jwt.Import) bool {
++	// Find the subject in the exports list.
++	a.mu.RLock()
++	auth := a.checkStreamImportAuthorizedNoLock(account, subject, imClaim)
++	a.mu.RUnlock()
++	return auth
++}
++
++func (a *Account) checkStreamImportAuthorizedNoLock(account *Account, subject string, imClaim *jwt.Import) bool {
++	if a.exports.streams == nil || !IsValidSubject(subject) {
++		return false
++	}
++	return a.checkStreamExportApproved(account, subject, imClaim)
++}
+ 
+-func (a *Account) checkStreamImportAuthorizedNoLock(account *Account, subject string, imClaim *jwt.Import) bool { panic("excised: checkStreamImportAuthorizedNoLock") }
++func (a *Account) checkAuth(ea *exportAuth, account *Account, imClaim *jwt.Import, tokens []string) bool {
++	// if ea is nil or ea.approved is nil, that denotes a public export
++	if ea == nil || (len(ea.approved) == 0 && !ea.tokenReq && ea.accountPos == 0) {
++		return true
++	}
++	// Check if the export is protected and enforces presence of importing account identity
++	if ea.accountPos > 0 {
++		return ea.accountPos <= uint(len(tokens)) && tokens[ea.accountPos-1] == account.Name
++	}
++	// Check if token required
++	if ea.tokenReq {
++		return a.checkActivation(account, imClaim, ea, true)
++	}
++	if ea.approved == nil {
++		return false
++	}
++	// If we have a matching account we are authorized
++	_, ok := ea.approved[account.Name]
++	return ok
++}
+ 
+-func (a *Account) checkAuth(ea *exportAuth, account *Account, imClaim *jwt.Import, tokens []string) bool { panic("excised: checkAuth") }
++func (a *Account) checkStreamExportApproved(account *Account, subject string, imClaim *jwt.Import) bool {
++	// Check direct match of subject first
++	ea, ok := a.exports.streams[subject]
++	if ok {
++		// if ea is nil or eq.approved is nil, that denotes a public export
++		if ea == nil {
++			return true
++		}
++		return a.checkAuth(&ea.exportAuth, account, imClaim, nil)
++	}
+ 
+-func (a *Account) checkStreamExportApproved(account *Account, subject string, imClaim *jwt.Import) bool { panic("excised: checkStreamExportApproved") }
++	// ok if we are here we did not match directly so we need to test each one.
++	// The import subject arg has to take precedence, meaning the export
++	// has to be a true subset of the import claim. We already checked for
++	// exact matches above.
++	tokens := strings.Split(subject, tsep)
++	for subj, ea := range a.exports.streams {
++		if isSubsetMatch(tokens, subj) {
++			if ea == nil {
++				return true
++			}
++			return a.checkAuth(&ea.exportAuth, account, imClaim, tokens)
++		}
++	}
++	return false
++}
+ 
+-func (a *Account) checkServiceExportApproved(account *Account, subject string, imClaim *jwt.Import) bool { panic("excised: checkServiceExportApproved") }
++func (a *Account) checkServiceExportApproved(account *Account, subject string, imClaim *jwt.Import) bool {
++	// Check direct match of subject first
++	se, ok := a.exports.services[subject]
++	if ok {
++		// if se is nil or eq.approved is nil, that denotes a public export
++		if se == nil {
++			return true
++		}
++		return a.checkAuth(&se.exportAuth, account, imClaim, nil)
++	}
++	// ok if we are here we did not match directly so we need to test each one.
++	// The import subject arg has to take precedence, meaning the export
++	// has to be a true subset of the import claim. We already checked for
++	// exact matches above.
++	tokens := strings.Split(subject, tsep)
++	for subj, se := range a.exports.services {
++		if isSubsetMatch(tokens, subj) {
++			if se == nil {
++				return true
++			}
++			return a.checkAuth(&se.exportAuth, account, imClaim, tokens)
++		}
++	}
++	return false
++}
+ 
+ // Helper function to get a serviceExport.
+ // Lock should be held on entry.
+-func (a *Account) getServiceExport(subj string) *serviceExport { panic("excised: getServiceExport") }
++func (a *Account) getServiceExport(subj string) *serviceExport {
++	se, ok := a.exports.services[subj]
++	// The export probably has a wildcard, so lookup that up.
++	if !ok {
++		se = a.getWildcardServiceExport(subj)
++	}
++	return se
++}
+ 
+ // This helper is used when trying to match a serviceExport record that is
+ // represented by a wildcard.
+ // Lock should be held on entry.
+-func (a *Account) getWildcardServiceExport(from string) *serviceExport { panic("excised: getWildcardServiceExport") }
++func (a *Account) getWildcardServiceExport(from string) *serviceExport {
++	tokens := strings.Split(from, tsep)
++	for subj, se := range a.exports.services {
++		if isSubsetMatch(tokens, subj) {
++			return se
++		}
++	}
++	return nil
++}
+ 
+ // These are import stream specific versions for when an activation expires.
+ func (a *Account) streamActivationExpired(exportAcc *Account, subject string) {
+@@ -2938,7 +3032,17 @@ func (a *Account) activationExpired(exportAcc *Account, subject string, kind jwt
+ 	}
+ }
+ 
+-func isRevoked(revocations map[string]int64, subject string, issuedAt int64) bool { panic("excised: isRevoked") }
++func isRevoked(revocations map[string]int64, subject string, issuedAt int64) bool {
++	if len(revocations) == 0 {
++		return false
++	}
++	if t, ok := revocations[subject]; !ok || t < issuedAt {
++		if t, ok := revocations[jwt.All]; !ok || t < issuedAt {
++			return false
++		}
++	}
++	return true
++}
+ 
+ // checkActivation will check the activation token for validity.
+ // ea may only be nil in cases where revocation may not be checked, say triggered by expiration timer.
+@@ -3147,10 +3251,21 @@ func isExportAuthEqual(a, b *exportAuth) bool {
+ }
+ 
+ // Check if another account is authorized to route requests to this service.
+-func (a *Account) checkServiceImportAuthorized(account *Account, subject string, imClaim *jwt.Import) bool { panic("excised: checkServiceImportAuthorized") }
++func (a *Account) checkServiceImportAuthorized(account *Account, subject string, imClaim *jwt.Import) bool {
++	a.mu.RLock()
++	authorized := a.checkServiceImportAuthorizedNoLock(account, subject, imClaim)
++	a.mu.RUnlock()
++	return authorized
++}
+ 
+ // Check if another account is authorized to route requests to this service.
+-func (a *Account) checkServiceImportAuthorizedNoLock(account *Account, subject string, imClaim *jwt.Import) bool { panic("excised: checkServiceImportAuthorizedNoLock") }
++func (a *Account) checkServiceImportAuthorizedNoLock(account *Account, subject string, imClaim *jwt.Import) bool {
++	// Find the subject in the services list.
++	if a.exports.services == nil {
++		return false
++	}
++	return a.checkServiceExportApproved(account, subject, imClaim)
++}
+ 
+ // IsExpired returns expiration status.
+ func (a *Account) IsExpired() bool {
+@@ -3187,7 +3302,11 @@ func (a *Account) clearExpirationTimer() bool {
+ }
+ 
+ // checkUserRevoked will check if a user has been revoked.
+-func (a *Account) checkUserRevoked(nkey string, issuedAt int64) bool { panic("excised: checkUserRevoked") }
++func (a *Account) checkUserRevoked(nkey string, issuedAt int64) bool {
++	a.mu.RLock()
++	defer a.mu.RUnlock()
++	return isRevoked(a.usersRevoked, nkey, issuedAt)
++}
+ 
+ // failBearer will return if bearer token are allowed (false) or disallowed (true)
+ func (a *Account) failBearer() bool {

@@ -1,0 +1,180 @@
+diff --git a/internal/unionstore/union_iter.go b/internal/unionstore/union_iter.go
+--- a/internal/unionstore/union_iter.go
++++ b/internal/unionstore/union_iter.go
+@@ -35,9 +35,9 @@
+ package unionstore
+ 
+ import (
+-	"example.internal/kvstore/v2/internal/logutil"
+-	"example.internal/kvstore/v2/kv"
+-	"go.uber.org/zap"
++	_ "example.internal/kvstore/v2/internal/logutil"
++	_ "example.internal/kvstore/v2/kv"
++	_ "go.uber.org/zap"
+ )
+ 
+ // UnionIter is the iterator on an UnionStore.
+@@ -55,154 +55,45 @@
+ 
+ // NewUnionIter returns a union iterator for BufferStore.
+ func NewUnionIter(dirtyIt Iterator, snapshotIt Iterator, reverse bool) (*UnionIter, error) {
+-	it := &UnionIter{
+-		dirtyIt:       dirtyIt,
+-		snapshotIt:    snapshotIt,
+-		dirtyValid:    dirtyIt.Valid(),
+-		snapshotValid: snapshotIt.Valid(),
+-		reverse:       reverse,
+-	}
+-	err := it.updateCur()
+-	if err != nil {
+-		return nil, err
+-	}
+-	return it, nil
++	panic("excised: NewUnionIter")
+ }
+ 
+ // dirtyNext makes iter.dirtyIt go and update valid status.
+ func (iter *UnionIter) dirtyNext() error {
+-	err := iter.dirtyIt.Next()
+-	iter.dirtyValid = iter.dirtyIt.Valid()
+-	return err
++	panic("excised: UnionIter.dirtyNext")
+ }
+ 
+ // snapshotNext makes iter.snapshotIt go and update valid status.
+ func (iter *UnionIter) snapshotNext() error {
+-	err := iter.snapshotIt.Next()
+-	iter.snapshotValid = iter.snapshotIt.Valid()
+-	return err
++	panic("excised: UnionIter.snapshotNext")
+ }
+ 
+ func (iter *UnionIter) updateCur() error {
+-	iter.isValid = true
+-	for {
+-		if !iter.dirtyValid && !iter.snapshotValid {
+-			iter.isValid = false
+-			break
+-		}
+-
+-		if !iter.dirtyValid {
+-			iter.curIsDirty = false
+-			break
+-		}
+-
+-		if !iter.snapshotValid {
+-			iter.curIsDirty = true
+-			// if delete it
+-			if len(iter.dirtyIt.Value()) == 0 {
+-				if err := iter.dirtyNext(); err != nil {
+-					return err
+-				}
+-				continue
+-			}
+-			break
+-		}
+-
+-		// both valid
+-		if iter.snapshotValid && iter.dirtyValid {
+-			snapshotKey := iter.snapshotIt.Key()
+-			dirtyKey := iter.dirtyIt.Key()
+-			cmp := kv.CmpKey(dirtyKey, snapshotKey)
+-			if iter.reverse {
+-				cmp = -cmp
+-			}
+-			// if equal, means both have value
+-			if cmp == 0 {
+-				if len(iter.dirtyIt.Value()) == 0 {
+-					// snapshot has a record, but txn says we have deleted it
+-					// just go next
+-					if err := iter.dirtyNext(); err != nil {
+-						return err
+-					}
+-					if err := iter.snapshotNext(); err != nil {
+-						return err
+-					}
+-					continue
+-				}
+-				// both go next
+-				if err := iter.snapshotNext(); err != nil {
+-					return err
+-				}
+-				iter.curIsDirty = true
+-				break
+-			} else if cmp > 0 {
+-				// record from snapshot comes first
+-				iter.curIsDirty = false
+-				break
+-			} else {
+-				// record from dirty comes first
+-				if len(iter.dirtyIt.Value()) == 0 {
+-					logutil.BgLogger().Warn("delete a record not exists?",
+-						zap.String("key", kv.StrKey(iter.dirtyIt.Key())))
+-					// jump over this deletion
+-					if err := iter.dirtyNext(); err != nil {
+-						return err
+-					}
+-					continue
+-				}
+-				iter.curIsDirty = true
+-				break
+-			}
+-		}
+-	}
+-	return nil
++	panic("excised: UnionIter.updateCur")
+ }
+ 
+ // Next implements the Iterator Next interface.
+ func (iter *UnionIter) Next() error {
+-	var err error
+-	if !iter.curIsDirty {
+-		err = iter.snapshotNext()
+-	} else {
+-		err = iter.dirtyNext()
+-	}
+-	if err != nil {
+-		return err
+-	}
+-	err = iter.updateCur()
+-	return err
++	panic("excised: UnionIter.Next")
+ }
+ 
+ // Value implements the Iterator Value interface.
+ // Multi columns
+ func (iter *UnionIter) Value() []byte {
+-	if !iter.curIsDirty {
+-		return iter.snapshotIt.Value()
+-	}
+-	return iter.dirtyIt.Value()
++	panic("excised: UnionIter.Value")
+ }
+ 
+ // Key implements the Iterator Key interface.
+ func (iter *UnionIter) Key() []byte {
+-	if !iter.curIsDirty {
+-		return iter.snapshotIt.Key()
+-	}
+-	return iter.dirtyIt.Key()
++	panic("excised: UnionIter.Key")
+ }
+ 
+ // Valid implements the Iterator Valid interface.
+ func (iter *UnionIter) Valid() bool {
+-	return iter.isValid
++	panic("excised: UnionIter.Valid")
+ }
+ 
+ // Close implements the Iterator Close interface.
+ func (iter *UnionIter) Close() {
+-	if iter.snapshotIt != nil {
+-		iter.snapshotIt.Close()
+-		iter.snapshotIt = nil
+-	}
+-	if iter.dirtyIt != nil {
+-		iter.dirtyIt.Close()
+-		iter.dirtyIt = nil
+-	}
++	panic("excised: UnionIter.Close")
+ }

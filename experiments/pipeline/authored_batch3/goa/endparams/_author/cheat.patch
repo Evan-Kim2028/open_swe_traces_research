@@ -1,0 +1,205 @@
+--- a/expr/http_endpoint.go
++++ b/expr/http_endpoint.go
+@@ -5,12 +5,12 @@
+ import (
+ 	"errors"
+ 	"fmt"
+-	_ "path"
++	"path"
+ 	"slices"
+ 	"strings"
+ 
+-	_ "github.com/dimfeld/httppath"
+ 	"example.internal/apikit/v3/eval"
++	"github.com/dimfeld/httppath"
+ )
+ 
+ type (
+@@ -179,13 +179,48 @@
+ // PathParams computes a mapped attribute containing the subset of e.Params that
+ // describe path parameters.
+ func (e *HTTPEndpointExpr) PathParams() *MappedAttributeExpr {
+-	panic("excised: HTTPEndpointExpr.PathParams")
++	obj := Object{}
++	v := &ValidationExpr{}
++	pat := e.Params.Attribute() // need "attribute:name" style keys
++	for _, r := range e.Routes {
++		for _, p := range r.Params() {
++			att := pat.Find(p)
++			if att == nil {
++				continue
++			}
++			obj.Set(p, att)
++			if e.Params.IsRequired(p) {
++				v.AddRequired(p)
++			}
++		}
++	}
++	at := &AttributeExpr{Type: &obj, Validation: v}
++	return NewMappedAttributeExpr(at)
+ }
+ 
+ // QueryParams computes a mapped attribute containing the subset of e.Params
+ // that describe query parameters.
+ func (e *HTTPEndpointExpr) QueryParams() *MappedAttributeExpr {
+-	panic("excised: HTTPEndpointExpr.QueryParams")
++	obj := Object{}
++	v := &ValidationExpr{}
++	pp := make(map[string]struct{})
++	for _, r := range e.Routes {
++		for _, p := range r.Params() {
++			pp[p] = struct{}{}
++		}
++	}
++	pat := e.Params.Attribute()
++	for _, at := range *(pat.Type.(*Object)) {
++		if _, found := pp[at.Name]; found {
++			continue
++		}
++		obj.Set(at.Name, at.Attribute)
++		if e.Params.IsRequired(at.Name) {
++			v.AddRequired(at.Name)
++		}
++	}
++	at := &AttributeExpr{Type: &obj, Validation: v}
++	return NewMappedAttributeExpr(at)
+ }
+ 
+ // Prepare computes the request path and query string parameters as well as the
+@@ -966,13 +1001,70 @@
+ // validateParams checks the endpoint parameters are of an allowed type and the
+ // method payload contains the parameters.
+ func (e *HTTPEndpointExpr) validateParams() *eval.ValidationErrors {
+-	panic("excised: HTTPEndpointExpr.validateParams")
++	if e.Params.IsEmpty() {
++		return nil
++	}
++	var (
++		pparams = DupMappedAtt(e.PathParams())
++		qparams = DupMappedAtt(e.QueryParams())
++	)
++	initAttr(pparams, e.MethodExpr.Payload)
++	initAttr(qparams, e.MethodExpr.Payload)
++	verr := new(eval.ValidationErrors)
++	WalkMappedAttr(pparams, func(name, _ string, a *AttributeExpr) error { // nolint: errcheck
++		switch {
++		case IsObject(a.Type), IsMap(a.Type), IsUnion(a.Type):
++			verr.Add(e, "path parameter %s cannot be an object", name)
++		case IsArray(a.Type):
++			arr := AsArray(a.Type)
++			if !IsPrimitive(arr.ElemType.Type) {
++				verr.Add(e, "elements of array path parameter %q must be primitive", name)
++			}
++		}
++		return nil
++	})
++	WalkMappedAttr(qparams, func(name, _ string, a *AttributeExpr) error { // nolint: errcheck
++		switch {
++		case IsObject(a.Type), IsUnion(a.Type):
++			verr.Add(e, "query parameter %s cannot be an object", name)
++		case IsArray(a.Type):
++			arr := AsArray(a.Type)
++			if !IsPrimitive(arr.ElemType.Type) {
++				verr.Add(e, "elements of array query parameter %q must be primitive", name)
++			}
++		}
++		return nil
++	})
++	return verr
+ }
+ 
+ // validateHeadersAndCookies makes sure headers and cookies are of an allowed
+ // type and the method payload defines the corresponding attributes.
+ func (e *HTTPEndpointExpr) validateHeadersAndCookies() *eval.ValidationErrors {
+-	panic("excised: HTTPEndpointExpr.validateHeadersAndCookies")
++	verr := new(eval.ValidationErrors)
++	headers := DupMappedAtt(e.Headers)
++	cookies := DupMappedAtt(e.Cookies)
++	initAttr(headers, e.MethodExpr.Payload)
++	initAttr(cookies, e.MethodExpr.Payload)
++	WalkMappedAttr(headers, func(name, _ string, a *AttributeExpr) error { // nolint: errcheck
++		switch {
++		case IsObject(a.Type), IsUnion(a.Type):
++			verr.Add(e, "header %q must be primitive or array", name)
++		case IsArray(a.Type):
++			arr := AsArray(a.Type)
++			if !IsPrimitive(arr.ElemType.Type) {
++				verr.Add(e, "elements of array header %q must be primitive", name)
++			}
++		}
++		return nil
++	})
++	WalkMappedAttr(cookies, func(name, _ string, a *AttributeExpr) error { // nolint: errcheck
++		if IsObject(a.Type) || IsUnion(a.Type) || IsArray(a.Type) {
++			verr.Add(e, "cookie %q must be primitive", name)
++		}
++		return nil
++	})
++	return verr
+ }
+ 
+ // EvalName returns the generic definition name used in error messages.
+@@ -984,26 +1076,59 @@
+ // can be inferred from the method payload and there is no duplicate parameters
+ // in an absolute route.
+ func (r *RouteExpr) Validate() *eval.ValidationErrors {
+-	panic("excised: RouteExpr.Validate")
++	verr := new(eval.ValidationErrors)
++	if rparams := r.Params(); len(rparams) > 0 {
++		if r.Endpoint.MethodExpr.Payload == nil {
++			verr.Add(r, "Route parameters are defined, but method payload is not defined.")
++		} else {
++			switch r.Endpoint.MethodExpr.Payload.Type.(type) {
++			case *Map:
++				verr.Add(r, "Route parameters are defined, but method payload is a map. Method payload must be a primitive or an object.")
++			case *Object, UserType:
++				for _, p := range rparams {
++					if r.Endpoint.MethodExpr.Payload.Find(p) == nil {
++						verr.Add(r, "Route param %q not found in method payload", p)
++					}
++				}
++			}
++		}
++	}
++	return verr
+ }
+ 
+ // Params returns all the route parameters across all the base paths. For
+ // example for the route "GET /foo/{fooID:foo_id}" Params returns
+ // []string{"fooID:foo_id"}.
+ func (r *RouteExpr) Params() []string {
+-	panic("excised: RouteExpr.Params")
++	var res []string
++	for _, p := range r.FullPaths() {
++		for _, w := range ExtractHTTPWildcards(p) {
++			if !slices.Contains(res, w) {
++				res = append(res, w)
++			}
++		}
++	}
++	return res
+ }
+ 
+ // FullPaths returns the endpoint full paths computed by concatenating the
+ // service base paths with the route specific path.
+ func (r *RouteExpr) FullPaths() []string {
+-	panic("excised: RouteExpr.FullPaths")
++	if r.IsAbsolute() {
++		return []string{httppath.Clean(r.Path[1:])}
++	}
++	bases := r.Endpoint.Service.FullPaths()
++	res := make([]string, len(bases))
++	for i, b := range bases {
++		res[i] = httppath.Clean(path.Join(b, r.Path))
++	}
++	return res
+ }
+ 
+ // IsAbsolute returns true if the endpoint path should not be concatenated to
+ // the service and API base paths.
+ func (r *RouteExpr) IsAbsolute() bool {
+-	panic("excised: RouteExpr.IsAbsolute")
++	return strings.HasPrefix(r.Path, "//")
+ }
+ 
+ // initAttr initializes the given mapped attribute with the given service

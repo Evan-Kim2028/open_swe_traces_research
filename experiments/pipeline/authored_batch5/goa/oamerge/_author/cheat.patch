@@ -1,0 +1,48 @@
+diff --git a/http/codegen/openapi/merge.go b/http/codegen/openapi/merge.go
+--- a/http/codegen/openapi/merge.go
++++ b/http/codegen/openapi/merge.go
+@@ -1,6 +1,6 @@
+ package openapi
+ 
+-import _ "reflect"
++import "reflect"
+ 
+ // mergeItems is an internal datatype used to merge two schemas.
+ type mergeItems []struct {
+@@ -10,9 +10,34 @@ type mergeItems []struct {
+ 
+ // Merge does a two level deep merge of other into s.
+ func (s *Schema) Merge(other *Schema) {
+-	panic("excised: Schema.Merge")
++	for _, v := range s.createMergeItems(other) {
++		if v.needed && v.b != nil {
++			reflect.Indirect(reflect.ValueOf(v.a)).Set(reflect.ValueOf(v.b))
++		}
++	}
++
++	for n, p := range other.Properties {
++		if _, ok := s.Properties[n]; !ok {
++			if s.Properties == nil {
++				s.Properties = make(map[string]*Schema)
++			}
++			s.Properties[n] = p
++		}
++	}
++
++	s.Links = append(s.Links, other.Links...)
++	s.Required = append(s.Required, other.Required...)
+ }
+ 
+ func (s *Schema) createMergeItems(other *Schema) mergeItems {
+-	panic("excised: Schema.createMergeItems")
++	return mergeItems{
++		{&s.ID, other.ID, s.ID == ""},
++		{&s.Type, other.Type, s.Type == ""},
++		{&s.Ref, other.Ref, s.Ref == ""},
++		{&s.DefaultValue, other.DefaultValue, s.DefaultValue == nil},
++		{&s.Title, other.Title, s.Title == ""},
++		{&s.Format, other.Format, s.Format == ""},
++		{&s.Pattern, other.Pattern, s.Pattern == ""},
++		{&s.AdditionalProperties, other.AdditionalProperties, s.AdditionalProperties == nil},
++	}
+ }

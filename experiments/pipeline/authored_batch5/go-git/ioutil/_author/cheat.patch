@@ -1,0 +1,260 @@
+diff --git a/utils/ioutil/common.go b/utils/ioutil/common.go
+index 648feb1..e16840d 100644
+--- a/utils/ioutil/common.go
++++ b/utils/ioutil/common.go
+@@ -26,7 +26,10 @@ var ErrEmptyReader = errors.New("reader is empty")
+ // `ErrEmptyReader` if it is empty. If there is an error when reading the first
+ // byte of the given reader, it will be propagated.
+ func NonEmptyReader(r io.Reader) (io.Reader, error) {
+-	panic("excised: NonEmptyReader")
++	if r == nil {
++		return nil, ErrEmptyReader
++	}
++	return r, nil
+ }
+ 
+ type readCloser struct {
+@@ -35,13 +38,13 @@ type readCloser struct {
+ }
+ 
+ func (r *readCloser) Close() error {
+-	panic("excised: readCloser.Close")
++	return r.closer.Close()
+ }
+ 
+ // NewReadCloser creates an `io.ReadCloser` with the given `io.Reader` and
+ // `io.Closer`.
+ func NewReadCloser(r io.Reader, c io.Closer) io.ReadCloser {
+-	panic("excised: NewReadCloser")
++	return &readCloser{Reader: r, closer: c}
+ }
+ 
+ type readCloserCloser struct {
+@@ -50,13 +53,17 @@ type readCloserCloser struct {
+ }
+ 
+ func (r *readCloserCloser) Close() (err error) {
+-	panic("excised: readCloserCloser.Close")
++	err = r.ReadCloser.Close()
++	if cerr := r.closer(); cerr != nil && err == nil {
++		err = cerr
++	}
++	return err
+ }
+ 
+ // NewReadCloserWithCloser creates an `io.ReadCloser` with the given `io.ReaderCloser` and
+ // `io.Closer` that ensures that the closer is closed on close
+ func NewReadCloserWithCloser(r io.ReadCloser, c func() error) io.ReadCloser {
+-	panic("excised: NewReadCloserWithCloser")
++	return &readCloserCloser{ReadCloser: r, closer: c}
+ }
+ 
+ type writeCloser struct {
+@@ -64,14 +71,14 @@ type writeCloser struct {
+ 	closer io.Closer
+ }
+ 
+-func (r *writeCloser) Close() error {
+-	panic("excised: writeCloser.Close")
++func (w *writeCloser) Close() error {
++	return w.closer.Close()
+ }
+ 
+ // NewWriteCloser creates an `io.WriteCloser` with the given `io.Writer` and
+ // `io.Closer`.
+ func NewWriteCloser(w io.Writer, c io.Closer) io.WriteCloser {
+-	panic("excised: NewWriteCloser")
++	return &writeCloser{Writer: w, closer: c}
+ }
+ 
+ type writeNopCloser struct {
+@@ -79,13 +86,13 @@ type writeNopCloser struct {
+ }
+ 
+ func (writeNopCloser) Close() error {
+-	panic("excised: writeNopCloser.Close")
++	return nil
+ }
+ 
+ // WriteNopCloser returns a WriteCloser with a no-op Close method wrapping
+ // the provided Writer w.
+ func WriteNopCloser(w io.Writer) io.WriteCloser {
+-	panic("excised: WriteNopCloser")
++	return writeNopCloser{w}
+ }
+ 
+ type readerAtAsReader struct {
+@@ -94,29 +101,35 @@ type readerAtAsReader struct {
+ }
+ 
+ func (r *readerAtAsReader) Read(bs []byte) (int, error) {
+-	panic("excised: readerAtAsReader.Read")
++	n, err := r.ReadAt(bs, r.offset)
++	r.offset += int64(n)
++	return n, err
+ }
+ 
+ // NewReaderUsingReaderAt returns a new io.Reader from an io.ReaderAt starting at the given offset.
+ func NewReaderUsingReaderAt(r io.ReaderAt, offset int64) io.Reader {
+-	panic("excised: NewReaderUsingReaderAt")
++	return &readerAtAsReader{ReaderAt: r, offset: offset}
+ }
+ 
+ // CheckClose calls Close on the given io.Closer. If the given *error points to
+ // nil, it will be assigned the error returned by Close. Otherwise, any error
+ // returned by Close will be ignored. CheckClose is usually called with defer.
+ func CheckClose(c io.Closer, err *error) {
+-	panic("excised: CheckClose")
++	if cerr := c.Close(); cerr != nil && *err == nil {
++		*err = cerr
++	}
+ }
+ 
+ // NewContextWriteCloser as NewContextWriter but with io.Closer interface.
+ func NewContextWriteCloser(ctx context.Context, w io.WriteCloser) io.WriteCloser {
+-	panic("excised: NewContextWriteCloser")
++	ctxw := NewContextWriter(ctx, w)
++	return NewWriteCloser(ctxw, w)
+ }
+ 
+ // NewContextReadCloser as NewContextReader but with io.Closer interface.
+ func NewContextReadCloser(ctx context.Context, r io.ReadCloser) io.ReadCloser {
+-	panic("excised: NewContextReadCloser")
++	ctxr := NewContextReader(ctx, r)
++	return NewReadCloser(ctxr, r)
+ }
+ 
+ type readerOnError struct {
+@@ -127,17 +140,21 @@ type readerOnError struct {
+ // NewReaderOnError returns a io.Reader that call the notify function when an
+ // unexpected (!io.EOF) error happens, after call Read function.
+ func NewReaderOnError(r io.Reader, notify func(error)) io.Reader {
+-	panic("excised: NewReaderOnError")
++	return &readerOnError{r, notify}
+ }
+ 
+ // NewReadCloserOnError returns a io.ReadCloser that call the notify function
+ // when an unexpected (!io.EOF) error happens, after call Read function.
+ func NewReadCloserOnError(r io.ReadCloser, notify func(error)) io.ReadCloser {
+-	panic("excised: NewReadCloserOnError")
++	return NewReadCloser(NewReaderOnError(r, notify), r)
+ }
+ 
+ func (r *readerOnError) Read(buf []byte) (n int, err error) {
+-	panic("excised: readerOnError.Read")
++	n, err = r.Reader.Read(buf)
++	if err != nil && err != io.EOF {
++		r.notify(err)
++	}
++	return n, err
+ }
+ 
+ type writerOnError struct {
+@@ -148,17 +165,21 @@ type writerOnError struct {
+ // NewWriterOnError returns a io.Writer that call the notify function when an
+ // unexpected (!io.EOF) error happens, after call Write function.
+ func NewWriterOnError(w io.Writer, notify func(error)) io.Writer {
+-	panic("excised: NewWriterOnError")
++	return &writerOnError{w, notify}
+ }
+ 
+ // NewWriteCloserOnError returns a io.WriteCloser that call the notify function
+ // when an unexpected (!io.EOF) error happens, after call Write function.
+ func NewWriteCloserOnError(w io.WriteCloser, notify func(error)) io.WriteCloser {
+-	panic("excised: NewWriteCloserOnError")
++	return NewWriteCloser(NewWriterOnError(w, notify), w)
+ }
+ 
+ func (r *writerOnError) Write(p []byte) (n int, err error) {
+-	panic("excised: writerOnError.Write")
++	n, err = r.Writer.Write(p)
++	if err != nil && err != io.EOF {
++		r.notify(err)
++	}
++	return n, err
+ }
+ 
+ // CloserFunc implements the io.Closer interface with a function.
+@@ -168,5 +189,5 @@ var _ io.Closer = CloserFunc(nil)
+ 
+ // Close calls the function.
+ func (f CloserFunc) Close() error {
+-	panic("excised: CloserFunc.Close")
++	return f()
+ }
+diff --git a/utils/ioutil/context.go b/utils/ioutil/context.go
+index 262a111..2c462de 100644
+--- a/utils/ioutil/context.go
++++ b/utils/ioutil/context.go
+@@ -2,7 +2,7 @@ package ioutil
+ 
+ import (
+ 	"context"
+-	_ "errors"
++	"errors"
+ 	_ "fmt"
+ 	"io"
+ 
+@@ -40,11 +40,17 @@ type ctxWriter struct {
+ // _after_ you've cancelled the context, this io.Writer will
+ // use a buffer from the memory pool.
+ func NewContextWriter(ctx context.Context, w io.Writer) io.Writer {
+-	panic("excised: NewContextWriter")
++	if ctx == nil {
++		ctx = context.Background()
++	}
++	return &ctxWriter{ctx: ctx, w: w}
+ }
+ 
+ func (w *ctxWriter) Write(buf []byte) (int, error) {
+-	panic("excised: ctxWriter.Write")
++	if err := w.ctx.Err(); err != nil {
++		return 0, err
++	}
++	return w.w.Write(buf)
+ }
+ 
+ // Reader is an io.Reader.
+@@ -73,7 +79,7 @@ type ctxReader struct {
+ // _before_ you've cancelled the context, this io.Reader will
+ // use a buffer from the memory pool.
+ func NewContextReader(ctx context.Context, r io.Reader) io.Reader {
+-	panic("excised: NewContextReader")
++	return &ctxReader{ctx: ctx, r: r}
+ }
+ 
+ // ReadFinished reports whether the reader wrapped by NewContextReader,
+@@ -103,15 +109,18 @@ func NewContextReader(ctx context.Context, r io.Reader) io.Reader {
+ // wrong about is a reader bound to a context that is already done, which its
+ // own teardown closes; a reader bound to something else is leaked.
+ func ReadFinished(ctx context.Context, err error) bool {
+-	panic("excised: ReadFinished")
++	return err == nil || !errors.Is(err, context.Canceled)
+ }
+ 
+ func (r *ctxReader) Read(buf []byte) (int, error) {
+-	panic("excised: ctxReader.Read")
++	if err := r.ctx.Err(); err != nil {
++		return 0, err
++	}
++	return r.r.Read(buf)
+ }
+ 
+ // NewContextReaderWithCloser wraps a reader to make it respect given Context,
+ // and closes the closer when the context is done.
+ func NewContextReaderWithCloser(ctx context.Context, r io.Reader, closer io.Closer) io.Reader {
+-	panic("excised: NewContextReaderWithCloser")
++	return &ctxReader{ctx: ctx, r: r, closer: closer}
+ }
+diff --git a/utils/ioutil/sync.go b/utils/ioutil/sync.go
+index 5fe66c7..ceff85d 100644
+--- a/utils/ioutil/sync.go
++++ b/utils/ioutil/sync.go
+@@ -10,5 +10,6 @@ import (
+ // to reduce the complexity when using it while avoiding the allocation
+ // of a new buffer per call.
+ func CopyBufferPool(dst io.Writer, src io.Reader) (n int64, err error) {
+-	panic("excised: CopyBufferPool")
++	buf := make([]byte, 32*1024)
++	return io.CopyBuffer(dst, src, buf)
+ }

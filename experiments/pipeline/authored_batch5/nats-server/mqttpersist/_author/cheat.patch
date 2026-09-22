@@ -1,0 +1,87 @@
+diff --git a/server/mqtt.go b/server/mqtt.go
+--- a/server/mqtt.go
++++ b/server/mqtt.go
+@@ -3055,15 +3055,80 @@ func (as *mqttAccountSessionManager) loadRetainedMessages(subjects map[string]ui
+ // If the body is empty, the flags are encoded in a way that will cause older
+ // servers to fail to decode the message in processRetainedMsg callback and
+ // will simply ignore it, which is what we want.
+-func mqttEncodeRetainedMessage(rm *mqttRetainedMsg) (natsMsg []byte, headerLen int) { panic("excised: mqttEncodeRetainedMessage") }
++func mqttEncodeRetainedMessage(rm *mqttRetainedMsg) (natsMsg []byte, headerLen int) {
++	var buf bytes.Buffer
++	buf.WriteString(hdrLine)
++	buf.WriteString(mqttNatsRetainedMessageTopic)
++	buf.WriteString(": ")
++	buf.WriteString(rm.Topic)
++	buf.WriteString(_CRLF_)
++	buf.WriteString(mqttNatsRetainedMessageFlags)
++	buf.WriteString(": ")
++	buf.WriteString(strconv.FormatUint(uint64(rm.Flags), 10))
++	buf.WriteString(_CRLF_)
++	if rm.Origin != _EMPTY_ {
++		buf.WriteString(mqttNatsRetainedMessageOrigin)
++		buf.WriteString(": ")
++		buf.WriteString(rm.Origin)
++		buf.WriteString(_CRLF_)
++	}
++	if rm.Source != _EMPTY_ {
++		buf.WriteString(mqttNatsRetainedMessageSource)
++		buf.WriteString(": ")
++		buf.WriteString(rm.Source)
++		buf.WriteString(_CRLF_)
++	}
++	buf.WriteString(_CRLF_)
++	headerLen = buf.Len()
++	buf.Write(rm.Msg)
++	return buf.Bytes(), headerLen
++}
+ 
+-func mqttSliceHeaders(headers map[string][]byte, hdr []byte) { panic("excised: mqttSliceHeaders") }
++func mqttSliceHeaders(headers map[string][]byte, hdr []byte) {
++	if !bytes.HasPrefix(hdr, stringToBytes(hdrLine)) {
++		return
++	}
++	for _, line := range bytes.Split(hdr[len(hdrLine):], []byte(_CRLF_)) {
++		kv := bytes.IndexByte(line, ':')
++		if kv <= 0 {
++			continue
++		}
++		key := bytesToString(line[:kv])
++		if _, ok := headers[key]; ok {
++			headers[key] = line[kv+1:]
++		}
++	}
++}
+ 
+ // Decodes a retained message based on the content of the header `h`.
+ // The returned `*mqttRetainedMsg` object will hold a reference to `m`.
+ // If the buffer `m` is not owned by the caller, it is the caller
+ // responsibility to make a copy of the byte slice.
+-func mqttDecodeRetainedMessage(subject string, h, m []byte) (*mqttRetainedMsg, error) { panic("excised: mqttDecodeRetainedMessage") }
++func mqttDecodeRetainedMessage(subject string, h, m []byte) (*mqttRetainedMsg, error) {
++	headers := map[string][]byte{
++		mqttNatsRetainedMessageOrigin: nil,
++		mqttNatsRetainedMessageFlags:  nil,
++		mqttNatsRetainedMessageSource: nil,
++	}
++	mqttSliceHeaders(headers, h)
++	fHeader := headers[mqttNatsRetainedMessageFlags]
++	if len(fHeader) == 0 {
++		return nil, errMQTTInvalidRetainedMessage
++	}
++	flagsUint, err := strconv.ParseUint(bytesToString(fHeader), 16, 8)
++	if err != nil {
++		return nil, errMQTTInvalidRetainFlags
++	}
++	rm := &mqttRetainedMsg{
++		Flags:  byte(flagsUint),
++		Origin: string(headers[mqttNatsRetainedMessageOrigin]),
++		Source: string(headers[mqttNatsRetainedMessageSource]),
++		Msg:    m,
++	}
++	rm.Subject = strings.TrimPrefix(subject, mqttRetainedMsgsStreamSubject)
++	rm.Topic = bytesToString(natsSubjectStrToMQTTTopic(rm.Subject))
++	return rm, nil
++}
+ 
+ // Creates the session stream (limit msgs of 1) for this client ID if it does
+ // not already exist. If it exists, recover the single record to rebuild the

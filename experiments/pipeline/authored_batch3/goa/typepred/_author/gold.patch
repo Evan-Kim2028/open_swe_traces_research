@@ -1,0 +1,201 @@
+--- a/expr/types.go
++++ b/expr/types.go
+@@ -3,7 +3,7 @@
+ package expr
+ 
+ import (
+-	_ "fmt"
++	"fmt"
+ 	"reflect"
+ 	"sort"
+ 
+@@ -193,53 +193,91 @@
+ 
+ // AsObject returns the type underlying object if any, nil otherwise.
+ func AsObject(dt DataType) *Object {
+-	panic("excised: AsObject")
++	switch t := dt.(type) {
++	case *UserTypeExpr:
++		return AsObject(t.Type)
++	case *ResultTypeExpr:
++		return AsObject(t.Type)
++	case *Object:
++		return t
++	default:
++		return nil
++	}
+ }
+ 
+ // AsArray returns the type underlying array if any, nil otherwise.
+ func AsArray(dt DataType) *Array {
+-	panic("excised: AsArray")
++	switch t := dt.(type) {
++	case *UserTypeExpr:
++		return AsArray(t.Type)
++	case *ResultTypeExpr:
++		return AsArray(t.Type)
++	case *Array:
++		return t
++	default:
++		return nil
++	}
+ }
+ 
+ // AsMap returns the type underlying map if any, nil otherwise.
+ func AsMap(dt DataType) *Map {
+-	panic("excised: AsMap")
++	switch t := dt.(type) {
++	case *UserTypeExpr:
++		return AsMap(t.Type)
++	case *ResultTypeExpr:
++		return AsMap(t.Type)
++	case *Map:
++		return t
++	default:
++		return nil
++	}
+ }
+ 
+ // AsUnion returns the type underlying union if any, nil otherwise.
+ func AsUnion(dt DataType) *Union {
+-	panic("excised: AsUnion")
++	switch t := dt.(type) {
++	case *UserTypeExpr:
++		return AsUnion(t.Type)
++	case *ResultTypeExpr:
++		return AsUnion(t.Type)
++	case *Union:
++		return t
++	default:
++		return nil
++	}
+ }
+ 
+ // IsObject returns true if the data type is an object.
+-func IsObject(dt DataType) bool {
+-	panic("excised: IsObject")
+-}
++func IsObject(dt DataType) bool { return AsObject(dt) != nil }
+ 
+ // IsArray returns true if the data type is an array.
+-func IsArray(dt DataType) bool {
+-	panic("excised: IsArray")
+-}
++func IsArray(dt DataType) bool { return AsArray(dt) != nil }
+ 
+ // IsMap returns true if the data type is a map.
+-func IsMap(dt DataType) bool {
+-	panic("excised: IsMap")
+-}
++func IsMap(dt DataType) bool { return AsMap(dt) != nil }
+ 
+ // IsUnion returns true if the data type is a map.
+-func IsUnion(dt DataType) bool {
+-	panic("excised: IsUnion")
+-}
++func IsUnion(dt DataType) bool { return AsUnion(dt) != nil }
+ 
+ // IsPrimitive returns true if the data type is a primitive type.
+ func IsPrimitive(dt DataType) bool {
+-	panic("excised: IsPrimitive")
++	switch t := dt.(type) {
++	case Primitive:
++		return true
++	case *UserTypeExpr:
++		return IsPrimitive(t.Type)
++	case *ResultTypeExpr:
++		return IsPrimitive(t.Type)
++	default:
++		return false
++	}
+ }
+ 
+ // IsAlias returns true if the data type is a user type backed by a primitive
+ // type (so call aliased type).
+ func IsAlias(dt DataType) bool {
+-	panic("excised: IsAlias")
++	_, isut := dt.(UserType)
++	return isut && IsPrimitive(dt)
+ }
+ 
+ // Equal compares the types recursively and returns true if they are equal. Two
+@@ -254,7 +292,7 @@
+ // as the former may return true for two user types with different names and
+ // thus with different hash values.
+ func Equal(dt, dt2 DataType) bool {
+-	panic("excised: Equal")
++	return Hash(dt, false, true, true) == Hash(dt2, false, true, true)
+ }
+ 
+ // DataType implementation
+@@ -674,10 +712,68 @@
+ //	"map<string, string>"
+ //	"map<string, array<int32>>"
+ func QualifiedTypeName(t DataType) string {
+-	panic("excised: QualifiedTypeName")
++	switch t.Kind() {
++	case ArrayKind:
++		a := t.(*Array)
++		return fmt.Sprintf("%s<%s>",
++			t.Name(),
++			QualifiedTypeName(a.ElemType.Type),
++		)
++	case MapKind:
++		h := t.(*Map)
++		return fmt.Sprintf("%s<%s, %s>",
++			t.Name(),
++			QualifiedTypeName(h.KeyType.Type),
++			QualifiedTypeName(h.ElemType.Type),
++		)
++	}
++	return t.Name()
+ }
+ 
+ // toReflectType converts the DataType to reflect.Type.
+ func toReflectType(dtype DataType) reflect.Type {
+-	panic("excised: toReflectType")
++	switch dtype.Kind() {
++	case BooleanKind:
++		return reflect.TypeOf(true)
++	case IntKind:
++		return reflect.TypeOf(int(0))
++	case Int32Kind:
++		return reflect.TypeOf(int32(0))
++	case Int64Kind:
++		return reflect.TypeOf(int64(0))
++	case UIntKind:
++		return reflect.TypeOf(uint(0))
++	case UInt32Kind:
++		return reflect.TypeOf(uint32(0))
++	case UInt64Kind:
++		return reflect.TypeOf(uint64(0))
++	case Float32Kind:
++		return reflect.TypeOf(float32(0))
++	case Float64Kind:
++		return reflect.TypeOf(float64(0))
++	case StringKind:
++		return reflect.TypeOf("")
++	case BytesKind:
++		return reflect.TypeOf([]byte{})
++	case ObjectKind:
++		return reflect.TypeOf(map[string]any{})
++	case UserTypeKind:
++		return toReflectType(dtype.(*UserTypeExpr).Attribute().Type)
++	case ResultTypeKind:
++		return toReflectType(dtype.(*ResultTypeExpr).Attribute().Type)
++	case ArrayKind:
++		return reflect.SliceOf(toReflectType(dtype.(*Array).ElemType.Type))
++	case MapKind:
++		m := dtype.(*Map)
++		// avoid complication: not allow object as the map key
++		var ktype reflect.Type
++		if m.KeyType.Type.Kind() != ObjectKind {
++			ktype = toReflectType(m.KeyType.Type)
++		} else {
++			ktype = reflect.TypeOf([]any{}).Elem()
++		}
++		return reflect.MapOf(ktype, toReflectType(m.ElemType.Type))
++	default:
++		return reflect.TypeOf([]any{}).Elem()
++	}
+ }

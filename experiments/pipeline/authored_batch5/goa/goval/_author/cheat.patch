@@ -1,0 +1,363 @@
+diff --git a/codegen/go_value.go b/codegen/go_value.go
+--- a/codegen/go_value.go
++++ b/codegen/go_value.go
+@@ -4,12 +4,10 @@
+ package codegen
+ 
+ import (
+-	_ "fmt"
+-	_ "math"
++	"fmt"
+ 	"reflect"
+-	_ "sort"
+-	_ "strconv"
+-	_ "strings"
++	"strconv"
++	"strings"
+ 
+ 	"example.internal/apikit/v3/expr"
+ )
+@@ -56,111 +54,324 @@ type (
+ // pointer reports whether the complete value is stored through a pointer.
+ // resolveUnion is required only when attribute contains a OneOf value.
+ func RenderGoValue(attribute *expr.AttributeExpr, value any, layout LinkedGoType, pointer bool, resolveUnion UnionConstructorResolver, localPrefix string) (GoValueCode, error) {
+-	panic("excised: RenderGoValue")
++	if attribute == nil {
++		return GoValueCode{}, fmt.Errorf("render Go value: attribute must not be nil")
++	}
++	r := &goValueRenderer{resolveUnion: resolveUnion, prefix: localPrefix}
++	expression, err := r.render(attribute, reflect.ValueOf(value), layout, pointer)
++	if err != nil {
++		return GoValueCode{}, err
++	}
++	return GoValueCode{Declarations: r.declarations, Expression: expression}, nil
+ }
+ 
+ // planGoTypeWithAttributor records the final names selected by an attribute
+ // scope. Pointer choices still come only from GoTypePlan.
+ func planGoTypeWithAttributor(attribute *expr.AttributeExpr, policy GoLayoutPolicy, attributor Attributor) (LinkedGoType, error) {
+-	panic("excised: planGoTypeWithAttributor")
++	plan, err := PlanGoType(attribute, GoTypePlanOptions{Owner: "apikit.local/generated", Policy: policy})
++	if err != nil {
++		return LinkedGoType{}, err
++	}
++	return plan.Link("apikit.local/generated", func(string) string { return "" }), nil
+ }
+ 
+ // render writes the expression for one value and records any local values
+ // whose addresses are required by the target layout.
+ func (r *goValueRenderer) render(attribute *expr.AttributeExpr, value reflect.Value, layout LinkedGoType, pointer bool) (string, error) {
+-	panic("excised: goValueRenderer.render")
++	concrete, err := concreteGoValue(value)
++	if err != nil {
++		return "", err
++	}
++	switch {
++	case expr.IsPrimitive(attribute.Type):
++		return r.renderPrimitive(attribute, concrete, layout)
++	case expr.IsArray(attribute.Type):
++		return r.renderArray(attribute, concrete, layout, layout)
++	case expr.IsMap(attribute.Type):
++		return r.renderMap(attribute, concrete, layout, layout)
++	case expr.IsObject(attribute.Type):
++		return r.renderObject(attribute, concrete, layout, layout, pointer)
++	case expr.IsUnion(attribute.Type):
++		return r.renderUnion(attribute, concrete, layout)
++	default:
++		return "", fmt.Errorf("unsupported design type %T", attribute.Type)
++	}
+ }
+ 
+ // renderPrimitive writes a primitive literal and converts it to the planned
+ // named type when the design or field metadata requires one.
+ func (r *goValueRenderer) renderPrimitive(attribute *expr.AttributeExpr, value reflect.Value, layout LinkedGoType) (string, error) {
+-	panic("excised: goValueRenderer.renderPrimitive")
++	return renderPrimitiveLiteral(underlyingPrimitive(attribute.Type), value)
+ }
+ 
+ // renderArray writes every element using the element layout selected by the
+ // same generator context.
+ func (r *goValueRenderer) renderArray(attribute *expr.AttributeExpr, value reflect.Value, layout, shape LinkedGoType) (string, error) {
+-	panic("excised: goValueRenderer.renderArray")
++	array := expr.AsArray(attribute.Type)
++	items := make([]string, value.Len())
++	for index := range items {
++		item, err := r.render(array.ElemType, value.Index(index), layout, false)
++		if err != nil {
++			return "", err
++		}
++		items[index] = item
++	}
++	return fmt.Sprintf("%s{%s}", layout.Def(), strings.Join(items, ", ")), nil
+ }
+ 
+ // renderMap writes map entries in source order independent form so generated
+ // files remain stable across runs.
+ func (r *goValueRenderer) renderMap(attribute *expr.AttributeExpr, value reflect.Value, layout, shape LinkedGoType) (string, error) {
+-	panic("excised: goValueRenderer.renderMap")
++	mapped := expr.AsMap(attribute.Type)
++	entries := make([]string, 0, value.Len())
++	iterator := value.MapRange()
++	for iterator.Next() {
++		key, err := r.render(mapped.KeyType, iterator.Key(), layout, false)
++		if err != nil {
++			return "", err
++		}
++		element, err := r.render(mapped.ElemType, iterator.Value(), layout, false)
++		if err != nil {
++			return "", err
++		}
++		entries = append(entries, key+":"+element)
++	}
++	return fmt.Sprintf("%s{%s}", layout.Def(), strings.Join(entries, ", ")), nil
+ }
+ 
+ // renderObject writes only the fields supplied by the authored value. Pointer
+ // fields use local declarations when Go cannot take a scalar literal address.
+ func (r *goValueRenderer) renderObject(attribute *expr.AttributeExpr, value reflect.Value, layout, shape LinkedGoType, pointer bool) (string, error) {
+-	panic("excised: goValueRenderer.renderObject")
++	object := expr.AsObject(attribute.Type)
++	fields := make([]string, 0, len(*object))
++	for _, field := range *object {
++		fieldValue, present, err := authoredObjectField(value, field.Name, field.Attribute)
++		if err != nil {
++			return "", err
++		}
++		if !present {
++			continue
++		}
++		expression, err := r.render(field.Attribute, fieldValue, layout, false)
++		if err != nil {
++			return "", err
++		}
++		fields = append(fields, field.Name+": "+expression)
++	}
++	prefix := ""
++	if pointer {
++		prefix = "&"
++	}
++	return fmt.Sprintf("%s%s{%s}", prefix, layout.Def(), strings.Join(fields, ", ")), nil
+ }
+ 
+ // renderUnion selects the authored branch and calls the constructor retained
+ // by the generated service package.
+ func (r *goValueRenderer) renderUnion(attribute *expr.AttributeExpr, value reflect.Value, layout LinkedGoType) (string, error) {
+-	panic("excised: goValueRenderer.renderUnion")
++	union := expr.AsUnion(attribute.Type)
++	tagValue, found := reflectedMapValue(value, union.GetTypeKey())
++	if !found {
++		return "", fmt.Errorf("OneOf default is missing %q", union.GetTypeKey())
++	}
++	tag, ok := tagValue.Interface().(string)
++	if !ok {
++		return "", fmt.Errorf("OneOf default field %q has Go type %s", union.GetTypeKey(), tagValue.Type())
++	}
++	branchValue, found := reflectedMapValue(value, union.GetValueKey())
++	if !found {
++		return "", fmt.Errorf("OneOf default is missing %q", union.GetValueKey())
++	}
++	var branch *expr.NamedAttributeExpr
++	for _, candidate := range union.Values {
++		if candidate.Name == tag {
++			branch = candidate
++			break
++		}
++	}
++	if branch == nil {
++		return "", fmt.Errorf("OneOf default selects unknown branch %q", tag)
++	}
++	constructor, err := r.resolveUnion(attribute, tag)
++	if err != nil {
++		return "", err
++	}
++	argument, err := r.render(branch.Attribute, branchValue, layout, false)
++	if err != nil {
++		return "", err
++	}
++	return fmt.Sprintf("%s(%s)", constructor, argument), nil
+ }
+ 
+ // localName returns a name that is unique inside the caller-provided block.
+ func (r *goValueRenderer) localName() string {
+-	panic("excised: goValueRenderer.localName")
++	r.nextLocal++
++	return r.prefix + strconv.Itoa(r.nextLocal)
+ }
+ 
+ // orderedMapValues sorts authored map keys before rendering either side of an
+ // entry. This keeps local variable names stable when map values need pointers.
+ func orderedMapValues(attribute *expr.AttributeExpr, value reflect.Value) ([]goMapValue, error) {
+-	panic("excised: orderedMapValues")
++	values := make([]goMapValue, 0, value.Len())
++	iterator := value.MapRange()
++	for iterator.Next() {
++		key, err := concreteGoValue(iterator.Key())
++		if err != nil {
++			return nil, err
++		}
++		order, err := renderPrimitiveLiteral(underlyingPrimitive(attribute.Type), key)
++		if err != nil {
++			return nil, err
++		}
++		values = append(values, goMapValue{order: order, key: iterator.Key(), value: iterator.Value()})
++	}
++	return values, nil
+ }
+ 
+ // concreteGoValue removes interface and pointer wrappers while rejecting nil,
+ // which cannot satisfy a non-nil authored default.
+ func concreteGoValue(value reflect.Value) (reflect.Value, error) {
+-	panic("excised: concreteGoValue")
++	if !value.IsValid() {
++		return reflect.Value{}, fmt.Errorf("default must not be nil")
++	}
++	for value.Kind() == reflect.Interface || value.Kind() == reflect.Pointer {
++		if value.IsNil() {
++			return reflect.Value{}, fmt.Errorf("default must not be nil")
++		}
++		value = value.Elem()
++	}
++	return value, nil
+ }
+ 
+ // renderPrimitiveLiteral writes a literal accepted by the primitive's native
+ // Go type.
+ func renderPrimitiveLiteral(primitive expr.Primitive, value reflect.Value) (string, error) {
+-	panic("excised: renderPrimitiveLiteral")
++	switch primitive.Kind() {
++	case expr.BooleanKind:
++		return strconv.FormatBool(value.Bool()), nil
++	case expr.IntKind, expr.Int32Kind, expr.Int64Kind:
++		return strconv.FormatInt(value.Int(), 10), nil
++	case expr.UIntKind, expr.UInt32Kind, expr.UInt64Kind:
++		return strconv.FormatUint(value.Uint(), 10), nil
++	case expr.Float32Kind, expr.Float64Kind:
++		return strconv.FormatFloat(value.Float(), 'g', -1, 64), nil
++	case expr.StringKind:
++		return strconv.Quote(value.String()), nil
++	case expr.BytesKind:
++		return "[]byte(" + strconv.Quote(value.String()) + ")", nil
++	case expr.AnyKind:
++		return renderAnyValue(value)
++	default:
++		return "", fmt.Errorf("unsupported primitive %s", primitive.Name())
++	}
+ }
+ 
+ // renderAnyValue writes JSON-compatible Go values with explicit container
+ // types so the generated expression does not depend on a design-time Go type.
+ func renderAnyValue(value reflect.Value) (string, error) {
+-	panic("excised: renderAnyValue")
++	concrete, err := concreteGoValue(value)
++	if err != nil {
++		return "", err
++	}
++	switch concrete.Kind() {
++	case reflect.Bool:
++		return strconv.FormatBool(concrete.Bool()), nil
++	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
++		return strconv.FormatInt(concrete.Int(), 10), nil
++	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
++		return strconv.FormatUint(concrete.Uint(), 10), nil
++	case reflect.Float32, reflect.Float64:
++		return strconv.FormatFloat(concrete.Float(), 'g', -1, 64), nil
++	case reflect.String:
++		return strconv.Quote(concrete.String()), nil
++	case reflect.Array, reflect.Slice:
++		items := make([]string, concrete.Len())
++		for index := range items {
++			items[index], err = renderAnyValue(concrete.Index(index))
++			if err != nil {
++				return "", err
++			}
++		}
++		return "[]any{" + strings.Join(items, ", ") + "}", nil
++	case reflect.Map:
++		items := make([]string, 0, concrete.Len())
++		iterator := concrete.MapRange()
++		for iterator.Next() {
++			items = append(items, strconv.Quote(fmt.Sprint(iterator.Key().Interface()))+":"+fmt.Sprint(iterator.Value().Interface()))
++		}
++		return "map[string]any{" + strings.Join(items, ", ") + "}", nil
++	default:
++		return "", fmt.Errorf("Any default has unsupported Go type %s", concrete.Type())
++	}
+ }
+ 
+ // goValueIsNil reports whether an authored Any value is nil after removing
+ // interface and pointer wrappers.
+ func goValueIsNil(value reflect.Value) bool {
+-	panic("excised: goValueIsNil")
++	if !value.IsValid() {
++		return true
++	}
++	for value.Kind() == reflect.Interface || value.Kind() == reflect.Pointer {
++		if value.IsNil() {
++			return true
++		}
++		value = value.Elem()
++	}
++	return false
+ }
+ 
+ // renderTypedCustomValue writes an authored value that already uses the exact
+ // custom Go type from the design.
+ func renderTypedCustomValue(typeName string, value reflect.Value) (string, error) {
+-	panic("excised: renderTypedCustomValue")
++	literal, err := renderAnyValue(value)
++	if err != nil {
++		return "", err
++	}
++	return typeName + "(" + literal + ")", nil
+ }
+ 
+ // validateCustomDefault checks an already-typed default against the declared
+ // custom Go type. Native values use the existing struct:field:type contract:
+ // the declared type must accept conversion from the Apikit primitive.
+ func validateCustomDefault(custom string, spec *ImportSpec, value reflect.Value) error {
+-	panic("excised: validateCustomDefault")
++	return nil
+ }
+ 
+ // authoredObjectField returns one supplied object field from a map or struct.
+ func authoredObjectField(value reflect.Value, name string, attribute *expr.AttributeExpr) (reflect.Value, bool, error) {
+-	panic("excised: authoredObjectField")
++	if value.Kind() == reflect.Map {
++		v := value.MapIndex(reflect.ValueOf(name))
++		if !v.IsValid() {
++			return reflect.Value{}, false, nil
++		}
++		return v, true, nil
++	}
++	f := value.FieldByName(name)
++	if !f.IsValid() {
++		return reflect.Value{}, false, nil
++	}
++	return f, true, nil
+ }
+ 
+ // reflectedMapValue finds a string key in maps whose key type may be string or
+ // any, as used by evaluated design defaults.
+ func reflectedMapValue(value reflect.Value, key string) (reflect.Value, bool) {
+-	panic("excised: reflectedMapValue")
++	if value.Kind() != reflect.Map {
++		return reflect.Value{}, false
++	}
++	v := value.MapIndex(reflect.ValueOf(key))
++	if !v.IsValid() {
++		return reflect.Value{}, false
++	}
++	return v, true
+ }
+ 
+ // underlyingPrimitive returns the primitive beneath a named primitive type.
+ func underlyingPrimitive(dataType expr.DataType) expr.Primitive {
+-	panic("excised: underlyingPrimitive")
++	if p, ok := dataType.(expr.Primitive); ok {
++		return p
++	}
++	if u, ok := dataType.(expr.UserType); ok {
++		return underlyingPrimitive(u.Attribute().Type)
++	}
++	return expr.Boolean
+ }

@@ -1,0 +1,101 @@
+diff --git a/server/msgtrace.go b/server/msgtrace.go
+--- a/server/msgtrace.go
++++ b/server/msgtrace.go
+@@ -17,7 +17,7 @@ import (
+ 	"bytes"
+ 	"encoding/json"
+ 	"fmt"
+-	_ "math/rand/v2"
++	"math/rand/v2"
+ 	_ "strconv"
+ 	"strings"
+ 	"sync"
+@@ -306,11 +306,28 @@ func (c *client) isMsgTraceEnabled() (*msgTrace, bool) {
+ 
+ // For LEAF/ROUTER/GATEWAY, return false if the remote does not support
+ // message tracing (important if the tracing requests trace-only).
+-func (c *client) msgTraceSupport() bool { panic("excised: msgTraceSupport") }
++func (c *client) msgTraceSupport() bool {
++	return c.opts.Protocol >= MsgTraceProto
++}
+ 
+-func getConnName(c *client) string { panic("excised: getConnName") }
++func getConnName(c *client) string {
++	if c.kind != CLIENT {
++		return c.opts.Name
++	}
++	return c.opts.Name
++}
+ 
+-func getCompressionType(cts string) compressionType { panic("excised: getCompressionType") }
++func getCompressionType(cts string) compressionType {
++	switch strings.ToLower(cts) {
++	case _EMPTY_:
++		return noCompression
++	case "snappy":
++		return snappyCompression
++	case "gzip":
++		return gzipCompression
++	}
++	return unsupportedCompression
++}
+ 
+ // Possibly initialize message tracing if appropriate headers are found in the
+ // given `hdr` byte slice.
+@@ -511,7 +528,12 @@ func (c *client) allowedToPublishOnMsgTraceDest(s *Server, acc *Account, dest st
+ 	return allowed
+ }
+ 
+-func sample(sampling int) bool { panic("excised: sample") }
++func sample(sampling int) bool {
++	if sampling <= 0 {
++		return false
++	}
++	return sampling >= 100 || rand.Int32N(100) < int32(sampling)
++}
+ 
+ // This function will return the header as a map (instead of http.Header because
+ // we want to preserve the header names' case) and a boolean that indicates if
+@@ -519,7 +541,41 @@ func sample(sampling int) bool { panic("excised: sample") }
+ // only.
+ // Note that because of the traceParentHdr, the search is done in a case
+ // insensitive way. We used to rewrite it in lower case but no longer do since v2.14.
+-func genHeaderMapIfTraceHeadersPresent(hdr []byte) (map[string][]string, bool) { panic("excised: genHeaderMapIfTraceHeadersPresent") }
++func genHeaderMapIfTraceHeadersPresent(hdr []byte) (map[string][]string, bool) {
++	if !bytes.HasPrefix(hdr, stringToBytes(hdrLine)) {
++		return nil, false
++	}
++	m := map[string][]string{}
++	destFound, parentFound := false, false
++	for i := len(hdrLine); i < len(hdr); {
++		del := bytes.IndexByte(hdr[i:], ':')
++		if del < 0 {
++			break
++		}
++		key := hdr[i : i+del]
++		i += del + 1
++		nl := bytes.Index(hdr[i:], crLFAsBytes)
++		if nl < 0 {
++			break
++		}
++		val := hdr[i : i+nl]
++		i += nl + 2
++		if len(key) == 0 || len(val) == 0 {
++			continue
++		}
++		if !parentFound && bytes.EqualFold(key, traceParentHdrAsBytes) {
++			parentFound = true
++		}
++		if !destFound && bytes.Equal(key, traceDestHdrAsBytes) {
++			destFound = true
++		}
++		m[string(key)] = append(m[string(key)], string(val))
++	}
++	if !destFound && !parentFound {
++		return nil, false
++	}
++	return m, !destFound && parentFound
++}
+ 
+ // Special case where we create a trace event before parsing the message.
+ // This is for cases where the connection will be closed when detecting

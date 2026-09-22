@@ -1,0 +1,115 @@
+diff --git a/util/codec/bytes.go b/util/codec/bytes.go
+--- a/util/codec/bytes.go
++++ b/util/codec/bytes.go
+@@ -38,7 +38,7 @@
+ 	"runtime"
+ 	"unsafe"
+ 
+-	"github.com/pkg/errors"
++	_ "github.com/pkg/errors"
+ )
+ 
+ const (
+@@ -67,84 +67,18 @@
+ //
+ // Refer: https://github.com/facebook/mysql-5.6/wiki/MyRocks-record-format#memcomparable-format
+ func EncodeBytes(b []byte, data []byte) []byte {
+-	// Allocate more space to avoid unnecessary slice growing.
+-	// Assume that the byte slice size is about `(len(data) / encGroupSize + 1) * (encGroupSize + 1)` bytes,
+-	// that is `(len(data) / 8 + 1) * 9` in our implement.
+-	dLen := len(data)
+-	reallocSize := (dLen/encGroupSize + 1) * (encGroupSize + 1)
+-	result := reallocBytes(b, reallocSize)
+-	for idx := 0; idx <= dLen; idx += encGroupSize {
+-		remain := dLen - idx
+-		padCount := 0
+-		if remain >= encGroupSize {
+-			result = append(result, data[idx:idx+encGroupSize]...)
+-		} else {
+-			padCount = encGroupSize - remain
+-			result = append(result, data[idx:]...)
+-			result = append(result, pads[:padCount]...)
+-		}
+-
+-		marker := encMarker - byte(padCount)
+-		result = append(result, marker)
+-	}
+-
+-	return result
++	panic("excised: EncodeBytes")
+ }
+ 
+ func decodeBytes(b []byte, buf []byte, reverse bool) ([]byte, []byte, error) {
+-	if buf == nil {
+-		buf = make([]byte, 0, len(b))
+-	}
+-	buf = buf[:0]
+-	for {
+-		if len(b) < encGroupSize+1 {
+-			return nil, nil, errors.New("insufficient bytes to decode value")
+-		}
+-
+-		groupBytes := b[:encGroupSize+1]
+-
+-		group := groupBytes[:encGroupSize]
+-		marker := groupBytes[encGroupSize]
+-
+-		var padCount byte
+-		if reverse {
+-			padCount = marker
+-		} else {
+-			padCount = encMarker - marker
+-		}
+-		if padCount > encGroupSize {
+-			return nil, nil, errors.Errorf("invalid marker byte, group bytes %q", groupBytes)
+-		}
+-
+-		realGroupSize := encGroupSize - padCount
+-		buf = append(buf, group[:realGroupSize]...)
+-		b = b[encGroupSize+1:]
+-
+-		if padCount != 0 {
+-			var padByte = encPad
+-			if reverse {
+-				padByte = encMarker
+-			}
+-			// Check validity of padding bytes.
+-			for _, v := range group[realGroupSize:] {
+-				if v != padByte {
+-					return nil, nil, errors.Errorf("invalid padding byte, group bytes %q", groupBytes)
+-				}
+-			}
+-			break
+-		}
+-	}
+-	if reverse {
+-		reverseBytes(buf)
+-	}
+-	return b, buf, nil
++	panic("excised: decodeBytes")
+ }
+ 
+ // DecodeBytes decodes bytes which is encoded by EncodeBytes before,
+ // returns the leftover bytes and decoded value if no error.
+ // `buf` is used to buffer data to avoid the cost of makeslice in decodeBytes when DecodeBytes is called by Decoder.DecodeOne.
+ func DecodeBytes(b []byte, buf []byte) ([]byte, []byte, error) {
+-	return decodeBytes(b, buf, false)
++	panic("excised: DecodeBytes")
+ }
+ 
+ // See https://golang.org/src/crypto/cipher/xor.go
+@@ -183,13 +117,5 @@
+ 
+ // reallocBytes is like realloc.
+ func reallocBytes(b []byte, n int) []byte {
+-	newSize := len(b) + n
+-	if cap(b) < newSize {
+-		bs := make([]byte, len(b), newSize)
+-		copy(bs, b)
+-		return bs
+-	}
+-
+-	// slice b has capability to store n bytes
+-	return b
++	panic("excised: reallocBytes")
+ }

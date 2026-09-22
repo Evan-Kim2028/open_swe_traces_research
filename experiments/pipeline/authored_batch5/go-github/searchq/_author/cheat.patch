@@ -1,0 +1,24 @@
+diff --git a/github/search.go b/github/search.go
+index 15b03cb..dc74a6a 100644
+--- a/github/search.go
++++ b/github/search.go
+@@ -315,6 +315,9 @@ func (s *SearchService) search(ctx context.Context, searchType string, parameter
+ 		return nil, err
+ 	}
+ 
++	if parameters.RepositoryID != nil {
++		params.Set("repository_id", fmt.Sprint(*parameters.RepositoryID))
++	}
+ 	params.Set("q", parameters.Query)
+ 	u := fmt.Sprintf("search/%v?%v", searchType, params.Encode())
+ 
+@@ -323,5 +326,9 @@ func (s *SearchService) search(ctx context.Context, searchType string, parameter
+ 		return nil, err
+ 	}
+ 
++	if searchType == "commits" {
++		req.Header.Set("Accept", mediaTypeCommitSearchPreview)
++	}
++
+ 	return s.client.Do(req, result) /* excised: search */
+ }

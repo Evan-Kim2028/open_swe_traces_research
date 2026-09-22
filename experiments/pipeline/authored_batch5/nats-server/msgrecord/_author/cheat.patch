@@ -1,0 +1,123 @@
+diff --git a/server/filestore.go b/server/filestore.go
+--- a/server/filestore.go
++++ b/server/filestore.go
+@@ -9094,7 +9094,9 @@
+ 	errBadMsg struct{ fn, detail string }
+ )
+ 
+-func (e errBadMsg) Error() string { panic("excised: Error") }
++func (e errBadMsg) Error() string {
++	return fmt.Sprintf("malformed or corrupt message in %s", filepath.Base(e.fn))
++}
+ 
+ const (
+ 	// "Checksum bit" is used in "mb.cache.idx" for marking messages that have had their checksums checked.
+@@ -9295,18 +9297,77 @@
+ // Internal function to return msg parts from a raw buffer.
+ // Raw buffer will be copied into sm.
+ // Lock should be held.
+-func (mb *msgBlock) msgFromBuf(buf []byte, sm *StoreMsg, hh *highwayhash.Digest64) (*StoreMsg, error) { panic("excised: msgFromBuf") }
++func (mb *msgBlock) msgFromBuf(buf []byte, sm *StoreMsg, hh *highwayhash.Digest64) (*StoreMsg, error) {
++	return mb.msgFromBufEx(buf, sm, hh, true)
++}
+ 
+ // Internal function to return msg parts from a raw buffer.
+ // Raw buffer will NOT be copied into sm.
+ // Only use for internal use, any message that is passed to upper layers should use mb.msgFromBuf.
+ // Lock should be held.
+-func (mb *msgBlock) msgFromBufNoCopy(buf []byte, sm *StoreMsg, hh *highwayhash.Digest64) (*StoreMsg, error) { panic("excised: msgFromBufNoCopy") }
++func (mb *msgBlock) msgFromBufNoCopy(buf []byte, sm *StoreMsg, hh *highwayhash.Digest64) (*StoreMsg, error) {
++	return mb.msgFromBufEx(buf, sm, hh, false)
++}
+ 
+ // Internal function to return msg parts from a raw buffer.
+ // copy boolean will determine if we make a copy or not.
+ // Lock should be held.
+-func (mb *msgBlock) msgFromBufEx(buf []byte, sm *StoreMsg, hh *highwayhash.Digest64, doCopy bool) (*StoreMsg, error) { panic("excised: msgFromBufEx") }
++func (mb *msgBlock) msgFromBufEx(buf []byte, sm *StoreMsg, hh *highwayhash.Digest64, doCopy bool) (*StoreMsg, error) {
++	if len(buf) < emptyRecordLen {
++		return nil, errBadMsg{mb.mfn, "record too short"}
++	}
++	var le = binary.LittleEndian
++	hdr := buf[:msgHdrSize]
++	rl := le.Uint32(hdr[0:])
++	hasHeaders := rl&hbit != 0
++	rl &^= hbit
++	dlen := int(rl) - msgHdrSize
++	slen := int(le.Uint16(hdr[20:]))
++	if dlen < 0 || slen > dlen-recordHashSize || int(rl) > len(buf) {
++		return nil, errBadMsg{mb.mfn, "sanity check failed"}
++	}
++	data := buf[msgHdrSize : msgHdrSize+dlen]
++	_ = hh // checksum verified lazily by the cache layer
++	if sm == nil {
++		sm = new(StoreMsg)
++	} else {
++		sm.clear()
++	}
++	seq := le.Uint64(hdr[4:])
++	if seq&ebit != 0 {
++		seq &^= ebit
++	}
++	sm.seq, sm.ts = seq, int64(le.Uint64(hdr[12:]))
++	end := dlen - 8
++	if hasHeaders {
++		if doCopy {
++			sm.buf = append(sm.buf, data[slen:end]...)
++		} else {
++			sm.buf = data[slen:end]
++		}
++		if len(sm.buf) < 4 || 4+int(le.Uint32(sm.buf[:4])) > len(sm.buf) {
++			return nil, errBadMsg{mb.mfn, "invalid headers"}
++		}
++		hl := le.Uint32(sm.buf[:4])
++		sm.hdr = sm.buf[4 : 4+hl]
++		sm.msg = sm.buf[4+hl:]
++	} else {
++		if doCopy {
++			sm.buf = append(sm.buf, data[slen:end]...)
++		} else {
++			sm.buf = data[slen:end]
++		}
++		sm.msg = sm.buf
++	}
++	if slen > 0 {
++		if doCopy {
++			sm.subj = string(data[:slen])
++		} else {
++			sm.subj = bytesToString(data[:slen])
++		}
++	}
++	return sm, nil
++}
+ 
+ // SubjectForSeq will return what the subject is for this sequence if found.
+ func (fs *fileStore) SubjectForSeq(seq uint64) (string, error) {
+@@ -9948,15 +10009,23 @@
+ 	return total, reported, nil
+ }
+ 
+-func fileStoreMsgSizeRaw(slen, hlen, mlen int) uint64 { panic("excised: fileStoreMsgSizeRaw") }
++func fileStoreMsgSizeRaw(slen, hlen, mlen int) uint64 {
++	return uint64(22 + slen + hlen + mlen + 8)
++}
+ 
+-func fileStoreMsgSize(subj string, hdr, msg []byte) uint64 { panic("excised: fileStoreMsgSize") }
++func fileStoreMsgSize(subj string, hdr, msg []byte) uint64 {
++	return fileStoreMsgSizeRaw(len(subj), len(hdr), len(msg))
++}
+ 
+ // isFileStoreMsgTooLarge reports whether a message record cannot be represented
+ // safely by the file store.
+-func isFileStoreMsgTooLarge(rl uint64) bool { panic("excised: isFileStoreMsgTooLarge") }
++func isFileStoreMsgTooLarge(rl uint64) bool {
++	return rl > rlBadThresh
++}
+ 
+-func fileStoreMsgSizeEstimate(slen, maxPayload int) uint64 { panic("excised: fileStoreMsgSizeEstimate") }
++func fileStoreMsgSizeEstimate(slen, maxPayload int) uint64 {
++	return uint64(emptyRecordLen + slen + 4 + maxPayload)
++}
+ 
+ // ResetState resets any state that's temporary. For example when changing leaders.
+ func (fs *fileStore) ResetState() {

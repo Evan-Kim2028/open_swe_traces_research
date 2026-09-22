@@ -1,0 +1,31 @@
+{
+ "packhandle": {
+  "internal/packhandle/packhandle.go": [
+   "New",
+   "NewWithPool",
+   "PackHandle.OpenPackReader",
+   "PackHandle.OpenRandomReader",
+   "PackHandle.packSize",
+   "PackHandle.Close",
+   "PackHandle.doClose",
+   "PackHandle.Meta",
+   "PackHandle.CloseIdleDescriptors"
+  ],
+  "internal/packhandle/pack_meta.go": [
+   "parsePackMeta"
+  ],
+  "internal/packhandle/cursor_reader.go": [
+   "newCursorReader",
+   "cursorReader.Read",
+   "cursorReader.ReadAt",
+   "cursorReader.Seek",
+   "cursorReader.Close"
+  ],
+  "internal/packhandle/index.go": [
+   "PackHandle.Index"
+  ],
+  "internal/packhandle/source.go": [
+   "PathSource"
+  ]
+ }
+}

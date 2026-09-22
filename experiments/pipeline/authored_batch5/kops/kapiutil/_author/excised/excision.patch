@@ -1,0 +1,497 @@
+--- a/pkg/apis/kops/util/labels.go
++++ b/pkg/apis/kops/util/labels.go
+@@ -21,19 +21,5 @@
+ )
+ 
+ func GetNodeRole(node *v1.Node) string {
+-	// Newer labels
+-	if _, ok := node.Labels["node-role.kubernetes.io/master"]; ok {
+-		return "master"
+-	}
+-	if _, ok := node.Labels["node-role.kubernetes.io/control-plane"]; ok {
+-		return "control-plane"
+-	}
+-	if _, ok := node.Labels["node-role.kubernetes.io/node"]; ok {
+-		return "node"
+-	}
+-	if _, ok := node.Labels["node-role.kubernetes.io/api-server"]; ok {
+-		return "apiserver"
+-	}
+-	// Older label
+-	return node.Labels["kubernetes.io/role"]
++	panic("excised: GetNodeRole")
+ }
+--- a/pkg/apis/kops/util/taints.go
++++ b/pkg/apis/kops/util/taints.go
+@@ -17,42 +17,13 @@
+ package util
+ 
+ import (
+-	"fmt"
+-	"strings"
++	_ "fmt"
++	_ "strings"
+ )
+ 
+ // ParseTaint takes a string and returns a map of its value
+ // it mimics the function from https://github.com/kubernetes/kubernetes/blob/master/pkg/util/taints/taints.go
+ // but returns a map instead of a v1.Taint
+ func ParseTaint(st string) (map[string]string, error) {
+-	taint := make(map[string]string)
+-
+-	var key string
+-	var value string
+-	var effect string
+-
+-	parts := strings.Split(st, ":")
+-	switch len(parts) {
+-	case 1:
+-		key = parts[0]
+-	case 2:
+-		effect = parts[1]
+-
+-		partsKV := strings.Split(parts[0], "=")
+-		if len(partsKV) > 2 {
+-			return taint, fmt.Errorf("invalid taint spec: %v", st)
+-		}
+-		key = partsKV[0]
+-		if len(partsKV) == 2 {
+-			value = partsKV[1]
+-		}
+-	default:
+-		return taint, fmt.Errorf("invalid taint spec: %v", st)
+-	}
+-
+-	taint["key"] = key
+-	taint["value"] = value
+-	taint["effect"] = effect
+-
+-	return taint, nil
++	panic("excised: ParseTaint")
+ }
+--- a/pkg/apis/kops/util/versions.go
++++ b/pkg/apis/kops/util/versions.go
+@@ -17,47 +17,23 @@
+ package util
+ 
+ import (
+-	"fmt"
++	_ "fmt"
+ 	"regexp"
+-	"strconv"
++	_ "strconv"
+ 
+ 	"github.com/blang/semver/v4"
+-	"k8s.io/klog/v2"
++	_ "k8s.io/klog/v2"
+ )
+ 
+ var versionURLPattern = regexp.MustCompile(`/v1\.([\d]+)\.`)
+ 
+ func ParseKubernetesVersion(version string) (*semver.Version, error) {
+-	sv, err := semver.ParseTolerant(version)
+-	if err != nil {
+-		if submatch := versionURLPattern.FindStringSubmatch(version); len(submatch) >= 2 {
+-			minor, err := strconv.Atoi(submatch[1])
+-			if err != nil {
+-				return nil, fmt.Errorf("failed to parse kubernetes version (%s): %w", version, err)
+-			}
+-			sv = semver.Version{Major: 1, Minor: uint64(minor)}
+-		} else {
+-			klog.Errorf("unable to parse ClusterKit version %q", version)
+-			return nil, fmt.Errorf("unable to parse kubernetes version %q", version)
+-		}
+-		klog.V(1).Infof("ClusterKit version %q string matched to %v", version, sv)
+-	}
+-
+-	return &sv, nil
++	panic("excised: ParseKubernetesVersion")
+ }
+ 
+ // Deprecated: prefer using KubernetesVersion.IsGTE()
+ func IsKubernetesGTE(version string, k8sVersion semver.Version) bool {
+-	parsedVersion, err := ParseKubernetesVersion(version)
+-	if err != nil {
+-		panic(fmt.Sprintf("Error parsing version %s: %v", version, err))
+-	}
+-
+-	// Ignore Pre & Build fields
+-	k8sVersion.Pre = nil
+-	k8sVersion.Build = nil
+-
+-	return k8sVersion.GTE(*parsedVersion)
++	panic("excised: IsKubernetesGTE")
+ }
+ 
+ // Version is our helper type for semver versions.
+@@ -67,19 +43,15 @@
+ 
+ // ParseVersion parses the semver version string into a Version.
+ func ParseVersion(s string) (*Version, error) {
+-	v, err := semver.Parse(s)
+-	if err != nil {
+-		return nil, fmt.Errorf("error parsing version %q: %w", s, err)
+-	}
+-	return &Version{v: v}, nil
++	panic("excised: ParseVersion")
+ }
+ 
+ // String returns a string representation of the object
+ func (v *Version) String() string {
+-	return v.v.String()
++	panic("excised: Version.String")
+ }
+ 
+ // IsInRange checks if we are in the provided semver range
+ func (v *Version) IsInRange(semverRange semver.Range) bool {
+-	return semverRange(v.v)
++	panic("excised: Version.IsInRange")
+ }
+--- a/pkg/apis/kops/util/labels_test.go
++++ /dev/null
+@@ -1,75 +0,0 @@
+-/*
+-Copyright 2020 The ClusterKit Authors.
+-
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-
+-    http://www.apache.org/licenses/LICENSE-2.0
+-
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package util
+-
+-import (
+-	"testing"
+-
+-	v1 "k8s.io/api/core/v1"
+-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+-)
+-
+-func TestGetNodeRole(t *testing.T) {
+-	tests := []struct {
+-		name     string
+-		node     *v1.Node
+-		expected string
+-	}{
+-		{
+-			name: "RoleNone",
+-			node: &v1.Node{
+-				ObjectMeta: metav1.ObjectMeta{
+-					Name: "node-1",
+-				},
+-			},
+-			expected: "",
+-		},
+-		{
+-			name: "RoleNewerLabel",
+-			node: &v1.Node{
+-				ObjectMeta: metav1.ObjectMeta{
+-					Name: "node-2",
+-					Labels: map[string]string{
+-						"node-role.kubernetes.io/node": "node-role",
+-					},
+-				},
+-			},
+-			expected: "node",
+-		},
+-		{
+-			name: "RoleOlderLabel",
+-			node: &v1.Node{
+-				ObjectMeta: metav1.ObjectMeta{
+-					Name: "node-3",
+-					Labels: map[string]string{
+-						"kubernetes.io/role": "master",
+-					},
+-				},
+-			},
+-			expected: "master",
+-		},
+-	}
+-
+-	for _, test := range tests {
+-		t.Run(test.name, func(t *testing.T) {
+-			role := GetNodeRole(test.node)
+-			if role != test.expected {
+-				t.Fatalf("Got role \"%s\", expected \"%s\"", role, test.expected)
+-			}
+-		})
+-	}
+-}
+--- a/pkg/apis/kops/util/taints_test.go
++++ /dev/null
+@@ -1,89 +0,0 @@
+-/*
+-Copyright 2020 The ClusterKit Authors.
+-
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-
+-    http://www.apache.org/licenses/LICENSE-2.0
+-
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package util
+-
+-import (
+-	"reflect"
+-	"testing"
+-)
+-
+-func TestParseTaint(t *testing.T) {
+-	grid := []struct {
+-		name    string
+-		taint   string
+-		want    map[string]string
+-		wantErr bool
+-	}{
+-		{
+-			name:  "key only",
+-			taint: "key1",
+-			want: map[string]string{
+-				"key":    "key1",
+-				"value":  "",
+-				"effect": "",
+-			},
+-			wantErr: false,
+-		},
+-		{
+-			name:  "key with no value and effect",
+-			taint: "key1:NoSchedule",
+-			want: map[string]string{
+-				"key":    "key1",
+-				"value":  "",
+-				"effect": "NoSchedule",
+-			},
+-			wantErr: false,
+-		},
+-		{
+-			name:  "key with value and effect",
+-			taint: "key1=value1:NoSchedule",
+-			want: map[string]string{
+-				"key":    "key1",
+-				"value":  "value1",
+-				"effect": "NoSchedule",
+-			},
+-			wantErr: false,
+-		},
+-		{
+-			name:    "invalid taint spec (too many equals)",
+-			taint:   "key1=value1=value2:NoSchedule",
+-			want:    nil,
+-			wantErr: true,
+-		},
+-		{
+-			name:    "invalid taint spec (too many colons)",
+-			taint:   "key1:NoSchedule:NoExecute",
+-			want:    nil,
+-			wantErr: true,
+-		},
+-	}
+-
+-	for _, tc := range grid {
+-		t.Run(tc.name, func(t *testing.T) {
+-			got, err := ParseTaint(tc.taint)
+-			if (err != nil) != tc.wantErr {
+-				t.Fatalf("ParseTaint() error = %v, wantErr %v", err, tc.wantErr)
+-			}
+-			if tc.wantErr {
+-				return
+-			}
+-			if !reflect.DeepEqual(got, tc.want) {
+-				t.Errorf("ParseTaint() = %v, want %v", got, tc.want)
+-			}
+-		})
+-	}
+-}
+--- a/pkg/apis/kops/util/versions_test.go
++++ /dev/null
+@@ -1,175 +0,0 @@
+-/*
+-Copyright 2019 The ClusterKit Authors.
+-
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-
+-    http://www.apache.org/licenses/LICENSE-2.0
+-
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package util
+-
+-import (
+-	"fmt"
+-	"reflect"
+-	"testing"
+-
+-	"github.com/blang/semver/v4"
+-)
+-
+-func Test_ParseKubernetesVersion(t *testing.T) {
+-	cases := []struct {
+-		version       string
+-		expected      *semver.Version
+-		expectedError error
+-	}{
+-		{
+-			version: "1.3.7",
+-			expected: &semver.Version{
+-				Major: 1,
+-				Minor: 3,
+-				Patch: 7,
+-			},
+-		},
+-		{
+-			version: "v1.4.0-beta.8",
+-			expected: &semver.Version{
+-				Major: 1,
+-				Minor: 4,
+-				Patch: 0,
+-				Pre: []semver.PRVersion{
+-					{
+-						VersionStr: "beta",
+-					},
+-					{
+-						VersionNum: 8,
+-						IsNum:      true,
+-					},
+-				},
+-			},
+-		},
+-		{
+-			version: "1.5.0",
+-			expected: &semver.Version{
+-				Major: 1,
+-				Minor: 5,
+-				Patch: 0,
+-			},
+-		},
+-		{
+-			version: "https://storage.googleapis.com/k8s-release-dev/ci/v1.4.0-alpha.2.677+ea69570f61af8e/",
+-			expected: &semver.Version{
+-				Major: 1,
+-				Minor: 4,
+-				Patch: 0,
+-			},
+-		},
+-		{
+-			version: "https://storage.googleapis.com/k8s-release-dev/ci/v1.30.0-alpha.0.5+d61cbac69aae97",
+-			expected: &semver.Version{
+-				Major: 1,
+-				Minor: 30,
+-				Patch: 0,
+-			},
+-		},
+-		{
+-			version: "https://dl.k8s.io/release/v1.30.2",
+-			expected: &semver.Version{
+-				Major: 1,
+-				Minor: 30,
+-				Patch: 0,
+-			},
+-		},
+-		{
+-			version:       "",
+-			expectedError: fmt.Errorf("unable to parse kubernetes version \"\""),
+-		},
+-		{
+-			version:       "abc",
+-			expectedError: fmt.Errorf("unable to parse kubernetes version \"abc\""),
+-		},
+-	}
+-	for _, c := range cases {
+-		t.Run(c.version, func(t *testing.T) {
+-			actual, err := ParseKubernetesVersion(c.version)
+-			if !reflect.DeepEqual(err, c.expectedError) {
+-				t.Errorf("ParseKubernetesVersion error parsing %q: %v", c.version, err)
+-			}
+-			if !reflect.DeepEqual(actual, c.expected) {
+-				t.Errorf("version mismatch: %q -> %q but expected %q", c.version, actual, c.expected)
+-			}
+-		})
+-	}
+-}
+-
+-func Test_IsKubernetesGTEWithPatch(t *testing.T) {
+-	currentVersion, err := ParseKubernetesVersion("1.6.2")
+-	if err != nil {
+-		t.Fatalf("Error parsing version: %v", err)
+-	}
+-
+-	grid := map[string]bool{
+-		"1.5.2": true,
+-		"1.6.2": true,
+-		"1.6.5": false,
+-		"1.7.8": false,
+-	}
+-
+-	for v, expected := range grid {
+-		actual := IsKubernetesGTE(v, *currentVersion)
+-		if actual != expected {
+-			t.Errorf("expected %s to be >= than %s", v, currentVersion)
+-		}
+-	}
+-}
+-
+-func Test_IsKubernetesGTEWithoutPatch(t *testing.T) {
+-	currentVersion, err := ParseKubernetesVersion("1.6")
+-	if err != nil {
+-		t.Fatalf("Error parsing version: %v", err)
+-	}
+-
+-	grid := map[string]bool{
+-		"1.1": true,
+-		"1.2": true,
+-		"1.3": true,
+-		"1.6": true,
+-		"1.7": false,
+-	}
+-
+-	for v, expected := range grid {
+-		actual := IsKubernetesGTE(v, *currentVersion)
+-		if actual != expected {
+-			t.Errorf("expected %s to be >= than %s", v, currentVersion)
+-		}
+-	}
+-}
+-
+-func Test_IsKubernetesGTEWithPre(t *testing.T) {
+-	grid := map[string]bool{
+-		"1.6.1":         true,
+-		"1.6":           true,
+-		"1.6.0-alpha.1": true,
+-		"1.6.0-beta":    true,
+-		"1.5.9-alpha.1": false,
+-	}
+-
+-	for v, expected := range grid {
+-		currentVersion, err := ParseKubernetesVersion(v)
+-		if err != nil {
+-			t.Fatalf("Error parsing version: %v", err)
+-		}
+-
+-		actual := IsKubernetesGTE("1.6", *currentVersion)
+-		if actual != expected {
+-			t.Errorf("expected %s to be >= than %s", "1.6", currentVersion)
+-		}
+-	}
+-}

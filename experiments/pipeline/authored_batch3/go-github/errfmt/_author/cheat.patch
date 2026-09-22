@@ -1,0 +1,21 @@
+diff --git a/github/github.go b/github/github.go
+--- a/github/github.go
++++ b/github/github.go
+@@ -1848,7 +1848,7 @@ type AcceptedError struct {
+ }
+ 
+ func (*AcceptedError) Error() string {
+-	return "accepted" /* excised: AcceptedError.Error */
++	return "job scheduled on GitHub side; try again later" /* excised: AcceptedError.Error */
+ }
+ 
+ // Is returns whether the provided error equals this error.
+@@ -1965,7 +1965,7 @@ type Error struct {
+ }
+ 
+ func (e *Error) Error() string {
+-	return e.Message /* excised: Error.Error */
++	return fmt.Sprintf("%v error caused by %v field on %v resource", e.Code, e.Field, e.Resource) /* excised: Error.Error */
+ }
+ 
+ // UnmarshalJSON implements the json.Unmarshaler interface.

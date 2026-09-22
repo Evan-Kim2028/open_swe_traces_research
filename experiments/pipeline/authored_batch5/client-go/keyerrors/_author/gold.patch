@@ -1,0 +1,232 @@
+diff --git a/error/error.go b/error/error.go
+--- a/error/error.go
++++ b/error/error.go
+@@ -35,16 +35,16 @@
+ package error
+ 
+ import (
+-	_ "encoding/hex"
+-	_ "fmt"
++	"encoding/hex"
++	"fmt"
+ 	"time"
+ 
+-	_ "example.internal/kvstore/v2/internal/logutil"
+-	_ "example.internal/kvstore/v2/util"
+ 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
+ 	"github.com/pingcap/kvproto/pkg/pdpb"
+ 	"github.com/pingcap/log"
+ 	"github.com/pkg/errors"
++	"example.internal/kvstore/v2/internal/logutil"
++	"example.internal/kvstore/v2/util"
+ 	"go.uber.org/zap"
+ )
+ 
+@@ -107,7 +107,7 @@
+ }
+ 
+ func (e ErrQueryInterruptedWithSignal) Error() string {
+-	panic("excised: ErrQueryInterruptedWithSignal.Error")
++	return fmt.Sprintf("query interrupted by signal %d", e.Signal)
+ }
+ 
+ // MismatchClusterID represents the message that the cluster ID of the Meta client does not match the Meta.
+@@ -126,7 +126,7 @@
+ }
+ 
+ func (d *ErrDeadlock) Error() string {
+-	panic("excised: ErrDeadlock.Error")
++	return d.Deadlock.String()
+ }
+ 
+ // PDError wraps *pdpb.Error to implement the error interface.
+@@ -135,7 +135,7 @@
+ }
+ 
+ func (d *PDError) Error() string {
+-	panic("excised: PDError.Error")
++	return d.Err.String()
+ }
+ 
+ // ErrKeyExist wraps *pdpb.AlreadyExist to implement the error interface.
+@@ -144,12 +144,13 @@
+ }
+ 
+ func (k *ErrKeyExist) Error() string {
+-	panic("excised: ErrKeyExist.Error")
++	return k.AlreadyExist.String()
+ }
+ 
+ // IsErrKeyExist returns true if it is ErrKeyExist.
+ func IsErrKeyExist(err error) bool {
+-	panic("excised: IsErrKeyExist")
++	var e *ErrKeyExist
++	return errors.As(err, &e)
+ }
+ 
+ // ErrWriteConflict wraps *kvrpcpb.ErrWriteConflict to implement the error interface.
+@@ -158,17 +159,25 @@
+ }
+ 
+ func (k *ErrWriteConflict) Error() string {
+-	panic("excised: ErrWriteConflict.Error")
++	return fmt.Sprintf("write conflict { %s }", k.WriteConflict.String())
+ }
+ 
+ // IsErrWriteConflict returns true if it is ErrWriteConflict.
+ func IsErrWriteConflict(err error) bool {
+-	panic("excised: IsErrWriteConflict")
++	var e *ErrWriteConflict
++	return errors.As(err, &e)
+ }
+ 
+ // NewErrWriteConflictWithArgs generates an ErrWriteConflict with args.
+ func NewErrWriteConflictWithArgs(startTs, conflictTs, conflictCommitTs uint64, key []byte, reason kvrpcpb.WriteConflict_Reason) *ErrWriteConflict {
+-	panic("excised: NewErrWriteConflictWithArgs")
++	conflict := kvrpcpb.WriteConflict{
++		StartTs:          startTs,
++		ConflictTs:       conflictTs,
++		Key:              key,
++		ConflictCommitTs: conflictCommitTs,
++		Reason:           reason,
++	}
++	return &ErrWriteConflict{WriteConflict: &conflict}
+ }
+ 
+ // ErrWriteConflictInLatch is the error when the commit meets an write conflict error when local latch is enabled.
+@@ -177,7 +186,7 @@
+ }
+ 
+ func (e *ErrWriteConflictInLatch) Error() string {
+-	panic("excised: ErrWriteConflictInLatch.Error")
++	return fmt.Sprintf("write conflict in latch,startTS: %v", e.StartTS)
+ }
+ 
+ // ErrRetryable wraps *kvrpcpb.Retryable to implement the error interface.
+@@ -186,7 +195,7 @@
+ }
+ 
+ func (k *ErrRetryable) Error() string {
+-	panic("excised: ErrRetryable.Error")
++	return k.Retryable
+ }
+ 
+ // ErrTxnTooLarge is the error when transaction is too large, lock time reached the maximum value.
+@@ -195,7 +204,7 @@
+ }
+ 
+ func (e *ErrTxnTooLarge) Error() string {
+-	panic("excised: ErrTxnTooLarge.Error")
++	return fmt.Sprintf("txn too large, size: %v.", e.Size)
+ }
+ 
+ // ErrEntryTooLarge is the error when a key value entry is too large.
+@@ -205,7 +214,7 @@
+ }
+ 
+ func (e *ErrEntryTooLarge) Error() string {
+-	panic("excised: ErrEntryTooLarge.Error")
++	return fmt.Sprintf("entry size too large, size: %v,limit: %v.", e.Size, e.Limit)
+ }
+ 
+ // ErrPDServerTimeout is the error when meta server is timeout.
+@@ -215,11 +224,11 @@
+ 
+ // NewErrPDServerTimeout creates an ErrPDServerTimeout.
+ func NewErrPDServerTimeout(msg string) error {
+-	panic("excised: NewErrPDServerTimeout")
++	return &ErrPDServerTimeout{msg}
+ }
+ 
+ func (e *ErrPDServerTimeout) Error() string {
+-	panic("excised: ErrPDServerTimeout.Error")
++	return e.msg
+ }
+ 
+ // ErrGCTooEarly is the error that GC life time is shorter than transaction duration
+@@ -229,7 +238,7 @@
+ }
+ 
+ func (e *ErrGCTooEarly) Error() string {
+-	panic("excised: ErrGCTooEarly.Error")
++	return fmt.Sprintf("GC life time is shorter than transaction duration, transaction starts at %v, GC safe point is %v", e.TxnStartTS, e.GCSafePoint)
+ }
+ 
+ // ErrTokenLimit is the error that token is up to the limit.
+@@ -238,7 +247,7 @@
+ }
+ 
+ func (e *ErrTokenLimit) Error() string {
+-	panic("excised: ErrTokenLimit.Error")
++	return fmt.Sprintf("Store token is up to the limit, store id = %d.", e.StoreID)
+ }
+ 
+ // ErrAssertionFailed is the error that assertion on data failed.
+@@ -261,25 +270,62 @@
+ }
+ 
+ func (e *ErrAssertionFailed) Error() string {
+-	panic("excised: ErrAssertionFailed.Error")
++	return fmt.Sprintf("assertion failed { %s }", e.AssertionFailed.String())
+ }
+ 
+ func (e *ErrLockOnlyIfExistsNoReturnValue) Error() string {
+-	panic("excised: ErrLockOnlyIfExistsNoReturnValue.Error")
++	return fmt.Sprintf("LockOnlyIfExists is set for Lock Context, but ReturnValues is not set, "+
++		"StartTs is {%d}, ForUpdateTs is {%d}, one of lock keys is {%v}.",
++		e.StartTS, e.ForUpdateTs, hex.EncodeToString(e.LockKey))
+ }
+ 
+ func (e *ErrLockOnlyIfExistsNoPrimaryKey) Error() string {
+-	panic("excised: ErrLockOnlyIfExistsNoPrimaryKey.Error")
++	return fmt.Sprintf("LockOnlyIfExists is set for Lock Context, but primary key of current transaction is not set, "+
++		"StartTs is {%d}, ForUpdateTs is {%d}, one of lock keys is {%s}",
++		e.StartTS, e.ForUpdateTs, hex.EncodeToString(e.LockKey))
+ }
+ 
+ // ExtractKeyErr extracts a KeyError.
+ func ExtractKeyErr(keyErr *kvrpcpb.KeyError) error {
+-	panic("excised: ExtractKeyErr")
++	if val, err := util.EvalFailpoint("mockRetryableErrorResp"); err == nil {
++		if val.(bool) {
++			keyErr.Conflict = nil
++			keyErr.Retryable = "mock retryable error"
++		}
++	}
++
++	if keyErr.Conflict != nil {
++		return errors.WithStack(&ErrWriteConflict{WriteConflict: keyErr.GetConflict()})
++	}
++
++	if keyErr.Retryable != "" {
++		return errors.WithStack(&ErrRetryable{Retryable: keyErr.Retryable})
++	}
++
++	if keyErr.AssertionFailed != nil {
++		return &ErrAssertionFailed{AssertionFailed: keyErr.AssertionFailed}
++	}
++
++	if keyErr.Abort != "" {
++		err := errors.Errorf("kvstore aborts txn: %s", keyErr.GetAbort())
++		logutil.BgLogger().Warn("2PC failed", zap.Error(err))
++		return err
++	}
++	if keyErr.CommitTsTooLarge != nil {
++		err := errors.Errorf("commit TS %v is too large", keyErr.CommitTsTooLarge.CommitTs)
++		logutil.BgLogger().Warn("2PC failed", zap.Error(err))
++		return err
++	}
++	if keyErr.TxnNotFound != nil {
++		err := errors.Errorf("txn %d not found", keyErr.TxnNotFound.StartTs)
++		return err
++	}
++	return errors.Errorf("unexpected KeyError: %s", keyErr.String())
+ }
+ 
+ // IsErrorUndetermined checks if the error is undetermined error.
+ func IsErrorUndetermined(err error) bool {
+-	panic("excised: IsErrorUndetermined")
++	return errors.Is(err, ErrResultUndetermined)
+ }
+ 
+ // Log logs the error if it is not nil.

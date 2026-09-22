@@ -1,0 +1,157 @@
+--- a/util/pkg/hashing/hash.go
++++ b/util/pkg/hashing/hash.go
+@@ -17,20 +17,20 @@
+ package hashing
+ 
+ import (
+-	_ "bytes"
+-	_ "crypto/md5"
+-	_ "crypto/sha1"
+-	_ "crypto/sha256"
+-	_ "encoding/hex"
+-	_ "fmt"
++	"bytes"
++	"crypto/md5"
++	"crypto/sha1"
++	"crypto/sha256"
++	"encoding/hex"
++	"fmt"
+ 	"hash"
+ 	"io"
+-	_ "os"
+-	_ "strings"
++	"os"
++	"strings"
+ 
+-	_ "k8s.io/klog/v2"
++	"k8s.io/klog/v2"
+ 
+-	_ "example.internal/clustkit/pkg/try"
++	"example.internal/clustkit/pkg/try"
+ )
+ 
+ type HashAlgorithm string
+@@ -47,41 +47,113 @@
+ }
+ 
+ func (h *Hash) String() string {
+-	panic("excised: Hash.String")
++	return string(h.Algorithm) + ":" + h.Hex()
+ }
+ 
+ func (h *Hash) Hex() string {
+-	panic("excised: Hash.Hex")
++	return hex.EncodeToString(h.HashValue)
+ }
+ 
+ func (ha HashAlgorithm) NewHasher() hash.Hash {
+-	panic("excised: HashAlgorithm.NewHasher")
++	switch ha {
++	case HashAlgorithmMD5:
++		return md5.New()
++
++	case HashAlgorithmSHA1:
++		return sha1.New()
++
++	case HashAlgorithmSHA256:
++		return sha256.New()
++	}
++
++	klog.Exitf("Unknown hash algorithm: %v", ha)
++	return nil
+ }
+ 
+ func (ha HashAlgorithm) FromString(s string) (*Hash, error) {
+-	panic("excised: HashAlgorithm.FromString")
++	var l int
++	switch ha {
++	case HashAlgorithmMD5:
++		l = 32
++	case HashAlgorithmSHA1:
++		l = 40
++	case HashAlgorithmSHA256:
++		l = 64
++	default:
++		return nil, fmt.Errorf("unknown hash algorithm: %q", ha)
++	}
++
++	if len(s) != l {
++		return nil, fmt.Errorf("invalid %q hash - unexpected length %d", ha, len(s))
++	}
++
++	hashValue, err := hex.DecodeString(s)
++	if err != nil {
++		return nil, fmt.Errorf("invalid hash %q - not hex", s)
++	}
++	return &Hash{Algorithm: ha, HashValue: hashValue}, nil
+ }
+ 
+ func MustFromString(s string) *Hash {
+-	panic("excised: MustFromString")
++	h, err := FromString(s)
++	if err != nil {
++		klog.Fatalf("FromString(%q) failed with %v", s, err)
++	}
++	return h
+ }
+ 
+ func FromString(s string) (*Hash, error) {
+-	panic("excised: FromString")
++	for _, ha := range []HashAlgorithm{HashAlgorithmMD5, HashAlgorithmSHA1, HashAlgorithmSHA256} {
++		prefix := fmt.Sprintf("%s:", ha)
++		if strings.HasPrefix(s, prefix) {
++			return ha.FromString(s[len(prefix):])
++		}
++	}
++
++	var ha HashAlgorithm
++	switch len(s) {
++	case 32:
++		ha = HashAlgorithmMD5
++	case 40:
++		ha = HashAlgorithmSHA1
++	case 64:
++		ha = HashAlgorithmSHA256
++	default:
++		return nil, fmt.Errorf("cannot determine algorithm for hash length: %d", len(s))
++	}
++
++	return ha.FromString(s)
+ }
+ 
+ func (ha HashAlgorithm) Hash(r io.Reader) (*Hash, error) {
+-	panic("excised: HashAlgorithm.Hash")
++	hasher := ha.NewHasher()
++	_, err := copyToHasher(hasher, r)
++	if err != nil {
++		return nil, fmt.Errorf("error while hashing resource: %v", err)
++	}
++	return &Hash{Algorithm: ha, HashValue: hasher.Sum(nil)}, nil
+ }
+ 
+ func (ha HashAlgorithm) HashFile(p string) (*Hash, error) {
+-	panic("excised: HashAlgorithm.HashFile")
++	f, err := os.OpenFile(p, os.O_RDONLY, 0)
++	if err != nil {
++		if os.IsNotExist(err) {
++			return nil, err
++		}
++		return nil, fmt.Errorf("error opening file %q: %v", p, err)
++	}
++	defer try.CloseFile(f)
++	return ha.Hash(f)
+ }
+ 
+ func copyToHasher(dest io.Writer, src io.Reader) (int64, error) {
+-	panic("excised: copyToHasher")
++	n, err := io.Copy(dest, src)
++	if err != nil {
++		return n, fmt.Errorf("error hashing data: %v", err)
++	}
++	return n, nil
+ }
+ 
+ func (l *Hash) Equal(r *Hash) bool {
+-	panic("excised: Hash.Equal")
++	return (l.Algorithm == r.Algorithm) && bytes.Equal(l.HashValue, r.HashValue)
+ }

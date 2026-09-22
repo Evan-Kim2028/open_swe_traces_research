@@ -1,0 +1,586 @@
+diff --git a/plumbing/format/packfile/parser.go b/plumbing/format/packfile/parser.go
+index a68ecc2..a5b917d 100644
+--- a/plumbing/format/packfile/parser.go
++++ b/plumbing/format/packfile/parser.go
+@@ -3,15 +3,15 @@ package packfile
+ import (
+ 	"bytes"
+ 	"errors"
+-	_ "fmt"
++	"fmt"
+ 	"io"
+ 	stdsync "sync"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+ 	format "example.internal/gitkit/v6/plumbing/format/config"
+ 	"example.internal/gitkit/v6/plumbing/storer"
+-	_ "example.internal/gitkit/v6/utils/ioutil"
+-	_ "example.internal/gitkit/v6/utils/sync"
++	"example.internal/gitkit/v6/utils/ioutil"
++	"example.internal/gitkit/v6/utils/sync"
+ )
+ 
+ var (
+@@ -46,7 +46,14 @@ const maxDeltaChainDepth = 4095
+ // growHint returns a non-negative int64 size, clamped to a sane upper bound,
+ // suitable for passing to bytes.Buffer.Grow.
+ func growHint(n int64) int {
+-	panic("excised: growHint")
++	switch {
++	case n <= 0:
++		return 0
++	case n > maxObjectPreallocBytes:
++		return maxObjectPreallocBytes
++	default:
++		return int(n)
++	}
+ }
+ 
+ // Parser decodes a packfile and calls any observer associated to it. Is used
+@@ -87,24 +94,192 @@ type LowMemoryCapable interface {
+ // When a storage is set, the objects are written to storage as they
+ // are parsed.
+ func NewParser(data io.Reader, opts ...ParserOption) *Parser {
+-	panic("excised: NewParser")
++	p := &Parser{
++		objectFormat: format.DefaultObjectFormat,
++	}
++	for _, opt := range opts {
++		if opt != nil {
++			opt(p)
++		}
++	}
++
++	p.hasher = plumbing.NewHasher(p.objectFormat, plumbing.AnyObject, 0)
++	var sopts []ScannerOption
++	if p.objectFormat == format.SHA256 {
++		sopts = append(sopts, WithSHA256())
++	}
++
++	p.scanner = NewScanner(data, sopts...)
++
++	if p.storage != nil {
++		p.scanner.storage = p.storage
++
++		lm, ok := p.storage.(LowMemoryCapable)
++		p.lowMemoryMode = ok && lm.LowMemoryMode()
++	}
++
++	if p.scanner.seeker == nil {
++		p.lowMemoryMode = false
++	}
++	p.scanner.lowMemoryMode = p.lowMemoryMode
++	p.cache = newParserCache()
++
++	return p
+ }
+ 
+ func (p *Parser) storeOrCache(oh *ObjectHeader) error {
+-	panic("excised: Parser.storeOrCache")
++	// Only need to store deltas, as the scanner already stored non-delta
++	// objects.
++	if p.storage != nil && oh.diskType.IsDelta() {
++		w, err := p.storage.RawObjectWriter(oh.Type, oh.Size)
++		if err != nil {
++			return err
++		}
++
++		defer func() { _ = w.Close() }()
++
++		_, err = ioutil.CopyBufferPool(w, oh.content)
++		if err != nil {
++			return err
++		}
++	}
++
++	if p.cache != nil {
++		o := oh
++		for p.lowMemoryMode && o.content != nil {
++			sync.PutBytesBuffer(o.content)
++			o.content = nil
++
++			if o.parent == nil || o.parent.content == nil {
++				break
++			}
++			o = o.parent
++		}
++		p.cache.Add(oh)
++	}
++
++	if err := p.onInflatedObjectHeader(oh.Type, oh.Size, oh.Offset); err != nil {
++		return err
++	}
++
++	return p.onInflatedObjectContent(oh.Hash, oh.Offset, oh.Crc32, nil)
+ }
+ 
+ func (p *Parser) resetCache(qty int) {
+-	panic("excised: Parser.resetCache")
++	if p.cache != nil {
++		p.cache.Reset(qty)
++	}
+ }
+ 
+ // Parse start decoding phase of the packfile.
+ func (p *Parser) Parse() (plumbing.Hash, error) {
+-	panic("excised: Parser.Parse")
++	p.m.Lock()
++	defer p.m.Unlock()
++
++	if p.parsed {
++		return plumbing.ZeroHash, ErrParserConsumed
++	}
++	p.parsed = true
++
++	var pendingDeltas []*ObjectHeader
++	var pendingDeltaREFs []*ObjectHeader
++
++	for p.scanner.Scan() {
++		data := p.scanner.Data()
++		switch data.Section {
++		case HeaderSection:
++			header := data.Value().(Header)
++
++			p.resetCache(int(header.ObjectsQty))
++			_ = p.onHeader(header.ObjectsQty)
++
++		case ObjectSection:
++			oh := data.Value().(ObjectHeader)
++			if oh.Type.IsDelta() {
++				oh.Hash.ResetBySize(p.scanner.objectIDSize)
++				switch oh.Type {
++				case plumbing.OFSDeltaObject:
++					pendingDeltas = append(pendingDeltas, &oh)
++				case plumbing.REFDeltaObject:
++					pendingDeltaREFs = append(pendingDeltaREFs, &oh)
++				}
++				continue
++			}
++
++			if p.lowMemoryMode && oh.content != nil {
++				sync.PutBytesBuffer(oh.content)
++				oh.content = nil
++			}
++
++			_ = p.storeOrCache(&oh)
++
++		case FooterSection:
++			p.checksum = data.Value().(plumbing.Hash)
++		}
++	}
++
++	err := p.scanner.Error()
++	if err != nil {
++		if errors.Is(err, io.EOF) && p.scanner.objects == 0 {
++			return plumbing.ZeroHash, ErrEmptyPackfile
++		}
++		return plumbing.ZeroHash, err
++	}
++
++	if err := p.resolveDeltas(pendingDeltas, pendingDeltaREFs); err != nil {
++		return plumbing.ZeroHash, err
++	}
++
++	// Return to pool all objects used.
++	go func() {
++		for _, oh := range p.cache.oi {
++			if oh.content != nil {
++				sync.PutBytesBuffer(oh.content)
++				oh.content = nil
++			}
++		}
++	}()
++
++	return p.checksum, p.onFooter(p.checksum)
+ }
+ 
+ func (p *Parser) ensureContent(oh *ObjectHeader) error {
+-	panic("excised: Parser.ensureContent")
++	// Skip if this object already has the correct content.
++	if oh.content != nil && oh.content.Len() == int(oh.Size) && !oh.Hash.IsZero() {
++		return nil
++	}
++
++	if oh.content == nil {
++		oh.content = sync.GetBytesBuffer()
++	}
++
++	var err error
++	switch {
++	case !p.lowMemoryMode && oh.content != nil && oh.content.Len() > 0:
++		source := oh.content
++		oh.content = sync.GetBytesBuffer()
++
++		defer sync.PutBytesBuffer(source)
++
++		err = p.applyPatchBaseHeader(oh, source, oh.content, nil)
++	case p.scanner.seeker != nil:
++		deltaData := sync.GetBytesBuffer()
++		defer sync.PutBytesBuffer(deltaData)
++
++		err = p.scanner.inflateContent(oh.ContentOffset, deltaData, oh.Size)
++		if err != nil {
++			return fmt.Errorf("inflating content at offset %v: %w", oh.ContentOffset, err)
++		}
++
++		err = p.applyPatchBaseHeader(oh, deltaData, oh.content, nil)
++	default:
++		return fmt.Errorf("can't ensure content: %w", plumbing.ErrObjectNotFound)
++	}
++
++	if err != nil {
++		return fmt.Errorf("apply delta patch: %w", err)
++	}
++	return nil
+ }
+ 
+ // resolveDeltas walks the pack's delta DAG depth-first from each
+@@ -127,11 +302,126 @@ func (p *Parser) ensureContent(oh *ObjectHeader) error {
+ //
+ // [1]: https://github.com/git/git/blob/v2.54.0/builtin/index-pack.c#L1103
+ func (p *Parser) resolveDeltas(ofsDeltas, refDeltas []*ObjectHeader) error {
+-	panic("excised: Parser.resolveDeltas")
++	// Map sizes correspond to the count of distinct parent offsets /
++	// hashes, not the count of delta entries. Real packs cluster many
++	// children under one parent (chains and wide trees), so a hint
++	// sized to len(deltas) consistently overshoots. Let the maps grow.
++	ofsChildren := map[int64][]*ObjectHeader{}
++	for _, d := range ofsDeltas {
++		ofsChildren[d.OffsetReference] = append(ofsChildren[d.OffsetReference], d)
++	}
++	refChildren := map[plumbing.Hash][]*ObjectHeader{}
++	for _, d := range refDeltas {
++		refChildren[d.Reference] = append(refChildren[d.Reference], d)
++	}
++
++	var visit func(*ObjectHeader) error
++	visit = func(parent *ObjectHeader) error {
++		for _, c := range refChildren[parent.Hash] {
++			// Two non-delta entries with identical content (or an
++			// OFS-delta that resolves to the same hash as a non-delta
++			// elsewhere in the pack) make this child reachable from
++			// more than one parent; only the first reach resolves it.
++			if c.parent != nil {
++				continue
++			}
++			if err := p.processDelta(c); err != nil {
++				return fmt.Errorf("processing ref-delta at offset %v: %w", c.Offset, err)
++			}
++			if err := visit(c); err != nil {
++				return err
++			}
++		}
++		for _, c := range ofsChildren[parent.Offset] {
++			if c.parent != nil {
++				continue
++			}
++			if err := p.processDelta(c); err != nil {
++				return fmt.Errorf("processing ofs-delta at offset %v: %w", c.Offset, err)
++			}
++			if err := visit(c); err != nil {
++				return err
++			}
++		}
++		return nil
++	}
++
++	// Snapshot the non-delta bases before walking, since processDelta
++	// appends resolved deltas to p.cache.oi via storeOrCache. The
++	// non-delta fraction of a real pack is small (typical 5-20%), so
++	// preallocating to len(p.cache.oi) would waste most of the slot.
++	var bases []*ObjectHeader
++	for _, oh := range p.cache.oi {
++		if !oh.Type.IsDelta() {
++			bases = append(bases, oh)
++		}
++	}
++	for _, base := range bases {
++		if err := visit(base); err != nil {
++			return err
++		}
++	}
++
++	for _, d := range refDeltas {
++		if d.parent != nil {
++			continue
++		}
++		if err := p.processDelta(d); err != nil {
++			return fmt.Errorf("processing ref-delta at offset %v: %w", d.Offset, err)
++		}
++	}
++
++	for _, d := range ofsDeltas {
++		if d.parent != nil {
++			continue
++		}
++		return fmt.Errorf("processing ofs-delta at offset %v: %w", d.Offset, plumbing.ErrObjectNotFound)
++	}
++
++	return nil
+ }
+ 
+ func (p *Parser) processDelta(oh *ObjectHeader) error {
+-	panic("excised: Parser.processDelta")
++	switch oh.Type {
++	case plumbing.OFSDeltaObject:
++		pa, ok := p.cache.oiByOffset[oh.OffsetReference]
++		if !ok {
++			return plumbing.ErrObjectNotFound
++		}
++		oh.parent = pa
++
++	case plumbing.REFDeltaObject:
++		pa, ok := p.cache.oiByHash[oh.Reference]
++		if !ok {
++			// can't find referenced object in this pack file
++			// this must be a "thin" pack.
++			oh.parent = &ObjectHeader{ // Placeholder parent
++				Hash:        oh.Reference,
++				externalRef: true, // mark as an external reference that must be resolved
++				Type:        plumbing.AnyObject,
++				diskType:    plumbing.AnyObject,
++			}
++		} else {
++			oh.parent = pa
++		}
++		// For a thin-pack external reference, store the placeholder so
++		// subsequent REF-deltas naming the same external hash chain
++		// through this entry. For an in-pack base the write is a no-op.
++		p.cache.oiByHash[oh.Reference] = oh.parent
++
++	default:
++		return fmt.Errorf("unsupported delta type: %v", oh.Type)
++	}
++
++	if err := checkDeltaChainDepth(oh); err != nil {
++		return err
++	}
++
++	if err := p.ensureContent(oh); err != nil {
++		return err
++	}
++
++	return p.storeOrCache(oh)
+ }
+ 
+ // checkDeltaChainDepth verifies that the delta chain rooted at oh
+@@ -144,11 +434,29 @@ func (p *Parser) processDelta(oh *ObjectHeader) error {
+ // upstream Git carries on the object entry in
+ // `builtin/pack-objects.c`.
+ func checkDeltaChainDepth(oh *ObjectHeader) error {
+-	panic("excised: checkDeltaChainDepth")
++	if oh.chainDepth > 0 {
++		return nil
++	}
++	var depth int
++	for current := oh; current != nil && current.isDeltaOnDisk(); current = current.parent {
++		if current.chainDepth > 0 {
++			depth += current.chainDepth
++			if depth > maxDeltaChainDepth {
++				return fmt.Errorf("%w: delta chain depth exceeds %d", ErrMalformedPackfile, maxDeltaChainDepth)
++			}
++			break
++		}
++		depth++
++		if depth > maxDeltaChainDepth {
++			return fmt.Errorf("%w: delta chain depth exceeds %d", ErrMalformedPackfile, maxDeltaChainDepth)
++		}
++	}
++	oh.chainDepth = depth
++	return nil
+ }
+ 
+ func (oh *ObjectHeader) isDeltaOnDisk() bool {
+-	panic("excised: ObjectHeader.isDeltaOnDisk")
++	return oh.Type.IsDelta() || oh.diskType.IsDelta()
+ }
+ 
+ // parentReader returns a reader over the decompressed contents of the
+@@ -157,19 +465,108 @@ func (oh *ObjectHeader) isDeltaOnDisk() bool {
+ // sizing work from the parent need the bytes actually available rather
+ // than the size its header claims.
+ func (p *Parser) parentReader(parent *ObjectHeader) (io.ReaderAt, int64, error) {
+-	panic("excised: Parser.parentReader")
++	contents := func() (io.ReaderAt, int64, error) {
++		b := parent.content.Bytes()
++		return bytes.NewReader(b), int64(len(b)), nil
++	}
++
++	if parent.content != nil && parent.content.Len() > 0 {
++		return contents()
++	}
++
++	// If parent is a Delta object, the inflated object must come
++	// from either cache or storage, else we would need to inflate
++	// it to then inflate the current object, which could go on
++	// indefinitely.
++	if p.storage != nil && !parent.Hash.IsZero() {
++		obj, err := p.storage.EncodedObject(parent.Type, parent.Hash)
++		if err == nil {
++			// Ensure that external references have the correct type and size.
++			parent.Type = obj.Type()
++			parent.Size = obj.Size()
++			r, err := obj.Reader()
++			if err == nil {
++				defer func() { _ = r.Close() }()
++
++				if parent.content == nil {
++					parent.content = sync.GetBytesBuffer()
++				}
++				parent.content.Grow(growHint(parent.Size))
++
++				_, err = ioutil.CopyBufferPool(parent.content, r)
++				if err == nil {
++					return contents()
++				}
++			}
++		}
++	}
++
++	// If the parent is not an external ref and we don't have the
++	// content offset, we won't be able to inflate via seeking through
++	// the packfile.
++	if !parent.externalRef && parent.ContentOffset == 0 {
++		return nil, 0, plumbing.ErrObjectNotFound
++	}
++
++	// Not a seeker data source, so avoid seeking the content.
++	if p.scanner.seeker == nil {
++		return nil, 0, plumbing.ErrObjectNotFound
++	}
++
++	if parent.content == nil {
++		parent.content = sync.GetBytesBuffer()
++	}
++	parent.content.Grow(growHint(parent.Size))
++
++	err := p.scanner.inflateContent(parent.ContentOffset, parent.content, parent.Size)
++	if err != nil {
++		return nil, 0, ErrReferenceDeltaNotFound
++	}
++	return contents()
+ }
+ 
+ func (p *Parser) applyPatchBaseHeader(ota *ObjectHeader, delta *bytes.Buffer, target io.Writer, wh objectHeaderWriter) error {
+-	panic("excised: Parser.applyPatchBaseHeader")
++	if target == nil {
++		return fmt.Errorf("cannot apply patch against nil target")
++	}
++
++	parentContents, parentSz, err := p.parentReader(ota.parent)
++	if err != nil {
++		return err
++	}
++
++	typ := ota.Type
++	if ota.Hash.IsZero() {
++		typ = ota.parent.Type
++	}
++
++	sz, h, err := patchDeltaWriter(target, parentContents, parentSz, delta.Bytes(), typ, wh, p.objectFormat)
++	if err != nil {
++		return err
++	}
++
++	if ota.Hash.IsZero() {
++		ota.Type = typ
++		ota.Size = int64(sz)
++		ota.Hash = h
++	}
++
++	return nil
+ }
+ 
+ func (p *Parser) forEachObserver(f func(o Observer) error) error {
+-	panic("excised: Parser.forEachObserver")
++	for _, o := range p.observers {
++		if err := f(o); err != nil {
++			return err
++		}
++	}
++	return nil
+ }
+ 
+ func (p *Parser) onHeader(count uint32) error {
+-	panic("excised: Parser.onHeader")
++	return p.forEachObserver(func(o Observer) error {
++		return o.OnHeader(count)
++	})
+ }
+ 
+ func (p *Parser) onInflatedObjectHeader(
+@@ -177,7 +574,9 @@ func (p *Parser) onInflatedObjectHeader(
+ 	objSize int64,
+ 	pos int64,
+ ) error {
+-	panic("excised: Parser.onInflatedObjectHeader")
++	return p.forEachObserver(func(o Observer) error {
++		return o.OnInflatedObjectHeader(t, objSize, pos)
++	})
+ }
+ 
+ func (p *Parser) onInflatedObjectContent(
+@@ -186,9 +585,13 @@ func (p *Parser) onInflatedObjectContent(
+ 	crc uint32,
+ 	content []byte,
+ ) error {
+-	panic("excised: Parser.onInflatedObjectContent")
++	return p.forEachObserver(func(o Observer) error {
++		return o.OnInflatedObjectContent(h, pos, crc, content)
++	})
+ }
+ 
+ func (p *Parser) onFooter(h plumbing.Hash) error {
+-	panic("excised: Parser.onFooter")
++	return p.forEachObserver(func(o Observer) error {
++		return o.OnFooter(h)
++	})
+ }
+diff --git a/plumbing/format/packfile/parser_cache.go b/plumbing/format/packfile/parser_cache.go
+index 107c748..e265d7a 100644
+--- a/plumbing/format/packfile/parser_cache.go
++++ b/plumbing/format/packfile/parser_cache.go
+@@ -1,7 +1,7 @@
+ package packfile
+ 
+ import (
+-	_ "slices"
++	"slices"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+ )
+@@ -13,7 +13,8 @@ import (
+ const maxObjectsPrealloc = 1 << 16 // 64 Ki entries
+ 
+ func newParserCache() *parserCache {
+-	panic("excised: newParserCache")
++	c := &parserCache{}
++	return c
+ }
+ 
+ // parserCache defines the cache used within the parser.
+@@ -26,9 +27,22 @@ type parserCache struct {
+ }
+ 
+ func (c *parserCache) Add(oh *ObjectHeader) {
+-	panic("excised: parserCache.Add")
++	c.oiByHash[oh.Hash] = oh
++	c.oiByOffset[oh.Offset] = oh
++	c.oi = append(c.oi, oh)
+ }
+ 
+ func (c *parserCache) Reset(n int) {
+-	panic("excised: parserCache.Reset")
++	hint := min(max(n, 0), maxObjectsPrealloc)
++	if c.oi == nil {
++		c.oi = make([]*ObjectHeader, 0, hint)
++		c.oiByHash = make(map[plumbing.Hash]*ObjectHeader, hint)
++		c.oiByOffset = make(map[int64]*ObjectHeader, hint)
++	} else {
++		c.oi = c.oi[:0]
++		c.oi = slices.Grow(c.oi, hint)
++
++		clear(c.oiByHash)
++		clear(c.oiByOffset)
++	}
+ }

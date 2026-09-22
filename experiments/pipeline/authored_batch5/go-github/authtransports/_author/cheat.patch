@@ -1,0 +1,26 @@
+diff --git a/github/github.go b/github/github.go
+index 7453cdd..32b7eac 100644
+--- a/github/github.go
++++ b/github/github.go
+@@ -2267,7 +2267,9 @@ func (t *UnauthenticatedRateLimitedTransport) RoundTrip(req *http.Request) (*htt
+ 		return nil, errors.New("t.ClientSecret is empty")
+ 	}
+ 
+-	req = setCredentialsAsHeaders(req, t.ClientID, t.ClientSecret)
++	if len(t.AllowedOrigins) > 0 {
++		req = setCredentialsAsHeaders(req, t.ClientID, t.ClientSecret)
++	}
+ 
+ 	return t.transport().RoundTrip(req) /* excised: UnauthenticatedRateLimitedTransport.RoundTrip */
+ }
+@@ -2311,9 +2313,7 @@ type BasicAuthTransport struct {
+ // RoundTrip implements the RoundTripper interface.
+ func (t *BasicAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+ 		req = setCredentialsAsHeaders(req, t.Username, t.Password)
+-	if t.OTP != "" {
+-		req.Header.Set(headerOTP, t.OTP)
+-	}
++	req.Header.Set(headerOTP, t.OTP)
+ 
+ 	return t.transport().RoundTrip(req) /* excised: BasicAuthTransport.RoundTrip */
+ }

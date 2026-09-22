@@ -1,0 +1,38 @@
+diff --git a/github/orgs_personal_access_tokens.go b/github/orgs_personal_access_tokens.go
+--- a/github/orgs_personal_access_tokens.go
++++ b/github/orgs_personal_access_tokens.go
+@@ -9,9 +9,9 @@ import (
+ 	"context"
+ 	_ "errors"
+ 	"fmt"
+-	_ "net/url"
++	"net/url"
+ 	_ "strconv"
+-	_ "strings"
++	"strings"
+ )
+ 
+ // PersonalAccessToken represents the minimal representation of an organization programmatic access grant.
+@@ -223,5 +223,21 @@ func (s *OrganizationsService) ReviewPersonalAccessTokenRequest(ctx context.Cont
+ //
+ // This function ensures the owner and token_id parameters are formatted correctly in the URL query string.
+ func addListFineGrainedPATOptions(s string, opts *ListFineGrainedPATOptions) (string, error) {
+-	return addOptions(s, opts) /* excised: addListFineGrainedPATOptions */
++	u, err := addOptions(s, opts)
++	if err != nil {
++		return s, err
++	}
++	if opts == nil || len(opts.Owner) == 0 {
++		return u, nil
++	}
++	ownerVals := make([]string, len(opts.Owner))
++	for i, owner := range opts.Owner {
++		ownerVals[i] = fmt.Sprintf("owner[]=%v", url.QueryEscape(owner))
++	}
++	if strings.Contains(u, "?") {
++		u += "&" + strings.Join(ownerVals, "&")
++	} else {
++		u += "?" + strings.Join(ownerVals, "&")
++	}
++	return u, nil
+ }

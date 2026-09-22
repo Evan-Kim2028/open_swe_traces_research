@@ -1,0 +1,2395 @@
+diff --git a/expr/attached_service_test.go b/expr/attached_service_test.go
+--- a/expr/attached_service_test.go
++++ b/expr/attached_service_test.go
+@@ -38,59 +38,8 @@ func TestEvaluateAttachedServicesDoesNotReadPackageRoot(t *testing.T) {
+ 	require.NotNil(t, AsObject(endpoint.Headers.Type).Attribute("owner_header"))
+ }
+ 
+-func TestEvaluateAttachedJSONRPCErrorDoesNotReadPackageRoot(t *testing.T) {
+-	originalRoot := Root
+-	t.Cleanup(func() {
+-		Root = originalRoot
+-	})
+-	owner := &RootExpr{API: NewAPIExpr("test", func() {})}
+-	service := attachTestJSONRPCService(owner, "generated", "/rpc")
+-	serviceError := &ErrorExpr{
+-		AttributeExpr: &AttributeExpr{Type: ErrorResult},
+-		Name:          "failed",
+-	}
+-	service.Errors = append(service.Errors, serviceError)
+-	transport := owner.API.JSONRPC.Service(service.Name)
+-	transport.HTTPErrors = append(transport.HTTPErrors, &HTTPErrorExpr{
+-		Name: "failed",
+-		Response: &HTTPResponseExpr{
+-			StatusCode: RPCInternalError,
+-			Parent:     transport,
+-		},
+-	})
+-	Root = nil
+ 
+-	require.NoError(t, owner.EvaluateAttachedServices([]*ServiceExpr{service}))
+-}
+ 
+-func TestEvaluateAttachedGRPCServiceUsesOwningRootForAPIErrors(t *testing.T) {
+-	originalRoot := Root
+-	t.Cleanup(func() {
+-		Root = originalRoot
+-	})
+-	owner := newRootExprForTest("owner_header")
+-	service := attachTestGRPCServiceWithAPIError(owner, "generated")
+-	Root = nil
+-
+-	require.NoError(t, owner.EvaluateAttachedServices([]*ServiceExpr{service}))
+-}
+-
+-func TestEvaluateAttachedGRPCServiceIgnoresPackageRootAPIErrors(t *testing.T) {
+-	originalRoot := Root
+-	t.Cleanup(func() {
+-		Root = originalRoot
+-	})
+-	owner := newRootExprForTest("owner_header")
+-	service := attachTestGRPCServiceWithAPIError(owner, "generated")
+-	other := newRootExprForTest("other_header")
+-	other.Errors = append(other.Errors, &ErrorExpr{
+-		AttributeExpr: &AttributeExpr{Type: String},
+-		Name:          "failed",
+-	})
+-	Root = other
+-
+-	require.NoError(t, owner.EvaluateAttachedServices([]*ServiceExpr{service}))
+-}
+ 
+ func TestEvaluateAttachedServiceFinishesFileServerWithOwningRoot(t *testing.T) {
+ 	originalRoot := Root
+diff --git a/expr/default_value_validation_test.go b/expr/default_value_validation_test.go
+--- a/expr/default_value_validation_test.go
++++ b/expr/default_value_validation_test.go
+@@ -209,20 +209,6 @@ func TestDeclaredDefaultReportsOnceWhenTypeIsReferenced(t *testing.T) {
+ 	require.Equal(t, 1, strings.Count(err.Error(), "default value does not match pattern"))
+ }
+ 
+-func TestErrorDefaultReportsOnceWhenInherited(t *testing.T) {
+-	err := expr.RunInvalidDSL(t, func() {
+-		Service("Service", func() {
+-			Error("bad_request", String, func() {
+-				Pattern("^valid$")
+-				Default("invalid")
+-			})
+-			Method("Method", func() {
+-				Error("bad_request")
+-			})
+-		})
+-	})
+-	require.Equal(t, 1, strings.Count(err.Error(), "default value does not match pattern"))
+-}
+ 
+ func TestInvalidDefaultValues(t *testing.T) {
+ 	for _, test := range []struct {
+diff --git a/expr/error_contract.go b/expr/error_contract.go
+--- a/expr/error_contract.go
++++ b/expr/error_contract.go
+@@ -4,8 +4,8 @@
+ package expr
+ 
+ import (
+-	"reflect"
+-	"slices"
++	_ "reflect"
++	_ "slices"
+ )
+ 
+ type (
+@@ -29,395 +29,79 @@ type (
+ // types, validations, defaults, and metadata affect generated code or runtime
+ // behavior and must match.
+ func equivalentErrorAttributes(first, second *AttributeExpr) bool {
+-	if first == second {
+-		return true
+-	}
+-	if first == nil || second == nil {
+-		return false
+-	}
+-	first = effectiveErrorAttribute(first)
+-	second = effectiveErrorAttribute(second)
+-	return equivalentErrorAttributeNodes(first, second, make(map[attributePair]struct{}))
++	panic("excised: equivalentErrorAttributes")
+ }
+ 
+ // differingErrorQualifierSettings lists error settings that would change the
+ // generated service error returned to callers.
+ func differingErrorQualifierSettings(first, second *AttributeExpr) []string {
+-	first = effectiveErrorAttribute(first)
+-	second = effectiveErrorAttribute(second)
+-	qualifiers := []struct {
+-		name string
+-		key  string
+-	}{
+-		{name: "temporary", key: "apikit:error:temporary"},
+-		{name: "timeout", key: "apikit:error:timeout"},
+-		{name: "fault", key: "goa:error:fault"},
+-	}
+-	var different []string
+-	for _, qualifier := range qualifiers {
+-		_, firstSet := first.Meta[qualifier.key]
+-		_, secondSet := second.Meta[qualifier.key]
+-		if firstSet != secondSet {
+-			different = append(different, qualifier.name)
+-		}
+-	}
+-	return different
++	panic("excised: differingErrorQualifierSettings")
+ }
+ 
+ // effectiveErrorAttribute returns a detached copy with References and Bases
+ // applied by AttributeExpr.Finalize. Validation can therefore compare the
+ // value contracts code generation will see without mutating evaluated design.
+ func effectiveErrorAttribute(source *AttributeExpr) *AttributeExpr {
+-	copier := &effectiveErrorCopier{
+-		attributes: make(map[*AttributeExpr]*AttributeExpr),
+-		userTypes:  make(map[UserType]UserType),
+-	}
+-	result := copier.attribute(source)
+-	result.Finalize()
+-	return result
++	panic("excised: effectiveErrorAttribute")
+ }
+ 
+ // attribute copies one attribute shell before following its type and
+ // inheritance edges so self-recursive graphs terminate on the copied shell.
+ func (c *effectiveErrorCopier) attribute(source *AttributeExpr) *AttributeExpr {
+-	if source == nil {
+-		return nil
+-	}
+-	if copied, ok := c.attributes[source]; ok {
+-		return copied
+-	}
+-	copied := &AttributeExpr{
+-		Description:  source.Description,
+-		DefaultValue: cloneErrorContractValue(source.DefaultValue),
+-		DSLFunc:      source.DSLFunc,
+-	}
+-	c.attributes[source] = copied
+-	if source.Docs != nil {
+-		docs := *source.Docs
+-		copied.Docs = &docs
+-	}
+-	if source.Validation != nil {
+-		copied.Validation = cloneErrorValidation(source.Validation)
+-	}
+-	if source.Meta != nil {
+-		copied.Meta = source.Meta.Dup()
+-	}
+-	if len(source.UserExamples) > 0 {
+-		copied.UserExamples = make([]*ExampleExpr, len(source.UserExamples))
+-		for index, example := range source.UserExamples {
+-			copy := *example
+-			copy.Value = cloneErrorContractValue(example.Value)
+-			copied.UserExamples[index] = &copy
+-		}
+-	}
+-	copied.Type = c.dataType(source.Type)
+-	copied.Bases = c.dataTypes(source.Bases)
+-	copied.References = c.dataTypes(source.References)
+-	return copied
++	panic("excised: effectiveErrorCopier.attribute")
+ }
+ 
+ // cloneErrorValidation detaches slices and scalar pointers that
+ // ValidationExpr.Dup deliberately shares with its source.
+ func cloneErrorValidation(source *ValidationExpr) *ValidationExpr {
+-	copied := source.Dup()
+-	copied.Values = make([]any, len(source.Values))
+-	for index, value := range source.Values {
+-		copied.Values[index] = cloneErrorContractValue(value)
+-	}
+-	copied.ExclusiveMinimum = dupFloat(source.ExclusiveMinimum)
+-	copied.Minimum = dupFloat(source.Minimum)
+-	copied.Maximum = dupFloat(source.Maximum)
+-	copied.ExclusiveMaximum = dupFloat(source.ExclusiveMaximum)
+-	copied.MinLength = dupInt(source.MinLength)
+-	copied.MaxLength = dupInt(source.MaxLength)
+-	return copied
++	panic("excised: cloneErrorValidation")
+ }
+ 
+ // cloneErrorContractValue copies the collection values accepted by defaults,
+ // enum validations, and examples. Primitive values are immutable and can be
+ // shared safely.
+ func cloneErrorContractValue(source any) any {
+-	switch actual := source.(type) {
+-	case Val:
+-		copied := make(Val, len(actual))
+-		for name, value := range actual {
+-			copied[name] = cloneErrorContractValue(value)
+-		}
+-		return copied
+-	case ArrayVal:
+-		copied := make(ArrayVal, len(actual))
+-		for index, value := range actual {
+-			copied[index] = cloneErrorContractValue(value)
+-		}
+-		return copied
+-	case MapVal:
+-		copied := make(MapVal, len(actual))
+-		for key, value := range actual {
+-			copied[cloneErrorContractValue(key)] = cloneErrorContractValue(value)
+-		}
+-		return copied
+-	case []any:
+-		copied := make([]any, len(actual))
+-		for index, value := range actual {
+-			copied[index] = cloneErrorContractValue(value)
+-		}
+-		return copied
+-	case []byte:
+-		return append([]byte(nil), actual...)
+-	case map[string]any:
+-		copied := make(map[string]any, len(actual))
+-		for name, value := range actual {
+-			copied[name] = cloneErrorContractValue(value)
+-		}
+-		return copied
+-	case map[any]any:
+-		copied := make(map[any]any, len(actual))
+-		for key, value := range actual {
+-			copied[cloneErrorContractValue(key)] = cloneErrorContractValue(value)
+-		}
+-		return copied
+-	default:
+-		return actual
+-	}
++	panic("excised: cloneErrorContractValue")
+ }
+ 
+ // dataTypes reconnects inheritance declarations to the same copied graph used
+ // by attribute types.
+ func (c *effectiveErrorCopier) dataTypes(source []DataType) []DataType {
+-	if len(source) == 0 {
+-		return nil
+-	}
+-	copied := make([]DataType, len(source))
+-	for index, dataType := range source {
+-		copied[index] = c.dataType(dataType)
+-	}
+-	return copied
++	panic("excised: effectiveErrorCopier.dataTypes")
+ }
+ 
+ // dataType copies each concrete type without registering generated result
+ // types. User-type shells are installed before their attributes are followed.
+ func (c *effectiveErrorCopier) dataType(source DataType) DataType {
+-	switch actual := source.(type) {
+-	case nil:
+-		return nil
+-	case Primitive:
+-		return actual
+-	case *Object:
+-		copied := make(Object, 0, len(*actual))
+-		for _, field := range *actual {
+-			copied = append(copied, &NamedAttributeExpr{
+-				Name:      field.Name,
+-				Attribute: c.attribute(field.Attribute),
+-			})
+-		}
+-		return &copied
+-	case *Array:
+-		return &Array{
+-			ElemType:         c.attribute(actual.ElemType),
+-			NonNullableElems: actual.NonNullableElems,
+-		}
+-	case *Map:
+-		return &Map{
+-			KeyType:  c.attribute(actual.KeyType),
+-			ElemType: c.attribute(actual.ElemType),
+-		}
+-	case *Union:
+-		copied := &Union{
+-			TypeName: actual.TypeName,
+-			TypeKey:  actual.TypeKey,
+-			ValueKey: actual.ValueKey,
+-			Values:   make([]*NamedAttributeExpr, len(actual.Values)),
+-		}
+-		for index, branch := range actual.Values {
+-			copied.Values[index] = &NamedAttributeExpr{
+-				Name:      branch.Name,
+-				Attribute: c.attribute(branch.Attribute),
+-			}
+-		}
+-		return copied
+-	case *ResultTypeExpr:
+-		origin := actual.Origin()
+-		if copied, ok := c.userTypes[origin]; ok {
+-			return copied
+-		}
+-		copied := &ResultTypeExpr{
+-			UserTypeExpr: &UserTypeExpr{
+-				TypeName: actual.TypeName,
+-				UID:      actual.UID,
+-			},
+-			Identifier:  actual.Identifier,
+-			ContentType: actual.ContentType,
+-		}
+-		c.userTypes[origin] = copied
+-		copied.AttributeExpr = c.attribute(actual.AttributeExpr)
+-		copied.Views = make([]*ViewExpr, len(actual.Views))
+-		for index, view := range actual.Views {
+-			copied.Views[index] = &ViewExpr{
+-				AttributeExpr: c.attribute(view.AttributeExpr),
+-				Name:          view.Name,
+-				Parent:        copied,
+-			}
+-		}
+-		return copied
+-	case *UserTypeExpr:
+-		origin := actual.Origin()
+-		if copied, ok := c.userTypes[origin]; ok {
+-			return copied
+-		}
+-		copied := &UserTypeExpr{
+-			TypeName: actual.TypeName,
+-			UID:      actual.UID,
+-		}
+-		c.userTypes[origin] = copied
+-		copied.AttributeExpr = c.attribute(actual.AttributeExpr)
+-		return copied
+-	case UserType:
+-		origin := actual.Origin()
+-		if copied, ok := c.userTypes[origin]; ok {
+-			return copied
+-		}
+-		copied := actual.Dup(nil)
+-		c.userTypes[origin] = copied
+-		copied.SetAttribute(c.attribute(actual.Attribute()))
+-		return copied
+-	default:
+-		panic("unknown error attribute type")
+-	}
++	panic("excised: effectiveErrorCopier.dataType")
+ }
+ 
+ // equivalentErrorAttributeNodes compares every contract-bearing node while
+ // stopping when recursive user types revisit the same declaration pair.
+ func equivalentErrorAttributeNodes(first, second *AttributeExpr, seen map[attributePair]struct{}) bool {
+-	if first == second {
+-		return true
+-	}
+-	pair := attributePair{first: first, second: second}
+-	if _, ok := seen[pair]; ok {
+-		return true
+-	}
+-	seen[pair] = struct{}{}
+-	if !equivalentErrorValidation(first.Validation, second.Validation) ||
+-		!reflect.DeepEqual(first.DefaultValue, second.DefaultValue) ||
+-		!equivalentErrorMetadata(first.Meta, second.Meta) {
+-		return false
+-	}
+-
+-	switch firstType := first.Type.(type) {
+-	case Primitive:
+-		secondType, ok := second.Type.(Primitive)
+-		return ok && firstType == secondType
+-	case UserType:
+-		secondType, ok := second.Type.(UserType)
+-		return ok &&
+-			firstType.Name() == secondType.Name() &&
+-			equivalentErrorAttributeNodes(firstType.Attribute(), secondType.Attribute(), seen)
+-	case *Object:
+-		secondType, ok := second.Type.(*Object)
+-		if !ok || len(*firstType) != len(*secondType) {
+-			return false
+-		}
+-		for _, field := range *firstType {
+-			other := secondType.Attribute(field.Name)
+-			if other == nil || !equivalentErrorAttributeNodes(field.Attribute, other, seen) {
+-				return false
+-			}
+-		}
+-	case *Array:
+-		secondType, ok := second.Type.(*Array)
+-		return ok &&
+-			firstType.NonNullableElems == secondType.NonNullableElems &&
+-			equivalentErrorAttributeNodes(firstType.ElemType, secondType.ElemType, seen)
+-	case *Map:
+-		secondType, ok := second.Type.(*Map)
+-		return ok &&
+-			equivalentErrorAttributeNodes(firstType.KeyType, secondType.KeyType, seen) &&
+-			equivalentErrorAttributeNodes(firstType.ElemType, secondType.ElemType, seen)
+-	case *Union:
+-		secondType, ok := second.Type.(*Union)
+-		if !ok ||
+-			firstType.TypeName != secondType.TypeName ||
+-			firstType.GetTypeKey() != secondType.GetTypeKey() ||
+-			firstType.GetValueKey() != secondType.GetValueKey() ||
+-			len(firstType.Values) != len(secondType.Values) {
+-			return false
+-		}
+-		for index, branch := range firstType.Values {
+-			other := secondType.Values[index]
+-			if branch.Name != other.Name || !equivalentErrorAttributeNodes(branch.Attribute, other.Attribute, seen) {
+-				return false
+-			}
+-		}
+-	default:
+-		return false
+-	}
+-	return true
++	panic("excised: equivalentErrorAttributeNodes")
+ }
+ 
+ // equivalentErrorValidation compares validation behavior independently of the
+ // authored order of required fields and enum values.
+ func equivalentErrorValidation(first, second *ValidationExpr) bool {
+-	if first == nil {
+-		first = new(ValidationExpr)
+-	}
+-	if second == nil {
+-		second = new(ValidationExpr)
+-	}
+-	firstScalars, secondScalars := *first, *second
+-	firstScalars.Required, secondScalars.Required = nil, nil
+-	firstScalars.Values, secondScalars.Values = nil, nil
+-	return reflect.DeepEqual(firstScalars, secondScalars) &&
+-		equivalentStringSet(first.Required, second.Required) &&
+-		equivalentValueSet(first.Values, second.Values)
++	panic("excised: equivalentErrorValidation")
+ }
+ 
+ // equivalentStringSet reports whether both slices contain the same distinct
+ // strings; validation order does not affect runtime behavior.
+ func equivalentStringSet(first, second []string) bool {
+-	if len(first) != len(second) {
+-		return false
+-	}
+-	for _, value := range first {
+-		if !slices.Contains(second, value) {
+-			return false
+-		}
+-	}
+-	return true
++	panic("excised: equivalentStringSet")
+ }
+ 
+ // equivalentValueSet reports whether both enum lists contain the same values
+ // regardless of declaration order.
+ func equivalentValueSet(first, second []any) bool {
+-	if len(first) != len(second) {
+-		return false
+-	}
+-	matched := make([]bool, len(second))
+-	for _, value := range first {
+-		found := false
+-		for index, candidate := range second {
+-			if !matched[index] && reflect.DeepEqual(value, candidate) {
+-				matched[index] = true
+-				found = true
+-				break
+-			}
+-		}
+-		if !found {
+-			return false
+-		}
+-	}
+-	return true
++	panic("excised: equivalentValueSet")
+ }
+ 
+ // equivalentErrorMetadata compares metadata keys and ordered values while
+ // treating nil and empty maps or value slices as the same absent content.
+ func equivalentErrorMetadata(first, second MetaExpr) bool {
+-	if len(first) != len(second) {
+-		return false
+-	}
+-	for key, values := range first {
+-		other, ok := second[key]
+-		if !ok || !slices.Equal(values, other) {
+-			return false
+-		}
+-	}
+-	return true
++	panic("excised: equivalentErrorMetadata")
+ }
+diff --git a/expr/error_contract_test.go b/expr/error_contract_test.go
+deleted file mode 100644
+--- a/expr/error_contract_test.go
++++ /dev/null
+@@ -1,268 +0,0 @@
+-// This file verifies canonical comparison of reusable transport error value
+-// contracts independently of authored ordering and explicit default storage.
+-package expr
+-
+-import (
+-	"testing"
+-
+-	"github.com/stretchr/testify/require"
+-)
+-
+-func TestEquivalentErrorAttributesUseEffectiveUnionKeys(t *testing.T) {
+-	branches := []*NamedAttributeExpr{
+-		{Name: "text", Attribute: &AttributeExpr{Type: String}},
+-	}
+-	implicit := &AttributeExpr{Type: &Union{TypeName: "Value", Values: branches}}
+-	explicit := &AttributeExpr{Type: &Union{
+-		TypeName: "Value",
+-		TypeKey:  "type",
+-		ValueKey: "value",
+-		Values:   branches,
+-	}}
+-
+-	require.True(t, equivalentErrorAttributes(implicit, explicit))
+-}
+-
+-func TestEquivalentErrorAttributesIgnoreRequiredOrder(t *testing.T) {
+-	first := requiredObject("first", "second")
+-	second := requiredObject("second", "first")
+-
+-	require.True(t, equivalentErrorAttributes(first, second))
+-}
+-
+-func TestEquivalentErrorAttributesMaterializeBases(t *testing.T) {
+-	base := &UserTypeExpr{
+-		TypeName: "BaseError",
+-		AttributeExpr: &AttributeExpr{
+-			Type: &Object{
+-				{Name: "message", Attribute: &AttributeExpr{
+-					Type:         String,
+-					DefaultValue: "invalid",
+-					Meta:         MetaExpr{"struct:field:name": {"Message"}},
+-				}},
+-			},
+-			Validation: &ValidationExpr{Required: []string{"message"}},
+-		},
+-	}
+-	composed := &AttributeExpr{Type: &Object{}, Bases: []DataType{base}}
+-	explicit := &AttributeExpr{
+-		Type: &Object{
+-			{Name: "message", Attribute: &AttributeExpr{
+-				Type:         String,
+-				DefaultValue: "invalid",
+-				Meta:         MetaExpr{"struct:field:name": {"Message"}},
+-			}},
+-		},
+-		Validation: &ValidationExpr{Required: []string{"message"}},
+-	}
+-
+-	require.True(t, equivalentErrorAttributes(composed, explicit))
+-	require.Len(t, composed.Bases, 1)
+-	require.False(t, composed.finalized)
+-	require.Empty(t, *AsObject(composed.Type))
+-	require.False(t, base.AttributeExpr.finalized)
+-}
+-
+-func TestEquivalentErrorAttributesRejectDifferentEffectiveBases(t *testing.T) {
+-	stringBase := errorBase("Base", String)
+-	integerBase := errorBase("Base", Int)
+-	first := &AttributeExpr{Type: &Object{}, Bases: []DataType{stringBase}}
+-	second := &AttributeExpr{Type: &Object{}, Bases: []DataType{integerBase}}
+-
+-	require.False(t, equivalentErrorAttributes(first, second))
+-}
+-
+-func TestEquivalentErrorAttributesMaterializeReferences(t *testing.T) {
+-	reference := &UserTypeExpr{
+-		TypeName: "ReferenceError",
+-		AttributeExpr: &AttributeExpr{
+-			Type: &Object{
+-				{Name: "message", Attribute: &AttributeExpr{
+-					Type:         String,
+-					DefaultValue: "invalid",
+-				}},
+-			},
+-			Validation: &ValidationExpr{Required: []string{"message"}},
+-		},
+-	}
+-	referenced := &AttributeExpr{
+-		Type: &Object{
+-			{Name: "message", Attribute: &AttributeExpr{Type: String}},
+-		},
+-		References: []DataType{reference},
+-	}
+-	explicit := &AttributeExpr{
+-		Type: &Object{
+-			{Name: "message", Attribute: &AttributeExpr{
+-				Type:         String,
+-				DefaultValue: "invalid",
+-			}},
+-		},
+-		Validation: &ValidationExpr{Required: []string{"message"}},
+-	}
+-
+-	require.True(t, equivalentErrorAttributes(referenced, explicit))
+-	require.Len(t, referenced.References, 1)
+-	require.Nil(t, referenced.Find("message").Validation)
+-	require.Nil(t, referenced.Find("message").DefaultValue)
+-}
+-
+-func TestEquivalentErrorAttributesRejectReferenceContractDrift(t *testing.T) {
+-	for _, test := range []struct {
+-		name   string
+-		mutate func(*AttributeExpr)
+-	}{
+-		{"validation", func(attribute *AttributeExpr) {
+-			minimum := 3
+-			attribute.Validation.MinLength = &minimum
+-		}},
+-		{"default", func(attribute *AttributeExpr) { attribute.DefaultValue = "different" }},
+-		{"metadata", func(attribute *AttributeExpr) {
+-			attribute.Meta["struct:field:name"] = []string{"Different"}
+-		}},
+-	} {
+-		t.Run(test.name, func(t *testing.T) {
+-			referenced, explicit := referencedErrorContracts()
+-			test.mutate(explicit.Find("message"))
+-
+-			require.False(t, equivalentErrorAttributes(referenced, explicit))
+-		})
+-	}
+-}
+-
+-func TestEquivalentErrorAttributesCompareUnionBranchesPositionally(t *testing.T) {
+-	first := &AttributeExpr{Type: &Union{TypeName: "Value", Values: []*NamedAttributeExpr{
+-		{Name: "text", Attribute: &AttributeExpr{Type: String}},
+-		{Name: "count", Attribute: &AttributeExpr{Type: Int}},
+-	}}}
+-	second := &AttributeExpr{Type: &Union{TypeName: "Value", Values: []*NamedAttributeExpr{
+-		{Name: "count", Attribute: &AttributeExpr{Type: Int}},
+-		{Name: "text", Attribute: &AttributeExpr{Type: String}},
+-	}}}
+-
+-	require.False(t, equivalentErrorAttributes(first, second))
+-}
+-
+-func TestEquivalentErrorAttributesCopiesRecursiveDeclarations(t *testing.T) {
+-	first := recursiveErrorType("RecursiveError")
+-	second := recursiveErrorType("RecursiveError")
+-
+-	require.True(t, equivalentErrorAttributes(
+-		&AttributeExpr{Type: first},
+-		&AttributeExpr{Type: second},
+-	))
+-	require.False(t, first.AttributeExpr.finalized)
+-	require.Same(t, first, first.Find("next").Type)
+-}
+-
+-func TestEffectiveErrorAttributeSharesNoMutableContractValues(t *testing.T) {
+-	minimum := 2
+-	source := &AttributeExpr{
+-		Type: String,
+-		Docs: &DocsExpr{Description: "source"},
+-		Validation: &ValidationExpr{
+-			MinLength: &minimum,
+-			Values:    []any{"first", "second"},
+-		},
+-		DefaultValue: []any{map[string]any{"message": "invalid"}},
+-		UserExamples: []*ExampleExpr{{Value: map[string]any{"message": "invalid"}}},
+-	}
+-
+-	effective := effectiveErrorAttribute(source)
+-	*effective.Validation.MinLength = 5
+-	effective.Validation.Values[0] = "changed"
+-	effective.DefaultValue.([]any)[0].(map[string]any)["message"] = "changed"
+-	effective.Docs.Description = "changed"
+-	effective.UserExamples[0].Value.(map[string]any)["message"] = "changed"
+-
+-	require.Equal(t, 2, *source.Validation.MinLength)
+-	require.Equal(t, "first", source.Validation.Values[0])
+-	require.Equal(t, "invalid", source.DefaultValue.([]any)[0].(map[string]any)["message"])
+-	require.Equal(t, "source", source.Docs.Description)
+-	require.Equal(t, "invalid", source.UserExamples[0].Value.(map[string]any)["message"])
+-}
+-
+-func TestEffectiveErrorAttributeReconnectsCopiesByOrigin(t *testing.T) {
+-	source := recursiveErrorType("RecursiveError")
+-	first := Dup(source).(UserType)
+-	second := Dup(source).(UserType)
+-	root := &AttributeExpr{Type: &Object{
+-		{Name: "first", Attribute: &AttributeExpr{Type: first}},
+-		{Name: "second", Attribute: &AttributeExpr{Type: second}},
+-	}}
+-
+-	effective := effectiveErrorAttribute(root)
+-	firstCopy := effective.Find("first").Type.(UserType)
+-	secondCopy := effective.Find("second").Type.(UserType)
+-
+-	require.Same(t, firstCopy, secondCopy)
+-	require.Same(t, firstCopy, firstCopy.Origin())
+-	require.NotSame(t, source, firstCopy.Origin())
+-}
+-
+-// errorBase returns an object declaration whose only field has the given
+-// primitive type. The shared type name proves comparison uses effective shape.
+-func errorBase(name string, fieldType DataType) *UserTypeExpr {
+-	return &UserTypeExpr{
+-		TypeName: name,
+-		AttributeExpr: &AttributeExpr{Type: &Object{
+-			{Name: "value", Attribute: &AttributeExpr{Type: fieldType}},
+-		}},
+-	}
+-}
+-
+-// recursiveErrorType returns an unfinalized self-referential declaration.
+-func recursiveErrorType(name string) *UserTypeExpr {
+-	result := &UserTypeExpr{TypeName: name}
+-	result.AttributeExpr = &AttributeExpr{Type: &Object{
+-		{Name: "message", Attribute: &AttributeExpr{Type: String}},
+-		{Name: "next", Attribute: &AttributeExpr{Type: result}},
+-	}}
+-	return result
+-}
+-
+-// referencedErrorContracts returns one inherited and one explicit error with
+-// the same field validation, default, and generated Go name.
+-func referencedErrorContracts() (*AttributeExpr, *AttributeExpr) {
+-	referenceMinimum := 2
+-	field := &AttributeExpr{
+-		Type:         String,
+-		Validation:   &ValidationExpr{MinLength: &referenceMinimum},
+-		DefaultValue: "invalid",
+-		Meta:         MetaExpr{"struct:field:name": {"Message"}},
+-	}
+-	reference := &UserTypeExpr{
+-		TypeName: "ReferenceError",
+-		AttributeExpr: &AttributeExpr{Type: &Object{
+-			{Name: "message", Attribute: field},
+-		}},
+-	}
+-	referenced := &AttributeExpr{
+-		Type: &Object{
+-			{Name: "message", Attribute: &AttributeExpr{Type: String}},
+-		},
+-		References: []DataType{reference},
+-	}
+-	explicitMinimum := 2
+-	explicit := &AttributeExpr{Type: &Object{
+-		{Name: "message", Attribute: &AttributeExpr{
+-			Type:         String,
+-			Validation:   &ValidationExpr{MinLength: &explicitMinimum},
+-			DefaultValue: "invalid",
+-			Meta:         MetaExpr{"struct:field:name": {"Message"}},
+-		}},
+-	}}
+-	return referenced, explicit
+-}
+-
+-// requiredObject returns the same two-field error object with the requested
+-// validation order so the test distinguishes authored order from semantics.
+-func requiredObject(required ...string) *AttributeExpr {
+-	return &AttributeExpr{
+-		Type: &Object{
+-			{Name: "first", Attribute: &AttributeExpr{Type: String}},
+-			{Name: "second", Attribute: &AttributeExpr{Type: String}},
+-		},
+-		Validation: &ValidationExpr{Required: required},
+-	}
+-}
+diff --git a/expr/grpc_endpoint_test.go b/expr/grpc_endpoint_test.go
+--- a/expr/grpc_endpoint_test.go
++++ b/expr/grpc_endpoint_test.go
+@@ -3,136 +3,16 @@
+ package expr_test
+ 
+ import (
+-	"errors"
++	_ "errors"
+ 	"testing"
+ 
+ 	"github.com/stretchr/testify/require"
+ 
+-	"example.internal/apikit/v3/eval"
++	_ "example.internal/apikit/v3/eval"
+ 	"example.internal/apikit/v3/expr"
+ 	"example.internal/apikit/v3/expr/testdata"
+ )
+ 
+-func TestGRPCEndpointValidation(t *testing.T) {
+-	cases := map[string]struct {
+-		DSL    func()
+-		Errors []string
+-	}{
+-		"endpoint-with-any-type": {
+-			DSL:    testdata.GRPCEndpointWithAnyType,
+-			Errors: []string{}, // Any type is now supported in gRPC
+-		},
+-		"endpoint-with-mixed-results": {
+-			DSL: testdata.GRPCEndpointWithMixedResults,
+-			Errors: []string{
+-				`service "Service" gRPC endpoint "Method": gRPC method "Method" cannot define both Result and StreamingResult because one gRPC call cannot return a separate result after its response stream`,
+-			},
+-		},
+-		"endpoint-with-matching-mixed-results": {
+-			DSL: testdata.GRPCEndpointWithMatchingMixedResults,
+-			Errors: []string{
+-				`service "Service" gRPC endpoint "Method": gRPC method "Method" cannot define both Result and StreamingResult because one gRPC call cannot return a separate result after its response stream`,
+-			},
+-		},
+-		"endpoint-with-streaming-result": {
+-			DSL:    testdata.GRPCEndpointWithStreamingResult,
+-			Errors: []string{},
+-		},
+-		"endpoint-with-untagged-fields": {
+-			DSL: testdata.GRPCEndpointWithUntaggedFields,
+-			Errors: []string{`service "Service" gRPC endpoint "Method": attribute "req_not_field" does not have "rpc:tag" defined in the meta, use "Field" to define the attribute of a type used in a gRPC method
+-service "Service" gRPC endpoint "Method": attribute "resp_not_field" does not have "rpc:tag" defined in the meta, use "Field" to define the attribute of a type used in a gRPC method`,
+-			},
+-		},
+-		"endpoint-with-repeated-field-tags": {
+-			DSL: testdata.GRPCEndpointWithRepeatedFieldTags,
+-			Errors: []string{`service "Service" gRPC endpoint "Method": field number 1 in attribute "key_dup_id" already exists for attribute "key"
+-service "Service" gRPC endpoint "Method": field number 2 in attribute "key_dup_id" already exists for attribute "key"`,
+-			},
+-		},
+-		"endpoint-with-reference-types-field-inheritance": {
+-			DSL:    testdata.GRPCEndpointWithReferenceTypes,
+-			Errors: []string{},
+-		},
+-		"endpoint-with-extended-types": {
+-			DSL:    testdata.GRPCEndpointWithExtendedTypes,
+-			Errors: []string{},
+-		},
+-		"endpoint-with-composite-metadata": {
+-			DSL: testdata.GRPCEndpointWithCompositeMetadata,
+-			Errors: []string{`service "Service" gRPC endpoint "Method": Request metadata attribute "object" must be a primitive or an array of primitives, got MetadataObject
+-service "Service" gRPC endpoint "Method": Request metadata attribute "mapping" must be a primitive or an array of primitives, got map
+-service "Service" gRPC endpoint "Method": Request metadata attribute "choice" must be a primitive or an array of primitives, got choice
+-service "Service" gRPC endpoint "Method": Response metadata attribute "object" must be a primitive or an array of primitives, got MetadataObject
+-service "Service" gRPC endpoint "Method": Response metadata attribute "mapping" must be a primitive or an array of primitives, got map
+-service "Service" gRPC endpoint "Method": Response metadata attribute "choice" must be a primitive or an array of primitives, got choice`},
+-		},
+-		"endpoint-with-inherit-error": {
+-			DSL:    testdata.GRPCEndpointWithInheritErrorDSL,
+-			Errors: []string{},
+-		},
+-		"endpoint-stream-compat": {
+-			DSL:    testdata.GRPCEndpointStreamCompat,
+-			Errors: []string{},
+-		},
+-		"endpoint-stream-compat-service-level": {
+-			DSL:    testdata.GRPCEndpointStreamCompatServiceLevel,
+-			Errors: []string{},
+-		},
+-		"endpoint-stream-compat-bad-value": {
+-			DSL:    testdata.GRPCEndpointStreamCompatBadValue,
+-			Errors: []string{`service "Service" gRPC endpoint "Method": invalid "grpc:stream:compat" meta value "v2": only "v1" is supported`},
+-		},
+-		"endpoint-stream-compat-no-streaming-payload": {
+-			DSL:    testdata.GRPCEndpointStreamCompatNoStreamingPayload,
+-			Errors: []string{`service "Service" gRPC endpoint "Method": "grpc:stream:compat" meta requires the method to define both Payload and StreamingPayload`},
+-		},
+-		"endpoint-stream-compat-union-payload": {
+-			DSL:    testdata.GRPCEndpointStreamCompatUnionPayload,
+-			Errors: []string{`service "Service" gRPC endpoint "Method": attribute "version_ref" of the method payload must be a primitive or an array of primitives to satisfy the "grpc:stream:compat" meta`},
+-		},
+-		"endpoint-union-containing-any": {
+-			DSL: testdata.GRPCEndpointWithUnionContainingAny,
+-			Errors: []string{
+-				`service "Service" method "MethodUnion": union type choice has array elements, not supported by gRPC
+-service "Service" method "MethodUnion": union type choice has map elements, not supported by gRPC`,
+-				// Any type error removed as Any is now supported
+-			},
+-		},
+-	}
+-	for name, c := range cases {
+-		t.Run(name, func(t *testing.T) {
+-			if len(c.Errors) == 0 {
+-				expr.RunDSL(t, c.DSL)
+-			} else {
+-				var errs []error
+-
+-				err := expr.RunInvalidDSL(t, c.DSL)
+-				if err != nil {
+-					var merr eval.MultiError
+-					if errors.As(err, &merr) {
+-						for _, e := range merr {
+-							errs = append(errs, e.GoError)
+-						}
+-					} else {
+-						errs = append(errs, err)
+-					}
+-				}
+-
+-				if len(c.Errors) != len(errs) {
+-					t.Errorf("%s: got %d, expected the number of error values to match %d", name, len(errs), len(c.Errors))
+-				} else {
+-					for i, err := range errs {
+-						got := stripValidationLocations(err.Error())
+-						if got != c.Errors[i] {
+-							t.Errorf("%s:\ngot \t%q,\nexpected\t%q at index %d", name, got, c.Errors[i], i)
+-						}
+-					}
+-				}
+-			}
+-		})
+-	}
+-}
+ 
+ func TestGRPCEndpointStreamingPayloadKeepsInitialRequest(t *testing.T) {
+ 	root := expr.RunDSL(t, testdata.GRPCEndpointWithStreamingPayloadInitialRequest)
+diff --git a/expr/http_endpoint_test.go b/expr/http_endpoint_test.go
+--- a/expr/http_endpoint_test.go
++++ b/expr/http_endpoint_test.go
+@@ -2,7 +2,7 @@ package expr_test
+ 
+ import (
+ 	"errors"
+-	"strings"
++	_ "strings"
+ 	"testing"
+ 
+ 	"example.internal/apikit/v3/dsl"
+@@ -11,33 +11,6 @@ import (
+ 	"example.internal/apikit/v3/expr/testdata"
+ )
+ 
+-func TestHTTPRouteValidation(t *testing.T) {
+-	cases := []struct {
+-		Name  string
+-		DSL   func()
+-		Error string
+-	}{
+-		{"valid", testdata.ValidRouteDSL, ""},
+-		{"duplicate-wc-route", testdata.DuplicateWCRouteDSL, `route POST "/{id}" of service "DuplicateWCRoute" HTTP endpoint "Method": Wildcard "id" appears multiple times in full path "/{id}/{id}"`},
+-		{"disallow-response-body", testdata.DisallowResponseBodyHeadDSL, `route HEAD "/" of service "DisallowResponseBody" HTTP endpoint "Method": HTTP status 200: Response body defined for HEAD method which does not allow response body.
+-route HEAD "/" of service "DisallowResponseBody" HTTP endpoint "Method": HTTP status 404: Response body defined for HEAD method which does not allow response body.`,
+-		},
+-		{"invalid", testdata.InvalidRouteDSL, "routes at the service level are only allowed for JSON-RPC services. Use method-level routes instead. in service \"InvalidRoute\""},
+-	}
+-	for _, c := range cases {
+-		t.Run(c.Name, func(t *testing.T) {
+-			if c.Error == "" {
+-				expr.RunDSL(t, c.DSL)
+-			} else {
+-				err := expr.RunInvalidDSL(t, c.DSL)
+-				got := stripValidationLocations(err.Error())
+-				if !strings.HasSuffix(got, c.Error) {
+-					t.Errorf("got error %q\nexpected %q", got, c.Error)
+-				}
+-			}
+-		})
+-	}
+-}
+ 
+ func TestHTTPEndpointPrepare(t *testing.T) {
+ 	cases := map[string]struct {
+diff --git a/expr/http_error_test.go b/expr/http_error_test.go
+--- a/expr/http_error_test.go
++++ b/expr/http_error_test.go
+@@ -1,40 +1,12 @@
+ package expr_test
+ 
+ import (
+-	"testing"
++	_ "testing"
+ 
+ 	. "example.internal/apikit/v3/dsl"
+-	"example.internal/apikit/v3/expr"
++	_ "example.internal/apikit/v3/expr"
+ )
+ 
+-func TestHTTPErrorResponseValidation(t *testing.T) {
+-	cases := []struct {
+-		Name  string
+-		DSL   func()
+-		Error string
+-	}{
+-		{"header string error", stringErrorResponseWithHeadersDSL, ""},
+-		{"header object result", objectErrorResponseWithHeadersDSL, ""},
+-		{"header array result", arrayErrorResponseWithHeadersDSL, ""},
+-		{"header map result", mapErrorResponseWithHeadersDSL, `HTTP response of service "MapErrorResponseWithHeaders" HTTP endpoint "Method": attribute "foo" used in HTTP headers must be a primitive type or an array of primitive types.`},
+-		{"implicit object in header", implicitObjectErrorResponseWithHeadersDSL, `HTTP response of service "ArrayObjectErrorResponseWithHeaders" HTTP endpoint "Method": attribute "foo" used in HTTP headers must be a primitive type or an array of primitive types.`},
+-		{"array of object in header", arrayObjectErrorResponseWithHeadersDSL, `HTTP response of service "ArrayObjectErrorResponseWithHeaders" HTTP endpoint "Method": Array error type is mapped to an HTTP header but is not an array of primitive types.`},
+-		{"map in header", mapErrorTypeResponseWithHeadersDSL, `HTTP response of service "MapErrorTypeResponseWithHeaders" HTTP endpoint "Method": error type must be a primitive type or an array of primitive types.`},
+-		{"missing header result attribute", missingHeaderErrorAttributeDSL, `HTTP response of service "MissingHeaderErrorAttribute" HTTP endpoint "Method": header "bar" has no equivalent attribute in error type, use notation 'attribute_name:header_name' to identify corresponding error type attribute.`},
+-	}
+-	for _, c := range cases {
+-		t.Run(c.Name, func(t *testing.T) {
+-			if c.Error == "" {
+-				expr.RunDSL(t, c.DSL)
+-			} else {
+-				err := expr.RunInvalidDSL(t, c.DSL)
+-				if err.Error() != c.Error {
+-					t.Errorf("\ngot error %q\nexpected %q", err.Error(), c.Error)
+-				}
+-			}
+-		})
+-	}
+-}
+ 
+ var stringErrorResponseWithHeadersDSL = func() {
+ 	Service("StringErrorResponseWithHeaders", func() {
+diff --git a/expr/jsonrpc_error_contract_test.go b/expr/jsonrpc_error_contract_test.go
+--- a/expr/jsonrpc_error_contract_test.go
++++ b/expr/jsonrpc_error_contract_test.go
+@@ -3,7 +3,7 @@
+ package expr_test
+ 
+ import (
+-	"fmt"
++	_ "fmt"
+ 	"testing"
+ 
+ 	"github.com/stretchr/testify/require"
+@@ -12,41 +12,6 @@ import (
+ 	"example.internal/apikit/v3/expr"
+ )
+ 
+-func TestJSONRPCAPIErrorMappingOverridesHTTPDefault(t *testing.T) {
+-	root := expr.RunDSL(t, func() {
+-		API("jobs", func() {
+-			Error("busy", String)
+-			HTTP(func() {
+-				Path("/v1")
+-				Response("busy", StatusServiceUnavailable)
+-			})
+-			JSONRPC(func() {
+-				Response("busy", 7001)
+-			})
+-		})
+-		Service("jobs", func() {
+-			Method("run", func() {
+-				Error("busy")
+-				HTTP(func() {
+-					POST("/run")
+-				})
+-				JSONRPC(func() {})
+-			})
+-			Method("inspect", func() {
+-				JSONRPC(func() {})
+-			})
+-		})
+-	})
+-
+-	httpEndpoint := root.API.HTTP.Service("jobs").Endpoint("run")
+-	jsonrpcService := root.API.JSONRPC.Service("jobs")
+-	jsonrpcEndpoint := jsonrpcService.Endpoint("run")
+-
+-	require.Equal(t, StatusServiceUnavailable, httpEndpoint.HTTPErrors[0].Response.StatusCode)
+-	require.Equal(t, 7001, jsonrpcEndpoint.HTTPErrors[0].Response.StatusCode)
+-	require.Empty(t, jsonrpcService.Endpoint("inspect").HTTPErrors)
+-	require.Equal(t, "/v1", root.API.JSONRPC.Path)
+-}
+ 
+ func TestJSONRPCPreparePreservesJSONRPCErrorDefaults(t *testing.T) {
+ 	previousRoot := expr.Root
+@@ -100,117 +65,10 @@ func TestJSONRPCAPIErrorMappingRequiresReusableError(t *testing.T) {
+ 	require.ErrorContains(t, err, `Error "busy" does not match an error defined in the API`)
+ }
+ 
+-func TestJSONRPCErrorCodeAcceptsAllowedValues(t *testing.T) {
+-	for _, test := range []struct {
+-		name       string
+-		code       int
+-		useCodeDSL bool
+-	}{
+-		{name: fmt.Sprint(RPCParseError), code: RPCParseError},
+-		{name: fmt.Sprint(RPCInvalidRequest), code: RPCInvalidRequest},
+-		{name: fmt.Sprint(RPCMethodNotFound), code: RPCMethodNotFound},
+-		{name: fmt.Sprint(RPCInvalidParams), code: RPCInvalidParams},
+-		{name: fmt.Sprint(RPCInternalError), code: RPCInternalError},
+-		{name: "server range lower bound", code: -32099},
+-		{name: "server range upper bound", code: -32000},
+-		{name: "below reserved range", code: -32769},
+-		{name: "zero argument", code: 0},
+-		{name: "Code zero", code: 0, useCodeDSL: true},
+-		{name: "positive application code", code: 7001},
+-	} {
+-		t.Run(test.name, func(t *testing.T) {
+-			root := expr.RunDSL(t, jsonRPCErrorCodeDSL(test.code, test.useCodeDSL))
+-			response := root.API.JSONRPC.Service("jobs").Endpoint("run").HTTPErrors[0].Response
+-
+-			require.Equal(t, test.code, response.StatusCode)
+-			require.True(t, response.StatusCodeSet)
+-		})
+-	}
+-}
+-
+-func TestJSONRPCErrorCodeDefaultsToInternalError(t *testing.T) {
+-	root := expr.RunDSL(t, func() {
+-		Service("jobs", func() {
+-			Method("run", func() {
+-				Error("failed", String)
+-				JSONRPC(func() {
+-					Response("failed", func() {})
+-				})
+-			})
+-		})
+-	})
+-	response := root.API.JSONRPC.Service("jobs").Endpoint("run").HTTPErrors[0].Response
+-
+-	require.Equal(t, RPCInternalError, response.StatusCode)
+-	require.False(t, response.StatusCodeSet)
+-}
+-
+-func TestJSONRPCErrorCodeRejectsReservedValues(t *testing.T) {
+-	for _, code := range []int{-32768, -32701, -32699, -32604, -32100} {
+-		t.Run(fmt.Sprint(code), func(t *testing.T) {
+-			err := expr.RunInvalidDSL(t, jsonRPCErrorCodeDSL(code, false))
+-
+-			require.ErrorContains(t, err, fmt.Sprintf("JSON-RPC error code %d is reserved", code))
+-		})
+-	}
+-}
+ 
+-func TestJSONRPCErrorCodeMayBeReusedByDifferentMethods(t *testing.T) {
+-	root := expr.RunDSL(t, func() {
+-		API("jobs", func() {
+-			Error("busy", String)
+-			Error("failed", String)
+-			JSONRPC(func() {
+-				Response("busy", 7001)
+-				Response("failed", 7001)
+-			})
+-		})
+-		Service("jobs", func() {
+-			Method("run", func() {
+-				Error("busy")
+-				JSONRPC(func() {})
+-			})
+-			Method("inspect", func() {
+-				Error("failed")
+-				JSONRPC(func() {})
+-			})
+-		})
+-	})
+ 
+-	service := root.API.JSONRPC.Service("jobs")
+-	require.Equal(t, 7001, service.Endpoint("run").HTTPErrors[0].Response.StatusCode)
+-	require.Equal(t, "busy", service.Endpoint("run").HTTPErrors[0].Name)
+-	require.Equal(t, 7001, service.Endpoint("inspect").HTTPErrors[0].Response.StatusCode)
+-	require.Equal(t, "failed", service.Endpoint("inspect").HTTPErrors[0].Name)
+-}
+ 
+-func TestJSONRPCMethodErrorMappingReplacesAPIDefault(t *testing.T) {
+-	root := expr.RunDSL(t, func() {
+-		API("jobs", func() {
+-			Error("busy", String)
+-			JSONRPC(func() {
+-				Response("busy", 7001)
+-			})
+-		})
+-		Service("jobs", func() {
+-			Method("run", func() {
+-				Error("busy")
+-				Error("failed", String)
+-				JSONRPC(func() {
+-					Response("busy", 7002)
+-					Response("failed", 7001)
+-				})
+-			})
+-		})
+-	})
+ 
+-	errors := root.API.JSONRPC.Service("jobs").Endpoint("run").HTTPErrors
+-	require.Len(t, errors, 2)
+-	require.Equal(t, "busy", errors[0].Name)
+-	require.Equal(t, 7002, errors[0].Response.StatusCode)
+-	require.Equal(t, "failed", errors[1].Name)
+-	require.Equal(t, 7001, errors[1].Response.StatusCode)
+-}
+ 
+ func jsonRPCErrorCodeDSL(code int, useCodeDSL bool) func() {
+ 	return func() {
+diff --git a/expr/jsonrpc_notification_contract_test.go b/expr/jsonrpc_notification_contract_test.go
+--- a/expr/jsonrpc_notification_contract_test.go
++++ b/expr/jsonrpc_notification_contract_test.go
+@@ -12,163 +12,6 @@ import (
+ 
+ const jsonRPCInternalError = -32603
+ 
+-// TestJSONRPCNotificationContract checks that notifications are explicit and
+-// cannot declare response or request-ID behavior.
+-func TestJSONRPCNotificationContract(t *testing.T) {
+-	t.Run("notification with payload", func(t *testing.T) {
+-		root := expr.RunDSL(t, jsonRPCNotificationDSL(func() {
+-			dsl.Payload(func() {
+-				dsl.Attribute("message", dsl.String)
+-				dsl.Required("message")
+-			})
+-			dsl.JSONRPC(func() {
+-				dsl.Notification()
+-			})
+-		}))
+-		endpoint := root.API.JSONRPC.Services[0].HTTPEndpoints[0]
+-		require.True(t, endpoint.IsJSONRPCNotification())
+-	})
+-
+-	t.Run("ordinary method without result", func(t *testing.T) {
+-		root := expr.RunDSL(t, jsonRPCNotificationDSL(func() {
+-			dsl.JSONRPC(func() {})
+-		}))
+-		endpoint := root.API.JSONRPC.Services[0].HTTPEndpoints[0]
+-		require.False(t, endpoint.IsJSONRPCNotification())
+-	})
+-
+-	t.Run("named string request ID", func(t *testing.T) {
+-		expr.RunDSL(t, func() {
+-			requestID := dsl.Type("RequestID", dsl.String)
+-			dsl.Service("notifications", func() {
+-				dsl.JSONRPC(func() {
+-					dsl.POST("/rpc")
+-				})
+-				dsl.Method("notify", func() {
+-					dsl.Payload(func() {
+-						dsl.ID("request_id", requestID)
+-					})
+-					dsl.JSONRPC(func() {})
+-				})
+-			})
+-		})
+-	})
+-
+-	t.Run("notification outside JSON-RPC", func(t *testing.T) {
+-		err := expr.RunInvalidDSL(t, func() {
+-			dsl.Service("records", func() {
+-				dsl.Method("record", func() {
+-					dsl.HTTP(func() {
+-						dsl.POST("/records")
+-						dsl.Notification()
+-					})
+-				})
+-			})
+-		})
+-		require.Contains(t, err.Error(), `invalid use of Notification in service "records" HTTP endpoint "record"`)
+-	})
+-
+-	invalid := []struct {
+-		name    string
+-		method  func()
+-		wantErr string
+-	}{
+-		{
+-			name: "result",
+-			method: func() {
+-				dsl.Result(dsl.String)
+-				dsl.JSONRPC(func() {
+-					dsl.Notification()
+-				})
+-			},
+-			wantErr: `JSON-RPC notification "notify" cannot define a result because notifications receive no response`,
+-		},
+-		{
+-			name: "request ID",
+-			method: func() {
+-				dsl.Payload(func() {
+-					dsl.ID("request_id")
+-				})
+-				dsl.JSONRPC(func() {
+-					dsl.Notification()
+-				})
+-			},
+-			wantErr: `JSON-RPC notification "notify" cannot define an ID field because notifications omit the request ID`,
+-		},
+-		{
+-			name: "result ID",
+-			method: func() {
+-				dsl.Result(func() {
+-					dsl.ID("request_id")
+-				})
+-				dsl.JSONRPC(func() {})
+-			},
+-			wantErr: `JSON-RPC method "notify" cannot define an ID field in its result because the transport copies the request ID`,
+-		},
+-		{
+-			name: "error ID",
+-			method: func() {
+-				dsl.Error("failed", func() {
+-					dsl.ID("request_id")
+-				})
+-				dsl.JSONRPC(func() {
+-					dsl.Response("failed", jsonRPCInternalError)
+-				})
+-			},
+-			wantErr: `JSON-RPC error "failed" cannot define an ID field because the transport copies the request ID`,
+-		},
+-		{
+-			name: "non-string request ID",
+-			method: func() {
+-				dsl.Payload(func() {
+-					dsl.ID("request_id", dsl.Int)
+-				})
+-				dsl.JSONRPC(func() {})
+-			},
+-			wantErr: `JSON-RPC request ID field "request_id" must be a string`,
+-		},
+-		{
+-			name: "nested request ID",
+-			method: func() {
+-				dsl.Payload(func() {
+-					dsl.Attribute("request", func() {
+-						dsl.ID("id")
+-					})
+-				})
+-				dsl.JSONRPC(func() {})
+-			},
+-			wantErr: `JSON-RPC request ID field "id" must be a direct payload field`,
+-		},
+-		{
+-			name: "multiple request IDs",
+-			method: func() {
+-				dsl.Payload(func() {
+-					dsl.ID("first")
+-					dsl.ID("second")
+-				})
+-				dsl.JSONRPC(func() {})
+-			},
+-			wantErr: `JSON-RPC method "notify" cannot define more than one request ID field`,
+-		},
+-		{
+-			name: "stream",
+-			method: func() {
+-				dsl.StreamingResult(dsl.String)
+-				dsl.JSONRPC(func() {
+-					dsl.Notification()
+-					dsl.ServerSentEvents(func() {})
+-				})
+-			},
+-			wantErr: `JSON-RPC notification "notify" cannot stream because notifications send one message and receive no response`,
+-		},
+-	}
+-	for _, test := range invalid {
+-		t.Run(test.name, func(t *testing.T) {
+-			err := expr.RunInvalidDSL(t, jsonRPCNotificationDSL(test.method))
+-			require.Contains(t, err.Error(), test.wantErr)
+-		})
+-	}
+-}
+ 
+ // TestJSONRPCRequestIDBodyContract checks that the request ID exists only in
+ // the JSON-RPC envelope and cannot also be mapped into params.
+diff --git a/expr/jsonrpc_response_metadata_test.go b/expr/jsonrpc_response_metadata_test.go
+--- a/expr/jsonrpc_response_metadata_test.go
++++ b/expr/jsonrpc_response_metadata_test.go
+@@ -38,94 +38,7 @@ func TestJSONRPCSuccessResponseRejectsHTTPMetadata(t *testing.T) {
+ 	}
+ }
+ 
+-// TestJSONRPCErrorResponseRejectsHTTPMetadata checks mappings declared at each
+-// level where an error response can be shared or overridden.
+-func TestJSONRPCErrorResponseRejectsHTTPMetadata(t *testing.T) {
+-	for _, scope := range []string{"API", "service", "method"} {
+-		for _, test := range []struct {
+-			name    string
+-			mapping func()
+-			wantErr string
+-		}{
+-			{
+-				name:    "header",
+-				mapping: func() { dsl.Header("detail:X-Detail") },
+-				wantErr: "JSON-RPC error response cannot map error attributes to HTTP headers",
+-			},
+-			{
+-				name:    "cookie",
+-				mapping: func() { dsl.Cookie("detail:error") },
+-				wantErr: "JSON-RPC error response cannot map error attributes to HTTP cookies",
+-			},
+-		} {
+-			t.Run(scope+" "+test.name, func(t *testing.T) {
+-				err := expr.RunInvalidDSL(t, jsonRPCErrorResponseMetadataDSL(scope, test.mapping))
+-				require.ErrorContains(t, err, test.wantErr)
+-			})
+-		}
+-	}
+-}
+ 
+-// TestResponseMetadataPreservesSupportedMappings checks that the rejection is
+-// limited to JSON-RPC response headers and cookies. Ordinary HTTP responses,
+-// JSON-RPC request headers and cookies, and server-sent-event fields remain
+-// valid.
+-func TestResponseMetadataPreservesSupportedMappings(t *testing.T) {
+-	expr.RunDSL(t, func() {
+-		dsl.Service("records", func() {
+-			dsl.Method("fetch", func() {
+-				dsl.Result(func() {
+-					dsl.Attribute("value", dsl.String)
+-					dsl.Attribute("etag", dsl.String)
+-					dsl.Attribute("session", dsl.String)
+-				})
+-				dsl.Error("failed", func() {
+-					dsl.Attribute("detail", dsl.String)
+-				})
+-				dsl.HTTP(func() {
+-					dsl.GET("/records")
+-					dsl.Response(func() {
+-						dsl.Header("etag:X-ETag")
+-						dsl.Cookie("session:SID")
+-					})
+-					dsl.Response("failed", dsl.StatusBadRequest, func() {
+-						dsl.Header("detail:X-Detail")
+-						dsl.Cookie("detail:error")
+-					})
+-				})
+-			})
+-		})
+-		dsl.Service("events", func() {
+-			dsl.JSONRPC(func() {
+-				dsl.POST("/rpc")
+-			})
+-			dsl.Method("watch", func() {
+-				dsl.Payload(func() {
+-					dsl.Attribute("token", dsl.String)
+-					dsl.Attribute("session", dsl.String)
+-					dsl.Attribute("resume", dsl.String)
+-				})
+-				dsl.StreamingResult(func() {
+-					dsl.Attribute("value", dsl.String)
+-					dsl.Attribute("event_id", dsl.String)
+-					dsl.Attribute("event_type", dsl.String)
+-					dsl.Attribute("retry", dsl.Int)
+-				})
+-				dsl.JSONRPC(func() {
+-					dsl.Header("token:X-Token")
+-					dsl.Cookie("session:SID")
+-					dsl.ServerSentEvents(func() {
+-						dsl.SSERequestID("resume")
+-						dsl.SSEEventData("value")
+-						dsl.SSEEventID("event_id")
+-						dsl.SSEEventType("event_type")
+-						dsl.SSEEventRetry("retry")
+-					})
+-				})
+-			})
+-		})
+-	})
+-}
+ 
+ // jsonRPCSuccessResponseMetadataDSL defines one result response with the given
+ // transport mapping.
+diff --git a/expr/service_test.go b/expr/service_test.go
+--- a/expr/service_test.go
++++ b/expr/service_test.go
+@@ -7,7 +7,7 @@ import (
+ 	"github.com/stretchr/testify/require"
+ 
+ 	"example.internal/apikit/v3/dsl"
+-	"example.internal/apikit/v3/eval"
++	_ "example.internal/apikit/v3/eval"
+ 	"example.internal/apikit/v3/expr"
+ 	"example.internal/apikit/v3/expr/testdata"
+ )
+@@ -48,98 +48,8 @@ func TestServiceExprMethod(t *testing.T) {
+ 	}
+ }
+ 
+-func TestEquivalentInlineMethodErrorsShareOrigin(t *testing.T) {
+-	root := expr.RunDSL(t, func() {
+-		dsl.Service("secured", func() {
+-			for _, method := range []string{"read", "write"} {
+-				dsl.Method(method, func() {
+-					dsl.Error("invalid_scopes", dsl.String)
+-				})
+-			}
+-		})
+-	})
+-	service := root.Service("secured")
+-	first := service.Method("read").Error("invalid_scopes").Type.(expr.UserType)
+-	second := service.Method("write").Error("invalid_scopes").Type.(expr.UserType)
+-
+-	require.NotSame(t, first, second)
+-	require.Same(t, first.Origin(), second.Origin())
+-	firstIdentity, ok := expr.GeneratedUserTypeExampleIdentity(first)
+-	require.True(t, ok)
+-	secondIdentity, ok := expr.GeneratedUserTypeExampleIdentity(second)
+-	require.True(t, ok)
+-	require.NotEqual(t, firstIdentity, secondIdentity)
+-}
+ 
+-func TestIncompatibleInlineMethodErrorsAreRejected(t *testing.T) {
+-	expr.ResetDSL(t)
+-	design := func() {
+-		dsl.Service("secured", func() {
+-			dsl.Method("read", func() {
+-				dsl.Error("invalid_scopes", dsl.String)
+-			})
+-			dsl.Method("write", func() {
+-				dsl.Error("invalid_scopes", dsl.Int)
+-			})
+-		})
+-	}
+-	require.True(t, eval.Execute(design, nil))
+-	err := eval.RunDSL()
+-	require.ErrorContains(t, err, `inline error "invalid_scopes" must define the same value contract in every method of service "secured"`)
+-}
+ 
+-func TestRepeatedStandardErrorsMustUseSameQualifiers(t *testing.T) {
+-	qualifiers := []struct {
+-		name  string
+-		apply func()
+-	}{
+-		{name: "temporary", apply: dsl.Temporary},
+-		{name: "timeout", apply: func() { dsl.Timeout() }},
+-		{name: "fault", apply: dsl.Fault},
+-	}
+-	for _, qualifier := range qualifiers {
+-		t.Run("service reference inherits "+qualifier.name, func(t *testing.T) {
+-			root := expr.RunDSL(t, func() {
+-				dsl.Service("jobs", func() {
+-					dsl.Error("busy", qualifier.apply)
+-					dsl.Method("run", func() {
+-						dsl.Error("busy")
+-					})
+-				})
+-			})
+-			service := root.Service("jobs")
+-			require.Same(t, service.Error("busy"), service.Method("run").Error("busy"))
+-		})
+-
+-		t.Run("two methods "+qualifier.name, func(t *testing.T) {
+-			expr.ResetDSL(t)
+-			design := func() {
+-				dsl.Service("jobs", func() {
+-					dsl.Method("start", func() {
+-						dsl.Error("busy", qualifier.apply)
+-					})
+-					dsl.Method("resume", func() {
+-						dsl.Error("busy")
+-					})
+-				})
+-			}
+-			require.True(t, eval.Execute(design, nil))
+-			err := eval.RunDSL()
+-			require.ErrorContains(t, err, qualifier.name+" setting differs")
+-		})
+-
+-		t.Run("matching "+qualifier.name, func(t *testing.T) {
+-			expr.RunDSL(t, func() {
+-				dsl.Service("jobs", func() {
+-					dsl.Error("busy", qualifier.apply)
+-					dsl.Method("run", func() {
+-						dsl.Error("busy", qualifier.apply)
+-					})
+-				})
+-			})
+-		})
+-	}
+-}
+ 
+ func TestAPIErrorDoesNotAddErrorsToServicesOrMethods(t *testing.T) {
+ 	root := expr.RunDSL(t, func() {
+diff --git a/expr/transport_error_contract_test.go b/expr/transport_error_contract_test.go
+--- a/expr/transport_error_contract_test.go
++++ b/expr/transport_error_contract_test.go
+@@ -11,164 +11,18 @@ import (
+ 	"example.internal/apikit/v3/expr"
+ )
+ 
+-func TestHTTPInheritedErrorMappingUsesMethodError(t *testing.T) {
+-	root := expr.RunDSL(t, equivalentHTTPErrorMappingDSL)
+-	endpoint := root.API.HTTP.Services[0].HTTPEndpoints[0]
+ 
+-	require.Same(t, endpoint.MethodExpr.Error("bad_request"), endpoint.HTTPErrors[0].ErrorExpr)
+-}
+-
+-func TestHTTPInheritedErrorMappingRejectsIncompatibleError(t *testing.T) {
+-	for _, test := range []struct {
+-		name string
+-		dsl  func()
+-	}{
+-		{"different type", incompatibleHTTPErrorMappingDSL},
+-		{"different validation", incompatibleHTTPErrorValidationDSL},
+-		{"different named type", incompatibleHTTPNamedErrorMappingDSL},
+-	} {
+-		t.Run(test.name, func(t *testing.T) {
+-			err := expr.RunInvalidDSL(t, test.dsl)
+-			require.ErrorContains(t, err, `HTTP error mapping "bad_request"`)
+-			require.ErrorContains(t, err, `method "Show" of service "Errors"`)
+-			require.ErrorContains(t, err, "must define the same error attribute")
+-		})
+-	}
+-}
+ 
+-func TestHTTPInheritedErrorMappingAcceptsServiceReference(t *testing.T) {
+-	root := expr.RunDSL(t, inheritedHTTPObjectErrorMappingDSL)
+-	endpoint := root.API.HTTP.Services[0].HTTPEndpoints[0]
+ 
+-	require.Same(t, root.Error("bad_request"), endpoint.HTTPErrors[0].ErrorExpr)
+-}
+ 
+-func TestGRPCInheritedErrorMappingUsesMethodError(t *testing.T) {
+-	root := expr.RunDSL(t, equivalentGRPCErrorMappingDSL)
+-	endpoint := root.API.GRPC.Services[0].GRPCEndpoints[0]
+ 
+-	require.Same(t, endpoint.MethodExpr.Error("bad_request"), endpoint.GRPCErrors[0].ErrorExpr)
+-}
+ 
+-func TestServiceErrorMappingsUseMethodError(t *testing.T) {
+-	root := expr.RunDSL(t, equivalentServiceErrorMappingDSL)
+-	httpEndpoint := root.API.HTTP.Services[0].HTTPEndpoints[0]
+-	grpcEndpoint := root.API.GRPC.Services[0].GRPCEndpoints[0]
+-	methodError := httpEndpoint.MethodExpr.Error("bad_request")
+ 
+-	require.Same(t, methodError, httpEndpoint.HTTPErrors[0].ErrorExpr)
+-	require.Same(t, methodError, grpcEndpoint.GRPCErrors[0].ErrorExpr)
+-}
+ 
+-func TestHTTPInheritedErrorMappingAcceptsEquivalentValidationOrder(t *testing.T) {
+-	root := expr.RunDSL(t, equivalentHTTPErrorValidationOrderDSL)
+-	endpoint := root.API.HTTP.Services[0].HTTPEndpoints[0]
+ 
+-	require.Same(t, endpoint.MethodExpr.Error("bad_request"), endpoint.HTTPErrors[0].ErrorExpr)
+-}
+ 
+-func TestHTTPInheritedErrorMappingUsesEffectiveInheritedContract(t *testing.T) {
+-	root := expr.RunDSL(t, equivalentHTTPInheritedErrorMappingDSL)
+-	endpoint := root.API.HTTP.Services[0].HTTPEndpoints[0]
+ 
+-	require.Same(t, endpoint.MethodExpr.Error("bad_request"), endpoint.HTTPErrors[0].ErrorExpr)
+-}
+-
+-func TestGRPCInheritedErrorMappingUsesEffectiveInheritedContract(t *testing.T) {
+-	root := expr.RunDSL(t, equivalentGRPCInheritedErrorMappingDSL)
+-	endpoint := root.API.GRPC.Services[0].GRPCEndpoints[0]
+-
+-	require.Same(t, endpoint.MethodExpr.Error("bad_request"), endpoint.GRPCErrors[0].ErrorExpr)
+-}
+-
+-func TestInheritedErrorMappingRejectsDifferentEffectiveBases(t *testing.T) {
+-	for _, test := range []struct {
+-		name string
+-		dsl  func()
+-	}{
+-		{"HTTP", incompatibleHTTPInheritedErrorMappingDSL},
+-		{"gRPC", incompatibleGRPCInheritedErrorMappingDSL},
+-	} {
+-		t.Run(test.name, func(t *testing.T) {
+-			err := expr.RunInvalidDSL(t, test.dsl)
+-			require.ErrorContains(t, err, `error mapping "bad_request"`)
+-			require.ErrorContains(t, err, "must define the same error attribute")
+-		})
+-	}
+-}
+ 
+-func TestGRPCInheritedErrorMappingRejectsIncompatibleError(t *testing.T) {
+-	err := expr.RunInvalidDSL(t, incompatibleGRPCErrorMappingDSL)
+-	require.ErrorContains(t, err, `gRPC error mapping "bad_request"`)
+-	require.ErrorContains(t, err, `method "Show" of service "Errors"`)
+-	require.ErrorContains(t, err, "must define the same error attribute")
+-}
+-
+-func TestInheritedErrorMappingRetainsQualifiers(t *testing.T) {
+-	qualifiers := []struct {
+-		name  string
+-		apply func()
+-	}{
+-		{name: "temporary", apply: Temporary},
+-		{name: "timeout", apply: func() { Timeout() }},
+-		{name: "fault", apply: Fault},
+-	}
+-	for _, transport := range []string{"HTTP", "gRPC"} {
+-		for _, qualifier := range qualifiers {
+-			t.Run(transport+" "+qualifier.name, func(t *testing.T) {
+-				root := expr.RunDSL(t, qualifierErrorMappingDSL(transport, qualifier.apply))
+-				if transport == "HTTP" {
+-					require.Same(t, root.Error("busy"), root.API.HTTP.Services[0].HTTPEndpoints[0].HTTPErrors[0].ErrorExpr)
+-				} else {
+-					require.Same(t, root.Error("busy"), root.API.GRPC.Services[0].GRPCEndpoints[0].GRPCErrors[0].ErrorExpr)
+-				}
+-			})
+-		}
+-	}
+-}
+-
+-func TestInheritedErrorMappingRejectsExplicitQualifierOverride(t *testing.T) {
+-	for _, transport := range []string{"HTTP", "gRPC"} {
+-		t.Run(transport, func(t *testing.T) {
+-			err := expr.RunInvalidDSL(t, explicitQualifierOverrideDSL(transport))
+-			require.ErrorContains(t, err, transport+` error mapping "busy"`)
+-			require.ErrorContains(t, err, "temporary setting differs")
+-		})
+-	}
+-}
+-
+-func TestServiceTransportErrorResponseMayDefineUnusedDefault(t *testing.T) {
+-	for _, test := range []struct {
+-		name string
+-		dsl  func()
+-	}{
+-		{
+-			name: "HTTP",
+-			dsl:  serviceDefaultErrorResponseDSL("HTTP"),
+-		},
+-		{
+-			name: "gRPC",
+-			dsl:  serviceDefaultErrorResponseDSL("gRPC"),
+-		},
+-	} {
+-		t.Run(test.name, func(t *testing.T) {
+-			root := expr.RunDSL(t, test.dsl)
+-			if test.name == "HTTP" {
+-				service := root.API.HTTP.Service("Jobs")
+-				selected := service.Endpoint("Selected")
+-				require.Len(t, selected.HTTPErrors, 1)
+-				require.Same(t, root.Error("busy"), selected.HTTPErrors[0].ErrorExpr)
+-				require.Empty(t, service.Endpoint("Unselected").HTTPErrors)
+-			} else {
+-				service := root.API.GRPC.Service("Jobs")
+-				selected := service.Endpoint("Selected")
+-				require.Len(t, selected.GRPCErrors, 1)
+-				require.Same(t, root.Error("busy"), selected.GRPCErrors[0].ErrorExpr)
+-				require.Empty(t, service.Endpoint("Unselected").GRPCErrors)
+-			}
+-		})
+-	}
+-}
+ 
+ func TestMethodTransportErrorResponseRequiresSelectedError(t *testing.T) {
+ 	for _, test := range []struct {
+diff --git a/expr/transport_error_response_dsl_test.go b/expr/transport_error_response_dsl_test.go
+--- a/expr/transport_error_response_dsl_test.go
++++ b/expr/transport_error_response_dsl_test.go
+@@ -12,100 +12,9 @@ import (
+ 	"example.internal/apikit/v3/expr"
+ )
+ 
+-func TestHTTPErrorResponseCallbackUsesDeclaredError(t *testing.T) {
+-	for _, test := range []struct {
+-		name string
+-		dsl  func()
+-	}{
+-		{name: "method", dsl: methodHTTPErrorResponseDSL},
+-		{name: "service", dsl: serviceHTTPErrorResponseDSL},
+-		{name: "API", dsl: apiHTTPErrorResponseDSL},
+-	} {
+-		t.Run(test.name, func(t *testing.T) {
+-			root := expr.RunDSL(t, test.dsl)
+-			response := root.API.HTTP.Services[0].HTTPEndpoints[0].HTTPErrors[0].Response
+ 
+-			require.Equal(t, StatusUnprocessableEntity, response.StatusCode)
+-			require.Equal(t, "The problem response.", response.Description)
+-			require.Equal(t, "application/problem+json", response.ContentType)
+-			require.Equal(t, []string{"detail"}, response.Body.Meta["origin:attribute"])
+-			require.NotNil(t, response.Headers.Find("detail"))
+-			require.NotNil(t, response.Cookies.Find("detail"))
+-			require.Equal(t, []string{"30"}, response.Cookies.Meta["cookie:max-age"])
+-		})
+-	}
+-}
+ 
+-func TestHTTPMethodErrorResponseCallbackAcceptsTag(t *testing.T) {
+-	root := expr.RunDSL(t, func() {
+-		Service("Errors", func() {
+-			Method("Run", func() {
+-				Error("problem", transportErrorType())
+-				HTTP(func() {
+-					POST("/")
+-					Response("problem", StatusUnprocessableEntity, func() {
+-						Tag("detail", "problem")
+-					})
+-				})
+-			})
+-		})
+-	})
+ 
+-	response := root.API.HTTP.Services[0].HTTPEndpoints[0].HTTPErrors[0].Response
+-	require.Equal(t, [2]string{"detail", "problem"}, response.Tag)
+-}
+-
+-func TestGRPCErrorResponseCallbackUsesDeclaredError(t *testing.T) {
+-	for _, test := range []struct {
+-		name string
+-		dsl  func()
+-	}{
+-		{name: "method", dsl: methodGRPCErrorResponseDSL},
+-		{name: "service", dsl: serviceGRPCErrorResponseDSL},
+-		{name: "API", dsl: apiGRPCErrorResponseDSL},
+-	} {
+-		t.Run(test.name, func(t *testing.T) {
+-			root := expr.RunDSL(t, test.dsl)
+-			response := root.API.GRPC.Services[0].GRPCEndpoints[0].GRPCErrors[0].Response
+-
+-			require.Equal(t, CodeInvalidArgument, response.StatusCode)
+-			require.Equal(t, "The problem response.", response.Description)
+-			require.NotNil(t, response.Message.Find("detail"))
+-			require.NotNil(t, response.Headers.Find("header"))
+-			require.NotNil(t, response.Trailers.Find("trailer"))
+-		})
+-	}
+-}
+-
+-func TestJSONRPCErrorResponseCallbackUsesDeclaredError(t *testing.T) {
+-	root := expr.RunDSL(t, func() {
+-		API("Errors", func() {
+-			JSONRPC(func() {
+-				Response("problem", func() {
+-					Code(7001)
+-					Description("The problem response.")
+-					ContentType("application/problem+json")
+-					Body("detail")
+-				})
+-			})
+-			Error("problem", transportErrorType())
+-		})
+-		Service("Errors", func() {
+-			Error("problem")
+-			JSONRPC(func() { POST("/rpc") })
+-			Method("Run", func() {
+-				Error("problem")
+-				JSONRPC(func() {})
+-			})
+-		})
+-	})
+-
+-	response := root.API.JSONRPC.Services[0].HTTPEndpoints[0].HTTPErrors[0].Response
+-	require.Equal(t, 7001, response.StatusCode)
+-	require.Equal(t, "The problem response.", response.Description)
+-	require.Equal(t, "application/problem+json", response.ContentType)
+-	require.Equal(t, []string{"detail"}, response.Body.Meta["origin:attribute"])
+-}
+ 
+ func TestErrorResponseCallbackWithUnknownErrorDoesNotPanic(t *testing.T) {
+ 	for _, test := range []struct {
+diff --git a/http/codegen/error_body_description_test.go b/http/codegen/error_body_description_test.go
+--- a/http/codegen/error_body_description_test.go
++++ b/http/codegen/error_body_description_test.go
+@@ -9,29 +9,10 @@ import (
+ 	"github.com/stretchr/testify/require"
+ 
+ 	"example.internal/apikit/v3/codegen"
+-	"example.internal/apikit/v3/expr"
+-	"example.internal/apikit/v3/http/codegen/testdata"
++	_ "example.internal/apikit/v3/expr"
++	_ "example.internal/apikit/v3/http/codegen/testdata"
+ )
+ 
+-func TestErrorBodyDescriptionNamesSingleError(t *testing.T) {
+-	root := expr.RunDSL(t, testdata.WithErrorCustomPkgDSL)
+-	plan := linkedHTTPPlanForRoot(t, root)
+-	want := "MethodWithErrorCustomPkgErrorNameResponseBody is the type of the\n" +
+-		"// \"ServiceWithErrorCustomPkg\" service \"MethodWithErrorCustomPkg\" endpoint HTTP\n" +
+-		"// response body for the \"error_name\" error."
+-
+-	for _, file := range []struct {
+-		name     string
+-		sections string
+-	}{
+-		{name: "client", sections: renderHTTPSections(t, plan.ClientTypeFiles()[0])},
+-		{name: "server", sections: renderHTTPSections(t, plan.ServerTypeFiles()[0])},
+-	} {
+-		t.Run(file.name, func(t *testing.T) {
+-			require.Contains(t, file.sections, want)
+-		})
+-	}
+-}
+ 
+ // renderHTTPSections writes all generated sections after the file header.
+ func renderHTTPSections(t *testing.T, file *codegen.File) string {
+diff --git a/http/codegen/handler_test.go b/http/codegen/handler_test.go
+--- a/http/codegen/handler_test.go
++++ b/http/codegen/handler_test.go
+@@ -1,41 +1,15 @@
+ package codegen
+ 
+ import (
+-	"testing"
++	_ "testing"
+ 
+-	"example.internal/apikit/v3/codegen/testutil"
+-	"example.internal/apikit/v3/expr"
++	_ "example.internal/apikit/v3/codegen/testutil"
++	_ "example.internal/apikit/v3/expr"
+ 
+-	"github.com/stretchr/testify/require"
++	_ "github.com/stretchr/testify/require"
+ 
+-	"example.internal/apikit/v3/codegen"
+-	"example.internal/apikit/v3/codegen/codegentest"
+-	"example.internal/apikit/v3/http/codegen/testdata"
++	_ "example.internal/apikit/v3/codegen"
++	_ "example.internal/apikit/v3/codegen/codegentest"
++	_ "example.internal/apikit/v3/http/codegen/testdata"
+ )
+ 
+-func TestHandlerInit(t *testing.T) {
+-	cases := []struct {
+-		Name string
+-		DSL  func()
+-	}{
+-		{"no payload no result", testdata.ServerNoPayloadNoResultDSL},
+-		{"no payload no result with a redirect", testdata.ServerNoPayloadNoResultWithRedirectDSL},
+-		{"payload no result", testdata.ServerPayloadNoResultDSL},
+-		{"payload no result with a redirect", testdata.ServerPayloadNoResultWithRedirectDSL},
+-		{"no payload result", testdata.ServerNoPayloadResultDSL},
+-		{"payload result", testdata.ServerPayloadResultDSL},
+-		{"payload result error", testdata.ServerPayloadResultErrorDSL},
+-		{"skip response body encode decode", testdata.ServerSkipResponseBodyEncodeDecodeDSL},
+-	}
+-	for _, c := range cases {
+-		t.Run(c.Name, func(t *testing.T) {
+-			root := expr.RunDSL(t, c.DSL)
+-			plan := linkedHTTPPlanForRoot(t, root)
+-			fs := plan.ServerFiles()
+-			sections := codegentest.Sections(fs, "server.go", "server-handler-init")
+-			require.Greater(t, len(sections), 0)
+-			code := codegen.SectionCode(t, sections[0])
+-			testutil.AssertGo(t, "testdata/golden/handler_"+c.Name+".go.golden", code)
+-		})
+-	}
+-}
+diff --git a/http/codegen/idempotency_test.go b/http/codegen/idempotency_test.go
+--- a/http/codegen/idempotency_test.go
++++ b/http/codegen/idempotency_test.go
+@@ -7,47 +7,18 @@ import (
+ 	"os"
+ 	"path/filepath"
+ 	"slices"
+-	"strings"
++	_ "strings"
+ 	"testing"
+ 
+-	"github.com/stretchr/testify/assert"
++	_ "github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
+ 
+-	"example.internal/apikit/v3/codegen"
+-	. "example.internal/apikit/v3/dsl"
++	_ "example.internal/apikit/v3/codegen"
++	_ "example.internal/apikit/v3/dsl"
+ 	"example.internal/apikit/v3/expr"
+ 	"example.internal/apikit/v3/http/codegen/testdata"
+ )
+ 
+-func TestIdempotentHTTPEndpointCodegen(t *testing.T) {
+-	root := expr.RunDSL(t, func() {
+-		Service("Retry", func() {
+-			Method("read", func() {
+-				Idempotent()
+-				Error("busy", func() {
+-					Temporary()
+-				})
+-				HTTP(func() {
+-					GET("/read")
+-					Response("busy", StatusServiceUnavailable)
+-				})
+-			})
+-			Method("write", func() {
+-				HTTP(func() {
+-					POST("/write")
+-				})
+-			})
+-		})
+-	})
+-	plan := linkedHTTPPlanForRoot(t, root)
+-	clientFiles := plan.ClientFiles()
+-	require.NotEmpty(t, clientFiles)
+-
+-	clientCode := codegen.SectionsCode(t, clientFiles[0].Section("client-endpoint-init"))
+-
+-	assert.Contains(t, clientCode, `goa.RetryEndpoint(endpoint, "busy")`)
+-	assert.Equal(t, 1, strings.Count(clientCode, "goa.RetryEndpoint("))
+-}
+ 
+ // TestFileGenerationIdempotent builds the HTTP services data once and renders
+ // the complete generated file set twice, asserting that both renders produce
+diff --git a/http/codegen/openapi_order_independence_test.go b/http/codegen/openapi_order_independence_test.go
+--- a/http/codegen/openapi_order_independence_test.go
++++ b/http/codegen/openapi_order_independence_test.go
+@@ -7,56 +7,13 @@ import (
+ 	"testing"
+ 	"text/template"
+ 
+-	"github.com/stretchr/testify/assert"
++	_ "github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
+ 
+ 	"example.internal/apikit/v3/expr"
+-	"example.internal/apikit/v3/http/codegen/testdata"
++	_ "example.internal/apikit/v3/http/codegen/testdata"
+ )
+ 
+-// TestOpenAPIOrderIndependence verifies that building HTTP files first does not
+-// change the OpenAPI documents. HTTP generation must not change the design that
+-// the OpenAPI generator reads afterward.
+-func TestOpenAPIOrderIndependence(t *testing.T) {
+-	cases := []struct {
+-		Name string
+-		DSL  func()
+-	}{
+-		// Named request and result fields used to be flattened in place, which
+-		// changed the OpenAPI schemas generated afterward.
+-		{"alias-type", testdata.AliasTypeDSL},
+-		{"result-body-multiple-views", testdata.ResultBodyMultipleViewsDSL},
+-		{"explicit-view", testdata.ExplicitViewDSL},
+-		{"error-response", testdata.PrimitiveErrorResponseDSL},
+-		{"streaming-result", testdata.StreamingResultDSL},
+-		{"streaming-payload", testdata.StreamingPayloadDSL},
+-		// Anonymous object results pass because codegen.NewGeneration prepares
+-		// those result objects before HTTP generation starts. See
+-		// TestGeneratorsTreatDesignAsReadOnly for the check that covers the whole
+-		// generation run.
+-		{"sse", testdata.SSEStringDSL},
+-	}
+-	for _, c := range cases {
+-		t.Run(c.Name, func(t *testing.T) {
+-			// First build OpenAPI documents from an untouched design.
+-			pristine := renderOpenAPI(t, expr.RunDSL(t, c.DSL))
+-
+-			// Then build HTTP files first and OpenAPI documents second from the
+-			// same design.
+-			root := expr.RunDSL(t, c.DSL)
+-			plan := linkedHTTPPlanForRoot(t, root)
+-			for _, svc := range root.API.HTTP.Services {
+-				require.NotNil(t, plan.services.Get(svc.Name()))
+-			}
+-			produced := renderOpenAPI(t, root)
+-
+-			require.Equal(t, len(pristine), len(produced))
+-			for path, content := range pristine {
+-				assert.Equal(t, content, produced[path], "OpenAPI file %q changed after the HTTP transport data was computed", path)
+-			}
+-		})
+-	}
+-}
+ 
+ // renderOpenAPI generates and renders all the OpenAPI specification files for
+ // the given root and returns their content indexed by file path. The call uses
+diff --git a/http/codegen/plan_test.go b/http/codegen/plan_test.go
+--- a/http/codegen/plan_test.go
++++ b/http/codegen/plan_test.go
+@@ -23,7 +23,7 @@ import (
+ 	"example.internal/apikit/v3/dsl"
+ 	"example.internal/apikit/v3/eval"
+ 	"example.internal/apikit/v3/expr"
+-	"example.internal/apikit/v3/http/codegen/testdata"
++	_ "example.internal/apikit/v3/http/codegen/testdata"
+ )
+ 
+ func TestPlanDoesNotReserveUnusedStaticAliasesBeforeFreeze(t *testing.T) {
+@@ -401,52 +401,6 @@ func TestHTTPPlanReservesOnlyFixedImportsWrittenByThePackage(t *testing.T) {
+ 	}
+ }
+ 
+-// TestHTTPPlanReservesFixedImportsWrittenByThePackage verifies that standard
+-// packages keep the names written by HTTP templates when generated sections
+-// use them.
+-func TestHTTPPlanReservesFixedImportsWrittenByThePackage(t *testing.T) {
+-	const customRoot = "example.com/custom/"
+-	root := expr.RunDSL(t, func() {
+-		failure := dsl.Type("Failure", func() {
+-			dsl.Attribute("message", dsl.String)
+-		})
+-		dsl.Service("Calc", func() {
+-			dsl.Error("failed", failure)
+-			dsl.Method("Read", func() {
+-				dsl.Result(func() {
+-					for _, name := range []string{"errors", "strings", "strconv"} {
+-						dsl.Attribute(name, dsl.String, func() {
+-							dsl.Meta("struct:field:type", name+".Value", customRoot+name, name)
+-						})
+-					}
+-					dsl.Attribute("numbers", dsl.ArrayOf(dsl.Int))
+-				})
+-				dsl.Error("failed")
+-				dsl.HTTP(func() {
+-					dsl.GET("/")
+-					dsl.Response(func() {
+-						dsl.Header("numbers:X-Numbers")
+-					})
+-					dsl.Response("failed", dsl.StatusBadRequest)
+-				})
+-			})
+-		})
+-	})
+-	generation, err := codegen.NewGeneration("generated.local/gen", []eval.Root{root})
+-	require.NoError(t, err)
+-	servicePlan, err := service.NewPlan(root, generation, expr.NewExampleGenerator(root.API.RandomizerFactory))
+-	require.NoError(t, err)
+-	plans, err := NewPlans(generation, PlanInput{Root: root, Service: servicePlan})
+-	require.NoError(t, err)
+-	require.NoError(t, generation.Freeze())
+-	require.NoError(t, servicePlan.Link())
+-	require.NoError(t, plans[0].Link())
+-
+-	server := generation.Package("generated.local/gen/http/calc/server")
+-	for _, name := range []string{"errors", "strings", "strconv"} {
+-		require.Equal(t, name+"2", server.ImportName(customRoot+name))
+-	}
+-}
+ 
+ // TestHTTPFilePlansMatchRenderedImports verifies that planning and rendering
+ // agree on every import used by a simple HTTP service.
+@@ -495,86 +449,6 @@ func TestHTTPFilePlansMatchRenderedImports(t *testing.T) {
+ 	}
+ }
+ 
+-// TestHTTPFilePlansIncludeGeneratedUses verifies that files reserve the
+-// packages named by copied validators, constructors, and query conversion.
+-func TestHTTPFilePlansIncludeGeneratedUses(t *testing.T) {
+-	t.Run("required basic authentication", func(t *testing.T) {
+-		root := expr.RunDSL(t, func() {
+-			basic := dsl.BasicAuthSecurity("basic")
+-			dsl.API("secure", func() {
+-				dsl.Security(basic)
+-			})
+-			dsl.Service("Account", func() {
+-				dsl.Method("Read", func() {
+-					dsl.Payload(func() {
+-						dsl.Username("username")
+-						dsl.Password("password")
+-						dsl.Required("username", "password")
+-					})
+-					dsl.HTTP(func() {
+-						dsl.GET("/account")
+-					})
+-				})
+-			})
+-		})
+-		plan := linkedHTTPPlanForRoot(t, root)
+-		serverImports := plannedHTTPFileImports(t, plan.ServerFiles(), "/server/encode_decode.go")
+-		clientCLIImports := plannedHTTPFileImports(t, plan.ClientCLIFiles(), "/client/cli.go")
+-		require.Contains(t, serverImports, codegen.GoaImport("").Path)
+-		require.Contains(t, clientCLIImports, "fmt")
+-	})
+-
+-	t.Run("authorization bearer header", func(t *testing.T) {
+-		root := expr.RunDSL(t, testdata.PayloadJWTAuthorizationHeaderDSL)
+-		plan := linkedHTTPPlanForRoot(t, root)
+-		clientImports := plannedHTTPFileImports(t, plan.ClientFiles(), "/client/encode_decode.go")
+-		require.Contains(t, clientImports, "strings")
+-	})
+-
+-	t.Run("path default ignored by client command", func(t *testing.T) {
+-		root := expr.RunDSL(t, testdata.PayloadPathStringDefaultDSL)
+-		plan := linkedHTTPPlanForRoot(t, root)
+-		clientImports := plannedHTTPFileImports(t, plan.ClientCLIFiles(), "/client/cli.go")
+-		require.Contains(t, clientImports, "fmt")
+-	})
+-
+-	t.Run("nested string validation", func(t *testing.T) {
+-		root := expr.RunDSL(t, testdata.ResultWithResultCollectionDSL)
+-		plan := linkedHTTPPlanForRoot(t, root)
+-		file := plan.ClientTypeFiles()[0]
+-		imports := importPaths(file.SectionTemplates[0].Data.(map[string]any)["Imports"].([]*codegen.ImportSpec))
+-		require.Contains(t, imports, "unicode/utf8")
+-	})
+-
+-	t.Run("numeric map query", func(t *testing.T) {
+-		root := expr.RunDSL(t, testdata.PayloadMapQueryObjectDSL)
+-		plan := linkedHTTPPlanForRoot(t, root)
+-		client := plan.ClientFiles()[1]
+-		server := plan.ServerFiles()[1]
+-		clientImports := importPaths(client.SectionTemplates[0].Data.(map[string]any)["Imports"].([]*codegen.ImportSpec))
+-		serverImports := importPaths(server.SectionTemplates[0].Data.(map[string]any)["Imports"].([]*codegen.ImportSpec))
+-		require.Contains(t, clientImports, "strconv")
+-		require.Contains(t, serverImports, "strconv")
+-	})
+-
+-	t.Run("built-in error constructor", func(t *testing.T) {
+-		root := expr.RunDSL(t, func() {
+-			dsl.Service("Records", func() {
+-				dsl.Method("Read", func() {
+-					dsl.Error("not_found")
+-					dsl.HTTP(func() {
+-						dsl.GET("/records")
+-						dsl.Response("not_found", dsl.StatusNotFound)
+-					})
+-				})
+-			})
+-		})
+-		plan := linkedHTTPPlanForRoot(t, root)
+-		file := plan.ServerTypeFiles()[0]
+-		imports := importPaths(file.SectionTemplates[0].Data.(map[string]any)["Imports"].([]*codegen.ImportSpec))
+-		require.Contains(t, imports, codegen.GoaImport("").Path)
+-	})
+-}
+ 
+ // TestHTTPCodecFilesPlanStringLengthValidationImports checks the complete
+ // decoder files that validate request and response headers directly.
+@@ -839,41 +713,6 @@ func TestViewedResultCopiesBodyFieldSelection(t *testing.T) {
+ 	}
+ }
+ 
+-// TestEndpointConstructorsUsePackageDeclarations checks that request payload,
+-// response result, and error result functions all use the names chosen before
+-// files are written.
+-func TestEndpointConstructorsUsePackageDeclarations(t *testing.T) {
+-	root := expr.RunDSL(t, func() {
+-		dsl.Service("Calc", func() {
+-			dsl.Method("Add", func() {
+-				dsl.Payload(func() { dsl.Attribute("value", dsl.Int) })
+-				dsl.Result(func() { dsl.Attribute("total", dsl.Int) })
+-				dsl.Error("BadInput", func() { dsl.Attribute("message", dsl.String) })
+-				dsl.HTTP(func() {
+-					dsl.POST("/add")
+-					dsl.Response("BadInput", dsl.StatusBadRequest)
+-				})
+-			})
+-		})
+-	})
+-	generation, err := codegen.NewGeneration("generated.local/gen", []eval.Root{root})
+-	require.NoError(t, err)
+-	servicePlan, err := service.NewPlan(root, generation, expr.NewExampleGenerator(root.API.RandomizerFactory))
+-	require.NoError(t, err)
+-	plans, err := NewPlans(generation, PlanInput{Root: root, Service: servicePlan})
+-	require.NoError(t, err)
+-	require.NoError(t, generation.Freeze())
+-	require.NoError(t, servicePlan.Link())
+-	require.NoError(t, plans[0].Link())
+-
+-	endpoint := plans[0].services.Get("Calc").Endpoints[0]
+-	require.NotNil(t, endpoint.Payload.Request.PayloadInit.Declaration)
+-	require.Equal(t, endpoint.Payload.Request.PayloadInit.Declaration.Name(), endpoint.Payload.Request.PayloadInit.Name)
+-	require.NotNil(t, endpoint.Result.Responses[0].ResultInit.Declaration)
+-	require.Equal(t, endpoint.Result.Responses[0].ResultInit.Declaration.Name(), endpoint.Result.Responses[0].ResultInit.Name)
+-	require.NotNil(t, endpoint.Errors[0].Errors[0].Response.ResultInit.Declaration)
+-	require.Equal(t, endpoint.Errors[0].Errors[0].Response.ResultInit.Declaration.Name(), endpoint.Errors[0].Errors[0].Response.ResultInit.Name)
+-}
+ 
+ // TestHTTPTypeAndConstructorNamesShareOnePackage checks a body type and a
+ // payload constructor that request the same spelling. Apikit must give them
+diff --git a/http/codegen/service_data_purity_test.go b/http/codegen/service_data_purity_test.go
+--- a/http/codegen/service_data_purity_test.go
++++ b/http/codegen/service_data_purity_test.go
+@@ -3,13 +3,13 @@ package codegen
+ import (
+ 	"sort"
+ 	"strings"
+-	"testing"
++	_ "testing"
+ 
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
++	_ "github.com/stretchr/testify/assert"
++	_ "github.com/stretchr/testify/require"
+ 
+ 	"example.internal/apikit/v3/expr"
+-	"example.internal/apikit/v3/http/codegen/testdata"
++	_ "example.internal/apikit/v3/http/codegen/testdata"
+ )
+ 
+ type (
+@@ -30,104 +30,6 @@ type (
+ 	}
+ )
+ 
+-func TestAnalyzeLeavesDesignExpressionsUnchanged(t *testing.T) {
+-	cases := []struct {
+-		Name string
+-		DSL  func()
+-	}{
+-		{"payload-body-user", testdata.PayloadBodyUserDSL},
+-		{"aliased-payload-and-result", testdata.AliasTypeDSL},
+-		{"result-body-multiple-views", testdata.ResultBodyMultipleViewsDSL},
+-		{"explicit-view", testdata.ExplicitViewDSL},
+-		{"primitive-error", testdata.PrimitiveErrorResponseDSL},
+-		{"service-error", testdata.ServiceErrorResponseDSL},
+-		{"websocket-streaming-payload", testdata.StreamingPayloadDSL},
+-		{"websocket-bidirectional", testdata.BidirectionalStreamingDSL},
+-		{"sse", testdata.SSEObjectDSL},
+-	}
+-	for _, c := range cases {
+-		t.Run(c.Name, func(t *testing.T) {
+-			root := expr.RunDSL(t, c.DSL)
+-			snaps := make(map[string]httpEndpointExprSnapshot)
+-			tags := make(map[*expr.AttributeExpr][]string)
+-			for _, svc := range root.API.HTTP.Services {
+-				for _, e := range svc.HTTPEndpoints {
+-					snap := httpEndpointExprSnapshot{
+-						body:           e.Body,
+-						bodyType:       e.Body.Type,
+-						errorBodies:    make(map[string]*expr.AttributeExpr, len(e.HTTPErrors)),
+-						errorBodyTypes: make(map[string]expr.DataType, len(e.HTTPErrors)),
+-					}
+-					if e.StreamingBody != nil {
+-						snap.streamingBody = e.StreamingBody
+-						snap.streamingBodyType = e.StreamingBody.Type
+-					}
+-					for _, resp := range e.Responses {
+-						snap.responseBodies = append(snap.responseBodies, resp.Body)
+-						snap.responseBodyTypes = append(snap.responseBodyTypes, resp.Body.Type)
+-					}
+-					for _, er := range e.HTTPErrors {
+-						snap.errorBodies[er.Name] = er.Response.Body
+-						snap.errorBodyTypes[er.Name] = er.Response.Body.Type
+-					}
+-					snaps[svc.Name()+"."+e.Name()] = snap
+-					collectMarshalTagMeta(e.Body, tags, make(map[string]struct{}))
+-					collectMarshalTagMeta(e.StreamingBody, tags, make(map[string]struct{}))
+-					for _, resp := range e.Responses {
+-						collectMarshalTagMeta(resp.Body, tags, make(map[string]struct{}))
+-					}
+-					for _, er := range e.HTTPErrors {
+-						collectMarshalTagMeta(er.Response.Body, tags, make(map[string]struct{}))
+-					}
+-				}
+-			}
+-
+-			plan := linkedHTTPPlanForRoot(t, root)
+-			for _, svc := range root.API.HTTP.Services {
+-				require.NotNil(t, plan.services.Get(svc.Name()))
+-			}
+-
+-			for _, svc := range root.API.HTTP.Services {
+-				for _, e := range svc.HTTPEndpoints {
+-					key := svc.Name() + "." + e.Name()
+-					snap := snaps[key]
+-					assert.Same(t, snap.body, e.Body, "%s: body attribute replaced", key)
+-					assert.True(t, snap.bodyType == e.Body.Type, "%s: body type replaced", key)
+-					if snap.streamingBody != nil {
+-						assert.Same(t, snap.streamingBody, e.StreamingBody, "%s: streaming body attribute replaced", key)
+-						assert.True(t, snap.streamingBodyType == e.StreamingBody.Type, "%s: streaming body type replaced", key)
+-					}
+-					require.Len(t, e.Responses, len(snap.responseBodies), "%s: responses changed", key)
+-					for i, resp := range e.Responses {
+-						assert.Same(t, snap.responseBodies[i], resp.Body, "%s: response #%d body attribute replaced", key, i)
+-						assert.True(t, snap.responseBodyTypes[i] == resp.Body.Type, "%s: response #%d body type replaced", key, i)
+-					}
+-					for _, er := range e.HTTPErrors {
+-						assert.Same(t, snap.errorBodies[er.Name], er.Response.Body, "%s: error %q response body attribute replaced", key, er.Name)
+-						assert.True(t, snap.errorBodyTypes[er.Name] == er.Response.Body.Type, "%s: error %q response body type replaced", key, er.Name)
+-					}
+-				}
+-			}
+-
+-			// addMarshalTags must only annotate the detached shaped bodies,
+-			// never the design attributes.
+-			after := make(map[*expr.AttributeExpr][]string)
+-			for _, svc := range root.API.HTTP.Services {
+-				for _, e := range svc.HTTPEndpoints {
+-					collectMarshalTagMeta(e.Body, after, make(map[string]struct{}))
+-					collectMarshalTagMeta(e.StreamingBody, after, make(map[string]struct{}))
+-					for _, resp := range e.Responses {
+-						collectMarshalTagMeta(resp.Body, after, make(map[string]struct{}))
+-					}
+-					for _, er := range e.HTTPErrors {
+-						collectMarshalTagMeta(er.Response.Body, after, make(map[string]struct{}))
+-					}
+-				}
+-			}
+-			assert.Equal(t, tags, after, "struct:tag meta written into design attributes")
+-		})
+-	}
+-}
+ 
+ // collectMarshalTagMeta records the struct:tag:* meta keys carried by the
+ // attributes reachable from att so the test can assert that analysis does not
+diff --git a/http/codegen/service_data_union_order_test.go b/http/codegen/service_data_union_order_test.go
+--- a/http/codegen/service_data_union_order_test.go
++++ b/http/codegen/service_data_union_order_test.go
+@@ -208,30 +208,6 @@ func TestHTTPServiceDataReusesOneAuthoredUnionAcrossExplicitRequestBodies(t *tes
+ 	}
+ }
+ 
+-func TestHTTPServiceDataReusesOneAuthoredUnionAcrossErrors(t *testing.T) {
+-	root := expr.RunDSL(t, func() {
+-		failure := dsl.Type("SharedFailure", func() {
+-			dsl.OneOf("Cause", sameShapedValueUnionDSL)
+-		})
+-		dsl.Service("values", func() {
+-			for _, method := range []string{"first", "second"} {
+-				dsl.Method(method, func() {
+-					dsl.Error("failed", failure)
+-					dsl.HTTP(func() {
+-						dsl.GET("/" + method)
+-						dsl.Response("failed", dsl.StatusBadRequest)
+-					})
+-				})
+-			}
+-		})
+-	})
+-
+-	data := linkedHTTPPlanForRoot(t, root).services.Get("values")
+-	for _, catalog := range []*wireTypeCatalog{data.serverWireTypes, data.clientWireTypes} {
+-		require.Len(t, catalog.unionTypes(), 1)
+-		require.Equal(t, "CauseResponseBody", catalog.unionTypes()[0].Name)
+-	}
+-}
+ 
+ func TestHTTPServiceDataReusesUnionWhenBranchTypeAppearsEarlier(t *testing.T) {
+ 	root := expr.RunDSL(t, unionBranchOrderDSL)

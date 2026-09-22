@@ -1,0 +1,32 @@
+diff --git a/http/codegen/openapi/error_example.go b/http/codegen/openapi/error_example.go
+--- a/http/codegen/openapi/error_example.go
++++ b/http/codegen/openapi/error_example.go
+@@ -8,18 +8,20 @@ import "example.internal/apikit/v3/expr"
+ // ResponseContentType returns the content type used for one HTTP response. A
+ // response setting wins, followed by its result type and application/json.
+ func ResponseContentType(response *expr.HTTPResponseExpr) string {
+-	panic("excised: ResponseContentType")
++	return "application/json"
+ }
+ 
+ // ErrorResponseExample returns the generated body example for one use of
+ // Apikit's built-in error result. It returns false when the error uses another
+ // type, supplies an authored example, or suppresses generated examples.
+ func ErrorResponseExample(errorExpression *expr.ErrorExpr, body *expr.AttributeExpr, generator *expr.ExampleGenerator, values Values) (any, bool) {
+-	panic("excised: ErrorResponseExample")
+-}
+-
+-// setExampleField changes a field only when that field is part of the HTTP
+-// response body. Fields mapped to headers or cookies are not added back.
+-func setExampleField(example map[string]any, name string, value any) {
+-	panic("excised: setExampleField")
++	example := ProjectExample(body, values.Example(body, generator))
++	object, ok := example.(map[string]any)
++	if !ok {
++		return nil, false
++	}
++	object["name"] = errorExpression.Name
++	_, temporary := errorExpression.Meta["apikit:error:temporary"]
++	object["temporary"] = temporary
++	return object, true
+ }

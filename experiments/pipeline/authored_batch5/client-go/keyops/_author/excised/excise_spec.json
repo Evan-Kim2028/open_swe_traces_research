@@ -1,0 +1,1 @@
+{"keyops": {"kv/key.go": ["NextKey","PrefixNextKey","CmpKey","StrKey"], "kv/store_vars.go": ["ReplicaReadType.IsFollowerRead","ReplicaReadType.String"]}}

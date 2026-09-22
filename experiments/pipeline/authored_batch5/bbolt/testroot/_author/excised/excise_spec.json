@@ -1,0 +1,7 @@
+{
+ "testroot": {
+  "tests/utils/helpers.go": [
+   "RequiresRoot"
+  ]
+ }
+}

@@ -1,0 +1,1025 @@
+diff --git a/internal/archive/archive.go b/internal/archive/archive.go
+index bb052a3..22a01c3 100644
+--- a/internal/archive/archive.go
++++ b/internal/archive/archive.go
+@@ -3,22 +3,22 @@
+ package archive
+ 
+ import (
+-	"archive/tar"
+-	"archive/zip"
+-	"compress/gzip"
++	_ "archive/tar"
++	_ "archive/zip"
++	_ "compress/gzip"
+ 	"errors"
+-	"fmt"
++	_ "fmt"
+ 	"io"
+-	"io/fs"
+-	"path"
+-	"slices"
+-	"strings"
++	_ "io/fs"
++	_ "path"
++	_ "slices"
++	_ "strings"
+ 	"time"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+-	"example.internal/gitkit/v6/plumbing/filemode"
++	_ "example.internal/gitkit/v6/plumbing/filemode"
+ 	"example.internal/gitkit/v6/plumbing/object"
+-	"example.internal/gitkit/v6/plumbing/storer"
++	_ "example.internal/gitkit/v6/plumbing/storer"
+ 	"example.internal/gitkit/v6/storage"
+ )
+ 
+@@ -71,22 +71,19 @@ const maxTarSymlinkTargetSize = 64 * 1024
+ 
+ // SupportedFormats returns the list of supported archive formats.
+ func SupportedFormats() []string {
+-	return []string{"tar", "tar.gz", "tgz", "zip"}
++	panic("excised: SupportedFormats")
+ }
+ 
+ // ApplyUmask applies umask to the given mode for regular files.
+ // Returns mode with all permission bits set, then applies umask.
+ func ApplyUmask(mode int64, isExecutable bool) int64 {
+-	if isExecutable {
+-		return (mode | 0o777) &^ DefaultUmask
+-	}
+-	return (mode | 0o666) &^ DefaultUmask
++	panic("excised: ApplyUmask")
+ }
+ 
+ // ApplyUmaskDir applies umask to directories.
+ // Directories always get full permissions minus umask.
+ func ApplyUmaskDir(mode int64) int64 {
+-	return (mode | 0o777) &^ DefaultUmask
++	panic("excised: ApplyUmaskDir")
+ }
+ 
+ // ResolveTreeish resolves a tree-ish expression to a tree object.
+@@ -98,322 +95,22 @@ func ApplyUmaskDir(mode int64) int64 {
+ //
+ // Returns the tree, commit hash (if applicable), commit time, and any error.
+ func ResolveTreeish(st storage.Storer, treeish string, allowUnreachable bool) (*object.Tree, *plumbing.Hash, time.Time, error) {
+-	var subPath string
+-	if idx := strings.IndexByte(treeish, ':'); idx >= 0 {
+-		subPath = treeish[idx+1:]
+-		treeish = treeish[:idx]
+-	}
+-
+-	if !allowUnreachable {
+-		if plumbing.IsHash(treeish) {
+-			return nil, nil, time.Time{}, fmt.Errorf("%w (got %s)", ErrOnlyRefNames, treeish)
+-		}
+-		if strings.ContainsAny(treeish, "^~@{}") {
+-			return nil, nil, time.Time{}, fmt.Errorf("%w (got %s)", ErrRelativeExpressions, treeish)
+-		}
+-	}
+-
+-	h, err := ResolveRef(st, treeish, allowUnreachable)
+-	if err != nil {
+-		return nil, nil, time.Time{}, err
+-	}
+-
+-	obj, err := object.GetObject(st, h)
+-	if err != nil {
+-		return nil, nil, time.Time{}, fmt.Errorf("%w: %s", ErrObjectNotFound, treeish)
+-	}
+-
+-	for {
+-		tag, ok := obj.(*object.Tag)
+-		if !ok {
+-			break
+-		}
+-
+-		obj, err = object.GetObject(st, tag.Target)
+-		if err != nil {
+-			return nil, nil, time.Time{}, fmt.Errorf("resolve annotated tag: %w", err)
+-		}
+-	}
+-
+-	var commitHash *plumbing.Hash
+-	var commitTime time.Time
+-	var tree *object.Tree
+-
+-	switch o := obj.(type) {
+-	case *object.Commit:
+-		commitHash = &o.Hash
+-		commitTime = o.Committer.When
+-		tree, err = o.Tree()
+-		if err != nil {
+-			return nil, nil, time.Time{}, err
+-		}
+-	case *object.Tree:
+-		tree = o
+-
+-		// git archive behaves differently when given a tree ID versus when
+-		// given a commit ID or tag ID. In the first case the current time is
+-		// used as the modification time of each file in the archive. In the
+-		// latter case the commit time as recorded in the referenced commit
+-		// object is used instead.
+-		//
+-		// See https://git-scm.com/docs/git-archive
+-		commitTime = time.Now()
+-	default:
+-		return nil, nil, time.Time{}, fmt.Errorf("unsupported object type for archive: %T", obj)
+-	}
+-
+-	if subPath != "" {
+-		entry, err := tree.FindEntry(subPath)
+-		if err != nil {
+-			return nil, nil, time.Time{}, fmt.Errorf("path not found in tree: %s", subPath)
+-		}
+-		if entry.Mode != filemode.Dir {
+-			return nil, nil, time.Time{}, fmt.Errorf("path is not a directory: %s", subPath)
+-		}
+-		tree, err = object.GetTree(st, entry.Hash)
+-		if err != nil {
+-			return nil, nil, time.Time{}, err
+-		}
+-	}
+-
+-	return tree, commitHash, commitTime, nil
++	panic("excised: ResolveTreeish")
+ }
+ 
+ // ResolveRef resolves a ref name to a hash.
+ func ResolveRef(st storage.Storer, name string, allowHash bool) (plumbing.Hash, error) {
+-	if allowHash && plumbing.IsHash(name) {
+-		return plumbing.NewHash(name), nil
+-	}
+-
+-	for _, candidate := range []plumbing.ReferenceName{
+-		plumbing.ReferenceName(name),
+-		plumbing.ReferenceName("refs/heads/" + name),
+-		plumbing.ReferenceName("refs/tags/" + name),
+-	} {
+-		ref, err := storer.ResolveReference(st, candidate)
+-		if err == nil {
+-			return ref.Hash(), nil
+-		}
+-	}
+-
+-	return plumbing.ZeroHash, fmt.Errorf("cannot resolve %q", name)
++	panic("excised: ResolveRef")
+ }
+ 
+ // WriteTarArchive writes a tar archive from a tree.
+ func WriteTarArchive(st storage.Storer, w io.Writer, tree *object.Tree, commitHash *plumbing.Hash, prefix string, pathFilter []string, modTime time.Time) error {
+-	tw := tar.NewWriter(w)
+-
+-	// Write PAX global extended header with commit ID if available.
+-	// This matches the behavior of git archive and allows extraction
+-	// via git get-tar-commit-id.
+-	if commitHash != nil {
+-		err := tw.WriteHeader(&tar.Header{
+-			Typeflag: tar.TypeXGlobalHeader,
+-			Name:     PAXGlobalHeader,
+-			PAXRecords: map[string]string{
+-				"comment": commitHash.String(),
+-			},
+-		})
+-		if err != nil {
+-			return fmt.Errorf("writing global PAX header: %w", err)
+-		}
+-	}
+-
+-	if prefix != "" && strings.HasSuffix(prefix, "/") {
+-		if err := tw.WriteHeader(&tar.Header{
+-			Typeflag: tar.TypeDir,
+-			Name:     prefix,
+-			Mode:     ApplyUmaskDir(0),
+-			ModTime:  modTime,
+-		}); err != nil {
+-			return err
+-		}
+-	}
+-
+-	walker := object.NewTreeWalker(tree, true, nil)
+-	defer walker.Close()
+-
+-	var matchedAny bool
+-	for {
+-		name, entry, err := walker.Next()
+-		if err == io.EOF {
+-			break
+-		}
+-		if err != nil {
+-			return err
+-		}
+-
+-		if len(pathFilter) > 0 && !MatchesPathFilter(name, pathFilter) {
+-			continue
+-		}
+-		matchedAny = true
+-
+-		fullName := prefix + name
+-
+-		// Extract Unix permission bits from git mode.
+-		unixMode := int64(entry.Mode) & 0o777
+-
+-		if entry.Mode == filemode.Dir || entry.Mode == filemode.Submodule {
+-			if err := tw.WriteHeader(&tar.Header{
+-				Typeflag: tar.TypeDir,
+-				Name:     fullName + "/",
+-				Mode:     ApplyUmaskDir(unixMode),
+-				ModTime:  modTime,
+-			}); err != nil {
+-				return err
+-			}
+-			continue
+-		}
+-
+-		blob, err := object.GetBlob(st, entry.Hash)
+-		if err != nil {
+-			return err
+-		}
+-
+-		hdr := &tar.Header{
+-			Name:    fullName,
+-			Size:    blob.Size,
+-			Mode:    unixMode,
+-			ModTime: modTime,
+-		}
+-
+-		if entry.Mode == filemode.Symlink {
+-			rc, err := blob.Reader()
+-			if err != nil {
+-				return err
+-			}
+-			target, err := io.ReadAll(io.LimitReader(rc, maxTarSymlinkTargetSize+1))
+-			closeErr := rc.Close()
+-			if err != nil {
+-				return err
+-			}
+-			if closeErr != nil {
+-				return closeErr
+-			}
+-			if len(target) > maxTarSymlinkTargetSize {
+-				return fmt.Errorf("%w: %s (%d bytes)", ErrSymlinkTargetTooLarge, fullName, len(target))
+-			}
+-			hdr.Typeflag = tar.TypeSymlink
+-			hdr.Linkname = string(target)
+-			hdr.Size = 0
+-			// Symlinks always get 0777 per canonical git.
+-			hdr.Mode = 0o777
+-			if err := tw.WriteHeader(hdr); err != nil {
+-				return err
+-			}
+-			continue
+-		}
+-
+-		isExec := entry.Mode == filemode.Executable
+-		hdr.Mode = ApplyUmask(unixMode, isExec)
+-
+-		if err := tw.WriteHeader(hdr); err != nil {
+-			return err
+-		}
+-
+-		rc, err := blob.Reader()
+-		if err != nil {
+-			return err
+-		}
+-		_, err = io.Copy(tw, rc)
+-		closeErr := rc.Close()
+-		if err != nil {
+-			return err
+-		}
+-		if closeErr != nil {
+-			return closeErr
+-		}
+-	}
+-
+-	if len(pathFilter) > 0 && !matchedAny {
+-		return fmt.Errorf("%w: '%s'", ErrPathspecNoMatch, strings.Join(pathFilter, " "))
+-	}
+-
+-	return tw.Close()
++	panic("excised: WriteTarArchive")
+ }
+ 
+ // WriteZipArchive writes a zip archive from a tree.
+ func WriteZipArchive(st storage.Storer, w io.Writer, tree *object.Tree, commitHash *plumbing.Hash, prefix string, pathFilter []string, modTime time.Time) error {
+-	zw := zip.NewWriter(w)
+-
+-	walker := object.NewTreeWalker(tree, true, nil)
+-	defer walker.Close()
+-
+-	var matchedAny bool
+-	for {
+-		name, entry, err := walker.Next()
+-		if err == io.EOF {
+-			break
+-		}
+-		if err != nil {
+-			return err
+-		}
+-
+-		if len(pathFilter) > 0 && !MatchesPathFilter(name, pathFilter) {
+-			continue
+-		}
+-		matchedAny = true
+-
+-		if entry.Mode == filemode.Dir || entry.Mode == filemode.Submodule {
+-			continue
+-		}
+-
+-		fullName := prefix + name
+-		blob, err := object.GetBlob(st, entry.Hash)
+-		if err != nil {
+-			return err
+-		}
+-
+-		// Extract Unix permission bits from git mode and apply default umask.
+-		unixMode := int64(entry.Mode) & 0o777
+-
+-		fh := &zip.FileHeader{
+-			Name:     fullName,
+-			Method:   zip.Deflate,
+-			Modified: modTime,
+-		}
+-		switch entry.Mode {
+-		case filemode.Executable:
+-			fh.SetMode(fs.FileMode(ApplyUmask(unixMode, true)))
+-		case filemode.Symlink:
+-			// Zip stores symlinks with mode 0o120000 + permissions.
+-			fh.SetMode(fs.FileMode(0o120000 | (ApplyUmask(unixMode, true) & 0o777)))
+-		default:
+-			fh.SetMode(fs.FileMode(ApplyUmask(unixMode, false)))
+-		}
+-
+-		fw, err := zw.CreateHeader(fh)
+-		if err != nil {
+-			return err
+-		}
+-
+-		rc, err := blob.Reader()
+-		if err != nil {
+-			return err
+-		}
+-		_, err = io.Copy(fw, rc)
+-		closeErr := rc.Close()
+-		if err != nil {
+-			return err
+-		}
+-		if closeErr != nil {
+-			return closeErr
+-		}
+-	}
+-
+-	if len(pathFilter) > 0 && !matchedAny {
+-		return fmt.Errorf("pathspec '%s' did not match any files", strings.Join(pathFilter, " "))
+-	}
+-
+-	// Store commit ID as ZIP file comment if available.
+-	// This matches the behavior of git archive.
+-	if commitHash != nil {
+-		if err := zw.SetComment(commitHash.String()); err != nil {
+-			return err
+-		}
+-	}
+-
+-	return zw.Close()
++	panic("excised: WriteZipArchive")
+ }
+ 
+ // MatchesPathFilter checks if a name matches any of the path filters.
+@@ -429,16 +126,7 @@ func WriteZipArchive(st storage.Storer, w io.Writer, tree *object.Tree, commitHa
+ //   - Glob patterns: "*.go" matches "main.go"
+ //   - Parent-child: "docs/guide.md" matches parent "docs"
+ func MatchesPathFilter(name string, filters []string) bool {
+-	for _, f := range filters {
+-		if name == f || strings.HasPrefix(name, f+"/") || strings.HasPrefix(f, name+"/") {
+-			return true
+-		}
+-		matched, _ := path.Match(f, name)
+-		if matched {
+-			return true
+-		}
+-	}
+-	return false
++	panic("excised: MatchesPathFilter")
+ }
+ 
+ // GetTarCommitID extracts the commit ID from a git-generated tar archive.
+@@ -447,22 +135,7 @@ func MatchesPathFilter(name string, filters []string) bool {
+ // If no global header is found or it doesn't contain a comment, it returns
+ // an error.
+ func GetTarCommitID(r io.Reader) (*plumbing.Hash, error) {
+-	tr := tar.NewReader(r)
+-	hdr, err := tr.Next()
+-	if err != nil {
+-		return nil, fmt.Errorf("reading tar header: %w", err)
+-	}
+-	// Check for PAX global extended header (typeflag 'g')
+-	if hdr.Typeflag != tar.TypeXGlobalHeader {
+-		return nil, fmt.Errorf("expected global PAX header, got typeflag %c", hdr.Typeflag)
+-	}
+-	// The PAX records should contain the commit ID in the "comment" field
+-	comment, ok := hdr.PAXRecords["comment"]
+-	if !ok {
+-		return nil, fmt.Errorf("global header missing comment field")
+-	}
+-	hash := plumbing.NewHash(comment)
+-	return &hash, nil
++	panic("excised: GetTarCommitID")
+ }
+ 
+ // WriteArchive generates an archive from a resolved tree and writes it to w.
+@@ -471,24 +144,7 @@ func GetTarCommitID(r io.Reader) (*plumbing.Hash, error) {
+ // The prefix is prepended to all file paths in the archive.
+ // The paths slice can be used to filter which files are included.
+ func WriteArchive(st storage.Storer, w io.Writer, tree *object.Tree, commitHash *plumbing.Hash, commitTime time.Time, format, prefix string, paths []string) error {
+-	if HasInvalidPrefix(prefix) {
+-		return fmt.Errorf("%w: %s", ErrInvalidPrefix, prefix)
+-	}
+-
+-	switch format {
+-	case "tar":
+-		return WriteTarArchive(st, w, tree, commitHash, prefix, paths, commitTime)
+-	case "tar.gz", "tgz":
+-		gw := gzip.NewWriter(w)
+-		if err := WriteTarArchive(st, gw, tree, commitHash, prefix, paths, commitTime); err != nil {
+-			return err
+-		}
+-		return gw.Close()
+-	case "zip":
+-		return WriteZipArchive(st, w, tree, commitHash, prefix, paths, commitTime)
+-	default:
+-		return fmt.Errorf("%w: %s", ErrUnsupportedFormat, format)
+-	}
++	panic("excised: WriteArchive")
+ }
+ 
+ // HasInvalidPrefix reports whether prefix contains path traversal
+@@ -496,10 +152,5 @@ func WriteArchive(st storage.Storer, w io.Writer, tree *object.Tree, commitHash
+ // Both local and remote archive paths should call this before accepting a
+ // user-supplied prefix.
+ func HasInvalidPrefix(prefix string) bool {
+-	if strings.HasPrefix(prefix, "/") || strings.HasPrefix(prefix, "\\") {
+-		return true
+-	}
+-	return slices.Contains(strings.FieldsFunc(prefix, func(r rune) bool {
+-		return r == '/' || r == '\\'
+-	}), "..")
++	panic("excised: HasInvalidPrefix")
+ }
+diff --git a/internal/archive/archive_test.go b/internal/archive/archive_test.go
+deleted file mode 100644
+index 8a3490b..0000000
+--- a/internal/archive/archive_test.go
++++ /dev/null
+@@ -1,549 +0,0 @@
+-package archive
+-
+-import (
+-	"bytes"
+-	"strings"
+-	"testing"
+-	"time"
+-
+-	fixtures "github.com/go-git/go-git-fixtures/v6"
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	"example.internal/gitkit/v6/plumbing"
+-	"example.internal/gitkit/v6/plumbing/filemode"
+-	"example.internal/gitkit/v6/plumbing/object"
+-	"example.internal/gitkit/v6/storage/filesystem"
+-	"example.internal/gitkit/v6/storage/memory"
+-)
+-
+-func TestMatchesPathFilter(t *testing.T) {
+-	t.Parallel()
+-	// Note: All paths use forward slashes because these are Git internal paths,
+-	// not OS filesystem paths. Git always uses / regardless of platform.
+-	tests := []struct {
+-		name    string
+-		path    string
+-		filters []string
+-		want    bool
+-	}{
+-		{
+-			name:    "exact match",
+-			path:    "README.md",
+-			filters: []string{"README.md"},
+-			want:    true,
+-		},
+-		{
+-			name:    "prefix match",
+-			path:    "docs/guide.md",
+-			filters: []string{"docs"},
+-			want:    true,
+-		},
+-		{
+-			name:    "deep nested path",
+-			path:    "src/pkg/sub/module.go",
+-			filters: []string{"src/pkg"},
+-			want:    true,
+-		},
+-		{
+-			name:    "glob pattern match",
+-			path:    "test.go",
+-			filters: []string{"*.go"},
+-			want:    true,
+-		},
+-		{
+-			name:    "glob pattern no match",
+-			path:    "README.md",
+-			filters: []string{"*.go"},
+-			want:    false,
+-		},
+-		{
+-			name:    "child match parent",
+-			path:    "docs",
+-			filters: []string{"docs/guide.md"},
+-			want:    true,
+-		},
+-		{
+-			name:    "exact directory no trailing slash",
+-			path:    "docs/guide.md",
+-			filters: []string{"docs/"},
+-			want:    false,
+-		},
+-		{
+-			name:    "no match",
+-			path:    "src/main.go",
+-			filters: []string{"docs", "*.md"},
+-			want:    false,
+-		},
+-		{
+-			name:    "multiple filters match",
+-			path:    "docs/guide.md",
+-			filters: []string{"src", "docs"},
+-			want:    true,
+-		},
+-		{
+-			name:    "dot prefix match",
+-			path:    ".github/workflows/ci.yml",
+-			filters: []string{".github"},
+-			want:    true,
+-		},
+-	}
+-
+-	for _, tt := range tests {
+-		t.Run(tt.name, func(t *testing.T) {
+-			t.Parallel()
+-			got := MatchesPathFilter(tt.path, tt.filters)
+-			assert.Equal(t, tt.want, got)
+-		})
+-	}
+-}
+-
+-// TestMatchesPathFilter_PlatformIndependence verifies that the function
+-// works correctly with forward slashes, which is the format used by Git
+-// internally regardless of the operating system.
+-func TestMatchesPathFilter_PlatformIndependence(t *testing.T) {
+-	t.Parallel()
+-	// Windows-style backslash paths should NOT match because Git
+-	// always uses forward slashes internally
+-	assert.False(t, MatchesPathFilter("docs\\guide.md", []string{"docs"}),
+-		"backslash paths should not match - Git uses forward slashes")
+-
+-	// Forward slashes should match regardless of OS
+-	assert.True(t, MatchesPathFilter("docs/guide.md", []string{"docs"}),
+-		"forward slash paths should always match")
+-}
+-
+-func TestResolveRef(t *testing.T) {
+-	t.Parallel()
+-	fixture := fixtures.Basic().One()
+-	dotGit, err := fixture.DotGit()
+-	require.NoError(t, err)
+-	storer := filesystem.NewStorage(dotGit, nil)
+-	defer func() { _ = storer.Close() }()
+-
+-	// Get expected hashes from the fixture
+-	masterRef, err := storer.Reference(plumbing.ReferenceName("refs/heads/master"))
+-	require.NoError(t, err)
+-	masterHash := masterRef.Hash()
+-
+-	tagRef, err := storer.Reference(plumbing.ReferenceName("refs/tags/v1.0.0"))
+-	require.NoError(t, err)
+-	tagHash := tagRef.Hash()
+-
+-	tests := []struct {
+-		name       string
+-		ref        string
+-		allowHash  bool
+-		wantHash   plumbing.Hash
+-		wantErr    bool
+-		errContain string
+-	}{
+-		{
+-			name:      "resolve branch with full ref",
+-			ref:       "refs/heads/master",
+-			allowHash: false,
+-			wantHash:  masterHash,
+-			wantErr:   false,
+-		},
+-		{
+-			name:      "resolve short branch name",
+-			ref:       "master",
+-			allowHash: false,
+-			wantHash:  masterHash,
+-			wantErr:   false,
+-		},
+-		{
+-			name:      "resolve tag name",
+-			ref:       "v1.0.0",
+-			allowHash: false,
+-			wantHash:  tagHash,
+-			wantErr:   false,
+-		},
+-		{
+-			name:       "non-existent ref fails",
+-			ref:        "nonexistent",
+-			allowHash:  false,
+-			wantHash:   plumbing.ZeroHash,
+-			wantErr:    true,
+-			errContain: "cannot resolve",
+-		},
+-		{
+-			name:      "raw hash allowed when allowHash=true",
+-			ref:       masterHash.String(),
+-			allowHash: true,
+-			wantHash:  masterHash,
+-			wantErr:   false,
+-		},
+-		{
+-			name:       "raw hash rejected when allowHash=false",
+-			ref:        masterHash.String(),
+-			allowHash:  false,
+-			wantHash:   plumbing.ZeroHash,
+-			wantErr:    true,
+-			errContain: "cannot resolve",
+-		},
+-	}
+-
+-	for _, tt := range tests { //nolint:paralleltest // avoid parallel test because of shared fixture state
+-		t.Run(tt.name, func(t *testing.T) {
+-			got, err := ResolveRef(storer, tt.ref, tt.allowHash)
+-			if tt.wantErr {
+-				require.Error(t, err)
+-				if tt.errContain != "" {
+-					assert.Contains(t, err.Error(), tt.errContain)
+-				}
+-			} else {
+-				require.NoError(t, err)
+-				assert.Equal(t, tt.wantHash, got)
+-			}
+-		})
+-	}
+-}
+-
+-func TestResolveTreeish_Errors(t *testing.T) {
+-	t.Parallel()
+-	fixture := fixtures.Basic().One()
+-	dotGit, err := fixture.DotGit()
+-	require.NoError(t, err)
+-	storer := filesystem.NewStorage(dotGit, nil)
+-	defer func() { _ = storer.Close() }()
+-
+-	tests := []struct {
+-		name             string
+-		treeish          string
+-		allowUnreachable bool
+-		wantErr          bool
+-		errIs            error
+-		errContain       string
+-	}{
+-		{
+-			name:             "raw hash rejected without allowUnreachable",
+-			treeish:          "6ecf0ef2c2dffb796033e5a02219af86ec6584e5",
+-			allowUnreachable: false,
+-			wantErr:          true,
+-			errIs:            ErrOnlyRefNames,
+-		},
+-		{
+-			name:             "relative ref expression rejected",
+-			treeish:          "master~1",
+-			allowUnreachable: false,
+-			wantErr:          true,
+-			errIs:            ErrRelativeExpressions,
+-		},
+-		{
+-			name:             "non-existent ref fails",
+-			treeish:          "nonexistent",
+-			allowUnreachable: false,
+-			wantErr:          true,
+-			errContain:       "cannot resolve",
+-		},
+-	}
+-
+-	for _, tt := range tests { //nolint:paralleltest // avoid parallel test because of shared fixture state
+-		t.Run(tt.name, func(t *testing.T) {
+-			_, _, _, err := ResolveTreeish(storer, tt.treeish, tt.allowUnreachable)
+-			if tt.wantErr {
+-				require.Error(t, err)
+-				if tt.errIs != nil {
+-					assert.ErrorIs(t, err, tt.errIs)
+-				}
+-				if tt.errContain != "" {
+-					assert.Contains(t, err.Error(), tt.errContain)
+-				}
+-			} else {
+-				require.NoError(t, err)
+-			}
+-		})
+-	}
+-}
+-
+-// TestResolveTreeish_AllowUnreachable tests the allowUnreachable flag enforcement
+-// comprehensively with various tree-ish expressions.
+-func TestResolveTreeish_AllowUnreachable(t *testing.T) {
+-	t.Parallel()
+-	fixture := fixtures.Basic().One()
+-	dotGit, err := fixture.DotGit()
+-	require.NoError(t, err)
+-	storer := filesystem.NewStorage(dotGit, nil)
+-	defer func() { _ = storer.Close() }()
+-
+-	// Get the master commit hash for testing
+-	masterRef, err := storer.Reference(plumbing.ReferenceName("refs/heads/master"))
+-	require.NoError(t, err)
+-	masterHash := masterRef.Hash().String()
+-
+-	tests := []struct {
+-		name             string
+-		treeish          string
+-		allowUnreachable bool
+-		wantErr          bool
+-		errIs            error
+-		errContain       string
+-	}{
+-		// allowUnreachable=false cases (secure mode)
+-		{
+-			name:             "raw hash blocked when allowUnreachable=false",
+-			treeish:          masterHash,
+-			allowUnreachable: false,
+-			wantErr:          true,
+-			errIs:            ErrOnlyRefNames,
+-		},
+-		{
+-			name:             "parent expression blocked (~)",
+-			treeish:          "master~1",
+-			allowUnreachable: false,
+-			wantErr:          true,
+-			errIs:            ErrRelativeExpressions,
+-		},
+-		{
+-			name:             "ancestor expression blocked (~N)",
+-			treeish:          "master~3",
+-			allowUnreachable: false,
+-			wantErr:          true,
+-			errIs:            ErrRelativeExpressions,
+-		},
+-		{
+-			name:             "parent expression blocked (^)",
+-			treeish:          "master^",
+-			allowUnreachable: false,
+-			wantErr:          true,
+-			errIs:            ErrRelativeExpressions,
+-		},
+-		{
+-			name:             "nth parent blocked (^N)",
+-			treeish:          "master^2",
+-			allowUnreachable: false,
+-			wantErr:          true,
+-			errIs:            ErrRelativeExpressions,
+-		},
+-		{
+-			name:             "at-sign expression blocked (@)",
+-			treeish:          "@{upstream}",
+-			allowUnreachable: false,
+-			wantErr:          true,
+-			errIs:            ErrRelativeExpressions,
+-		},
+-		{
+-			name:             "brace expression blocked",
+-			treeish:          "master@{1}",
+-			allowUnreachable: false,
+-			wantErr:          true,
+-			errIs:            ErrRelativeExpressions,
+-		},
+-		{
+-			name:             "ref short name allowed",
+-			treeish:          "master",
+-			allowUnreachable: false,
+-			wantErr:          false,
+-		},
+-		{
+-			name:             "full ref path allowed",
+-			treeish:          "refs/heads/master",
+-			allowUnreachable: false,
+-			wantErr:          false,
+-		},
+-		{
+-			name:             "tag short name allowed",
+-			treeish:          "v1.0.0",
+-			allowUnreachable: false,
+-			wantErr:          false,
+-		},
+-		// allowUnreachable=true cases
+-		{
+-			name:             "raw hash allowed when allowUnreachable=true",
+-			treeish:          masterHash,
+-			allowUnreachable: true,
+-			wantErr:          false,
+-		},
+-		{
+-			name:             "parent expression allowed (~)",
+-			treeish:          "master~1",
+-			allowUnreachable: true,
+-			wantErr:          true, // fails because we can't resolve, but not blocked
+-			errContain:       "cannot resolve",
+-		},
+-		{
+-			name:             "parent expression allowed (^)",
+-			treeish:          "master^",
+-			allowUnreachable: true,
+-			wantErr:          true,
+-			errContain:       "cannot resolve",
+-		},
+-	}
+-
+-	for _, tt := range tests { //nolint:paralleltest // avoid parallel test because of shared fixture state
+-		t.Run(tt.name, func(t *testing.T) {
+-			_, _, _, err := ResolveTreeish(storer, tt.treeish, tt.allowUnreachable)
+-			if tt.wantErr {
+-				require.Error(t, err)
+-				if tt.errIs != nil {
+-					assert.ErrorIs(t, err, tt.errIs)
+-				}
+-				if tt.errContain != "" {
+-					assert.Contains(t, err.Error(), tt.errContain)
+-				}
+-			} else {
+-				require.NoError(t, err)
+-			}
+-		})
+-	}
+-}
+-
+-func TestResolveTreeish_AnnotatedTags(t *testing.T) {
+-	t.Parallel()
+-	fixture := fixtures.ByTag("tags").One()
+-	dotGit, err := fixture.DotGit()
+-	require.NoError(t, err)
+-	storer := filesystem.NewStorage(dotGit, nil)
+-	defer func() { _ = storer.Close() }()
+-
+-	tests := []struct {
+-		name    string
+-		treeish string
+-		assert  func(*testing.T, *object.Tag)
+-	}{
+-		{
+-			name:    "commit target",
+-			treeish: "commit-tag",
+-			assert: func(t *testing.T, tag *object.Tag) {
+-				commit, err := object.GetCommit(storer, tag.Target)
+-				require.NoError(t, err)
+-
+-				expectedTree, err := commit.Tree()
+-				require.NoError(t, err)
+-
+-				tree, commitHash, commitTime, err := ResolveTreeish(storer, "commit-tag", false)
+-				require.NoError(t, err)
+-				require.NotNil(t, commitHash)
+-				assert.Equal(t, expectedTree.Hash, tree.Hash)
+-				assert.Equal(t, commit.Hash, *commitHash)
+-				assert.True(t, commit.Committer.When.Equal(commitTime))
+-			},
+-		},
+-		{
+-			name:    "tree target",
+-			treeish: "tree-tag",
+-			assert: func(t *testing.T, tag *object.Tag) {
+-				expectedTree, err := object.GetTree(storer, tag.Target)
+-				require.NoError(t, err)
+-
+-				tree, commitHash, commitTime, err := ResolveTreeish(storer, "tree-tag", false)
+-				require.NoError(t, err)
+-				assert.Equal(t, expectedTree.Hash, tree.Hash)
+-				assert.Nil(t, commitHash)
+-				assert.False(t, commitTime.IsZero())
+-			},
+-		},
+-		{
+-			name:    "unsupported target",
+-			treeish: "blob-tag",
+-			assert: func(t *testing.T, _ *object.Tag) {
+-				_, _, _, err := ResolveTreeish(storer, "blob-tag", false)
+-				require.Error(t, err)
+-				assert.Contains(t, err.Error(), "unsupported object type for archive")
+-			},
+-		},
+-	}
+-
+-	for _, tt := range tests { //nolint:paralleltest // object / storer are not thread safe
+-		t.Run(tt.name, func(t *testing.T) {
+-			tagRef, err := storer.Reference(plumbing.ReferenceName("refs/tags/" + tt.treeish))
+-			require.NoError(t, err)
+-
+-			tag, err := object.GetTag(storer, tagRef.Hash())
+-			require.NoError(t, err)
+-
+-			tt.assert(t, tag)
+-		})
+-	}
+-}
+-
+-func TestWriteTarArchive_RejectsOversizedSymlinkTarget(t *testing.T) {
+-	t.Parallel()
+-
+-	st := memory.NewStorage()
+-
+-	blobObj := &plumbing.MemoryObject{}
+-	blobObj.SetType(plumbing.BlobObject)
+-	_, err := blobObj.Write([]byte(strings.Repeat("a", maxTarSymlinkTargetSize+1)))
+-	require.NoError(t, err)
+-	blobHash, err := st.SetEncodedObject(blobObj)
+-	require.NoError(t, err)
+-
+-	treeObj := &object.Tree{
+-		Entries: []object.TreeEntry{
+-			{
+-				Name: "link",
+-				Mode: filemode.Symlink,
+-				Hash: blobHash,
+-			},
+-		},
+-	}
+-
+-	encodedTree := &plumbing.MemoryObject{}
+-	encodedTree.SetType(plumbing.TreeObject)
+-	require.NoError(t, treeObj.Encode(encodedTree))
+-	treeHash, err := st.SetEncodedObject(encodedTree)
+-	require.NoError(t, err)
+-
+-	tree, err := object.GetTree(st, treeHash)
+-	require.NoError(t, err)
+-
+-	var buf bytes.Buffer
+-	err = WriteTarArchive(st, &buf, tree, nil, "", nil, time.Now())
+-	require.Error(t, err)
+-	assert.ErrorIs(t, err, ErrSymlinkTargetTooLarge)
+-	assert.Contains(t, err.Error(), "link")
+-}
+-
+-func TestSupportedFormats(t *testing.T) {
+-	t.Parallel()
+-	formats := SupportedFormats()
+-	assert.Contains(t, formats, "tar")
+-	assert.Contains(t, formats, "zip")
+-	assert.Contains(t, formats, "tar.gz")
+-	assert.Contains(t, formats, "tgz")
+-}
+-
+-func TestApplyUmask(t *testing.T) {
+-	t.Parallel()
+-	tests := []struct {
+-		name         string
+-		mode         int64
+-		isExecutable bool
+-		want         int64
+-	}{
+-		{
+-			name:         "regular file",
+-			mode:         0o000,
+-			isExecutable: false,
+-			want:         0o664,
+-		},
+-		{
+-			name:         "executable file",
+-			mode:         0o000,
+-			isExecutable: true,
+-			want:         0o775,
+-		},
+-		{
+-			name:         "preserves existing bits",
+-			mode:         0o640,
+-			isExecutable: false,
+-			want:         0o664,
+-		},
+-	}
+-
+-	for _, tt := range tests {
+-		t.Run(tt.name, func(t *testing.T) {
+-			t.Parallel()
+-			got := ApplyUmask(tt.mode, tt.isExecutable)
+-			assert.Equal(t, tt.want, got)
+-		})
+-	}
+-}
+-
+-func TestApplyUmaskDir(t *testing.T) {
+-	t.Parallel()
+-	got := ApplyUmaskDir(0o000)
+-	assert.Equal(t, int64(0o775), got)
+-}

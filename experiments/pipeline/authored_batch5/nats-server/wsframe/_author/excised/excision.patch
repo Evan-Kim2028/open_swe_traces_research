@@ -1,0 +1,451 @@
+diff --git a/server/websocket.go b/server/websocket.go
+index e903e06..f75dc50 100644
+--- a/server/websocket.go
++++ b/server/websocket.go
+@@ -25,7 +25,7 @@ import (
+ 	"fmt"
+ 	"io"
+ 	"log"
+-	mrand "math/rand/v2"
++	_ "math/rand/v2"
+ 	"net"
+ 	"net/http"
+ 	"net/url"
+@@ -200,16 +200,7 @@ func (r *wsReadInfo) resetCompressedState() {
+ // decompressed and handed to the parser, so this transport limit needs to
+ // allow batching several max_payload-sized Msgkit operations while still
+ // capping resource usage on the buffered compressed path.
+-func wsMaxMessageSize(mpay int) uint64 {
+-	if mpay <= 0 {
+-		mpay = MAX_PAYLOAD_SIZE
+-	}
+-	limit := uint64(mpay) * wsMaxMsgPayloadMultiple
+-	if limit > wsMaxMsgPayloadLimit {
+-		limit = wsMaxMsgPayloadLimit
+-	}
+-	return limit
+-}
++func wsMaxMessageSize(mpay int) uint64 { panic("excised: wsMaxMessageSize") }
+ 
+ // Returns a slice containing `needed` bytes from the given buffer `buf`
+ // starting at position `pos`, and possibly read from the given reader `r`.
+@@ -217,22 +208,7 @@ func wsMaxMessageSize(mpay int) uint64 {
+ // of bytes found up to `needed` and the new position is returned. If not
+ // enough bytes are found, the bytes found in `buf` are copied to the returned
+ // slice and the remaning bytes are read from `r`.
+-func wsGet(r io.Reader, buf []byte, pos, needed uint64) ([]byte, uint64, error) {
+-	avail := uint64(len(buf)) - pos
+-	if avail >= needed {
+-		return buf[pos : pos+needed], pos + needed, nil
+-	}
+-	b := make([]byte, needed)
+-	start := uint64(copy(b, buf[pos:]))
+-	for start != needed {
+-		n, err := r.Read(b[start:cap(b)])
+-		if err != nil {
+-			return nil, 0, err
+-		}
+-		start += uint64(n)
+-	}
+-	return b, pos + avail, nil
+-}
++func wsGet(r io.Reader, buf []byte, pos, needed uint64) ([]byte, uint64, error) { panic("excised: wsGet") }
+ 
+ // Returns true if this connection is from a Websocket client.
+ // Lock held on entry.
+@@ -593,93 +569,16 @@ func (c *client) wsHandleControlFrame(r *wsReadInfo, frameType wsOpCode, nc io.R
+ }
+ 
+ // Unmask the given slice.
+-func (r *wsReadInfo) unmask(buf []byte) {
+-	p := int(r.mkpos)
+-	if len(buf) < 16 {
+-		for i := 0; i < len(buf); i++ {
+-			buf[i] ^= r.mkey[p&3]
+-			p++
+-		}
+-		r.mkpos = byte(p & 3)
+-		return
+-	}
+-	var k [8]byte
+-	for i := 0; i < 8; i++ {
+-		k[i] = r.mkey[(p+i)&3]
+-	}
+-	km := binary.BigEndian.Uint64(k[:])
+-	n := (len(buf) / 8) * 8
+-	for i := 0; i < n; i += 8 {
+-		tmp := binary.BigEndian.Uint64(buf[i : i+8])
+-		tmp ^= km
+-		binary.BigEndian.PutUint64(buf[i:], tmp)
+-	}
+-	buf = buf[n:]
+-	for i := 0; i < len(buf); i++ {
+-		buf[i] ^= r.mkey[p&3]
+-		p++
+-	}
+-	r.mkpos = byte(p & 3)
+-}
++func (r *wsReadInfo) unmask(buf []byte) { panic("excised: unmask") }
+ 
+ // Returns true if the op code corresponds to a control frame.
+-func wsIsControlFrame(frameType wsOpCode) bool {
+-	return frameType >= wsCloseMessage
+-}
++func wsIsControlFrame(frameType wsOpCode) bool { panic("excised: wsIsControlFrame") }
+ 
+ // Create the frame header.
+ // Encodes the frame type and optional compression flag, and the size of the payload.
+-func wsCreateFrameHeader(useMasking, compressed bool, frameType wsOpCode, l int) ([]byte, []byte) {
+-	fh := nbPoolGet(wsMaxFrameHeaderSize)[:wsMaxFrameHeaderSize]
+-	n, key := wsFillFrameHeader(fh, useMasking, wsFirstFrame, wsFinalFrame, compressed, frameType, l)
+-	return fh[:n], key
+-}
++func wsCreateFrameHeader(useMasking, compressed bool, frameType wsOpCode, l int) ([]byte, []byte) { panic("excised: wsCreateFrameHeader") }
+ 
+-func wsFillFrameHeader(fh []byte, useMasking, first, final, compressed bool, frameType wsOpCode, l int) (int, []byte) {
+-	var n int
+-	var b byte
+-	if first {
+-		b = byte(frameType)
+-	}
+-	if final {
+-		b |= wsFinalBit
+-	}
+-	if compressed {
+-		b |= wsRsv1Bit
+-	}
+-	b1 := byte(0)
+-	if useMasking {
+-		b1 |= wsMaskBit
+-	}
+-	switch {
+-	case l <= 125:
+-		n = 2
+-		fh[0] = b
+-		fh[1] = b1 | byte(l)
+-	case l < 65536:
+-		n = 4
+-		fh[0] = b
+-		fh[1] = b1 | 126
+-		binary.BigEndian.PutUint16(fh[2:], uint16(l))
+-	default:
+-		n = 10
+-		fh[0] = b
+-		fh[1] = b1 | 127
+-		binary.BigEndian.PutUint64(fh[2:], uint64(l))
+-	}
+-	var key []byte
+-	if useMasking {
+-		var keyBuf [4]byte
+-		if _, err := io.ReadFull(crand.Reader, keyBuf[:4]); err != nil {
+-			kv := mrand.Int32()
+-			binary.LittleEndian.PutUint32(keyBuf[:4], uint32(kv))
+-		}
+-		copy(fh[n:], keyBuf[:4])
+-		key = fh[n : n+4]
+-		n += 4
+-	}
+-	return n, key
+-}
++func wsFillFrameHeader(fh []byte, useMasking, first, final, compressed bool, frameType wsOpCode, l int) (int, []byte) { panic("excised: wsFillFrameHeader") }
+ 
+ // Invokes wsEnqueueControlMessageLocked under client lock.
+ //
+@@ -691,23 +590,10 @@ func (c *client) wsEnqueueControlMessage(controlMsg wsOpCode, payload []byte) {
+ }
+ 
+ // Mask the buffer with the given key
+-func wsMaskBuf(key, buf []byte) {
+-	for i := 0; i < len(buf); i++ {
+-		buf[i] ^= key[i&3]
+-	}
+-}
++func wsMaskBuf(key, buf []byte) { panic("excised: wsMaskBuf") }
+ 
+ // Mask the buffers, as if they were contiguous, with the given key
+-func wsMaskBufs(key []byte, bufs [][]byte) {
+-	pos := 0
+-	for i := 0; i < len(bufs); i++ {
+-		buf := bufs[i]
+-		for j := 0; j < len(buf); j++ {
+-			buf[j] ^= key[pos&3]
+-			pos++
+-		}
+-	}
+-}
++func wsMaskBufs(key []byte, bufs [][]byte) { panic("excised: wsMaskBufs") }
+ 
+ // Enqueues a websocket control message.
+ // If the control message is a wsCloseMessage, then marks this client
+@@ -791,41 +677,13 @@ func (c *client) wsHandleProtocolError(message string) error {
+ 	return errors.New(message)
+ }
+ 
+-func wsIsValidCloseStatus(code int) bool {
+-	switch code {
+-	case wsCloseStatusNoStatusReceived, 1004, 1006, wsCloseStatusTLSHandshake:
+-		return false
+-	}
+-	if code < 1000 || code >= 5000 {
+-		return false
+-	}
+-	// 1016-2999 are currently reserved.
+-	if code >= 1016 && code <= 2999 {
+-		return false
+-	}
+-	return true
+-}
++func wsIsValidCloseStatus(code int) bool { panic("excised: wsIsValidCloseStatus") }
+ 
+ // Create a close message with the given `status` and `body`.
+ // If the `body` is more than the maximum allows control frame payload size,
+ // it is truncated and "..." is added at the end (as a hint that message
+ // is not complete).
+-func wsCreateCloseMessage(status int, body string) []byte {
+-	// Since a control message payload is limited in size, we
+-	// will limit the text and add trailing "..." if truncated.
+-	// The body of a Close Message must be preceded with 2 bytes,
+-	// so take that into account for limiting the body length.
+-	if len(body) > wsMaxControlPayloadSize-2 {
+-		body = body[:wsMaxControlPayloadSize-5]
+-		body += "..."
+-	}
+-	buf := nbPoolGet(2 + len(body))[:2+len(body)]
+-	// We need to have a 2 byte unsigned int that represents the error status code
+-	// https://tools.ietf.org/html/rfc6455#section-5.5.1
+-	binary.BigEndian.PutUint16(buf[:2], uint16(status))
+-	copy(buf[2:], []byte(body))
+-	return buf
+-}
++func wsCreateCloseMessage(status int, body string) []byte { panic("excised: wsCreateCloseMessage") }
+ 
+ // Process websocket client handshake. On success, returns the raw net.Conn that
+ // will be used to create a *client object.
+diff --git a/server/websocket_test.go b/server/websocket_test.go
+index 036de7a..07a9f2b 100644
+--- a/server/websocket_test.go
++++ b/server/websocket_test.go
+@@ -66,79 +66,7 @@ func (tr *testReader) Read(p []byte) (int, error) {
+ 	return n, nil
+ }
+ 
+-func TestWSGet(t *testing.T) {
+-	rb := []byte("012345")
+ 
+-	tr := &testReader{buf: []byte("6789")}
+-
+-	for _, test := range []struct {
+-		name   string
+-		pos    uint64
+-		needed uint64
+-		newpos uint64
+-		trmax  int
+-		result string
+-		reterr bool
+-	}{
+-		{"fromrb1", 0, 3, 3, 4, "012", false},    // Partial from read buffer
+-		{"fromrb2", 3, 2, 5, 4, "34", false},     // Partial from read buffer
+-		{"fromrb3", 5, 1, 6, 4, "5", false},      // Partial from read buffer
+-		{"fromtr1", 4, 4, 6, 4, "4567", false},   // Partial from read buffer + some of ioReader
+-		{"fromtr2", 4, 6, 6, 4, "456789", false}, // Partial from read buffer + all of ioReader
+-		{"fromtr3", 4, 6, 6, 2, "456789", false}, // Partial from read buffer + all of ioReader with several reads
+-		{"fromtr4", 4, 6, 6, 2, "", true},        // ioReader returns error
+-	} {
+-		t.Run(test.name, func(t *testing.T) {
+-			tr.pos = 0
+-			tr.max = test.trmax
+-			if test.reterr {
+-				tr.err = fmt.Errorf("on purpose")
+-			}
+-			res, np, err := wsGet(tr, rb, test.pos, test.needed)
+-			if test.reterr {
+-				if err == nil {
+-					t.Fatalf("Expected error, got none")
+-				}
+-				if err.Error() != "on purpose" {
+-					t.Fatalf("Unexpected error: %v", err)
+-				}
+-				if np != 0 || res != nil {
+-					t.Fatalf("Unexpected returned values: res=%v n=%v", res, np)
+-				}
+-				return
+-			}
+-			if err != nil {
+-				t.Fatalf("Error on get: %v", err)
+-			}
+-			if np != test.newpos {
+-				t.Fatalf("Expected pos=%v, got %v", test.newpos, np)
+-			}
+-			if string(res) != test.result {
+-				t.Fatalf("Invalid returned content: %s", res)
+-			}
+-		})
+-	}
+-}
+-
+-func TestWSIsControlFrame(t *testing.T) {
+-	for _, test := range []struct {
+-		name      string
+-		code      wsOpCode
+-		isControl bool
+-	}{
+-		{"binary", wsBinaryMessage, false},
+-		{"text", wsTextMessage, false},
+-		{"ping", wsPingMessage, true},
+-		{"pong", wsPongMessage, true},
+-		{"close", wsCloseMessage, true},
+-	} {
+-		t.Run(test.name, func(t *testing.T) {
+-			if res := wsIsControlFrame(test.code); res != test.isControl {
+-				t.Fatalf("Expected %q isControl to be %v, got %v", test.name, test.isControl, res)
+-			}
+-		})
+-	}
+-}
+ 
+ func testWSSimpleMask(key, buf []byte) {
+ 	for i := 0; i < len(buf); i++ {
+@@ -146,143 +74,8 @@ func testWSSimpleMask(key, buf []byte) {
+ 	}
+ }
+ 
+-func TestWSUnmask(t *testing.T) {
+-	key := []byte{1, 2, 3, 4}
+-	orgBuf := []byte("this is a clear text")
+ 
+-	mask := func() []byte {
+-		t.Helper()
+-		buf := append([]byte(nil), orgBuf...)
+-		testWSSimpleMask(key, buf)
+-		// First ensure that the content is masked.
+-		if bytes.Equal(buf, orgBuf) {
+-			t.Fatalf("Masking did not do anything: %q", buf)
+-		}
+-		return buf
+-	}
+-
+-	ri := &wsReadInfo{mask: true}
+-	ri.init()
+-	copy(ri.mkey[:], key)
+ 
+-	buf := mask()
+-	// Unmask in one call
+-	ri.unmask(buf)
+-	if !bytes.Equal(buf, orgBuf) {
+-		t.Fatalf("Unmask error, expected %q, got %q", orgBuf, buf)
+-	}
+-
+-	// Unmask in multiple calls
+-	buf = mask()
+-	ri.mkpos = 0
+-	ri.unmask(buf[:3])
+-	ri.unmask(buf[3:11])
+-	ri.unmask(buf[11:])
+-	if !bytes.Equal(buf, orgBuf) {
+-		t.Fatalf("Unmask error, expected %q, got %q", orgBuf, buf)
+-	}
+-}
+-
+-func TestWSCreateCloseMessage(t *testing.T) {
+-	for _, test := range []struct {
+-		name      string
+-		status    int
+-		psize     int
+-		truncated bool
+-	}{
+-		{"fits", wsCloseStatusInternalSrvError, 10, false},
+-		{"truncated", wsCloseStatusProtocolError, wsMaxControlPayloadSize + 10, true},
+-	} {
+-		t.Run(test.name, func(t *testing.T) {
+-			payload := make([]byte, test.psize)
+-			for i := 0; i < len(payload); i++ {
+-				payload[i] = byte('A' + (i % 26))
+-			}
+-			res := wsCreateCloseMessage(test.status, string(payload))
+-			if status := binary.BigEndian.Uint16(res[:2]); int(status) != test.status {
+-				t.Fatalf("Expected status to be %v, got %v", test.status, status)
+-			}
+-			psize := len(res) - 2
+-			if !test.truncated {
+-				if int(psize) != test.psize {
+-					t.Fatalf("Expected size to be %v, got %v", test.psize, psize)
+-				}
+-				if !bytes.Equal(res[2:], payload) {
+-					t.Fatalf("Unexpected result: %q", res[2:])
+-				}
+-				return
+-			}
+-			// Since the payload of a close message contains a 2 byte status, the
+-			// actual max text size will be wsMaxControlPayloadSize-2
+-			if int(psize) != wsMaxControlPayloadSize-2 {
+-				t.Fatalf("Expected size to be capped to %v, got %v", wsMaxControlPayloadSize-2, psize)
+-			}
+-			if string(res[len(res)-3:]) != "..." {
+-				t.Fatalf("Expected res to have `...` at the end, got %q", res[4:])
+-			}
+-		})
+-	}
+-}
+-
+-func TestWSCreateFrameHeader(t *testing.T) {
+-	for _, test := range []struct {
+-		name       string
+-		frameType  wsOpCode
+-		compressed bool
+-		len        int
+-	}{
+-		{"uncompressed 10", wsBinaryMessage, false, 10},
+-		{"uncompressed 600", wsTextMessage, false, 600},
+-		{"uncompressed 100000", wsTextMessage, false, 100000},
+-		{"compressed 10", wsBinaryMessage, true, 10},
+-		{"compressed 600", wsBinaryMessage, true, 600},
+-		{"compressed 100000", wsTextMessage, true, 100000},
+-	} {
+-		t.Run(test.name, func(t *testing.T) {
+-			res, _ := wsCreateFrameHeader(false, test.compressed, test.frameType, test.len)
+-			// The server is always sending the message has a single frame,
+-			// so the "final" bit should be set.
+-			expected := byte(test.frameType) | wsFinalBit
+-			if test.compressed {
+-				expected |= wsRsv1Bit
+-			}
+-			if b := res[0]; b != expected {
+-				t.Fatalf("Expected first byte to be %v, got %v", expected, b)
+-			}
+-			switch {
+-			case test.len <= 125:
+-				if len(res) != 2 {
+-					t.Fatalf("Frame len should be 2, got %v", len(res))
+-				}
+-				if res[1] != byte(test.len) {
+-					t.Fatalf("Expected len to be in second byte and be %v, got %v", test.len, res[1])
+-				}
+-			case test.len < 65536:
+-				// 1+1+2
+-				if len(res) != 4 {
+-					t.Fatalf("Frame len should be 4, got %v", len(res))
+-				}
+-				if res[1] != 126 {
+-					t.Fatalf("Second byte value should be 126, got %v", res[1])
+-				}
+-				if rl := binary.BigEndian.Uint16(res[2:]); int(rl) != test.len {
+-					t.Fatalf("Expected len to be %v, got %v", test.len, rl)
+-				}
+-			default:
+-				// 1+1+8
+-				if len(res) != 10 {
+-					t.Fatalf("Frame len should be 10, got %v", len(res))
+-				}
+-				if res[1] != 127 {
+-					t.Fatalf("Second byte value should be 127, got %v", res[1])
+-				}
+-				if rl := binary.BigEndian.Uint64(res[2:]); int(rl) != test.len {
+-					t.Fatalf("Expected len to be %v, got %v", test.len, rl)
+-				}
+-			}
+-		})
+-	}
+-}
+ 
+ func testWSCreateClientMsg(frameType wsOpCode, frameNum int, final, compressed bool, payload []byte) []byte {
+ 	if compressed {

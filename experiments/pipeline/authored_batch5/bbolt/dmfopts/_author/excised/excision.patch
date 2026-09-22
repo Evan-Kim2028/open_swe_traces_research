@@ -1,0 +1,110 @@
+diff --git a/tests/dmflakey/dmflakey.go b/tests/dmflakey/dmflakey.go
+index 593b6ff..dd3453e 100644
+--- a/tests/dmflakey/dmflakey.go
++++ b/tests/dmflakey/dmflakey.go
+@@ -6,8 +6,8 @@ import (
+ 	"errors"
+ 	"fmt"
+ 	"os"
+-	"os/exec"
+-	"path"
++	_ "os/exec"
++	_ "path"
+ 	"path/filepath"
+ 	"strings"
+ 	"time"
+@@ -42,17 +42,13 @@ type FeatOpt func(*featCfg)
+ 
+ // WithIntervalFeatOpt updates the up time for the feature.
+ func WithIntervalFeatOpt(interval time.Duration) FeatOpt {
+-	return func(cfg *featCfg) {
+-		cfg.interval = interval
+-	}
++	panic("excised: WithIntervalFeatOpt")
+ }
+ 
+ // WithSyncFSFeatOpt is to determine if the caller wants to synchronize
+ // filesystem before inject failure.
+ func WithSyncFSFeatOpt(syncFS bool) FeatOpt {
+-	return func(cfg *featCfg) {
+-		cfg.syncFS = syncFS
+-	}
++	panic("excised: WithSyncFSFeatOpt")
+ }
+ 
+ // Flakey is to inject failure into device.
+@@ -141,12 +137,12 @@ type flakey struct {
+ 
+ // DevicePath returns the flakey device path.
+ func (f *flakey) DevicePath() string {
+-	return fmt.Sprintf("/dev/mapper/%s", f.flakeyDevice)
++	panic("excised: flakey.DevicePath")
+ }
+ 
+ // Filesystem returns filesystem's type.
+ func (f *flakey) Filesystem() FSType {
+-	return f.fsType
++	panic("excised: flakey.Filesystem")
+ }
+ 
+ // AllowWrites allows write I/O.
+@@ -294,57 +290,10 @@ func (f *flakey) Teardown() error {
+ // createEmptyFSImage creates empty filesystem on dataStorePath folder with
+ // default size - 10 GiB.
+ func createEmptyFSImage(imgPath string, fsType FSType, mkfsOpt string) error {
+-	if err := validateFSType(fsType); err != nil {
+-		return err
+-	}
+-
+-	mkfs, err := exec.LookPath(fmt.Sprintf("mkfs.%s", fsType))
+-	if err != nil {
+-		return fmt.Errorf("failed to ensure mkfs.%s: %w", fsType, err)
+-	}
+-
+-	if _, err := os.Stat(imgPath); err == nil {
+-		return fmt.Errorf("failed to create image because %s already exists", imgPath)
+-	}
+-
+-	if err := os.MkdirAll(path.Dir(imgPath), 0600); err != nil {
+-		return fmt.Errorf("failed to ensure parent directory %s: %w", path.Dir(imgPath), err)
+-	}
+-
+-	f, err := os.Create(imgPath)
+-	if err != nil {
+-		return fmt.Errorf("failed to create image %s: %w", imgPath, err)
+-	}
+-
+-	if err = func() error {
+-		defer f.Close()
+-
+-		return f.Truncate(defaultImgSize)
+-	}(); err != nil {
+-		return fmt.Errorf("failed to truncate image %s with %v bytes: %w",
+-			imgPath, defaultImgSize, err)
+-	}
+-
+-	args := []string{imgPath}
+-	if mkfsOpt != "" {
+-		splitArgs := strings.Split(mkfsOpt, " ")
+-		args = append(splitArgs, imgPath)
+-	}
+-
+-	output, err := exec.Command(mkfs, args...).CombinedOutput()
+-	if err != nil {
+-		return fmt.Errorf("failed to mkfs on %s (%s %v) (out: %s): %w",
+-			imgPath, mkfs, args, string(output), err)
+-	}
+-	return nil
++	panic("excised: createEmptyFSImage")
+ }
+ 
+ // validateFSType validates the fs type input.
+ func validateFSType(fsType FSType) error {
+-	switch fsType {
+-	case FSTypeEXT4, FSTypeXFS:
+-		return nil
+-	default:
+-		return fmt.Errorf("unsupported filesystem %s", fsType)
+-	}
++	panic("excised: validateFSType")
+ }

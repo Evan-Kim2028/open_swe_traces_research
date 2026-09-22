@@ -1,0 +1,577 @@
+diff --git a/server/filestore.go b/server/filestore.go
+index d6a5306..ac4e61a 100644
+--- a/server/filestore.go
++++ b/server/filestore.go
+@@ -116,45 +116,11 @@ const (
+ 	S2Compression
+ )
+ 
+-func (alg StoreCompression) String() string {
+-	switch alg {
+-	case NoCompression:
+-		return "None"
+-	case S2Compression:
+-		return "S2"
+-	default:
+-		return "Unknown StoreCompression"
+-	}
+-}
++func (alg StoreCompression) String() string { panic("excised: String") }
+ 
+-func (alg StoreCompression) MarshalJSON() ([]byte, error) {
+-	var str string
+-	switch alg {
+-	case S2Compression:
+-		str = "s2"
+-	case NoCompression:
+-		str = "none"
+-	default:
+-		return nil, fmt.Errorf("unknown compression algorithm")
+-	}
+-	return json.Marshal(str)
+-}
++func (alg StoreCompression) MarshalJSON() ([]byte, error) { panic("excised: MarshalJSON") }
+ 
+-func (alg *StoreCompression) UnmarshalJSON(b []byte) error {
+-	var str string
+-	if err := json.Unmarshal(b, &str); err != nil {
+-		return err
+-	}
+-	switch str {
+-	case "s2":
+-		*alg = S2Compression
+-	case "none":
+-		*alg = NoCompression
+-	default:
+-		return fmt.Errorf("unknown compression algorithm")
+-	}
+-	return nil
+-}
++func (alg *StoreCompression) UnmarshalJSON(b []byte) error { panic("excised: UnmarshalJSON") }
+ 
+ // File ConsumerInfo is used for creating consumer stores.
+ type FileConsumerInfo struct {
+@@ -8113,38 +8079,7 @@ func (mb *msgBlock) atomicOverwriteFile(buf []byte, allowCompress bool) error {
+ }
+ 
+ // Lock should be held.
+-func (mb *msgBlock) decode(buf []byte) ([]byte, StoreCompression, error) {
+-	var meta CompressionInfo
+-	if n, err := meta.UnmarshalMetadata(buf); err != nil {
+-		// There was a problem parsing the metadata header of the block.
+-		// If there's no metadata header, an error isn't returned here,
+-		// we will instead just use default values of no compression.
+-		return nil, meta.Algorithm, err
+-	} else if n == 0 {
+-		// There were no metadata bytes, so we assume the block is not
+-		// compressed and return it as-is.
+-		return buf, NoCompression, nil
+-	} else {
+-		// Metadata was present, so try to decompress the block.
+-		decoded, err := meta.Algorithm.Decompress(buf[n:])
+-		if err == nil {
+-			return decoded, meta.Algorithm, nil
+-		}
+-		// Decompression failed. Before returning the error, check if the
+-		// buffer happens to store a valid uncompressed record.
+-		// A record with length 24145251 without headers happens to
+-		// collide with a valid compression header "cmp" and
+-		// compression algorithm 1 (S2).
+-		if meta.Algorithm == S2Compression && len(buf) >= 24145251 {
+-			var sm StoreMsg
+-			if _, msgErr := mb.msgFromBufNoCopy(buf, &sm, mb.hh); msgErr == nil {
+-				return buf, NoCompression, nil
+-			}
+-		}
+-		// Return the original error
+-		return nil, meta.Algorithm, err
+-	}
+-}
++func (mb *msgBlock) decode(buf []byte) ([]byte, StoreCompression, error) { panic("excised: decode") }
+ 
+ // Lock should be held.
+ func (mb *msgBlock) decompressIfNeeded(buf []byte) ([]byte, error) {
+@@ -14530,102 +14465,13 @@ type CompressionInfo struct {
+ 	OriginalSize uint64
+ }
+ 
+-func (c *CompressionInfo) MarshalMetadata() []byte {
+-	b := make([]byte, 14) // 4 + potentially up to 10 for uint64
+-	b[0], b[1], b[2] = 'c', 'm', 'p'
+-	b[3] = byte(c.Algorithm)
+-	n := binary.PutUvarint(b[4:], c.OriginalSize)
+-	return b[:4+n]
+-}
++func (c *CompressionInfo) MarshalMetadata() []byte { panic("excised: MarshalMetadata") }
+ 
+-func (c *CompressionInfo) UnmarshalMetadata(b []byte) (int, error) {
+-	c.Algorithm = NoCompression
+-	c.OriginalSize = 0
+-	if len(b) < 5 { // 4 + min 1 for uvarint uint64
+-		return 0, nil
+-	}
+-	// An uncompressed record with length 7,368,035 starts with "cmp",
+-	// so we also check algorithm byte.
+-	if b[0] != 'c' || b[1] != 'm' || b[2] != 'p' || StoreCompression(b[3]) != S2Compression {
+-		return 0, nil
+-	}
+-	var n int
+-	c.Algorithm = StoreCompression(b[3])
+-	c.OriginalSize, n = binary.Uvarint(b[4:])
+-	if n <= 0 {
+-		return 0, fmt.Errorf("metadata incomplete")
+-	}
+-	return 4 + n, nil
+-}
+-
+-func (alg StoreCompression) Compress(buf []byte) ([]byte, error) {
+-	if len(buf) < checksumSize {
+-		return nil, fmt.Errorf("uncompressed buffer is too short")
+-	}
+-	bodyLen := int64(len(buf) - checksumSize)
+-	var output bytes.Buffer
+-	var writer io.WriteCloser
+-	switch alg {
+-	case NoCompression:
+-		return buf, nil
+-	case S2Compression:
+-		writer = s2.NewWriter(&output)
+-	default:
+-		return nil, fmt.Errorf("compression algorithm not known")
+-	}
+-
+-	input := bytes.NewReader(buf[:bodyLen])
+-	checksum := buf[bodyLen:]
+-
+-	// Compress the block content, but don't compress the checksum.
+-	// We will preserve it at the end of the block as-is.
+-	if n, err := io.CopyN(writer, input, bodyLen); err != nil {
+-		return nil, fmt.Errorf("error writing to compression writer: %w", err)
+-	} else if n != bodyLen {
+-		return nil, fmt.Errorf("short write on body (%d != %d)", n, bodyLen)
+-	}
+-	if err := writer.Close(); err != nil {
+-		return nil, fmt.Errorf("error closing compression writer: %w", err)
+-	}
+-
+-	// Now add the checksum back onto the end of the block.
+-	if n, err := output.Write(checksum); err != nil {
+-		return nil, fmt.Errorf("error writing checksum: %w", err)
+-	} else if n != checksumSize {
+-		return nil, fmt.Errorf("short write on checksum (%d != %d)", n, checksumSize)
+-	}
+-
+-	return output.Bytes(), nil
+-}
+-
+-func (alg StoreCompression) Decompress(buf []byte) ([]byte, error) {
+-	if len(buf) < checksumSize {
+-		return nil, fmt.Errorf("compressed buffer is too short")
+-	}
+-	bodyLen := int64(len(buf) - checksumSize)
+-	input := bytes.NewReader(buf[:bodyLen])
+-
+-	var reader io.ReadCloser
+-	switch alg {
+-	case NoCompression:
+-		return buf, nil
+-	case S2Compression:
+-		reader = io.NopCloser(s2.NewReader(input))
+-	default:
+-		return nil, fmt.Errorf("compression algorithm not known")
+-	}
++func (c *CompressionInfo) UnmarshalMetadata(b []byte) (int, error) { panic("excised: UnmarshalMetadata") }
+ 
+-	// Decompress the block content. The checksum isn't compressed so
+-	// we can preserve it from the end of the block as-is.
+-	checksum := buf[bodyLen:]
+-	output, err := io.ReadAll(reader)
+-	if err != nil {
+-		return nil, fmt.Errorf("error reading compression reader: %w", err)
+-	}
+-	output = append(output, checksum...)
++func (alg StoreCompression) Compress(buf []byte) ([]byte, error) { panic("excised: Compress") }
+ 
+-	return output, reader.Close()
+-}
++func (alg StoreCompression) Decompress(buf []byte) ([]byte, error) { panic("excised: Decompress") }
+ 
+ // writeFileWithOptionalSync is equivalent to os.WriteFile() but optionally
+ // sets O_SYNC on the open file if SyncAlways is set. The dios semaphore is
+diff --git a/server/filestore_test.go b/server/filestore_test.go
+index bde2fc3..d4cde9b 100644
+--- a/server/filestore_test.go
++++ b/server/filestore_test.go
+@@ -11007,233 +11007,8 @@ func TestFileStoreAsyncFlushOnSkipMsgs(t *testing.T) {
+ 	}
+ }
+ 
+-func TestFileStoreCompressionHeaderCollision(t *testing.T) {
+-	for _, size := range []int{7368035, 24145251} {
+-		for _, hdr := range [][]byte{nil, []byte("NATS/1.0\r\nTest: value\r\n\r\n")} {
+-			t.Run(fmt.Sprintf("Size=%d/Headers=%v", size, len(hdr) > 0), func(t *testing.T) {
+-				testFileStoreAllPermutations(t, func(t *testing.T, fcfg FileStoreConfig) {
+-					cfg := StreamConfig{Name: "TEST", Storage: FileStorage}
+-					fs, err := newFileStoreWithCreated(fcfg, cfg, time.Now(), prf(&fcfg), nil)
+-					require_NoError(t, err)
+-					defer fs.Stop()
+-
+-					subj := "test"
+-					msg := bytes.Repeat([]byte("a"), size-int(fileStoreMsgSize(subj, hdr, nil)))
+-					_, _, err = fs.StoreMsg(subj, hdr, msg, 0)
+-					require_NoError(t, err)
+-					// Keep a following message to check after deletion.
+-					_, _, err = fs.StoreMsg(subj, nil, []byte("next"), 0)
+-					require_NoError(t, err)
+-					require_NoError(t, fs.Stop())
+-
+-					// Reopen to force decoding from disk instead of reading cached messages.
+-					fs, err = newFileStoreWithCreated(fcfg, cfg, time.Now(), prf(&fcfg), nil)
+-					require_NoError(t, err)
+-					defer fs.Stop()
+-					sm, err := fs.LoadMsg(1, nil)
+-					require_NoError(t, err)
+-					require_Equal(t, sm.subj, subj)
+-					require_True(t, bytes.Equal(sm.hdr, hdr))
+-					require_True(t, bytes.Equal(sm.msg, msg))
+-					removed, err := fs.RemoveMsg(1)
+-					require_NoError(t, err)
+-					require_True(t, removed)
+-					sm, err = fs.LoadMsg(2, nil)
+-					require_NoError(t, err)
+-					require_Equal(t, string(sm.msg), "next")
+-				})
+-			})
+-		}
+-	}
+-}
+-
+-func TestFileStoreDecodeCorruptBlock(t *testing.T) {
+-	fs, err := newFileStore(FileStoreConfig{StoreDir: t.TempDir(), Compression: S2Compression}, StreamConfig{Name: "TEST", Storage: FileStorage})
+-	require_NoError(t, err)
+-	defer fs.Stop()
+-
+-	// Create a large valid S2 compressed block
+-	msg := make([]byte, 25*1024*1024)
+-	_, err = crand.Read(msg)
+-	require_NoError(t, err)
+-	_, _, err = fs.StoreMsg("test", nil, msg, 0)
+-	require_NoError(t, err)
+-	mb := fs.getFirstBlock()
+-	require_NoError(t, mb.flushPendingMsgs())
+-	mb.mu.Lock()
+-	defer mb.mu.Unlock()
+-	require_NoError(t, mb.recompressOnDiskIfNeeded())
+-	compressed, err := mb.loadBlock(nil)
+-	require_NoError(t, err)
+-
+-	// Corrupt a byte in the S2 data so decompression fails.
+-	// mb.decode will try to interpret this block as uncompressed,
+-	// but that will fail as well because of checksum mismatch.
+-	compressed[len(compressed)/2] ^= 0xff
+-	_, _, err = mb.decode(compressed)
+-	require_Error(t, err)
+-	require_True(t, errors.Is(err, s2.ErrCRC))
+-}
+-
+-func TestFileStoreCompressionAfterTruncate(t *testing.T) {
+-	tests := []struct {
+-		title  string
+-		action func(fs *fileStore, seq uint64)
+-	}{
+-		{
+-			title: "RemoveMsg",
+-			action: func(fs *fileStore, seq uint64) {
+-				removed, err := fs.RemoveMsg(seq)
+-				require_NoError(t, err)
+-				require_True(t, removed)
+-			},
+-		},
+-		{
+-			title: "EraseMsg",
+-			action: func(fs *fileStore, seq uint64) {
+-				erased, err := fs.EraseMsg(seq)
+-				require_NoError(t, err)
+-				require_True(t, erased)
+-			},
+-		},
+-		{
+-			title: "Tombstone",
+-			action: func(fs *fileStore, seq uint64) {
+-				removed, err := fs.removeMsg(seq, false, false, true)
+-				require_NoError(t, err)
+-				require_True(t, removed)
+-			},
+-		},
+-	}
+-	for _, test := range tests {
+-		for _, recompress := range []bool{false, true} {
+-			t.Run(fmt.Sprintf("%s/Recompress=%v", test.title, recompress), func(t *testing.T) {
+-				testFileStoreAllPermutations(t, func(t *testing.T, fcfg FileStoreConfig) {
+-					cfg := StreamConfig{Name: "zzz", Subjects: []string{"foo"}, Storage: FileStorage}
+-					created := time.Now()
+-					fs, err := newFileStoreWithCreated(fcfg, cfg, created, prf(&fcfg), nil)
+-					require_NoError(t, err)
+-					defer fs.Stop()
+-
+-					for range 2 {
+-						_, _, err = fs.StoreMsg("foo", nil, nil, 0)
+-						require_NoError(t, err)
+-					}
+-
+-					checkCompressed := func(mb *msgBlock) (bool, error) {
+-						mb.mu.Lock()
+-						defer mb.mu.Unlock()
+-						buf, err := mb.loadBlock(nil)
+-						if err != nil {
+-							return false, err
+-						}
+-						if err = mb.encryptOrDecryptIfNeeded(buf); err != nil {
+-							return false, err
+-						}
+-						var meta CompressionInfo
+-						if n, err := meta.UnmarshalMetadata(buf); err != nil {
+-							return false, err
+-						} else if n == 0 {
+-							return false, nil
+-						} else {
+-							return meta.Algorithm != NoCompression, nil
+-						}
+-					}
+-
+-					smb := fs.getFirstBlock()
+-					require_NotNil(t, smb)
+-					compressed, err := checkCompressed(smb)
+-					require_NoError(t, err)
+-					require_False(t, compressed)
+-
+-					_, err = fs.newMsgBlockForWrite()
+-					require_NoError(t, err)
+-
+-					if fcfg.Compression != NoCompression {
+-						checkFor(t, 2*time.Second, 100*time.Millisecond, func() error {
+-							if compressed, err = checkCompressed(smb); err != nil {
+-								return err
+-							} else if !compressed {
+-								return errors.New("block not compressed yet")
+-							}
+-							return nil
+-						})
+-					} else {
+-						compressed, err = checkCompressed(smb)
+-						require_NoError(t, err)
+-						require_False(t, compressed)
+-					}
+-
+-					_, _, err = fs.StoreMsg("foo", nil, nil, 0)
+-					require_NoError(t, err)
+ 
+-					test.action(fs, 2)
+ 
+-					state := fs.State()
+-					require_Equal(t, state.Msgs, 2)
+-					require_Equal(t, state.FirstSeq, 1)
+-					require_Equal(t, state.LastSeq, 3)
+-					require_Equal(t, state.NumDeleted, 1)
+-
+-					require_NoError(t, fs.Truncate(2))
+-					state = fs.State()
+-					require_Equal(t, state.Msgs, 1)
+-					require_Equal(t, state.FirstSeq, 1)
+-					require_Equal(t, state.LastSeq, 2)
+-					require_Equal(t, state.NumDeleted, 1)
+-
+-					fs.mu.RLock()
+-					lmb := fs.lmb
+-					fs.mu.RUnlock()
+-					if smb == lmb {
+-						compressed, err = checkCompressed(smb)
+-						require_NoError(t, err)
+-						require_False(t, compressed)
+-					} else {
+-						compressed, err = checkCompressed(lmb)
+-						require_NoError(t, err)
+-						require_False(t, compressed)
+-
+-						if fcfg.Compression != NoCompression {
+-							checkFor(t, 2*time.Second, 100*time.Millisecond, func() error {
+-								if compressed, err = checkCompressed(smb); err != nil {
+-									return err
+-								} else if !compressed {
+-									return errors.New("block not compressed yet")
+-								}
+-								return nil
+-							})
+-						}
+-					}
+-
+-					require_NoError(t, fs.forceWriteFullState())
+-
+-					seq, _, err := fs.StoreMsg("foo", nil, nil, 0)
+-					require_NoError(t, err)
+-					require_Equal(t, seq, 3)
+-					require_NoError(t, fs.forceWriteFullState())
+-
+-					smb.mu.Lock()
+-					smb.clearCacheAndOffset()
+-					smb.mu.Unlock()
+-
+-					require_NoError(t, smb.loadMsgsWithLock())
+-					compressed, err = checkCompressed(smb)
+-					require_NoError(t, err)
+-					if smb == lmb {
+-						require_False(t, compressed)
+-					} else {
+-						require_Equal(t, compressed, fcfg.Compression != NoCompression)
+-					}
+-
+-					compressed, err = checkCompressed(lmb)
+-					require_NoError(t, err)
+-					require_False(t, compressed)
+-				})
+-			})
+-		}
+-	}
+-}
+ 
+ func TestFileStoreTruncateRemovedBlock(t *testing.T) {
+ 	testFileStoreAllPermutations(t, func(t *testing.T, fcfg FileStoreConfig) {
+@@ -11292,138 +11067,6 @@ func TestFileStoreTruncateRemovedBlock(t *testing.T) {
+ 	})
+ }
+ 
+-func TestFileStoreAtomicEraseMsg(t *testing.T) {
+-	for _, lmb := range []bool{true, false} {
+-		t.Run(fmt.Sprintf("lmb=%v", lmb), func(t *testing.T) {
+-			testFileStoreAllPermutations(t, func(t *testing.T, fcfg FileStoreConfig) {
+-				cfg := StreamConfig{Name: "zzz", Subjects: []string{"foo"}, Storage: FileStorage}
+-				created := time.Now()
+-				fs, err := newFileStoreWithCreated(fcfg, cfg, created, prf(&fcfg), nil)
+-				require_NoError(t, err)
+-				defer fs.Stop()
+-
+-				for range 3 {
+-					_, _, err = fs.StoreMsg("foo", nil, nil, 0)
+-					require_NoError(t, err)
+-				}
+-
+-				checkCompressed := func(mb *msgBlock) (bool, error) {
+-					mb.mu.Lock()
+-					defer mb.mu.Unlock()
+-					buf, err := mb.loadBlock(nil)
+-					if err != nil {
+-						return false, err
+-					}
+-					if err := mb.checkAndLoadEncryption(); err != nil {
+-						return false, err
+-					}
+-					if err = mb.encryptOrDecryptIfNeeded(buf); err != nil {
+-						return false, err
+-					}
+-					var meta CompressionInfo
+-					if n, err := meta.UnmarshalMetadata(buf); err != nil {
+-						return false, err
+-					} else if n == 0 {
+-						return false, nil
+-					} else {
+-						return meta.Algorithm != NoCompression, nil
+-					}
+-				}
+-
+-				if !lmb {
+-					smb := fs.getFirstBlock()
+-					require_NotNil(t, smb)
+-
+-					mb, err := fs.newMsgBlockForWrite()
+-					require_NoError(t, err)
+-					compressed, err := checkCompressed(mb)
+-					require_NoError(t, err)
+-					require_False(t, compressed)
+-
+-					if fcfg.Compression != NoCompression {
+-						checkFor(t, 2*time.Second, 100*time.Millisecond, func() error {
+-							if compressed, err = checkCompressed(smb); err != nil {
+-								return err
+-							} else if !compressed {
+-								return errors.New("block not compressed yet")
+-							}
+-							return nil
+-						})
+-					}
+-				}
+-
+-				before := fs.State()
+-				require_Equal(t, before.Msgs, 3)
+-				require_Equal(t, before.FirstSeq, 1)
+-				require_Equal(t, before.LastSeq, 3)
+-				require_Equal(t, before.NumDeleted, 0)
+-
+-				removed, err := fs.EraseMsg(2)
+-				require_NoError(t, err)
+-				require_True(t, removed)
+-
+-				before = fs.State()
+-				require_Equal(t, before.Msgs, 2)
+-				require_Equal(t, before.FirstSeq, 1)
+-				require_Equal(t, before.LastSeq, 3)
+-				require_Equal(t, before.NumDeleted, 1)
+-
+-				seq, _, err := fs.StoreMsg("foo", nil, nil, 0)
+-				require_NoError(t, err)
+-				require_Equal(t, seq, 4)
+-				before = fs.State()
+-
+-				validateCompressed := func() {
+-					t.Helper()
+-					fs.mu.Lock()
+-					defer fs.mu.Unlock()
+-					for _, mb := range fs.blks {
+-						compressed, err := checkCompressed(mb)
+-						require_NoError(t, err)
+-						if mb == fs.lmb {
+-							require_False(t, compressed)
+-						} else {
+-							require_Equal(t, compressed, fs.fcfg.Compression != NoCompression)
+-						}
+-					}
+-				}
+-				validateCompressed()
+-
+-				// Restart should equal before.
+-				require_NoError(t, fs.Stop())
+-				fs, err = newFileStoreWithCreated(fcfg, cfg, created, prf(&fcfg), nil)
+-				require_NoError(t, err)
+-				defer fs.Stop()
+-
+-				if state := fs.State(); !reflect.DeepEqual(state, before) {
+-					t.Fatalf("Expected before of:\n%+v, got:\n%+v", before, state)
+-				}
+-				validateCompressed()
+-
+-				// Stop and remove stream before file.
+-				require_NoError(t, fs.Stop())
+-				require_NoError(t, os.Remove(filepath.Join(fs.fcfg.StoreDir, msgDir, streamStreamStateFile)))
+-
+-				// Recovering based on blocks should result in the same before.
+-				fs, err = newFileStoreWithCreated(fcfg, cfg, created, prf(&fcfg), nil)
+-				require_NoError(t, err)
+-				defer fs.Stop()
+-
+-				if state := fs.State(); !reflect.DeepEqual(state, before) {
+-					t.Fatalf("Expected before of:\n%+v, got:\n%+v", before, state)
+-				}
+-				validateCompressed()
+-
+-				// Rebuilding before must also result in the same before.
+-				fs.rebuildState(nil)
+-				if state := fs.State(); !reflect.DeepEqual(state, before) {
+-					t.Fatalf("Expected before of:\n%+v, got:\n%+v", before, state)
+-				}
+-				validateCompressed()
+-			})
+-		})
+-	}
+-}
+ 
+ func TestFileStoreRemoveBlockWithStaleStreamState(t *testing.T) {
+ 	testFileStoreAllPermutations(t, func(t *testing.T, fcfg FileStoreConfig) {

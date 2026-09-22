@@ -1,0 +1,109 @@
+diff --git a/internal/resourcecontrol/resource_control.go b/internal/resourcecontrol/resource_control.go
+--- a/internal/resourcecontrol/resource_control.go
++++ b/internal/resourcecontrol/resource_control.go
+@@ -15,10 +15,10 @@
+ package resourcecontrol
+ 
+ import (
+-	_ "strings"
++	"strings"
+ 	"time"
+ 
+-	_ "example.internal/kvstore/v2/util"
++	"example.internal/kvstore/v2/util"
+ 	"example.internal/kvstore/v2/wirerpc"
+ 	_ "github.com/pingcap/kvproto/pkg/coprocessor"
+ 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
+@@ -40,31 +40,38 @@
+ 
+ // MakeRequestInfo extracts the relevant information from a BatchRequest.
+ func MakeRequestInfo(req *tikvrpc.Request) *RequestInfo {
+-	panic("excised: MakeRequestInfo")
++	var bypass bool
++	if s := req.Context.GetRequestSource(); strings.Contains(s, util.InternalRequestPrefix+util.InternalTxnOthers) {
++		bypass = true
++	}
++	return &RequestInfo{writeBytes: -1, storeID: req.Context.GetPeer().GetStoreId(), bypass: bypass}
+ }
+ 
+ // IsWrite returns whether the request is a write request.
+ func (req *RequestInfo) IsWrite() bool {
+-	panic("excised: RequestInfo.IsWrite")
++	return req.writeBytes > -1
+ }
+ 
+ // WriteBytes returns the actual write size of the request,
+ // -1 will be returned if it's not a write request.
+ func (req *RequestInfo) WriteBytes() uint64 {
+-	panic("excised: RequestInfo.WriteBytes")
++	if req.writeBytes > 0 {
++		return uint64(req.writeBytes)
++	}
++	return 0
+ }
+ 
+ func (req *RequestInfo) ReplicaNumber() int64 {
+-	panic("excised: RequestInfo.ReplicaNumber")
++	return req.replicaNumber
+ }
+ 
+ // Bypass returns whether the request should be bypassed.
+ func (req *RequestInfo) Bypass() bool {
+-	panic("excised: RequestInfo.Bypass")
++	return req.bypass
+ }
+ 
+ func (req *RequestInfo) StoreID() uint64 {
+-	panic("excised: RequestInfo.StoreID")
++	return req.storeID
+ }
+ 
+ // ResponseInfo contains information about a response that is able to calculate the RU cost
+@@ -78,26 +85,42 @@
+ 
+ // MakeResponseInfo extracts the relevant information from a BatchResponse.
+ func MakeResponseInfo(resp *tikvrpc.Response) *ResponseInfo {
+-	panic("excised: MakeResponseInfo")
++	if resp.Resp == nil {
++		return &ResponseInfo{}
++	}
++	var readBytes uint64
++	var detailsV2 *kvrpcpb.ExecDetailsV2
++	switch r := resp.Resp.(type) {
++	case *kvrpcpb.GetResponse:
++		detailsV2 = r.GetExecDetailsV2()
++	case *kvrpcpb.ScanResponse:
++		readBytes = uint64(r.Size())
++	default:
++		return &ResponseInfo{}
++	}
++	return &ResponseInfo{readBytes: readBytes, kvCPU: getKVCPU(detailsV2, nil)}
+ }
+ 
+ // TODO: find out a more accurate way to get the actual KV CPU time.
+ func getKVCPU(detailsV2 *kvrpcpb.ExecDetailsV2, details *kvrpcpb.ExecDetails) time.Duration {
+-	panic("excised: getKVCPU")
++	if td := detailsV2.GetTimeDetailV2(); td != nil {
++		return time.Duration(td.GetProcessWallTimeNs())
++	}
++	return 0
+ }
+ 
+ // ReadBytes returns the read bytes of the response.
+ func (res *ResponseInfo) ReadBytes() uint64 {
+-	panic("excised: ResponseInfo.ReadBytes")
++	return res.readBytes
+ }
+ 
+ // KVCPU returns the KV CPU time of the response.
+ func (res *ResponseInfo) KVCPU() time.Duration {
+-	panic("excised: ResponseInfo.KVCPU")
++	return res.kvCPU
+ }
+ 
+ // Succeed returns whether the KV request is successful.
+ // Todo: to fit https://github.com/kvstore/meta/pull/5941
+ func (res *ResponseInfo) Succeed() bool {
+-	panic("excised: ResponseInfo.Succeed")
++	return true
+ }

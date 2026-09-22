@@ -1,0 +1,109 @@
+--- a/pkg/featureflag/featureflag.go
++++ b/pkg/featureflag/featureflag.go
+@@ -25,12 +25,12 @@
+ package featureflag
+ 
+ import (
+-	_ "fmt"
++	"fmt"
+ 	"os"
+-	_ "strings"
++	"strings"
+ 	"sync"
+ 
+-	_ "k8s.io/klog/v2"
++	"k8s.io/klog/v2"
+ )
+ 
+ const (
+@@ -124,25 +124,84 @@
+ 
+ // new creates a new feature flag
+ func new(key string, defaultValue *bool) *FeatureFlag {
+-	panic("excised: new")
++	flagsMutex.Lock()
++	defer flagsMutex.Unlock()
++
++	f := flags[key]
++	if f == nil {
++		f = &FeatureFlag{
++			Key: key,
++		}
++		flags[key] = f
++	}
++
++	if f.defaultValue == nil {
++		f.defaultValue = defaultValue
++	}
++
++	return f
+ }
+ 
+ // Enabled checks if the flag is enabled
+ func (f *FeatureFlag) Enabled() bool {
+-	panic("excised: FeatureFlag.Enabled")
++	if f.enabled != nil {
++		return *f.enabled
++	}
++	if f.defaultValue != nil {
++		return *f.defaultValue
++	}
++	return false
+ }
+ 
+ // Bool returns a pointer to the boolean value
+ func Bool(b bool) *bool {
+-	panic("excised: Bool")
++	return &b
+ }
+ 
+ // ParseFlags responsible for parse out the feature flag usage
+ func ParseFlags(f string) {
+-	panic("excised: ParseFlags")
++	flagsMutex.Lock()
++	defer flagsMutex.Unlock()
++
++	f = strings.TrimSpace(f)
++	var parsed, unknown int
++	for _, s := range strings.Split(f, ",") {
++		s = strings.TrimSpace(s)
++		if s == "" {
++			continue
++		}
++		enabled := true
++		var ff *FeatureFlag
++		if s[0] == '+' || s[0] == '-' {
++			ff = flags[s[1:]]
++			if s[0] == '-' {
++				enabled = false
++			}
++		} else {
++			ff = flags[s]
++		}
++		if ff != nil {
++			klog.Infof("FeatureFlag %q=%v", ff.Key, enabled)
++			ff.enabled = &enabled
++			parsed++
++		} else {
++			klog.Infof("Unknown FeatureFlag %q", s)
++			unknown++
++		}
++	}
++	if f != "" {
++		klog.Infof("ParseFlags: parsed %d flags from %q (unknown=%d, registered=%d)", parsed, f, unknown, len(flags))
++	}
+ }
+ 
+ // Get returns given FeatureFlag.
+ func Get(flagName string) (*FeatureFlag, error) {
+-	panic("excised: Get")
+-}
++	flagsMutex.Lock()
++	defer flagsMutex.Unlock()
++
++	flag, found := flags[flagName]
++	if !found {
++		return nil, fmt.Errorf("flag %s not found", flagName)
++	}
++	return flag, nil
++}

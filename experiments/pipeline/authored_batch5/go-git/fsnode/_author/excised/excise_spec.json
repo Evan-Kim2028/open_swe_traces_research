@@ -1,0 +1,24 @@
+{
+ "fsnode": {
+  "utils/merkletrie/filesystem/node.go": [
+   "NewRootNode",
+   "NewRootNodeWithOptions",
+   "node.Hash",
+   "node.Name",
+   "node.IsDir",
+   "node.Skip",
+   "node.Children",
+   "node.NumChildren",
+   "node.calculateChildren",
+   "node.resolveScope",
+   "node.pathComponents",
+   "node.shouldSkipIgnored",
+   "node.newChildNode",
+   "node.calculateHash",
+   "node.metadataMatches",
+   "node.doCalculateHashForRegular",
+   "node.doCalculateHashForSymlink",
+   "node.String"
+  ]
+ }
+}

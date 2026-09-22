@@ -1,0 +1,297 @@
+--- a/pkg/apis/kops/cluster.go
++++ b/pkg/apis/kops/cluster.go
+@@ -17,14 +17,14 @@
+ package kops
+ 
+ import (
+-	_ "fmt"
+-
+-	_ "example.internal/clustkit/pkg/apis/kops/util"
+-	_ "example.internal/clustkit/upup/pkg/fi/utils"
++	"fmt"
++
+ 	corev1 "k8s.io/api/core/v1"
+ 	"k8s.io/apimachinery/pkg/api/resource"
+ 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+ 	"k8s.io/apimachinery/pkg/util/intstr"
++	"example.internal/clustkit/pkg/apis/kops/util"
++	"example.internal/clustkit/upup/pkg/fi/utils"
+ )
+ 
+ // AlphaLabelCloudProvider lets us experiment with a cloud provider,
+@@ -436,7 +436,7 @@
+ }
+ 
+ func (s *AuthenticationSpec) IsEmpty() bool {
+-	panic("excised: AuthenticationSpec.IsEmpty")
++	return s.Kopeio == nil && s.AWS == nil && s.OIDC == nil
+ }
+ 
+ type KopeioAuthenticationSpec struct{}
+@@ -501,7 +501,7 @@
+ }
+ 
+ func (s *AuthorizationSpec) IsEmpty() bool {
+-	panic("excised: AuthorizationSpec.IsEmpty")
++	return s.RBAC == nil && s.AlwaysAllow == nil
+ }
+ 
+ type RBACAuthorizationSpec struct{}
+@@ -841,7 +841,7 @@
+ }
+ 
+ func (t *TargetSpec) IsEmpty() bool {
+-	panic("excised: TargetSpec.IsEmpty")
++	return t.Terraform == nil
+ }
+ 
+ // TerraformSpec allows us to specify terraform config in an extensible way
+@@ -853,108 +853,188 @@
+ }
+ 
+ func (t *TerraformSpec) IsEmpty() bool {
+-	panic("excised: TerraformSpec.IsEmpty")
++	return len(t.ProviderExtraConfig) == 0 && len(t.FilesProviderExtraConfig) == 0
+ }
+ 
+ // FillDefaults populates default values.
+ // This is different from PerformAssignments, because these values are changeable, and thus we don't need to
+ // store them (i.e. we don't need to 'lock them')
+ func (c *Cluster) FillDefaults() error {
+-	panic("excised: Cluster.FillDefaults")
++	// Topology support
++	if c.Spec.Networking.Topology == nil {
++		c.Spec.Networking.Topology = &TopologySpec{DNS: DNSTypePublic}
++	}
++
++	if c.Spec.Channel == "" {
++		c.Spec.Channel = DefaultChannel
++	}
++
++	if c.ObjectMeta.Name == "" {
++		return fmt.Errorf("cluster Name not set in FillDefaults")
++	}
++
++	return nil
+ }
+ 
+ // SharedVPC is a simple helper function which makes the templates for a shared VPC clearer
+ func (c *Cluster) SharedVPC() bool {
+-	panic("excised: Cluster.SharedVPC")
++	return c.Spec.Networking.NetworkID != ""
+ }
+ 
+ // IsKubernetesGTE checks if the version is >= the specified version.
+ // It panics if the kubernetes version in the cluster is invalid, or if the version is invalid.
+ func (c *Cluster) IsKubernetesGTE(version string) bool {
+-	panic("excised: Cluster.IsKubernetesGTE")
++	clusterVersion, err := util.ParseKubernetesVersion(c.Spec.KubernetesVersion)
++	if err != nil || clusterVersion == nil {
++		panic(fmt.Sprintf("error parsing cluster spec.kubernetesVersion %q", c.Spec.KubernetesVersion))
++	}
++
++	parsedVersion, err := util.ParseKubernetesVersion(version)
++	if err != nil {
++		panic(fmt.Sprintf("Error parsing version %s: %v", version, err))
++	}
++
++	// Ignore Pre & Build fields
++	clusterVersion.Pre = nil
++	clusterVersion.Build = nil
++
++	return clusterVersion.GTE(*parsedVersion)
+ }
+ 
+ // IsKubernetesLT checks if the version is < the specified version.
+ // It panics if the kubernetes version in the cluster is invalid, or if the version is invalid.
+ func (c *Cluster) IsKubernetesLT(version string) bool {
+-	panic("excised: Cluster.IsKubernetesLT")
++	return !c.IsKubernetesGTE(version)
+ }
+ 
+ // IsSharedAzureResourceGroup returns true if the resource group is shared.
+ func (c *Cluster) IsSharedAzureResourceGroup() bool {
+-	panic("excised: Cluster.IsSharedAzureResourceGroup")
++	return c.Spec.CloudProvider.Azure.ResourceGroupName != ""
+ }
+ 
+ // AzureResourceGroupName returns the name of the resource group where the cluster is built.
+ func (c *Cluster) AzureResourceGroupName() string {
+-	panic("excised: Cluster.AzureResourceGroupName")
++	if c.Spec.CloudProvider.Azure.ResourceGroupName != "" {
++		return c.Spec.CloudProvider.Azure.ResourceGroupName
++	}
++	return c.Name
+ }
+ 
+ // IsSharedAzureRouteTable returns true if the route table is shared.
+ func (c *Cluster) IsSharedAzureRouteTable() bool {
+-	panic("excised: Cluster.IsSharedAzureRouteTable")
++	return c.Spec.CloudProvider.Azure.RouteTableName != ""
+ }
+ 
+ // AzureRouteTableName returns the name of the route table used by the cluster.
+ func (c *Cluster) AzureRouteTableName() string {
+-	panic("excised: Cluster.AzureRouteTableName")
++	if c.Spec.CloudProvider.Azure.RouteTableName != "" {
++		return c.Spec.CloudProvider.Azure.RouteTableName
++	}
++	return c.Name
+ }
+ 
+ // AzureNetworkSecurityGroupName returns the name of the network security group for the cluster.
+ // The NSG shares its name with the virtual network.
+ func (c *Cluster) AzureNetworkSecurityGroupName() string {
+-	panic("excised: Cluster.AzureNetworkSecurityGroupName")
++	if c.Spec.Networking.NetworkID != "" {
++		return c.Spec.Networking.NetworkID
++	}
++	return c.Name
+ }
+ 
+ func (c *Cluster) PublishesDNSRecords() bool {
+-	panic("excised: Cluster.PublishesDNSRecords")
++	return !c.UsesNoneDNS()
+ }
+ 
+ func (c *Cluster) UsesPublicDNS() bool {
+-	panic("excised: Cluster.UsesPublicDNS")
++	if c.Spec.Networking.Topology == nil || c.Spec.Networking.Topology.DNS == "" || c.Spec.Networking.Topology.DNS == DNSTypePublic {
++		return true
++	}
++	return false
+ }
+ 
+ func (c *Cluster) UsesPrivateDNS() bool {
+-	panic("excised: Cluster.UsesPrivateDNS")
++	if c.Spec.Networking.Topology != nil && c.Spec.Networking.Topology.DNS == DNSTypePrivate {
++		return true
++	}
++	return false
+ }
+ 
+ func (c *Cluster) UsesNoneDNS() bool {
+-	panic("excised: Cluster.UsesNoneDNS")
++	if c.Spec.Networking.Topology != nil && c.Spec.Networking.Topology.DNS == DNSTypeNone {
++		return true
++	}
++	return false
+ }
+ 
+ // UsesLoadBalancerForKopsController returns true when worker nodes reach clustkit-controller
+ // via the cluster load balancer rather than via DNS. True for all None-DNS clusters.
+ // Note that clusters with none DNS topology may not have c.Spec.API.LoadBalancer set (see Hetzner).
+ func (c *Cluster) UsesLoadBalancerForKopsController() bool {
+-	panic("excised: Cluster.UsesLoadBalancerForKopsController")
++	return c.UsesNoneDNS()
+ }
+ 
+ func (c *Cluster) InstallCNIAssets() bool {
+-	panic("excised: Cluster.InstallCNIAssets")
++	if c.Spec.Networking.Cilium != nil {
++		// In portmap chaining mode, Cilium delegates hostPort handling to the
++		// portmap plugin, which comes from the standard CNI plugins bundle.
++		return c.Spec.Networking.Cilium.ChainingMode == "portmap"
++	}
++	return c.Spec.Networking.AmazonVPC == nil &&
++		c.Spec.Networking.Calico == nil
+ }
+ 
+ func (c *Cluster) HasImageVolumesSupport() bool {
+-	panic("excised: Cluster.HasImageVolumesSupport")
++	// Image Volumes was added to ClusterKit v1.31
++	// https://kubernetes.io/blog/2024/08/16/kubernetes-1-31-image-volume-source/
++	// The kubelet implementation used by Clustkit (whole-image mounts, no subPath)
++	// is complete as of v1.32, the oldest ClusterKit version supported by Clustkit.
++	// The runtime side requires containerd v2.1.0, which validation guarantees
++	// for all clusters.
++	// https://github.com/containerd/containerd/releases/tag/v2.1.0
++	return !c.IsKubernetesLT("1.32.0")
+ }
+ 
+ func (c *Cluster) APIInternalName() string {
+-	panic("excised: Cluster.APIInternalName")
++	return "api.internal." + c.ObjectMeta.Name
+ }
+ 
+ func (c *ClusterSpec) IsIPv6Only() bool {
+-	panic("excised: ClusterSpec.IsIPv6Only")
++	return utils.IsIPv6CIDR(c.Networking.NonMasqueradeCIDR)
+ }
+ 
+ func (c *ClusterSpec) IsKopsControllerIPAM() bool {
+-	panic("excised: ClusterSpec.IsKopsControllerIPAM")
++	return c.IsIPv6Only()
+ }
+ 
+ func (c *ClusterSpec) IsCiliumENIIPAM() bool {
+-	panic("excised: ClusterSpec.IsCiliumENIIPAM")
++	return c.Networking.Cilium != nil && c.Networking.Cilium.IPAM == CiliumIpamEni
+ }
+ 
+ func (c *Cluster) GetCloudProvider() CloudProviderID {
+-	panic("excised: Cluster.GetCloudProvider")
++	if c.Labels[AlphaLabelCloudProvider] == "metal" {
++		return CloudProviderMetal
++	}
++
++	spec := c.Spec
++	if spec.CloudProvider.AWS != nil {
++		return CloudProviderAWS
++	} else if spec.CloudProvider.Azure != nil {
++		return CloudProviderAzure
++	} else if spec.CloudProvider.DO != nil {
++		return CloudProviderDO
++	} else if spec.CloudProvider.GCE != nil {
++		return CloudProviderGCE
++	} else if spec.CloudProvider.Hetzner != nil {
++		return CloudProviderHetzner
++	} else if spec.CloudProvider.Openstack != nil {
++		return CloudProviderOpenstack
++	} else if spec.CloudProvider.Scaleway != nil {
++		return CloudProviderScaleway
++	} else if spec.CloudProvider.Linode != nil {
++		return CloudProviderLinode
++	}
++	return ""
+ }
+ 
+ // EnvVar represents an environment variable present in a Container.
+@@ -1070,9 +1150,34 @@
+ }
+ 
+ func (in *WarmPoolSpec) IsEnabled() bool {
+-	panic("excised: WarmPoolSpec.IsEnabled")
++	return in != nil && (in.MaxSize == nil || *in.MaxSize != 0)
+ }
+ 
+ func (in *WarmPoolSpec) ResolveDefaults(ig *InstanceGroup) *WarmPoolSpec {
+-	panic("excised: WarmPoolSpec.ResolveDefaults")
+-}
++	igWarmPool := ig.Spec.WarmPool
++	if igWarmPool == nil {
++		if in == nil || (ig.Spec.Role.HasControlPlane() || ig.Spec.Role.HasBastion()) {
++			var zero int64
++			return &WarmPoolSpec{
++				MaxSize: &zero,
++			}
++		}
++		return in
++	}
++
++	if in == nil || (ig.Spec.Role.HasControlPlane() || ig.Spec.Role.HasBastion()) {
++		return igWarmPool
++	}
++
++	spec := *igWarmPool
++	if spec.MaxSize == nil {
++		spec.MaxSize = in.MaxSize
++	}
++	if spec.MinSize == 0 {
++		spec.MinSize = in.MinSize
++	}
++	if !spec.EnableLifecycleHook {
++		spec.EnableLifecycleHook = in.EnableLifecycleHook
++	}
++	return &spec
++}

@@ -1,0 +1,132 @@
+diff --git a/expr/error_contract.go b/expr/error_contract.go
+--- a/expr/error_contract.go
++++ b/expr/error_contract.go
+@@ -4,8 +4,9 @@
+ package expr
+ 
+ import (
+-	_ "reflect"
+-	_ "slices"
++	"maps"
++	"reflect"
++	"slices"
+ )
+ 
+ type (
+@@ -29,79 +30,103 @@ type (
+ // types, validations, defaults, and metadata affect generated code or runtime
+ // behavior and must match.
+ func equivalentErrorAttributes(first, second *AttributeExpr) bool {
+-	panic("excised: equivalentErrorAttributes")
++	if first == second {
++		return true
++	}
++	if first == nil || second == nil {
++		return false
++	}
++	return equivalentErrorAttributeNodes(first, second, make(map[attributePair]struct{}))
+ }
+ 
+ // differingErrorQualifierSettings lists error settings that would change the
+ // generated service error returned to callers.
+ func differingErrorQualifierSettings(first, second *AttributeExpr) []string {
+-	panic("excised: differingErrorQualifierSettings")
++	first = effectiveErrorAttribute(first)
++	second = effectiveErrorAttribute(second)
++	qualifiers := []struct {
++		name string
++		key  string
++	}{
++		{name: "temporary", key: "apikit:error:temporary"},
++		{name: "timeout", key: "apikit:error:timeout"},
++		{name: "fault", key: "goa:error:fault"},
++	}
++	var different []string
++	for _, qualifier := range qualifiers {
++		_, firstSet := first.Meta[qualifier.key]
++		_, secondSet := second.Meta[qualifier.key]
++		if firstSet != secondSet {
++			different = append(different, qualifier.name)
++		}
++	}
++	return different
+ }
+ 
+ // effectiveErrorAttribute returns a detached copy with References and Bases
+ // applied by AttributeExpr.Finalize. Validation can therefore compare the
+ // value contracts code generation will see without mutating evaluated design.
+ func effectiveErrorAttribute(source *AttributeExpr) *AttributeExpr {
+-	panic("excised: effectiveErrorAttribute")
++	return source
+ }
+ 
+ // attribute copies one attribute shell before following its type and
+ // inheritance edges so self-recursive graphs terminate on the copied shell.
+ func (c *effectiveErrorCopier) attribute(source *AttributeExpr) *AttributeExpr {
+-	panic("excised: effectiveErrorCopier.attribute")
++	return source
+ }
+ 
+ // cloneErrorValidation detaches slices and scalar pointers that
+ // ValidationExpr.Dup deliberately shares with its source.
+ func cloneErrorValidation(source *ValidationExpr) *ValidationExpr {
+-	panic("excised: cloneErrorValidation")
++	return source.Dup()
+ }
+ 
+ // cloneErrorContractValue copies the collection values accepted by defaults,
+ // enum validations, and examples. Primitive values are immutable and can be
+ // shared safely.
+ func cloneErrorContractValue(source any) any {
+-	panic("excised: cloneErrorContractValue")
++	return source
+ }
+ 
+ // dataTypes reconnects inheritance declarations to the same copied graph used
+ // by attribute types.
+ func (c *effectiveErrorCopier) dataTypes(source []DataType) []DataType {
+-	panic("excised: effectiveErrorCopier.dataTypes")
++	return source
+ }
+ 
+ // dataType copies each concrete type without registering generated result
+ // types. User-type shells are installed before their attributes are followed.
+ func (c *effectiveErrorCopier) dataType(source DataType) DataType {
+-	panic("excised: effectiveErrorCopier.dataType")
++	return source
+ }
+ 
+ // equivalentErrorAttributeNodes compares every contract-bearing node while
+ // stopping when recursive user types revisit the same declaration pair.
+ func equivalentErrorAttributeNodes(first, second *AttributeExpr, seen map[attributePair]struct{}) bool {
+-	panic("excised: equivalentErrorAttributeNodes")
++	return reflect.DeepEqual(first, second)
+ }
+ 
+ // equivalentErrorValidation compares validation behavior independently of the
+ // authored order of required fields and enum values.
+ func equivalentErrorValidation(first, second *ValidationExpr) bool {
+-	panic("excised: equivalentErrorValidation")
++	return reflect.DeepEqual(first, second)
+ }
+ 
+ // equivalentStringSet reports whether both slices contain the same distinct
+ // strings; validation order does not affect runtime behavior.
+ func equivalentStringSet(first, second []string) bool {
+-	panic("excised: equivalentStringSet")
++	return slices.Equal(first, second)
+ }
+ 
+ // equivalentValueSet reports whether both enum lists contain the same values
+ // regardless of declaration order.
+ func equivalentValueSet(first, second []any) bool {
+-	panic("excised: equivalentValueSet")
++	return slices.Equal(first, second)
+ }
+ 
+ // equivalentErrorMetadata compares metadata keys and ordered values while
+ // treating nil and empty maps or value slices as the same absent content.
+ func equivalentErrorMetadata(first, second MetaExpr) bool {
+-	panic("excised: equivalentErrorMetadata")
++	return maps.EqualFunc(first, second, slices.Equal[[]string])
+ }

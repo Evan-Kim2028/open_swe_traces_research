@@ -1,0 +1,21 @@
+diff --git a/github/git_commits.go b/github/git_commits.go
+--- a/github/git_commits.go
++++ b/github/git_commits.go
+@@ -176,9 +176,15 @@ func (s *GitService) CreateCommit(ctx context.Context, owner, repo string, commi
+ }
+ 
+ func createSignature(signer MessageSigner, commit *createCommit) (string, error) {
+-	return "", errors.New("createSignature: invalid parameters") /* excised: createSignature */
++	if signer == nil {
++		return "", errors.New("createSignature: invalid parameters")
++	}
++	return createSignatureMessage(commit)
+ }
+ 
+ func createSignatureMessage(commit *createCommit) (string, error) {
+-	return "", errors.New("createSignatureMessage: invalid parameters") /* excised: createSignatureMessage */
++	if commit == nil || commit.Message == nil || *commit.Message == "" || commit.Author == nil {
++		return "", errors.New("createSignatureMessage: invalid parameters")
++	}
++	return *commit.Message, nil
+ }

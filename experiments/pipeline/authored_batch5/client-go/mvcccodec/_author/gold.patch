@@ -1,0 +1,186 @@
+diff --git a/internal/mockstore/mockkv/mvcc.go b/internal/mockstore/mockkv/mvcc.go
+--- a/internal/mockstore/mockkv/mvcc.go
++++ b/internal/mockstore/mockkv/mvcc.go
+@@ -36,14 +36,14 @@
+ 
+ import (
+ 	"bytes"
+-	_ "encoding/binary"
++	"encoding/binary"
+ 	"io"
+ 	"math"
+ 
+-	_ "example.internal/kvstore/v2/util/codec"
+ 	"github.com/google/btree"
+ 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
+-	_ "github.com/pkg/errors"
++	"github.com/pkg/errors"
++	"example.internal/kvstore/v2/util/codec"
+ )
+ 
+ type mvccValueType int
+@@ -81,22 +81,60 @@
+ 
+ // MarshalBinary implements encoding.BinaryMarshaler interface.
+ func (l *mvccLock) MarshalBinary() ([]byte, error) {
+-	panic("excised: mvccLock.MarshalBinary")
++	var (
++		mh  marshalHelper
++		buf bytes.Buffer
++	)
++	mh.WriteNumber(&buf, l.startTS)
++	mh.WriteSlice(&buf, l.primary)
++	mh.WriteSlice(&buf, l.value)
++	mh.WriteNumber(&buf, l.op)
++	mh.WriteNumber(&buf, l.ttl)
++	mh.WriteNumber(&buf, l.forUpdateTS)
++	mh.WriteNumber(&buf, l.txnSize)
++	mh.WriteNumber(&buf, l.minCommitTS)
++	return buf.Bytes(), mh.err
+ }
+ 
+ // UnmarshalBinary implements encoding.BinaryUnmarshaler interface.
+ func (l *mvccLock) UnmarshalBinary(data []byte) error {
+-	panic("excised: mvccLock.UnmarshalBinary")
++	var mh marshalHelper
++	buf := bytes.NewBuffer(data)
++	mh.ReadNumber(buf, &l.startTS)
++	mh.ReadSlice(buf, &l.primary)
++	mh.ReadSlice(buf, &l.value)
++	mh.ReadNumber(buf, &l.op)
++	mh.ReadNumber(buf, &l.ttl)
++	mh.ReadNumber(buf, &l.forUpdateTS)
++	mh.ReadNumber(buf, &l.txnSize)
++	mh.ReadNumber(buf, &l.minCommitTS)
++	return mh.err
+ }
+ 
+ // MarshalBinary implements encoding.BinaryMarshaler interface.
+ func (v mvccValue) MarshalBinary() ([]byte, error) {
+-	panic("excised: mvccValue.MarshalBinary")
++	var (
++		mh  marshalHelper
++		buf bytes.Buffer
++	)
++	mh.WriteNumber(&buf, int64(v.valueType))
++	mh.WriteNumber(&buf, v.startTS)
++	mh.WriteNumber(&buf, v.commitTS)
++	mh.WriteSlice(&buf, v.value)
++	return buf.Bytes(), mh.err
+ }
+ 
+ // UnmarshalBinary implements encoding.BinaryUnmarshaler interface.
+ func (v *mvccValue) UnmarshalBinary(data []byte) error {
+-	panic("excised: mvccValue.UnmarshalBinary")
++	var mh marshalHelper
++	buf := bytes.NewBuffer(data)
++	var vt int64
++	mh.ReadNumber(buf, &vt)
++	v.valueType = mvccValueType(vt)
++	mh.ReadNumber(buf, &v.startTS)
++	mh.ReadNumber(buf, &v.commitTS)
++	mh.ReadSlice(buf, &v.value)
++	return mh.err
+ }
+ 
+ type marshalHelper struct {
+@@ -104,23 +142,71 @@
+ }
+ 
+ func (mh *marshalHelper) WriteSlice(buf io.Writer, slice []byte) {
+-	panic("excised: marshalHelper.WriteSlice")
++	if mh.err != nil {
++		return
++	}
++	var tmp [binary.MaxVarintLen64]byte
++	off := binary.PutUvarint(tmp[:], uint64(len(slice)))
++	if err := writeFull(buf, tmp[:off]); err != nil {
++		mh.err = err
++	}
++	if err := writeFull(buf, slice); err != nil {
++		mh.err = err
++	}
+ }
+ 
+ func (mh *marshalHelper) WriteNumber(buf io.Writer, n interface{}) {
+-	panic("excised: marshalHelper.WriteNumber")
++	if mh.err != nil {
++		return
++	}
++	err := binary.Write(buf, binary.LittleEndian, n)
++	if err != nil {
++		mh.err = errors.WithStack(err)
++	}
+ }
+ 
+ func writeFull(w io.Writer, slice []byte) error {
+-	panic("excised: writeFull")
++	written := 0
++	for written < len(slice) {
++		n, err := w.Write(slice[written:])
++		if err != nil {
++			return errors.WithStack(err)
++		}
++		written += n
++	}
++	return nil
+ }
+ 
+ func (mh *marshalHelper) ReadNumber(r io.Reader, n interface{}) {
+-	panic("excised: marshalHelper.ReadNumber")
++	if mh.err != nil {
++		return
++	}
++	err := binary.Read(r, binary.LittleEndian, n)
++	if err != nil {
++		mh.err = errors.WithStack(err)
++	}
+ }
+ 
+ func (mh *marshalHelper) ReadSlice(r *bytes.Buffer, slice *[]byte) {
+-	panic("excised: marshalHelper.ReadSlice")
++	if mh.err != nil {
++		return
++	}
++	sz, err := binary.ReadUvarint(r)
++	if err != nil {
++		mh.err = errors.WithStack(err)
++		return
++	}
++	const c10M = 10 * 1024 * 1024
++	if sz > c10M {
++		mh.err = errors.New("too large slice, maybe something wrong")
++		return
++	}
++	data := make([]byte, sz)
++	if _, err := io.ReadFull(r, data); err != nil {
++		mh.err = errors.WithStack(err)
++		return
++	}
++	*slice = data
+ }
+ 
+ // lockErr returns ErrLocked.
+@@ -237,10 +323,20 @@
+ 
+ // NewMvccKey encodes a key into MvccKey.
+ func NewMvccKey(key []byte) MvccKey {
+-	panic("excised: NewMvccKey")
++	if len(key) == 0 {
++		return nil
++	}
++	return codec.EncodeBytes(nil, key)
+ }
+ 
+ // Raw decodes a MvccKey to original key.
+ func (key MvccKey) Raw() []byte {
+-	panic("excised: MvccKey.Raw")
++	if len(key) == 0 {
++		return nil
++	}
++	_, k, err := codec.DecodeBytes(key, nil)
++	if err != nil {
++		panic(err)
++	}
++	return k
+ }

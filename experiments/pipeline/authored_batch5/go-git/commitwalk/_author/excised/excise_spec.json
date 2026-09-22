@@ -1,0 +1,61 @@
+{
+ "commitwalk": {
+  "plumbing/object/commit_walker.go": [
+   "forEachCommit",
+   "NewCommitPreorderIter",
+   "commitPreIterator.Next",
+   "filteredParentIter",
+   "commitPreIterator.ForEach",
+   "commitPreIterator.Close",
+   "NewCommitPostorderIter",
+   "commitPostIterator.Next",
+   "commitPostIterator.ForEach",
+   "commitPostIterator.Close",
+   "NewCommitPostorderIterFirstParent",
+   "commitPostIteratorFirstParent.Next",
+   "commitPostIteratorFirstParent.ForEach",
+   "commitPostIteratorFirstParent.Close",
+   "NewCommitAllIter",
+   "addReference"
+  ],
+  "plumbing/object/commit_walker_bfs.go": [
+   "NewCommitIterBSF",
+   "bfsCommitIterator.appendHash",
+   "bfsCommitIterator.Next",
+   "bfsCommitIterator.ForEach",
+   "bfsCommitIterator.Close"
+  ],
+  "plumbing/object/commit_walker_bfs_filtered.go": [
+   "NewFilterCommitIter",
+   "filterCommitIter.Next",
+   "filterCommitIter.ForEach",
+   "filterCommitIter.Error",
+   "filterCommitIter.Close",
+   "filterCommitIter.close",
+   "filterCommitIter.popNewFromQueue",
+   "filterCommitIter.addToQueue"
+  ],
+  "plumbing/object/commit_walker_ctime.go": [
+   "NewCommitIterCTime",
+   "commitIteratorByCTime.Next",
+   "commitIteratorByCTime.ForEach",
+   "commitIteratorByCTime.Close"
+  ],
+  "plumbing/object/commit_walker_path.go": [
+   "NewCommitPathIterFromIter",
+   "NewCommitFileIterFromIter",
+   "commitPathIter.Next",
+   "commitPathIter.getNextFileCommit",
+   "commitPathIter.hasFileChange",
+   "isParentHash",
+   "commitPathIter.ForEach",
+   "commitPathIter.Close"
+  ],
+  "plumbing/object/commit_walker_limit.go": [
+   "NewCommitLimitIterFromIter",
+   "commitLimitIter.Next",
+   "commitLimitIter.ForEach",
+   "commitLimitIter.Close"
+  ]
+ }
+}

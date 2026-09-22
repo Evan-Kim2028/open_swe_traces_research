@@ -1,0 +1,200 @@
+diff --git a/github/dependency_graph.go b/github/dependency_graph.go
+index c50b573..51e111f 100644
+--- a/github/dependency_graph.go
++++ b/github/dependency_graph.go
+@@ -183,7 +183,7 @@ func (s *DependencyGraphService) GenerateSBOM(ctx context.Context, owner, repo s
+ //
+ //meta:operation GET /repos/{owner}/{repo}/dependency-graph/sbom/fetch-report/{sbom_uuid}
+ func (s *DependencyGraphService) FetchSBOM(ctx context.Context, owner, repo, sbomUUID string, followRedirectsClient *http.Client) (sbom *SBOM, redirectURL string, resp *Response, err error) {
+-	u := fmt.Sprintf("repos/%v/%v/dependency-graph/sbom/fetch-report/%v", owner, repo, sbomUUID)
++		u := fmt.Sprintf("repos/%v/%v/dependency-graph/sbom/fetch-report/%v", owner, repo, sbomUUID)
+ 
+ 	req, err := s.client.NewRequest(ctx, "GET", u, nil)
+ 	if err != nil {
+@@ -200,16 +200,7 @@ func (s *DependencyGraphService) FetchSBOM(ctx context.Context, owner, repo, sbo
+ 		return nil, "", resp, fmt.Errorf("expected redirect, got status %v", resp.Status)
+ 	}
+ 
+-	if followRedirectsClient == nil {
+-		return nil, loc.String(), resp, nil
+-	}
+-
+-	sbom, err = s.fetchSBOMFromURL(ctx, followRedirectsClient, loc.String())
+-	if err != nil {
+-		return nil, "", resp, err
+-	}
+-
+-	return sbom, "", resp, nil
++	return nil, loc.String(), resp, nil /* excised: FetchSBOM */
+ }
+ 
+ // fetchSBOMFromURL downloads and decodes an SPDX report from a temporary download
+@@ -218,7 +209,7 @@ func (s *DependencyGraphService) FetchSBOM(ctx context.Context, owner, repo, sbo
+ // The request must not carry s.client's credentials: the URL is pre-signed and
+ // its host rejects authenticated requests.
+ func (s *DependencyGraphService) fetchSBOMFromURL(ctx context.Context, followRedirectsClient *http.Client, url string) (*SBOM, error) {
+-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
++		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+@@ -227,20 +218,12 @@ func (s *DependencyGraphService) fetchSBOMFromURL(ctx context.Context, followRed
+ 	if err != nil {
+ 		return nil, err
+ 	}
+-
+-	// CheckResponse substitutes resp.Body with a re-readable copy on error responses,
+-	// so capture the network body first: it is the one that must be closed.
+-	origBody := resp.Body
+-	defer origBody.Close()
+-
+-	if err := CheckResponse(resp); err != nil {
+-		return nil, err
+-	}
++	defer resp.Body.Close()
+ 
+ 	var info *SBOMInfo
+ 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+ 		return nil, err
+ 	}
+ 
+-	return &SBOM{SBOM: info}, nil
++	return &SBOM{SBOM: info}, nil /* excised: fetchSBOMFromURL */
+ }
+diff --git a/github/dependency_graph_test.go b/github/dependency_graph_test.go
+index 3c63cca..37bc4c1 100644
+--- a/github/dependency_graph_test.go
++++ b/github/dependency_graph_test.go
+@@ -8,9 +8,9 @@ package github
+ import (
+ 	"errors"
+ 	"fmt"
+-	"io"
++	_ "io"
+ 	"net/http"
+-	"net/http/httptest"
++	_ "net/http/httptest"
+ 	"testing"
+ 
+ 	"github.com/google/go-cmp/cmp"
+@@ -120,80 +120,6 @@ func TestDependencyGraphService_GenerateSBOM(t *testing.T) {
+ 	})
+ }
+ 
+-func TestDependencyGraphService_FetchSBOM_Download(t *testing.T) {
+-	t.Parallel()
+-
+-	tests := []struct {
+-		name           string
+-		downloadStatus int
+-		downloadBody   string
+-		wantSBOM       *SBOM
+-		wantErr        error
+-	}{
+-		{
+-			name:           "success",
+-			downloadStatus: http.StatusOK,
+-			downloadBody:   `{"name":"owner/repo"}`,
+-			wantSBOM: &SBOM{
+-				SBOM: &SBOMInfo{Name: new("owner/repo")},
+-			},
+-		},
+-		{
+-			name:           "forbidden",
+-			downloadStatus: http.StatusForbidden,
+-			wantErr: &ErrorResponse{
+-				Response: &http.Response{StatusCode: http.StatusForbidden},
+-			},
+-		},
+-		{
+-			name:           "truncated JSON",
+-			downloadStatus: http.StatusOK,
+-			downloadBody:   `{"name":"owner/`,
+-			wantErr:        io.ErrUnexpectedEOF,
+-		},
+-	}
+-
+-	for _, tt := range tests {
+-		t.Run(tt.name, func(t *testing.T) {
+-			t.Parallel()
+-			client, mux, _ := setup(t)
+-
+-			client, err := client.Clone(WithAuthToken("secret-token"))
+-			if err != nil {
+-				t.Fatalf("failed to clone client: %v", err)
+-			}
+-
+-			downloadServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+-				testMethod(t, r, "GET")
+-				testHeader(t, r, "Authorization", "")
+-				w.WriteHeader(tt.downloadStatus)
+-				fmt.Fprint(w, tt.downloadBody)
+-			}))
+-			t.Cleanup(downloadServer.Close)
+-
+-			mux.HandleFunc("/repos/owner/repo/dependency-graph/sbom/fetch-report/1234", func(w http.ResponseWriter, r *http.Request) {
+-				testMethod(t, r, "GET")
+-				testHeader(t, r, "Authorization", "Bearer secret-token")
+-				http.Redirect(w, r, downloadServer.URL, http.StatusFound)
+-			})
+-
+-			sbom, redirectURL, resp, err := client.DependencyGraph.FetchSBOM(t.Context(), "owner", "repo", "1234", http.DefaultClient)
+-			if !errors.Is(err, tt.wantErr) {
+-				t.Errorf("DependencyGraph.FetchSBOM error = %#v, want %#v", err, tt.wantErr)
+-			}
+-
+-			if resp == nil || resp.StatusCode != http.StatusFound {
+-				t.Errorf("DependencyGraph.FetchSBOM response = %v, want status 302", resp)
+-			}
+-			if diff := cmp.Diff(tt.wantSBOM, sbom); diff != "" {
+-				t.Errorf("DependencyGraph.FetchSBOM SBOM mismatch (-want +got):\n%v", diff)
+-			}
+-			if redirectURL != "" {
+-				t.Errorf("DependencyGraph.FetchSBOM redirectURL = %v, want empty", redirectURL)
+-			}
+-		})
+-	}
+-}
+ 
+ func TestDependencyGraphService_FetchSBOM_Redirect(t *testing.T) {
+ 	t.Parallel()
+@@ -224,39 +150,6 @@ func TestDependencyGraphService_FetchSBOM_Redirect(t *testing.T) {
+ 	}
+ }
+ 
+-func TestDependencyGraphService_FetchSBOM_DownloadTransportError(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	const downloadURL = "https://example.com/sbom"
+-	wantErr := errors.New("download failed")
+-	downloadClient := &http.Client{
+-		Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+-			testMethod(t, r, "GET")
+-			if got := r.URL.String(); got != downloadURL {
+-				t.Errorf("download URL = %v, want %v", got, downloadURL)
+-			}
+-			return nil, wantErr
+-		}),
+-	}
+-
+-	mux.HandleFunc("/repos/owner/repo/dependency-graph/sbom/fetch-report/1234", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "GET")
+-		http.Redirect(w, r, downloadURL, http.StatusFound)
+-	})
+-
+-	sbom, redirectURL, resp, err := client.DependencyGraph.FetchSBOM(t.Context(), "owner", "repo", "1234", downloadClient)
+-	if !errors.Is(err, wantErr) {
+-		t.Errorf("DependencyGraph.FetchSBOM error = %v, want %v", err, wantErr)
+-	}
+-
+-	if sbom != nil || redirectURL != "" {
+-		t.Errorf("DependencyGraph.FetchSBOM returned (%v, %v), want (nil, empty)", sbom, redirectURL)
+-	}
+-	if resp == nil || resp.StatusCode != http.StatusFound {
+-		t.Errorf("DependencyGraph.FetchSBOM response = %v, want status 302", resp)
+-	}
+-}
+ 
+ func TestDependencyGraphService_FetchSBOM_AcceptedError(t *testing.T) {
+ 	t.Parallel()

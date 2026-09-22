@@ -1,0 +1,225 @@
+diff --git a/github/repos_releases.go b/github/repos_releases.go
+index 44c021a..bde2c17 100644
+--- a/github/repos_releases.go
++++ b/github/repos_releases.go
+@@ -336,7 +336,7 @@ func (s *RepositoriesService) GetReleaseAsset(ctx context.Context, owner, repo s
+ //
+ //meta:operation GET /repos/{owner}/{repo}/releases/assets/{asset_id}
+ func (s *RepositoriesService) DownloadReleaseAsset(ctx context.Context, owner, repo string, id int64, followRedirectsClient *http.Client) (rc io.ReadCloser, redirectURL string, err error) {
+-	u := fmt.Sprintf("repos/%v/%v/releases/assets/%v", owner, repo, id)
++		u := fmt.Sprintf("repos/%v/%v/releases/assets/%v", owner, repo, id)
+ 
+ 	req, err := s.client.NewRequest(ctx, "GET", u, nil)
+ 	if err != nil {
+@@ -349,26 +349,16 @@ func (s *RepositoriesService) DownloadReleaseAsset(ctx context.Context, owner, r
+ 		return nil, "", err
+ 	}
+ 
+-	// No redirect, stream the response body directly.
+ 	if loc == nil {
+ 		return resp.Body, "", nil
+ 	}
+ 
+-	// Close body as it's not needed when following redirects or returning the redirect URL.
+ 	_ = resp.Body.Close()
+-
+-	// Got a redirect URL.
+-	redirectStr := loc.String()
+-	if followRedirectsClient != nil {
+-		rc, err := s.downloadReleaseAssetFromURL(ctx, followRedirectsClient, redirectStr)
+-		return rc, "", err
+-	}
+-
+-	return nil, redirectStr, nil
++	return nil, loc.String(), nil /* excised: DownloadReleaseAsset */
+ }
+ 
+ func (s *RepositoriesService) downloadReleaseAssetFromURL(ctx context.Context, followRedirectsClient *http.Client, url string) (rc io.ReadCloser, err error) {
+-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
++		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+@@ -377,15 +367,7 @@ func (s *RepositoriesService) downloadReleaseAssetFromURL(ctx context.Context, f
+ 	if err != nil {
+ 		return nil, err
+ 	}
+-	// CheckResponse substitutes resp.Body with a re-readable copy on error
+-	// responses, so capture the original body first: it is the one that must
+-	// be closed.
+-	origBody := resp.Body
+-	if err := CheckResponse(resp); err != nil {
+-		_ = origBody.Close()
+-		return nil, err
+-	}
+-	return resp.Body, nil
++	return resp.Body, nil /* excised: downloadReleaseAssetFromURL */
+ }
+ 
+ // UpdateReleaseAsset updates a repository release asset.
+diff --git a/github/repos_releases_test.go b/github/repos_releases_test.go
+index ea02d68..49cabdf 100644
+--- a/github/repos_releases_test.go
++++ b/github/repos_releases_test.go
+@@ -433,161 +433,9 @@ func TestRepositoriesService_DownloadReleaseAsset_Redirect(t *testing.T) {
+ 	}
+ }
+ 
+-func TestRepositoriesService_DownloadReleaseAsset_FollowRedirect(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/repos/o/r/releases/assets/1", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "GET")
+-		testHeader(t, r, "Accept", defaultMediaType)
+-		// /yo, below will be served as baseURLPath/yo
+-		http.Redirect(w, r, baseURLPath+"/yo", http.StatusFound)
+-	})
+-	mux.HandleFunc("/yo", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "GET")
+-		testHeader(t, r, "Accept", defaultMediaType)
+-		w.Header().Set("Content-Type", "application/octet-stream")
+-		w.Header().Set("Content-Disposition", "attachment; filename=hello-world.txt")
+-		fmt.Fprint(w, "Hello World")
+-	})
+-
+-	ctx := t.Context()
+-	reader, _, err := client.Repositories.DownloadReleaseAsset(ctx, "o", "r", 1, http.DefaultClient)
+-	if err != nil {
+-		t.Errorf("Repositories.DownloadReleaseAsset returned error: %v", err)
+-	}
+-	content, err := io.ReadAll(reader)
+-	if err != nil {
+-		t.Errorf("Reading Repositories.DownloadReleaseAsset returned error: %v", err)
+-	}
+-	reader.Close()
+-	want := []byte("Hello World")
+-	if !bytes.Equal(want, content) {
+-		t.Errorf("Repositories.DownloadReleaseAsset returned %+v, want %+v", content, want)
+-	}
+-}
+ 
+-func TestRepositoriesService_DownloadReleaseAsset_FollowMultipleRedirects(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+ 
+-	mux.HandleFunc("/repos/o/r/releases/assets/1", func(w http.ResponseWriter, r *http.Request) {
+-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-		testMethod(t, r, "GET")
+-		testHeader(t, r, "Accept", defaultMediaType)
+-		// /yo, below will be served as baseURLPath/yo
+-		http.Redirect(w, r, baseURLPath+"/yo", http.StatusMovedPermanently)
+-	})
+-	mux.HandleFunc("/yo", func(w http.ResponseWriter, r *http.Request) {
+-		w.Header().Set("Content-Type", "text/html;charset=utf-8")
+-		testMethod(t, r, "GET")
+-		testHeader(t, r, "Accept", defaultMediaType)
+-		// /yo2, below will be served as baseURLPath/yo2
+-		http.Redirect(w, r, baseURLPath+"/yo2", http.StatusFound)
+-	})
+-	mux.HandleFunc("/yo2", func(w http.ResponseWriter, r *http.Request) {
+-		w.Header().Set("Content-Type", "application/octet-stream")
+-		w.Header().Set("Content-Disposition", "attachment; filename=hello-world.txt")
+-		testMethod(t, r, "GET")
+-		testHeader(t, r, "Accept", defaultMediaType)
+-		fmt.Fprint(w, "Hello World")
+-	})
+ 
+-	ctx := t.Context()
+-	reader, _, err := client.Repositories.DownloadReleaseAsset(ctx, "o", "r", 1, http.DefaultClient)
+-	if err != nil {
+-		t.Errorf("Repositories.DownloadReleaseAsset returned error: %v", err)
+-	}
+-	content, err := io.ReadAll(reader)
+-	if err != nil {
+-		t.Errorf("Reading Repositories.DownloadReleaseAsset returned error: %v", err)
+-	}
+-	reader.Close()
+-	want := []byte("Hello World")
+-	if !bytes.Equal(want, content) {
+-		t.Errorf("Repositories.DownloadReleaseAsset returned %+v, want %+v", content, want)
+-	}
+-}
+-
+-func TestRepositoriesService_DownloadReleaseAsset_FollowRedirectToError(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/repos/o/r/releases/assets/1", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "GET")
+-		testHeader(t, r, "Accept", defaultMediaType)
+-		// /yo, below will be served as baseURLPath/yo
+-		http.Redirect(w, r, baseURLPath+"/yo", http.StatusFound)
+-	})
+-	mux.HandleFunc("/yo", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "GET")
+-		testHeader(t, r, "Accept", defaultMediaType)
+-		w.WriteHeader(http.StatusNotFound)
+-	})
+-
+-	ctx := t.Context()
+-	resp, loc, err := client.Repositories.DownloadReleaseAsset(ctx, "o", "r", 1, http.DefaultClient)
+-	if err == nil {
+-		t.Error("Repositories.DownloadReleaseAsset did not return an error")
+-	}
+-	if resp != nil {
+-		resp.Close()
+-		t.Error("Repositories.DownloadReleaseAsset returned stream, want nil")
+-	}
+-	if loc != "" {
+-		t.Errorf(`Repositories.DownloadReleaseAsset returned "%v", want empty ""`, loc)
+-	}
+-}
+-
+-// CheckResponse substitutes resp.Body with a re-readable copy on error
+-// responses; downloadReleaseAssetFromURL must still close the original body it
+-// replaces. Unlike its sibling tests, the recorder wraps the follow-redirects
+-// client's transport: that client, not the library client, performs the
+-// redirected request, so wrapping the library client would only ever observe
+-// the first hop's correctly-closed redirect response and never the leak.
+-func TestRepositoriesService_DownloadReleaseAsset_FollowRedirectToErrorClosesOriginalBody(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/repos/o/r/releases/assets/1", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "GET")
+-		testHeader(t, r, "Accept", defaultMediaType)
+-		// /yo, below will be served as baseURLPath/yo
+-		http.Redirect(w, r, baseURLPath+"/yo", http.StatusFound)
+-	})
+-	mux.HandleFunc("/yo", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "GET")
+-		testHeader(t, r, "Accept", defaultMediaType)
+-		http.Error(w, `{"message":"Not Found"}`, 404)
+-	})
+-
+-	var closed bool
+-	followRedirectsClient := &http.Client{
+-		Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+-			resp, err := http.DefaultTransport.RoundTrip(req)
+-			if resp != nil {
+-				resp.Body = &closeRecorder{ReadCloser: resp.Body, closed: &closed}
+-			}
+-			return resp, err
+-		}),
+-	}
+-
+-	ctx := t.Context()
+-	rc, loc, err := client.Repositories.DownloadReleaseAsset(ctx, "o", "r", 1, followRedirectsClient)
+-	if err == nil {
+-		t.Error("Repositories.DownloadReleaseAsset did not return an error")
+-	}
+-	if rc != nil {
+-		rc.Close()
+-		t.Error("Repositories.DownloadReleaseAsset returned stream, want nil")
+-	}
+-	if loc != "" {
+-		t.Errorf(`Repositories.DownloadReleaseAsset returned "%v", want empty ""`, loc)
+-	}
+-	if !closed {
+-		t.Error("original response body was not closed on an error response")
+-	}
+-}
+ 
+ func TestRepositoriesService_DownloadReleaseAsset_APIError(t *testing.T) {
+ 	t.Parallel()

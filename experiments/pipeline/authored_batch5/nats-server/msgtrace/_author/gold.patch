@@ -1,0 +1,167 @@
+diff --git a/server/msgtrace.go b/server/msgtrace.go
+--- a/server/msgtrace.go
++++ b/server/msgtrace.go
+@@ -17,8 +17,8 @@ import (
+ 	"bytes"
+ 	"encoding/json"
+ 	"fmt"
+-	_ "math/rand/v2"
+-	_ "strconv"
++	"math/rand/v2"
++	"strconv"
+ 	"strings"
+ 	"sync"
+ 	"sync/atomic"
+@@ -306,11 +306,42 @@ func (c *client) isMsgTraceEnabled() (*msgTrace, bool) {
+ 
+ // For LEAF/ROUTER/GATEWAY, return false if the remote does not support
+ // message tracing (important if the tracing requests trace-only).
+-func (c *client) msgTraceSupport() bool { panic("excised: msgTraceSupport") }
++func (c *client) msgTraceSupport() bool {
++	// Exclude client connection from the protocol check.
++	return c.kind == CLIENT || c.opts.Protocol >= MsgTraceProto
++}
+ 
+-func getConnName(c *client) string { panic("excised: getConnName") }
++func getConnName(c *client) string {
++	switch c.kind {
++	case ROUTER:
++		if n := c.route.remoteName; n != _EMPTY_ {
++			return n
++		}
++	case GATEWAY:
++		if n := c.gw.remoteName; n != _EMPTY_ {
++			return n
++		}
++	case LEAF:
++		if n := c.leaf.remoteServer; n != _EMPTY_ {
++			return n
++		}
++	}
++	return c.opts.Name
++}
+ 
+-func getCompressionType(cts string) compressionType { panic("excised: getCompressionType") }
++func getCompressionType(cts string) compressionType {
++	if cts == _EMPTY_ {
++		return noCompression
++	}
++	cts = strings.ToLower(cts)
++	if strings.Contains(cts, "snappy") || strings.Contains(cts, "s2") {
++		return snappyCompression
++	}
++	if strings.Contains(cts, "gzip") {
++		return gzipCompression
++	}
++	return unsupportedCompression
++}
+ 
+ // Possibly initialize message tracing if appropriate headers are found in the
+ // given `hdr` byte slice.
+@@ -511,7 +542,14 @@ func (c *client) allowedToPublishOnMsgTraceDest(s *Server, acc *Account, dest st
+ 	return allowed
+ }
+ 
+-func sample(sampling int) bool { panic("excised: sample") }
++func sample(sampling int) bool {
++	// Option parsing should ensure that sampling is [1..100], but consider
++	// any value outside of this range to be 100%.
++	if sampling <= 0 || sampling >= 100 {
++		return true
++	}
++	return rand.Int32N(100) <= int32(sampling)
++}
+ 
+ // This function will return the header as a map (instead of http.Header because
+ // we want to preserve the header names' case) and a boolean that indicates if
+@@ -519,7 +557,89 @@ func sample(sampling int) bool { panic("excised: sample") }
+ // only.
+ // Note that because of the traceParentHdr, the search is done in a case
+ // insensitive way. We used to rewrite it in lower case but no longer do since v2.14.
+-func genHeaderMapIfTraceHeadersPresent(hdr []byte) (map[string][]string, bool) { panic("excised: genHeaderMapIfTraceHeadersPresent") }
++func genHeaderMapIfTraceHeadersPresent(hdr []byte) (map[string][]string, bool) {
++
++	var (
++		_keys               = [64][]byte{}
++		_vals               = [64][]byte{}
++		m                   map[string][]string
++		traceDestHdrFound   bool
++		traceParentHdrFound bool
++	)
++	// Skip the hdrLine
++	if !bytes.HasPrefix(hdr, stringToBytes(hdrLine)) {
++		return nil, false
++	}
++
++	keys := _keys[:0]
++	vals := _vals[:0]
++
++	for i := len(hdrLine); i < len(hdr); {
++		// Search for key/val delimiter
++		del := bytes.IndexByte(hdr[i:], ':')
++		if del < 0 {
++			break
++		}
++		keyStart := i
++		key := hdr[keyStart : keyStart+del]
++		i += del + 1
++		for i < len(hdr) && (hdr[i] == ' ' || hdr[i] == '\t') {
++			i++
++		}
++		valStart := i
++		nl := bytes.Index(hdr[valStart:], crLFAsBytes)
++		if nl < 0 {
++			break
++		}
++		valEnd := valStart + nl
++		for valEnd > valStart && (hdr[valEnd-1] == ' ' || hdr[valEnd-1] == '\t') {
++			valEnd--
++		}
++		val := hdr[valStart:valEnd]
++		if len(key) > 0 && len(val) > 0 {
++			vals = append(vals, val)
++
++			// We search for our special keys only if not already found.
++
++			// Check for the external trace header.
++			// Search needs to be case insensitive.
++			if !traceParentHdrFound && bytes.EqualFold(key, traceParentHdrAsBytes) {
++				// We will now check if the value has sampling or not.
++				// TODO(ik): Not sure if this header can have multiple values
++				// or not, and if so, what would be the rule to check for
++				// sampling. What is done here is to check them all until we
++				// found one with sampling.
++				tk := bytes.Split(val, dashAsBytes)
++				if len(tk) == 4 && len([]byte(tk[3])) == 2 {
++					if hexVal, err := strconv.ParseInt(bytesToString(tk[3]), 16, 8); err == nil {
++						if hexVal&0x1 == 0x1 {
++							traceParentHdrFound = true
++						}
++					}
++				}
++			} else if !traceDestHdrFound && bytes.Equal(key, traceDestHdrAsBytes) {
++				// This is the Msgkit-Trace-Dest header, check the value to see
++				// if it indicates that the trace was disabled.
++				if bytes.Equal(val, traceDestDisabledAsBytes) {
++					return nil, false
++				}
++				traceDestHdrFound = true
++			}
++			// Add to the keys and preserve the key's case
++			keys = append(keys, key)
++		}
++		i += nl + 2
++	}
++	if !traceDestHdrFound && !traceParentHdrFound {
++		return nil, false
++	}
++	m = make(map[string][]string, len(keys))
++	for i, k := range keys {
++		hname := string(k)
++		m[hname] = append(m[hname], string(vals[i]))
++	}
++	return m, !traceDestHdrFound && traceParentHdrFound
++}
+ 
+ // Special case where we create a trace event before parsing the message.
+ // This is for cases where the connection will be closed when detecting

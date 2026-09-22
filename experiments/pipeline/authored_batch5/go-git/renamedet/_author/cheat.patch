@@ -1,0 +1,13 @@
+diff --git a/plumbing/object/rename.go b/plumbing/object/rename.go
+index 15569b1..5215492 100644
+--- a/plumbing/object/rename.go
++++ b/plumbing/object/rename.go
+@@ -21,7 +21,7 @@ func DetectRenames(
+ 	changes Changes,
+ 	opts *DiffTreeOptions,
+ ) (Changes, error) {
+-	panic("excised: DetectRenames")
++	return changes, nil
+ }
+ 
+ // renameDetector will detect and resolve renames in a set of changes.

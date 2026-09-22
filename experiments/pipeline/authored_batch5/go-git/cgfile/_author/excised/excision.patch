@@ -1,0 +1,1966 @@
+diff --git a/plumbing/format/commitgraph/bench_test.go b/plumbing/format/commitgraph/bench_test.go
+deleted file mode 100644
+index 978fdfe..0000000
+--- a/plumbing/format/commitgraph/bench_test.go
++++ /dev/null
+@@ -1,130 +0,0 @@
+-package commitgraph_test
+-
+-import (
+-	"bytes"
+-	"fmt"
+-	"testing"
+-
+-	"example.internal/gitkit/v6/plumbing"
+-	"example.internal/gitkit/v6/plumbing/format/commitgraph"
+-)
+-
+-// benchShape parameterises buildBenchGraph so the parse-side and
+-// walk-side benchmarks can share a single graph builder while still
+-// exercising distinct chunk-shape combinations.
+-type benchShape struct {
+-	numCommits int
+-	hasGenV2   bool
+-	allOctopus bool // every commit (after the first three) has 3 parents
+-}
+-
+-// BenchmarkOpenFileIndex anchors OpenFileIndex along the two dimensions
+-// that move parse cost: chunk count (v1 graphs lack the GDA2 chunk) and
+-// commit count (parse must stay O(numChunks); a refactor that walks
+-// per-commit data would surface as a jump on the large case).
+-//
+-// small/v1 vs small/v2 measures the cost of one extra TOC entry plus
+-// one extra verifyChunkSizes branch; large/v2 vs small/v2 confirms the
+-// O(numChunks) property — ns drift is inside noise but allocs/op staying
+-// flat is the actual anchor.
+-func BenchmarkOpenFileIndex(b *testing.B) {
+-	cases := []struct {
+-		name  string
+-		shape benchShape
+-	}{
+-		{"small/v1", benchShape{numCommits: 100}},
+-		{"small/v2", benchShape{numCommits: 100, hasGenV2: true}},
+-		{"large/v2", benchShape{numCommits: 100_000, hasGenV2: true}},
+-	}
+-	for _, tc := range cases {
+-		raw := buildBenchGraph(b, tc.shape)
+-		b.Run(tc.name, func(b *testing.B) {
+-			b.ReportAllocs()
+-			for range b.N {
+-				fi, err := commitgraph.OpenFileIndex(
+-					discardCloseReader{bytes.NewReader(raw)},
+-				)
+-				if err != nil {
+-					b.Fatal(err)
+-				}
+-				_ = fi.Close()
+-			}
+-		})
+-	}
+-}
+-
+-// BenchmarkGetCommitDataByIndex anchors per-commit walk cost. The EDGE-
+-// chunk cap introduced by this branch only fires from the octopus path
+-// inside GetCommitDataByIndex, so a parse-time benchmark cannot
+-// regression-detect it; v2/octopus exists to keep the per-edge cost
+-// observable.
+-//
+-// The GDO2 overflow-cap branch was tried as a fourth sub-bench at 100%
+-// fire rate and produced numbers indistinguishable from v2/baseline
+-// (175 µs / 11 996 allocs in both, three runs). The per-overflow work
+-// is one ReadAt against an in-memory bytes.Reader plus an 8-byte buffer
+-// that escape analysis keeps on the stack; the cost sits beneath the
+-// bench's noise floor and would only become visible behind a slow-disk
+-// wrapper. Correctness for both the rejection and the happy-path
+-// overflow read is covered by dedicated unit tests.
+-func BenchmarkGetCommitDataByIndex(b *testing.B) {
+-	cases := []struct {
+-		name  string
+-		shape benchShape
+-	}{
+-		{"v1", benchShape{numCommits: 1000}},
+-		{"v2/baseline", benchShape{numCommits: 1000, hasGenV2: true}},
+-		{"v2/octopus", benchShape{numCommits: 1000, hasGenV2: true, allOctopus: true}},
+-	}
+-	for _, tc := range cases {
+-		raw := buildBenchGraph(b, tc.shape)
+-		fi, err := commitgraph.OpenFileIndex(
+-			discardCloseReader{bytes.NewReader(raw)},
+-		)
+-		if err != nil {
+-			b.Fatal(err)
+-		}
+-		n := fi.MaximumNumberOfHashes()
+-		b.Run(tc.name, func(b *testing.B) {
+-			b.ReportAllocs()
+-			for range b.N {
+-				for i := range n {
+-					if _, err := fi.GetCommitDataByIndex(i); err != nil {
+-						b.Fatal(err)
+-					}
+-				}
+-			}
+-		})
+-		_ = fi.Close()
+-	}
+-}
+-
+-func buildBenchGraph(b *testing.B, s benchShape) []byte {
+-	b.Helper()
+-	mem := commitgraph.NewMemoryIndex()
+-	hashes := make([]plumbing.Hash, s.numCommits)
+-	for i := range s.numCommits {
+-		hashes[i] = plumbing.NewHash(fmt.Sprintf("%040x", uint64(i+1)))
+-	}
+-	for i := range s.numCommits {
+-		cd := &commitgraph.CommitData{
+-			TreeHash:   hashes[i],
+-			Generation: uint64(i + 1),
+-		}
+-		switch {
+-		case s.allOctopus && i >= 3:
+-			cd.ParentHashes = []plumbing.Hash{hashes[i-1], hashes[i-2], hashes[i-3]}
+-		case i > 0:
+-			cd.ParentHashes = []plumbing.Hash{hashes[i-1]}
+-		}
+-		if s.hasGenV2 {
+-			cd.GenerationV2 = uint64(i + 1)
+-		}
+-		mem.Add(hashes[i], cd)
+-	}
+-	var buf bytes.Buffer
+-	if err := commitgraph.NewEncoder(&buf).Encode(mem); err != nil {
+-		b.Fatalf("encode: %v", err)
+-	}
+-	return buf.Bytes()
+-}
+diff --git a/plumbing/format/commitgraph/chain.go b/plumbing/format/commitgraph/chain.go
+index 2c51c88..0abe4ff 100644
+--- a/plumbing/format/commitgraph/chain.go
++++ b/plumbing/format/commitgraph/chain.go
+@@ -1,13 +1,13 @@
+ package commitgraph
+ 
+ import (
+-	"bufio"
++	_ "bufio"
+ 	"io"
+-	"path"
++	_ "path"
+ 
+ 	"github.com/go-git/go-billy/v6"
+ 
+-	"example.internal/gitkit/v6/plumbing"
++	_ "example.internal/gitkit/v6/plumbing"
+ )
+ 
+ // OpenChainFile reads a commit chain file and returns a slice of the hashes within it
+@@ -17,27 +17,7 @@ import (
+ //
+ // This function simply reads the file and returns the hashes as a slice.
+ func OpenChainFile(r io.Reader) ([]string, error) {
+-	if r == nil {
+-		return nil, io.ErrUnexpectedEOF
+-	}
+-	bufRd := bufio.NewReader(r)
+-	chain := make([]string, 0, 8)
+-	for {
+-		line, err := bufRd.ReadSlice('\n')
+-		if err != nil {
+-			if err == io.EOF {
+-				break
+-			}
+-			return nil, err
+-		}
+-
+-		hashStr := string(line[:len(line)-1])
+-		if !plumbing.IsHash(hashStr) {
+-			return nil, ErrMalformedCommitGraphFile
+-		}
+-		chain = append(chain, hashStr)
+-	}
+-	return chain, nil
++	panic("excised: OpenChainFile")
+ }
+ 
+ // OpenChainOrFileIndex expects a billy.Filesystem representing a .git directory.
+@@ -47,19 +27,7 @@ func OpenChainFile(r io.Reader) ([]string, error) {
+ //
+ // See: https://git-scm.com/docs/commit-graph
+ func OpenChainOrFileIndex(fs billy.Filesystem) (Index, error) {
+-	file, err := fs.Open(path.Join("objects", "info", "commit-graph"))
+-	if err != nil {
+-		// try to open a chain file
+-		return OpenChainIndex(fs)
+-	}
+-
+-	index, err := OpenFileIndex(file)
+-	if err != nil {
+-		// Ignore any file closing errors and return the error from OpenFileIndex instead
+-		_ = file.Close()
+-		return nil, err
+-	}
+-	return index, nil
++	panic("excised: OpenChainOrFileIndex")
+ }
+ 
+ // OpenChainIndex expects a billy.Filesystem representing a .git directory.
+@@ -68,33 +36,5 @@ func OpenChainOrFileIndex(fs billy.Filesystem) (Index, error) {
+ //
+ // See: https://git-scm.com/docs/commit-graph
+ func OpenChainIndex(fs billy.Filesystem) (Index, error) {
+-	chainFile, err := fs.Open(path.Join("objects", "info", "commit-graphs", "commit-graph-chain"))
+-	if err != nil {
+-		return nil, err
+-	}
+-
+-	chain, err := OpenChainFile(chainFile)
+-	_ = chainFile.Close()
+-	if err != nil {
+-		return nil, err
+-	}
+-
+-	var index Index
+-	for _, hash := range chain {
+-		file, err := fs.Open(path.Join("objects", "info", "commit-graphs", "graph-"+hash+".graph"))
+-		if err != nil {
+-			// Ignore all other file closing errors and return the error from opening the last file in the graph
+-			_ = index.Close()
+-			return nil, err
+-		}
+-
+-		index, err = OpenFileIndexWithParent(file, index)
+-		if err != nil {
+-			// Ignore file closing errors and return the error from OpenFileIndex instead
+-			_ = index.Close()
+-			return nil, err
+-		}
+-	}
+-
+-	return index, nil
++	panic("excised: OpenChainIndex")
+ }
+diff --git a/plumbing/format/commitgraph/chain_test.go b/plumbing/format/commitgraph/chain_test.go
+deleted file mode 100644
+index 1c2f218..0000000
+--- a/plumbing/format/commitgraph/chain_test.go
++++ /dev/null
+@@ -1,127 +0,0 @@
+-package commitgraph_test
+-
+-import (
+-	"bytes"
+-	"strings"
+-	"testing"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	"example.internal/gitkit/v6/plumbing/format/commitgraph"
+-)
+-
+-func TestOpenChainFile(t *testing.T) {
+-	t.Parallel()
+-	tests := []struct {
+-		name     string
+-		goodShas []string
+-		badShas  []string
+-	}{
+-		{
+-			name:     "sha1",
+-			goodShas: sha1Data,
+-			badShas:  sha1Invalid,
+-		},
+-		{
+-			name:     "sha256",
+-			goodShas: sha256Data,
+-			badShas:  sha256Invalid,
+-		},
+-	}
+-
+-	for _, tc := range tests {
+-		t.Run(tc.name, func(t *testing.T) {
+-			t.Parallel()
+-
+-			chainData := strings.Join(tc.goodShas, "\n") + "\n"
+-			chainReader := strings.NewReader(chainData)
+-
+-			chain, err := commitgraph.OpenChainFile(chainReader)
+-			require.NoError(t, err)
+-			assert.Equal(t, chain, tc.goodShas)
+-
+-			// Test with bad shas
+-			chainData = strings.Join(tc.badShas, "\n") + "\n"
+-
+-			chainReader = strings.NewReader(chainData)
+-
+-			chain, err = commitgraph.OpenChainFile(chainReader)
+-			require.ErrorIs(t, err, commitgraph.ErrMalformedCommitGraphFile)
+-			assert.Nil(t, chain)
+-
+-			// Test with empty file
+-			emptyChainReader := bytes.NewReader(nil)
+-
+-			chain, err = commitgraph.OpenChainFile(emptyChainReader)
+-			require.NoError(t, err)
+-			assert.Equal(t, []string{}, chain)
+-
+-			// Test with file containing only newlines
+-			newlineChainData := []byte("\n\n\n")
+-			newlineChainReader := bytes.NewReader(newlineChainData)
+-
+-			chain, err = commitgraph.OpenChainFile(newlineChainReader)
+-			require.ErrorIs(t, err, commitgraph.ErrMalformedCommitGraphFile)
+-			assert.Nil(t, chain)
+-		})
+-	}
+-}
+-
+-var (
+-	sha1Data = []string{
+-		"c336d16298a017486c4164c40f8acb28afe64e84",
+-		"31eae7b619d166c366bf5df4991f04ba8cebea0a",
+-		"b977a025ca21e3b5ca123d8093bd7917694f6da7",
+-		"d2a38b4a5965d529566566640519d03d2bd10f6c",
+-		"35b585759cbf29f8ec428ef89da20705d59f99ec",
+-		"c2bbf9fe8009b22d0f390f3c8c3f13937067590f",
+-		"fc9f0643b21cfe571046e27e0c4565f3a1ee96c8",
+-		"c088fd6a7e1a38e9d5a9815265cb575bb08d08ff",
+-		"5fddbeb678bd2c36c5e5c891ab8f2b143ced5baf",
+-		"5d7303c49ac984a9fec60523f2d5297682e16646",
+-	}
+-
+-	sha1Invalid = []string{
+-		"5d7303c49ac984a9fec60523f2d5297682e1664x",
+-	}
+-
+-	sha256Data = []string{
+-		"b9efda7160f2647e0974ca623f8a8f8e25fb6944f1b8f78f4db1bf07932de8eb",
+-		"7095c59f8bf46e12c21d2d9da344cfe383fae18d26f3ae4d4ab7b71e3d0ddfae",
+-		"25a395cb62f7656294e40a001ee19fefcdf3013d265dfcf4b744cd2549891dec",
+-		"7fbd564813a82227507d9dd70f1fd21fc1f180223cd3f42e0c3090c9a8b6a7d0",
+-		"aa95db1db2df91bd7200a892dd1c03bc2704c4793400d016b3ca08c148b0f7c1",
+-		"2176988184b570565dc33823a02f474ad59f667a0e971c86063a7fea64776a87",
+-		"d0afc0e64171140eb7902110f807a1beaa38a603d4312fd4bd14a5db2784ba62",
+-		"2822136f60bfc58bbd9d624cc19fbef9f0fc0efe2a61729242e1e5f9b77fa3d0",
+-		"6f207b5c43463af96bc38c43b0bf45275fa327e656a8bba8e7fc55c5ab6870d8",
+-		"6cf33782619b6ff0af9c081e46323f423f8b49bf3d043887c0549bef47d60f55",
+-		"60ea0753d2d4e828983528294be3f57e2a3ba37df4f59e3236133c9e2b17afc5",
+-		"6b3c9f4ba5092e0807774097953ec6e9f58e8371d775bd8738a0fa98d728ba3d",
+-		"c97cab8564054e30515dbe67dda4e14638aabf17b3f042d18dc8461cd098b362",
+-		"9f7ece76fd2c9dae08e75176347efffc1446ad74af66004dd34680edb205dfb5",
+-		"23e7a7e481b00571b63c2a7d0432f9733dd85d18a9841a3d7b96743100da5824",
+-		"e684b1253fa8eb6572f35bab2fd3b6efecabf8472ede43497cd9c171973cc341",
+-		"8b9f04080b0c40f7ad2a6bb5e5296cd6c06e730dffce87a0375ae7bd0f85f86e",
+-		"384a745f3b14edc89526a98b96b3247b2b548541c755aadee7664352ed7f12ae",
+-		"b68c8a82cd5b839917e1058570a0408819b81d16dbab81db118cc8dfc3def044",
+-		"fbaf04f1a401335be57e172f4326102c658d857fde6cf2bc987520d11fc99770",
+-		"57acf2aa5ac736337b120c951536c8a2b2cb23a4f0f198e86f3433370fa63105",
+-		"dd7fcba4c13b6ced0b6190cdb5861adcd08446a92d67f7ec0f02f9533e09bbb0",
+-		"744ef481c9b13ebd3b6e43d7e9ba25f7c7a5c8e453e6f0d50f5d71aae1591689",
+-		"2c573142f1edd52b64dcd42a9c3b0ca5c9c615f757d80d25bfb02ff3eb2257e2",
+-		"ea65cc58ef8520cd0335de4318a0d3b3a1ac257b7e9f82e12483fa3bce6cc0cd",
+-		"1dfa626ff1523b82e21a4c29476edcdc9a89842f3c7181f63a28cd4f46cc9923",
+-		"aa1153e71af836121e6f6cc716cf64880c19221d8dc367ff42359de1b8ef30e9",
+-		"a7c6ec6f6569e22d2fa6e8281639d27c59b633ea00ad8ef27a43171cc985fbda",
+-		"627b706d63d2cfd5a388deeaa76655ef09146fe492ee17cb0043578cef9c2800",
+-		"d40eaf091ef8357b734d1047a552436eaf057d99a0c6f2068b097c324099d360",
+-		"87f0ef81641da4fd3438dcaae4819f0c92a0ade54e262b21f9ded4575ff3f234",
+-		"3a00a29e08d29454b5197662f70ccab5699b0ce8c85af7fbf511b8915d97cfd0",
+-	}
+-
+-	sha256Invalid = []string{
+-		"3a00a29e08d29454b5197662f70ccab5699b0ce8c85af7fbf511b8915d97cfdx",
+-	}
+-)
+diff --git a/plumbing/format/commitgraph/commitgraph_fuzz_test.go b/plumbing/format/commitgraph/commitgraph_fuzz_test.go
+deleted file mode 100644
+index d811c7c..0000000
+--- a/plumbing/format/commitgraph/commitgraph_fuzz_test.go
++++ /dev/null
+@@ -1,194 +0,0 @@
+-package commitgraph
+-
+-import (
+-	"bytes"
+-	encbin "encoding/binary"
+-	"fmt"
+-	"io"
+-	"testing"
+-
+-	fixtures "github.com/go-git/go-git-fixtures/v6"
+-
+-	"example.internal/gitkit/v6/plumbing"
+-	"example.internal/gitkit/v6/utils/binary"
+-)
+-
+-func FuzzOpenFileIndex(f *testing.F) {
+-	// Seed builders are inlined here because OSS-Fuzz extracts the
+-	// FuzzXxx target into a standalone non-test file and strips the
+-	// rest of _test.go, so any package-level helper a fuzz target
+-	// references would be undefined at compile time.
+-
+-	// seedMismatchedChunkCount builds a commit-graph file whose header
+-	// declares fewer chunks than the chunk table-of-contents actually
+-	// holds, with no terminator entry. It exercises the bound that
+-	// pins iteration to the declared count.
+-	seedMismatchedChunkCount := func(declared uint8, entries []ChunkType) []byte {
+-		var buf bytes.Buffer
+-		buf.WriteString("CGPH")
+-		buf.WriteByte(1)        // header version
+-		buf.WriteByte(1)        // hash version
+-		buf.WriteByte(declared) // declared num_chunks
+-		buf.WriteByte(0)        // base graphs
+-		offset := uint64(8 + len(entries)*12)
+-		for _, c := range entries {
+-			buf.Write(c.Signature())
+-			_ = binary.WriteUint64(&buf, offset)
+-			offset += 16
+-		}
+-		return buf.Bytes()
+-	}
+-
+-	// seedGenerationOverflowPastChunk encodes a one-commit graph whose
+-	// GenerationV2 value forces overflow encoding (>= 0x80000000 and
+-	// above MaxUint32), then surgically rewrites the GDA2 entry to
+-	// point at the largest representable overflow index.
+-	// GetCommitDataByIndex must reject before reading past the single-
+-	// entry GDO2 chunk.
+-	seedGenerationOverflowPastChunk := func() []byte {
+-		mem := NewMemoryIndex()
+-		mem.Add(plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+-			&CommitData{
+-				TreeHash:     plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+-				Generation:   1,
+-				GenerationV2: 0x100000001,
+-			})
+-		var buf bytes.Buffer
+-		if err := NewEncoder(&buf).Encode(mem); err != nil {
+-			return nil
+-		}
+-		raw := buf.Bytes()
+-
+-		numChunks := int(raw[6])
+-		const tocBase = 8
+-		const tocEntrySize = 12
+-		for i := range numChunks {
+-			base := tocBase + i*tocEntrySize
+-			if string(raw[base:base+4]) == "GDA2" {
+-				gda2Offset := int(encbin.BigEndian.Uint64(raw[base+4:]))
+-				encbin.BigEndian.PutUint32(raw[gda2Offset:], 0x80000000|0x7FFFFFFF)
+-				break
+-			}
+-		}
+-		return raw
+-	}
+-
+-	// Seed from real commit-graph fixture when available.
+-	for _, fix := range fixtures.ByTag("commit-graph") {
+-		if dotgit, err := fix.DotGit(); err == nil {
+-			path := dotgit.Join("objects", "info", "commit-graph")
+-			if fh, err := dotgit.Open(path); err == nil {
+-				if data, err := io.ReadAll(fh); err == nil {
+-					f.Add(data)
+-				}
+-				_ = fh.Close()
+-			}
+-		}
+-	}
+-
+-	// Minimal header: 4-byte signature + version(1) + hash-version(1) +
+-	// number-of-chunks(1) + number-of-base-graphs(1).
+-	f.Add([]byte("CGPH\x01\x01\x00\x00"))
+-	// Header declares fewer chunks than the chunk table-of-contents
+-	// holds, so the parser must iterate by the declared count and
+-	// reject the missing terminator.
+-	f.Add(seedMismatchedChunkCount(2, []ChunkType{
+-		OIDFanoutChunk, OIDLookupChunk, CommitDataChunk,
+-		GenerationDataChunk, ExtraEdgeListChunk,
+-	}))
+-	// Generation-data overflow pointer past the GDO2 chunk; mirrors
+-	// the shape rejected by TestGetCommitDataRejectsGenerationOverflowPastChunk.
+-	f.Add(seedGenerationOverflowPastChunk())
+-	f.Add([]byte{})
+-
+-	f.Fuzz(func(_ *testing.T, data []byte) {
+-		idx, err := OpenFileIndex(struct {
+-			io.ReaderAt
+-			io.Closer
+-		}{
+-			bytes.NewReader(data),
+-			io.NopCloser(nil),
+-		})
+-		if err != nil {
+-			return
+-		}
+-		defer idx.Close()
+-
+-		// Walk the index to exercise fanout-driven offset math in
+-		// GetCommitDataByIndex and the OID lookup / generation-data paths.
+-		hashes := idx.Hashes()
+-		const maxIters = 4096
+-		n := min(len(hashes), maxIters)
+-		for i := range n {
+-			_, _ = idx.GetIndexByHash(hashes[i])
+-			_, _ = idx.GetHashByIndex(uint32(i))
+-			_, _ = idx.GetCommitDataByIndex(uint32(i))
+-		}
+-	})
+-}
+-
+-// FuzzEncoderRoundTrip drives the encoder with a small randomly-shaped
+-// MemoryIndex and asserts the produced byte stream parses back. Catches
+-// drift between the chunk-count cap on the writer side (byte 6 = uint8)
+-// and the on-disk header byte the reader extracts.
+-func FuzzEncoderRoundTrip(f *testing.F) {
+-	f.Add(uint8(0), uint8(0), uint8(0))
+-	f.Add(uint8(1), uint8(0), uint8(0))
+-	f.Add(uint8(5), uint8(3), uint8(2))
+-	f.Add(uint8(255), uint8(0), uint8(0))
+-
+-	f.Fuzz(func(t *testing.T, numCommits, octopusMod, gv2Mod uint8) {
+-		// Cap fuzzer-suggested numCommits to keep iterations cheap.
+-		const maxN = 64
+-		n := int(numCommits) % (maxN + 1)
+-		mem := NewMemoryIndex()
+-
+-		hashes := make([]plumbing.Hash, n)
+-		for i := range n {
+-			hashes[i] = plumbing.NewHash(fmt.Sprintf("%040x", uint64(i+1)))
+-		}
+-		for i := range n {
+-			cd := &CommitData{
+-				TreeHash:   hashes[i],
+-				Generation: uint64(i + 1),
+-			}
+-			// Octopus: 3 parents on selected commits.
+-			if octopusMod > 1 && i >= 3 && i%int(octopusMod) == 0 {
+-				cd.ParentHashes = []plumbing.Hash{hashes[i-1], hashes[i-2], hashes[i-3]}
+-			} else if i >= 1 {
+-				cd.ParentHashes = []plumbing.Hash{hashes[i-1]}
+-			}
+-			// GenerationV2: force overflow encoding on selected commits.
+-			if gv2Mod > 0 && i%(int(gv2Mod)+1) == 0 {
+-				cd.GenerationV2 = 0x100000001
+-			} else {
+-				cd.GenerationV2 = uint64(i + 1)
+-			}
+-			mem.Add(hashes[i], cd)
+-		}
+-
+-		var buf bytes.Buffer
+-		if err := NewEncoder(&buf).Encode(mem); err != nil {
+-			// Legitimate rejections (e.g. ErrTooManyChunks) are valid.
+-			return
+-		}
+-		out, err := OpenFileIndex(struct {
+-			io.ReaderAt
+-			io.Closer
+-		}{
+-			bytes.NewReader(buf.Bytes()),
+-			io.NopCloser(nil),
+-		})
+-		if err != nil {
+-			return
+-		}
+-		t.Cleanup(func() { _ = out.Close() })
+-
+-		// Walk to exercise EDGE / GDA2 / GDO2 paths bounded by the new
+-		// chunk-size assertions. Errors here aren't fatal — we only
+-		// want the fuzz harness to surface real panics.
+-		for i := range n {
+-			_, _ = out.GetCommitDataByIndex(uint32(i))
+-		}
+-	})
+-}
+diff --git a/plumbing/format/commitgraph/commitgraph_test.go b/plumbing/format/commitgraph/commitgraph_test.go
+deleted file mode 100644
+index c5326ce..0000000
+--- a/plumbing/format/commitgraph/commitgraph_test.go
++++ /dev/null
+@@ -1,799 +0,0 @@
+-package commitgraph_test
+-
+-import (
+-	"bytes"
+-	encbin "encoding/binary"
+-	"errors"
+-	"io"
+-	"os"
+-	"testing"
+-	"time"
+-
+-	"github.com/go-git/go-billy/v6"
+-	"github.com/go-git/go-billy/v6/util"
+-	fixtures "github.com/go-git/go-git-fixtures/v6"
+-	"github.com/stretchr/testify/suite"
+-
+-	"example.internal/gitkit/v6/plumbing"
+-	"example.internal/gitkit/v6/plumbing/cache"
+-	commitgraph "example.internal/gitkit/v6/plumbing/format/commitgraph"
+-	"example.internal/gitkit/v6/plumbing/format/packfile"
+-	"example.internal/gitkit/v6/plumbing/object"
+-	"example.internal/gitkit/v6/storage/filesystem"
+-	"example.internal/gitkit/v6/utils/binary"
+-)
+-
+-type CommitgraphSuite struct {
+-	suite.Suite
+-}
+-
+-func TestCommitgraphSuite(t *testing.T) {
+-	t.Parallel()
+-	suite.Run(t, new(CommitgraphSuite))
+-}
+-
+-func testReadIndex(s *CommitgraphSuite, fs billy.Filesystem, path string) commitgraph.Index {
+-	reader, err := fs.Open(path)
+-	s.Require().NoError(err)
+-	index, err := commitgraph.OpenFileIndex(reader)
+-	s.Require().NoError(err)
+-	s.NotNil(index)
+-	return index
+-}
+-
+-func testDecodeHelper(s *CommitgraphSuite, index commitgraph.Index) {
+-	// Root commit
+-	nodeIndex, err := index.GetIndexByHash(plumbing.NewHash("347c91919944a68e9413581a1bc15519550a3afe"))
+-	s.Require().NoError(err)
+-	commitData, err := index.GetCommitDataByIndex(nodeIndex)
+-	s.Require().NoError(err)
+-	s.Len(commitData.ParentIndexes, 0)
+-	s.Len(commitData.ParentHashes, 0)
+-
+-	// Regular commit
+-	nodeIndex, err = index.GetIndexByHash(plumbing.NewHash("e713b52d7e13807e87a002e812041f248db3f643"))
+-	s.Require().NoError(err)
+-	commitData, err = index.GetCommitDataByIndex(nodeIndex)
+-	s.Require().NoError(err)
+-	s.Len(commitData.ParentIndexes, 1)
+-	s.Len(commitData.ParentHashes, 1)
+-	s.Equal("347c91919944a68e9413581a1bc15519550a3afe", commitData.ParentHashes[0].String())
+-
+-	// Merge commit
+-	nodeIndex, err = index.GetIndexByHash(plumbing.NewHash("b29328491a0682c259bcce28741eac71f3499f7d"))
+-	s.Require().NoError(err)
+-	commitData, err = index.GetCommitDataByIndex(nodeIndex)
+-	s.Require().NoError(err)
+-	s.Len(commitData.ParentIndexes, 2)
+-	s.Len(commitData.ParentHashes, 2)
+-	s.Equal("e713b52d7e13807e87a002e812041f248db3f643", commitData.ParentHashes[0].String())
+-	s.Equal("03d2c021ff68954cf3ef0a36825e194a4b98f981", commitData.ParentHashes[1].String())
+-
+-	// Octopus merge commit
+-	nodeIndex, err = index.GetIndexByHash(plumbing.NewHash("6f6c5d2be7852c782be1dd13e36496dd7ad39560"))
+-	s.Require().NoError(err)
+-	commitData, err = index.GetCommitDataByIndex(nodeIndex)
+-	s.Require().NoError(err)
+-	s.Len(commitData.ParentIndexes, 3)
+-	s.Len(commitData.ParentHashes, 3)
+-	s.Equal("ce275064ad67d51e99f026084e20827901a8361c", commitData.ParentHashes[0].String())
+-	s.Equal("bb13916df33ed23004c3ce9ed3b8487528e655c1", commitData.ParentHashes[1].String())
+-	s.Equal("a45273fe2d63300e1962a9e26a6b15c276cd7082", commitData.ParentHashes[2].String())
+-
+-	// Check all hashes
+-	hashes := index.Hashes()
+-	s.Len(hashes, 11)
+-	s.Equal("03d2c021ff68954cf3ef0a36825e194a4b98f981", hashes[0].String())
+-	s.Equal("e713b52d7e13807e87a002e812041f248db3f643", hashes[10].String())
+-}
+-
+-func (s *CommitgraphSuite) TestDecodeMultiChain() {
+-	for _, f := range fixtures.ByTag("commit-graph-chain-2") {
+-		dotgit, err := f.DotGit()
+-		s.Require().NoError(err)
+-		index, err := commitgraph.OpenChainOrFileIndex(dotgit)
+-		s.Require().NoError(err)
+-		defer index.Close()
+-		dotgit2, err := f.DotGit()
+-		s.Require().NoError(err)
+-		storer := filesystem.NewStorage(dotgit2, cache.NewObjectLRUDefault())
+-		defer func() { _ = storer.Close() }()
+-		p, err := f.Packfile()
+-		s.Require().NoError(err)
+-		defer p.Close()
+-
+-		err = packfile.UpdateObjectStorage(storer, p)
+-		s.Require().NoError(err)
+-
+-		for idx, hash := range index.Hashes() {
+-			idx2, err := index.GetIndexByHash(hash)
+-			s.Require().NoError(err)
+-			s.Require().Equal(uint32(idx), idx2)
+-			hash2, err := index.GetHashByIndex(idx2)
+-			s.Require().NoError(err)
+-			s.Equal(hash.String(), hash2.String())
+-
+-			commitData, err := index.GetCommitDataByIndex(uint32(idx))
+-			s.Require().NoError(err)
+-			commit, err := object.GetCommit(storer, hash)
+-			s.Require().NoError(err)
+-
+-			for i, parent := range commit.ParentHashes {
+-				s.Equal(hash.String()+":"+commitData.ParentHashes[i].String(), hash.String()+":"+parent.String())
+-			}
+-		}
+-	}
+-}
+-
+-func (s *CommitgraphSuite) TestDecode() {
+-	for _, f := range fixtures.ByTag("commit-graph") {
+-		dotgit, err := f.DotGit()
+-		s.Require().NoError(err)
+-		index := testReadIndex(s, dotgit, dotgit.Join("objects", "info", "commit-graph"))
+-		defer index.Close()
+-		testDecodeHelper(s, index)
+-	}
+-}
+-
+-func (s *CommitgraphSuite) TestDecodeChain() {
+-	for _, f := range fixtures.ByTag("commit-graph") {
+-		dotgit, err := f.DotGit()
+-		s.Require().NoError(err)
+-		index, err := commitgraph.OpenChainOrFileIndex(dotgit)
+-		s.Require().NoError(err)
+-		defer index.Close()
+-		testDecodeHelper(s, index)
+-	}
+-
+-	for _, f := range fixtures.ByTag("commit-graph-chain") {
+-		dotgit, err := f.DotGit()
+-		s.Require().NoError(err)
+-		index, err := commitgraph.OpenChainOrFileIndex(dotgit)
+-		s.Require().NoError(err)
+-		defer index.Close()
+-		testDecodeHelper(s, index)
+-	}
+-}
+-
+-func (s *CommitgraphSuite) TestReencode() {
+-	for _, f := range fixtures.ByTag("commit-graph") {
+-		dotgit, err := f.DotGit()
+-		s.Require().NoError(err)
+-
+-		reader, err := dotgit.Open(dotgit.Join("objects", "info", "commit-graph"))
+-		s.Require().NoError(err)
+-		defer reader.Close()
+-		index, err := commitgraph.OpenFileIndex(reader)
+-		s.Require().NoError(err)
+-		defer index.Close()
+-
+-		writer, err := util.TempFile(dotgit, "", "commit-graph")
+-		s.Require().NoError(err)
+-		tmpName := writer.Name()
+-		defer os.Remove(tmpName)
+-
+-		encoder := commitgraph.NewEncoder(writer)
+-		err = encoder.Encode(index)
+-		s.Require().NoError(err)
+-		writer.Close()
+-
+-		tmpIndex := testReadIndex(s, dotgit, tmpName)
+-		defer tmpIndex.Close()
+-		testDecodeHelper(s, tmpIndex)
+-	}
+-}
+-
+-type discardCloseReader struct {
+-	io.ReaderAt
+-}
+-
+-func (discardCloseReader) Close() error { return nil }
+-
+-func (r discardCloseReader) Seek(offset int64, whence int) (int64, error) {
+-	if s, ok := r.ReaderAt.(io.Seeker); ok {
+-		return s.Seek(offset, whence)
+-	}
+-	return 0, errors.New("commitgraph test: inner reader does not support Seek")
+-}
+-
+-func openIndexBytes(data []byte) (commitgraph.Index, error) {
+-	return commitgraph.OpenFileIndex(discardCloseReader{bytes.NewReader(data)})
+-}
+-
+-func (s *CommitgraphSuite) TestOpenFileIndexRejectsChunkCountMismatch() {
+-	// File header declares 2 chunks, but the chunk table-of-contents
+-	// supplies five non-zero entries with no terminating zero entry.
+-	// Iteration that ignores the declared count would walk past the
+-	// declared table; iteration bounded by the declared count must
+-	// reject the trailing non-zero entry.
+-	chunks := []commitgraph.ChunkType{
+-		commitgraph.OIDFanoutChunk,
+-		commitgraph.OIDLookupChunk,
+-		commitgraph.CommitDataChunk,
+-		commitgraph.GenerationDataChunk,
+-		commitgraph.ExtraEdgeListChunk,
+-	}
+-
+-	var buf bytes.Buffer
+-	buf.WriteString("CGPH") // signature
+-	buf.WriteByte(1)        // header version
+-	buf.WriteByte(1)        // hash version (SHA-1)
+-	buf.WriteByte(byte(2))  // declared num_chunks
+-	buf.WriteByte(0)        // base graphs
+-	offset := uint64(8 + len(chunks)*12)
+-	for _, c := range chunks {
+-		buf.Write(c.Signature())
+-		s.Require().NoError(binary.WriteUint64(&buf, offset))
+-		offset += 16
+-	}
+-	// Pad to the minimum size verifyFileSize requires for num_chunks=2:
+-	//   8 (header) + (2+1)*12 (toc) + 1024 (fanout) + 20 (SHA-1 hash) = 1088
+-	// Without this padding, verifyFileSize rejects the buffer before
+-	// readChunkHeaders can exercise the chunk-count mismatch logic.
+-	const minSize = 8 + (2+1)*12 + 1024 + 20
+-	if buf.Len() < minSize {
+-		buf.Write(make([]byte, minSize-buf.Len()))
+-	}
+-
+-	_, err := openIndexBytes(buf.Bytes())
+-	s.ErrorIs(err, commitgraph.ErrMalformedCommitGraphFile)
+-}
+-
+-func (s *CommitgraphSuite) TestOpenFileIndexRejectsTruncatedFile() {
+-	// Header declares 3 chunks. Real Git's parse_commit_graph_v1 requires
+-	// the file to be at least
+-	//     8 (header) + (num_chunks+1)*12 (toc) + 1024 (fanout) + hashsz
+-	// bytes long. We supply only the header and chunk table, no fanout,
+-	// no trailing hash; the parser must reject before touching chunk data.
+-	var buf bytes.Buffer
+-	buf.WriteString("CGPH")
+-	buf.WriteByte(1) // header version
+-	buf.WriteByte(1) // SHA-1
+-	buf.WriteByte(3) // num_chunks
+-	buf.WriteByte(0) // base graphs
+-	// Three valid chunk entries plus a zero terminator (so the existing
+-	// mandatory-chunk check passes; only the size precheck should catch this).
+-	for _, c := range []commitgraph.ChunkType{
+-		commitgraph.OIDFanoutChunk,
+-		commitgraph.OIDLookupChunk,
+-		commitgraph.CommitDataChunk,
+-	} {
+-		buf.Write(c.Signature())
+-		s.Require().NoError(binary.WriteUint64(&buf, uint64(8+4*12)))
+-	}
+-	buf.Write(commitgraph.ZeroChunk.Signature())
+-	s.Require().NoError(binary.WriteUint64(&buf, uint64(8+4*12)))
+-
+-	_, err := openIndexBytes(buf.Bytes())
+-	s.ErrorIs(err, commitgraph.ErrMalformedCommitGraphFile)
+-}
+-
+-func (s *CommitgraphSuite) TestOpenFileIndexRejectsChunkOffsetPastEOF() {
+-	// Header declares 3 chunks; all three entries plus a zero terminator
+-	// are present and all mandatory chunks (OIDF, OIDL, CDAT) appear, so
+-	// the mandatory-chunk check cannot fire first. The second chunk's
+-	// offset (OIDL) points past file_size - hash_size. Canonical Git's
+-	// read_table_of_contents rejects such offsets; gitkit must follow
+-	// suit and return ErrMalformedCommitGraphFile from readChunkHeaders.
+-	//
+-	// fileSize = 8 (header) + 4*12 (toc: 3 chunks + terminator) + 1024 (fanout) + 20 (SHA-1)
+-	const fileSize = 8 + 4*12 + 1024 + 20 // = 1100
+-
+-	var buf bytes.Buffer
+-	buf.WriteString("CGPH")
+-	buf.WriteByte(1)
+-	buf.WriteByte(1)
+-	buf.WriteByte(3) // declare 3 chunks
+-	buf.WriteByte(0)
+-
+-	// OIDFanout at a valid offset right after the toc.
+-	validOffset := uint64(8 + 4*12)
+-	buf.Write(commitgraph.OIDFanoutChunk.Signature())
+-	s.Require().NoError(binary.WriteUint64(&buf, validOffset))
+-	// OIDLookup offset is past EOF (> fileSize - hash_size = 1080).
+-	buf.Write(commitgraph.OIDLookupChunk.Signature())
+-	s.Require().NoError(binary.WriteUint64(&buf, uint64(fileSize+1024)))
+-	// CommitData at a valid offset; without it, the post-loop
+-	// mandatory-chunk check would reject the file regardless of the
+-	// new offset validation, so this test would not be attributable
+-	// to the offset-past-EOF guard.
+-	buf.Write(commitgraph.CommitDataChunk.Signature())
+-	s.Require().NoError(binary.WriteUint64(&buf, validOffset+1024))
+-	// Zero terminator.
+-	buf.Write(commitgraph.ZeroChunk.Signature())
+-	s.Require().NoError(binary.WriteUint64(&buf, uint64(fileSize)))
+-
+-	// Pad to declared file size so verifyFileSize passes.
+-	buf.Write(make([]byte, fileSize-buf.Len()))
+-
+-	_, err := openIndexBytes(buf.Bytes())
+-	s.ErrorIs(err, commitgraph.ErrMalformedCommitGraphFile)
+-}
+-
+-func (s *CommitgraphSuite) TestOpenFileIndexRejectsDuplicateChunkID() {
+-	// Declare 4 chunks: OIDF, OIDL, CDAT, then a second OIDF.
+-	// Canonical Git's read_table_of_contents (chunk-format.c v2.54.0[1])
+-	// iterates through previously-stored chunk ids and returns -1 on the
+-	// first duplicate; gitkit must follow suit.
+-	//
+-	// Without the duplicate-detection guard the second OIDF entry silently
+-	// overwrites fi.offsets[OIDFanoutChunk]. All three required chunks end
+-	// up with non-zero offsets, readFanout reads 256 zero uint32s from the
+-	// overwritten offset, and OpenFileIndex returns (index, nil) — masking
+-	// the corruption.
+-	//
+-	// [1]: https://github.com/git/git/blob/v2.54.0/chunk-format.c#L143-L149
+-	//
+-	// Layout (num_chunks=4):
+-	//   header:     8 bytes
+-	//   TOC:        5×12 = 60 bytes  (4 chunks + zero terminator)
+-	//   OIDF data:  1024 bytes        (fanout table, all zeros)
+-	//   padding:    1024 bytes        (so OIDF-dup offset is within bounds)
+-	//   SHA-1 hash: 20 bytes
+-	const (
+-		fileSize = 8 + 5*12 + 2*1024 + 20 // = 2136
+-		tocBase  = 8
+-		tocEnd   = tocBase + 5*12 // = 68
+-	)
+-
+-	var buf bytes.Buffer
+-	buf.WriteString("CGPH")
+-	buf.WriteByte(1) // version
+-	buf.WriteByte(1) // SHA-1
+-	buf.WriteByte(4) // num_chunks
+-	buf.WriteByte(0) // base graphs
+-
+-	oidfOffset := uint64(tocEnd)
+-	oidlOffset := oidfOffset + 1024
+-	cdatOffset := oidlOffset
+-	dupOffset := oidlOffset // monotonic; same as cdat
+-	termOffset := uint64(fileSize - 20)
+-
+-	buf.Write(commitgraph.OIDFanoutChunk.Signature())
+-	s.Require().NoError(binary.WriteUint64(&buf, oidfOffset))
+-	buf.Write(commitgraph.OIDLookupChunk.Signature())
+-	s.Require().NoError(binary.WriteUint64(&buf, oidlOffset))
+-	buf.Write(commitgraph.CommitDataChunk.Signature())
+-	s.Require().NoError(binary.WriteUint64(&buf, cdatOffset))
+-	buf.Write(commitgraph.OIDFanoutChunk.Signature()) // duplicate
+-	s.Require().NoError(binary.WriteUint64(&buf, dupOffset))
+-	buf.Write(commitgraph.ZeroChunk.Signature())
+-	s.Require().NoError(binary.WriteUint64(&buf, termOffset))
+-
+-	// Pad to declared file size so verifyFileSize passes.
+-	buf.Write(make([]byte, fileSize-buf.Len()))
+-
+-	_, err := openIndexBytes(buf.Bytes())
+-	s.ErrorIs(err, commitgraph.ErrMalformedCommitGraphFile)
+-}
+-
+-func (s *CommitgraphSuite) TestOpenFileIndexRejectsZeroChunkCount() {
+-	// Header declares zero chunks. The terminator entry sits right at
+-	// the start of the table-of-contents. Even with a valid terminator
+-	// the required-chunks check fails because OIDFanout, OIDLookup,
+-	// and CommitData offsets are all zero.
+-	var buf bytes.Buffer
+-	buf.WriteString("CGPH")
+-	buf.WriteByte(1)
+-	buf.WriteByte(1)
+-	buf.WriteByte(0) // num_chunks
+-	buf.WriteByte(0)
+-	const fileSize = 8 + 12 + 1024 + 20
+-	buf.Write(commitgraph.ZeroChunk.Signature())
+-	s.Require().NoError(binary.WriteUint64(&buf, fileSize))
+-
+-	buf.Write(make([]byte, fileSize-buf.Len()))
+-
+-	_, err := openIndexBytes(buf.Bytes())
+-	s.ErrorIs(err, commitgraph.ErrMalformedCommitGraphFile)
+-}
+-
+-func (s *CommitgraphSuite) TestOpenFileIndexRejectsEarlyZeroChunk() {
+-	// num_chunks=2, but the second entry is the zero terminator. Canonical
+-	// reports "terminating chunk id appears earlier than expected"
+-	// (chunk-format.c v2.54.0); gitkit must reject likewise.
+-	const fileSize = 8 + 3*12 + 1024 + 20
+-
+-	var buf bytes.Buffer
+-	buf.WriteString("CGPH")
+-	buf.WriteByte(1)
+-	buf.WriteByte(1)
+-	buf.WriteByte(2)
+-	buf.WriteByte(0)
+-
+-	buf.Write(commitgraph.OIDFanoutChunk.Signature())
+-	s.Require().NoError(binary.WriteUint64(&buf, 8+3*12))
+-	// Early ZeroChunk inside the declared count. Its offset is strictly
+-	// greater than the previous one so the monotonicity guard cannot
+-	// fire; only the in-loop ZeroChunk guard can produce the rejection.
+-	buf.Write(commitgraph.ZeroChunk.Signature())
+-	s.Require().NoError(binary.WriteUint64(&buf, 8+3*12+1))
+-	buf.Write(commitgraph.ZeroChunk.Signature())
+-	s.Require().NoError(binary.WriteUint64(&buf, fileSize))
+-
+-	buf.Write(make([]byte, fileSize-buf.Len()))
+-
+-	_, err := openIndexBytes(buf.Bytes())
+-	s.ErrorIs(err, commitgraph.ErrMalformedCommitGraphFile)
+-}
+-
+-func (s *CommitgraphSuite) TestReencodeInMemory() {
+-	for _, f := range fixtures.ByTag("commit-graph") {
+-		dotgit, err := f.DotGit()
+-		s.Require().NoError(err)
+-
+-		reader, err := dotgit.Open(dotgit.Join("objects", "info", "commit-graph"))
+-		s.Require().NoError(err)
+-		index, err := commitgraph.OpenFileIndex(reader)
+-		s.Require().NoError(err)
+-
+-		memoryIndex := commitgraph.NewMemoryIndex()
+-		defer memoryIndex.Close()
+-		for i, hash := range index.Hashes() {
+-			commitData, err := index.GetCommitDataByIndex(uint32(i))
+-			s.Require().NoError(err)
+-			memoryIndex.Add(hash, commitData)
+-		}
+-		index.Close()
+-
+-		writer, err := util.TempFile(dotgit, "", "commit-graph")
+-		s.Require().NoError(err)
+-		tmpName := writer.Name()
+-		defer os.Remove(tmpName)
+-
+-		encoder := commitgraph.NewEncoder(writer)
+-		err = encoder.Encode(memoryIndex)
+-		s.Require().NoError(err)
+-		writer.Close()
+-
+-		tmpIndex := testReadIndex(s, dotgit, tmpName)
+-		defer tmpIndex.Close()
+-		testDecodeHelper(s, tmpIndex)
+-	}
+-}
+-
+-// TestGetCommitDataRejectsExtraEdgesPastChunk verifies that
+-// GetCommitDataByIndex refuses an octopus parent2 whose extra-edge index
+-// falls outside the declared EDGE chunk. Canonical Git's
+-// fill_commit_in_graph validates parent_data_pos against
+-// chunk_extra_edges_size / sizeof(uint32_t) (commit-graph.c v2.54.0);
+-// gitkit must follow suit and return ErrMalformedCommitGraphFile.
+-//
+-// The test loads the real "commit-graph" fixture (which contains an octopus
+-// merge at 6f6c5d2b with two EDGE entries), reads its raw bytes, and patches
+-// the octopus commit's parent2 field to encode an index of 100 — far past
+-// the two-entry EDGE chunk. The patched file is re-opened and the octopus
+-// commit looked up; the bound guard must fire before any read past the chunk.
+-func (s *CommitgraphSuite) TestGetCommitDataRejectsExtraEdgesPastChunk() {
+-	const octopusHash = "6f6c5d2be7852c782be1dd13e36496dd7ad39560"
+-	// parentOctopusUsed (bit 31) | out-of-bounds edge index 100.
+-	const badParent2 = uint32(0x80000000 | 100)
+-
+-	for _, f := range fixtures.ByTag("commit-graph") {
+-		dotgit, err := f.DotGit()
+-		s.Require().NoError(err)
+-
+-		// Read the raw commit-graph bytes.
+-		cgPath := dotgit.Join("objects", "info", "commit-graph")
+-		rdr, err := dotgit.Open(cgPath)
+-		s.Require().NoError(err)
+-		sz, err := rdr.Seek(0, io.SeekEnd)
+-		s.Require().NoError(err)
+-		_, err = rdr.Seek(0, io.SeekStart)
+-		s.Require().NoError(err)
+-		raw := make([]byte, sz)
+-		_, err = io.ReadFull(rdr, raw)
+-		s.Require().NoError(err)
+-		rdr.Close()
+-
+-		// Locate the octopus commit's index in the OID-lookup chunk so we
+-		// can compute the byte offset of its parent2 field in the CDAT chunk.
+-		//
+-		// File layout (SHA-1, from the fixture's TOC):
+-		//   header:  8 bytes
+-		//   TOC:     (numChunks+1) * 12 bytes
+-		//   OIDF chunk at tocEntry[0].offset
+-		//   OIDL chunk at tocEntry[1].offset
+-		//   CDAT chunk at tocEntry[2].offset
+-		//   EDGE chunk at tocEntry[3].offset
+-		//   terminator at tocEntry[4].offset  (= end of chunk data)
+-		numChunks := int(raw[6])
+-		const tocBase = 8
+-		const tocEntrySize = 12
+-		const sha1Size = 20
+-
+-		readU64 := func(off int) uint64 {
+-			return encbin.BigEndian.Uint64(raw[off:])
+-		}
+-
+-		var oidlOffset, cdatOffset int
+-		for i := range numChunks {
+-			base := tocBase + i*tocEntrySize
+-			id := string(raw[base : base+4])
+-			off := int(readU64(base + 4))
+-			switch id {
+-			case "OIDL":
+-				oidlOffset = off
+-			case "CDAT":
+-				cdatOffset = off
+-			}
+-		}
+-		s.Require().Greater(oidlOffset, 0, "OIDL chunk not found in fixture")
+-		s.Require().Greater(cdatOffset, 0, "CDAT chunk not found in fixture")
+-
+-		// Find the octopus commit's position in the sorted OID-lookup table.
+-		// fanout[255] sits in the four bytes immediately preceding OIDL,
+-		// regardless of how many other chunks precede the fanout.
+-		octHash := plumbing.NewHash(octopusHash)
+-		fanout255 := int(encbin.BigEndian.Uint32(raw[oidlOffset-4:]))
+-		octIdx := -1
+-		for i := range fanout255 {
+-			start := oidlOffset + i*sha1Size
+-			if bytes.Equal(raw[start:start+sha1Size], octHash.Bytes()) {
+-				octIdx = i
+-				break
+-			}
+-		}
+-		s.Require().GreaterOrEqual(octIdx, 0, "octopus commit not found in OIDL")
+-
+-		// CDAT entry layout: sha1Size tree-hash + 4 parent1 + 4 parent2 + 8 genAndTime.
+-		const cdatEntrySize = sha1Size + 4 + 4 + 8
+-		parent2Off := cdatOffset + octIdx*cdatEntrySize + sha1Size + 4
+-
+-		// Clone and patch.
+-		patched := make([]byte, len(raw))
+-		copy(patched, raw)
+-		encbin.BigEndian.PutUint32(patched[parent2Off:], badParent2)
+-
+-		// Opening the patched file should succeed: the corrupt field is inside
+-		// the CDAT chunk and is not read during header/fanout parsing.
+-		idx, err := openIndexBytes(patched)
+-		s.Require().NoError(err)
+-
+-		// GetCommitDataByIndex for the octopus commit must reject the
+-		// out-of-bounds edge pointer before reading past the EDGE chunk.
+-		nodeIdx, err := idx.GetIndexByHash(octHash)
+-		s.Require().NoError(err)
+-		_, err = idx.GetCommitDataByIndex(nodeIdx)
+-		s.ErrorIs(err, commitgraph.ErrMalformedCommitGraphFile,
+-			"expected ErrMalformedCommitGraphFile for out-of-bounds edge index")
+-		idx.Close()
+-	}
+-}
+-
+-// TestGetCommitDataAcceptsValidOctopusParents complements the negative
+-// extra-edge test by exercising the happy path through the same bound:
+-// loading the unmodified fixture and reading the octopus commit must
+-// still return all three parent hashes. Without this, an off-by-one
+-// regression in the EDGE chunk cap would silently shrink legitimate
+-// octopus walks.
+-func (s *CommitgraphSuite) TestGetCommitDataAcceptsValidOctopusParents() {
+-	const octopusHash = "6f6c5d2be7852c782be1dd13e36496dd7ad39560"
+-
+-	for _, f := range fixtures.ByTag("commit-graph") {
+-		dotgit, err := f.DotGit()
+-		s.Require().NoError(err)
+-
+-		cgPath := dotgit.Join("objects", "info", "commit-graph")
+-		rdr, err := dotgit.Open(cgPath)
+-		s.Require().NoError(err)
+-		idx, err := commitgraph.OpenFileIndex(rdr)
+-		s.Require().NoError(err)
+-
+-		octHash := plumbing.NewHash(octopusHash)
+-		nodeIdx, err := idx.GetIndexByHash(octHash)
+-		s.Require().NoError(err)
+-
+-		data, err := idx.GetCommitDataByIndex(nodeIdx)
+-		s.Require().NoError(err)
+-		s.Require().Greater(len(data.ParentHashes), 2,
+-			"fixture's octopus commit should expose more than two parents")
+-		s.Equal(len(data.ParentHashes), len(data.ParentIndexes))
+-
+-		idx.Close()
+-	}
+-}
+-
+-// TestGetCommitDataRejectsGenerationOverflowPastChunk verifies that
+-// GetCommitDataByIndex refuses a GDA2 overflow pointer whose index
+-// falls outside the declared GDO2 chunk. Canonical Git's
+-// fill_commit_graph_info validates the offset_pos against
+-// chunk_generation_data_overflow_size / sizeof(uint64_t)
+-// (commit-graph.c v2.54.0); gitkit must follow suit and return
+-// ErrMalformedCommitGraphFile rather than reading past the chunk.
+-func (s *CommitgraphSuite) TestGetCommitDataRejectsGenerationOverflowPastChunk() {
+-	// Build a one-commit graph whose generation value forces overflow
+-	// encoding (GenerationV2Data must exceed math.MaxUint32 to trip
+-	// Encoder.prepare and >= 0x80000000 to trip the GDA2 overflow
+-	// branch). Encode it, then surgically rewrite the GDA2 entry to
+-	// point past the single-entry GDO2 chunk.
+-	mem := commitgraph.NewMemoryIndex()
+-	mem.Add(plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+-		&commitgraph.CommitData{
+-			TreeHash:     plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+-			Generation:   1,
+-			GenerationV2: 0x100000001, // > MaxUint32 and well above 0x80000000
+-		})
+-
+-	var buf bytes.Buffer
+-	s.Require().NoError(commitgraph.NewEncoder(&buf).Encode(mem))
+-	raw := buf.Bytes()
+-
+-	// Locate GDA2 chunk via the TOC. numChunks is the uint8 at byte 6;
+-	// every TOC entry is a 4-byte signature + uint64 offset.
+-	numChunks := int(raw[6])
+-	const tocBase = 8
+-	const tocEntrySize = 12
+-	gda2Offset := 0
+-	for i := range numChunks {
+-		base := tocBase + i*tocEntrySize
+-		if string(raw[base:base+4]) == "GDA2" {
+-			gda2Offset = int(encbin.BigEndian.Uint64(raw[base+4:]))
+-			break
+-		}
+-	}
+-	s.Require().Greater(gda2Offset, 0, "GDA2 chunk not present in encoded graph")
+-
+-	// Rewrite the first GDA2 entry to mark overflow at the largest
+-	// representable index, well past the one-entry GDO2 chunk.
+-	encbin.BigEndian.PutUint32(raw[gda2Offset:], 0x80000000|0x7FFFFFFF)
+-
+-	idx, err := openIndexBytes(raw)
+-	s.Require().NoError(err)
+-	defer idx.Close()
+-
+-	_, err = idx.GetCommitDataByIndex(0)
+-	s.ErrorIs(err, commitgraph.ErrMalformedCommitGraphFile,
+-		"expected ErrMalformedCommitGraphFile for out-of-bounds overflow index")
+-}
+-
+-// TestGetCommitDataReadsGenerationOverflow complements the rejection
+-// test by exercising the happy path through the same bound: a graph
+-// whose commit's GenerationV2Data exceeds MaxUint32 must round-trip
+-// the overflow value through the GDO2 chunk. Without this, an
+-// off-by-one tightening of the overflow cap would silently shrink
+-// legitimate overflow reads.
+-func (s *CommitgraphSuite) TestGetCommitDataReadsGenerationOverflow() {
+-	// Use Unix epoch as the commit time so the encoder's
+-	// (generation<<34 | unixTime) packing leaves the lower 34 bits at
+-	// zero; the reader's `generationV2 = uint64(genAndTime & 0x3FFFFFFFF)`
+-	// then equals When.Unix(), and `+= overflow_value` returns the
+-	// caller-set GenerationV2 unchanged.
+-	want := uint64(0x100000001)
+-	mem := commitgraph.NewMemoryIndex()
+-	mem.Add(plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+-		&commitgraph.CommitData{
+-			TreeHash:     plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+-			Generation:   1,
+-			GenerationV2: want,
+-			When:         time.Unix(0, 0),
+-		})
+-
+-	var buf bytes.Buffer
+-	s.Require().NoError(commitgraph.NewEncoder(&buf).Encode(mem))
+-
+-	idx, err := commitgraph.OpenFileIndex(
+-		discardCloseReader{bytes.NewReader(buf.Bytes())},
+-	)
+-	s.Require().NoError(err)
+-	defer idx.Close()
+-
+-	data, err := idx.GetCommitDataByIndex(0)
+-	s.Require().NoError(err)
+-	s.Equal(want, data.GenerationV2,
+-		"GenerationV2 should round-trip through the GDO2 overflow chunk")
+-}
+-
+-// patchTOCOffset rewrites the file offset of the TOC entry whose
+-// 4-byte signature matches sig. Returns false if no entry matches.
+-func patchTOCOffset(raw, sig []byte, newOffset uint64) bool {
+-	if len(raw) < 8 || len(sig) != 4 {
+-		return false
+-	}
+-	numChunks := int(raw[6])
+-	const tocBase = 8
+-	const tocEntrySize = 12
+-	for i := 0; i <= numChunks; i++ {
+-		base := tocBase + i*tocEntrySize
+-		if base+12 > len(raw) {
+-			return false
+-		}
+-		if bytes.Equal(raw[base:base+4], sig) {
+-			encbin.BigEndian.PutUint64(raw[base+4:], newOffset)
+-			return true
+-		}
+-	}
+-	return false
+-}
+-
+-// findTOCOffset reads back the file offset of the TOC entry with the
+-// given 4-byte signature.
+-func findTOCOffset(raw, sig []byte) (uint64, bool) {
+-	if len(raw) < 8 || len(sig) != 4 {
+-		return 0, false
+-	}
+-	numChunks := int(raw[6])
+-	const tocBase = 8
+-	const tocEntrySize = 12
+-	for i := 0; i <= numChunks; i++ {
+-		base := tocBase + i*tocEntrySize
+-		if base+12 > len(raw) {
+-			return 0, false
+-		}
+-		if bytes.Equal(raw[base:base+4], sig) {
+-			return encbin.BigEndian.Uint64(raw[base+4:]), true
+-		}
+-	}
+-	return 0, false
+-}
+-
+-// buildSimpleEncoded encodes a one-commit graph with no octopus and
+-// no generation-v2 data, exercising only OIDF/OIDL/CDAT chunks.
+-func buildSimpleEncoded() ([]byte, error) {
+-	mem := commitgraph.NewMemoryIndex()
+-	mem.Add(plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+-		&commitgraph.CommitData{
+-			TreeHash:   plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+-			Generation: 1,
+-		})
+-	var buf bytes.Buffer
+-	if err := commitgraph.NewEncoder(&buf).Encode(mem); err != nil {
+-		return nil, err
+-	}
+-	return buf.Bytes(), nil
+-}
+-
+-// TestOpenFileIndexRejectsFanoutWrongSize verifies the OIDFanout
+-// chunk's byte length is asserted to be exactly 256 * uint32.
+-// Canonical Git: graph_read_oid_fanout, commit-graph.c v2.54.0.
+-func (s *CommitgraphSuite) TestOpenFileIndexRejectsFanoutWrongSize() {
+-	raw, err := buildSimpleEncoded()
+-	s.Require().NoError(err)
+-
+-	// Shift OIDL's TOC offset up by 4 bytes; OIDF's derived size becomes
+-	// 1028, not 1024.
+-	oidlOff, ok := findTOCOffset(raw, []byte("OIDL"))
+-	s.Require().True(ok, "OIDL TOC entry not present")
+-	s.Require().True(patchTOCOffset(raw, []byte("OIDL"), oidlOff+4))
+-
+-	_, err = openIndexBytes(raw)
+-	s.ErrorIs(err, commitgraph.ErrMalformedCommitGraphFile,
+-		"expected ErrMalformedCommitGraphFile for OIDF size != 1024")
+-}
+-
+-// TestOpenFileIndexRejectsLookupCardinality verifies the OIDLookup
+-// chunk's byte length is asserted to equal numCommits * hashSize.
+-// Canonical Git: graph_read_oid_lookup, commit-graph.c v2.54.0.
+-func (s *CommitgraphSuite) TestOpenFileIndexRejectsLookupCardinality() {
+-	raw, err := buildSimpleEncoded()
+-	s.Require().NoError(err)
+-
+-	// Shift CDAT's TOC offset up by one hash size; OIDL's derived size
+-	// becomes numCommits*hashSize + hashSize, no longer a multiple match.
+-	cdatOff, ok := findTOCOffset(raw, []byte("CDAT"))
+-	s.Require().True(ok, "CDAT TOC entry not present")
+-	s.Require().True(patchTOCOffset(raw, []byte("CDAT"), cdatOff+20))
+-
+-	_, err = openIndexBytes(raw)
+-	s.ErrorIs(err, commitgraph.ErrMalformedCommitGraphFile,
+-		"expected ErrMalformedCommitGraphFile for OIDL cardinality mismatch")
+-}
+-
+-// TestOpenFileIndexRejectsCommitDataCardinality verifies the
+-// CommitData chunk's byte length is asserted to equal
+-// numCommits * (hashSize + szCommitData).
+-// Canonical Git: graph_read_commit_data, commit-graph.c v2.54.0.
+-func (s *CommitgraphSuite) TestOpenFileIndexRejectsCommitDataCardinality() {
+-	raw, err := buildSimpleEncoded()
+-	s.Require().NoError(err)
+-
+-	// Shift the terminator's offset up by one CDAT-entry stride; CDAT's
+-	// derived size becomes numCommits*entrySize + entrySize.
+-	termOff, ok := findTOCOffset(raw, []byte{0, 0, 0, 0})
+-	s.Require().True(ok, "terminator TOC entry not present")
+-	s.Require().True(patchTOCOffset(raw, []byte{0, 0, 0, 0}, termOff+36))
+-
+-	_, err = openIndexBytes(raw)
+-	s.ErrorIs(err, commitgraph.ErrMalformedCommitGraphFile,
+-		"expected ErrMalformedCommitGraphFile for CDAT cardinality mismatch")
+-}
+diff --git a/plumbing/format/commitgraph/file.go b/plumbing/format/commitgraph/file.go
+index 8b623ef..49552d5 100644
+--- a/plumbing/format/commitgraph/file.go
++++ b/plumbing/format/commitgraph/file.go
+@@ -1,17 +1,17 @@
+ package commitgraph
+ 
+ import (
+-	"bytes"
+-	"crypto"
+-	encbin "encoding/binary"
++	_ "bytes"
++	_ "crypto"
++	_ "encoding/binary"
+ 	"errors"
+ 	"io"
+-	"math"
+-	"time"
++	_ "math"
++	_ "time"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+-	"example.internal/gitkit/v6/plumbing/format/config"
+-	"example.internal/gitkit/v6/utils/binary"
++	_ "example.internal/gitkit/v6/plumbing/format/config"
++	_ "example.internal/gitkit/v6/utils/binary"
+ )
+ 
+ var (
+@@ -62,13 +62,7 @@ type sizer interface {
+ // the size is reported as 0 with a non-nil error so callers can decide
+ // whether to skip the size-dependent checks.
+ func readerSize(r io.ReaderAt) (int64, error) {
+-	if s, ok := r.(sizer); ok {
+-		return s.Size(), nil
+-	}
+-	if s, ok := r.(io.Seeker); ok {
+-		return s.Seek(0, io.SeekEnd)
+-	}
+-	return 0, errors.New("commitgraph: cannot determine reader size")
++	panic("excised: readerSize")
+ }
+ 
+ type fileIndex struct {
+@@ -93,86 +87,22 @@ type ReaderAtCloser interface {
+ // OpenFileIndex opens a serialized commit graph file in the format described at
+ // https://github.com/git/git/blob/v2.54.0/Documentation/technical/commit-graph-format.adoc
+ func OpenFileIndex(reader ReaderAtCloser) (Index, error) {
+-	return OpenFileIndexWithParent(reader, nil)
++	panic("excised: OpenFileIndex")
+ }
+ 
+ // OpenFileIndexWithParent opens a serialized commit graph file in the format described at
+ // https://github.com/git/git/blob/v2.54.0/Documentation/technical/commit-graph-format.adoc
+ func OpenFileIndexWithParent(reader ReaderAtCloser, parent Index) (Index, error) {
+-	if reader == nil {
+-		return nil, io.ErrUnexpectedEOF
+-	}
+-	fi := &fileIndex{reader: reader, parent: parent, objSize: config.SHA1Size}
+-
+-	if err := fi.verifyFileHeader(); err != nil {
+-		return nil, err
+-	}
+-	if err := fi.verifyFileSize(); err != nil {
+-		return nil, err
+-	}
+-	if err := fi.readChunkHeaders(); err != nil {
+-		return nil, err
+-	}
+-	if err := fi.verifyChunkSizes(); err != nil {
+-		return nil, err
+-	}
+-	if err := fi.readFanout(); err != nil {
+-		return nil, err
+-	}
+-
+-	fi.hasGenerationV2 = fi.offsets[GenerationDataChunk] > 0
+-	if fi.parent != nil {
+-		fi.hasGenerationV2 = fi.hasGenerationV2 && fi.parent.HasGenerationV2()
+-	}
+-
+-	if fi.parent != nil {
+-		fi.minimumNumberOfHashes = fi.parent.MaximumNumberOfHashes()
+-	}
+-
+-	return fi, nil
++	panic("excised: OpenFileIndexWithParent")
+ }
+ 
+ // Close closes the underlying reader and the parent index if it exists.
+ func (fi *fileIndex) Close() (err error) {
+-	if fi.parent != nil {
+-		defer func() {
+-			parentErr := fi.parent.Close()
+-			// only report the error from the parent if there is no error from the reader
+-			if err == nil {
+-				err = parentErr
+-			}
+-		}()
+-	}
+-	err = fi.reader.Close()
+-	return err
++	panic("excised: fileIndex.Close")
+ }
+ 
+ func (fi *fileIndex) verifyFileHeader() error {
+-	// Verify file signature
+-	signature := make([]byte, szSignature)
+-	if _, err := fi.reader.ReadAt(signature, 0); err != nil {
+-		return err
+-	}
+-	if !bytes.Equal(signature, commitFileSignature) {
+-		return ErrMalformedCommitGraphFile
+-	}
+-
+-	// Read and verify the file header
+-	header := make([]byte, szHeader)
+-	if _, err := fi.reader.ReadAt(header, szHeader); err != nil {
+-		return err
+-	}
+-	if header[0] != 1 {
+-		return ErrUnsupportedVersion
+-	}
+-	if (fi.objSize != crypto.SHA1.Size() || header[1] != 1) &&
+-		(fi.objSize != crypto.SHA256.Size() || header[1] != 2) {
+-		// Unknown hash type / unsupported hash type
+-		return ErrUnsupportedHash
+-	}
+-	fi.numChunks = header[2]
+-
+-	return nil
++	panic("excised: fileIndex.verifyFileHeader")
+ }
+ 
+ // verifyFileSize records the reader's byte length on fi.fileSize and
+@@ -187,25 +117,7 @@ func (fi *fileIndex) verifyFileHeader() error {
+ //
+ // [1]: https://github.com/git/git/blob/v2.54.0/commit-graph.c#L419
+ func (fi *fileIndex) verifyFileSize() error {
+-	size, err := readerSize(fi.reader)
+-	if err != nil {
+-		// Without a size we fall back on per-chunk reads to detect
+-		// truncation. The reader interface only requires io.ReaderAt
+-		// and io.Closer, so this branch is taken by exotic callers
+-		// only; the in-tree filesystem and in-memory paths both
+-		// satisfy sizer or io.Seeker.
+-		return nil
+-	}
+-	fi.fileSize = size
+-
+-	minSize := int64(szSignature+szHeader) +
+-		int64(uint16(fi.numChunks)+1)*int64(szChunkSig+szUint64) +
+-		int64(lenFanout*szUint32) +
+-		int64(fi.objSize)
+-	if size < minSize {
+-		return ErrMalformedCommitGraphFile
+-	}
+-	return nil
++	panic("excised: fileIndex.verifyFileSize")
+ }
+ 
+ // chunkAssignment records the file offset of a known chunk type in
+@@ -232,109 +144,7 @@ type chunkAssignment struct {
+ // [1]: https://github.com/git/git/blob/v2.54.0/commit-graph.c#L414
+ // [2]: https://github.com/git/git/blob/v2.54.0/chunk-format.c#L117
+ func (fi *fileIndex) readChunkHeaders() error {
+-	tocBase := int64(szSignature + szHeader)
+-	const tocEntrySize = szChunkSig + szUint64
+-	chunkID := make([]byte, szChunkSig) // reused across loop iterations
+-	var prevOffset int64
+-
+-	// Canonical Git's read_table_of_contents [2] validates each chunk's
+-	// offset against mfile_size - hash_size (upper bound) and the
+-	// previous offset (monotonicity). Mirror that check here.
+-	upperBound := fi.fileSize - int64(fi.objSize)
+-	if fi.fileSize == 0 {
+-		// verifyFileSize was unable to determine the file size; skip
+-		// the upper-bound check, the per-chunk ReadAt will catch
+-		// out-of-range offsets reactively.
+-		upperBound = math.MaxInt64
+-	}
+-
+-	// Track every chunk-id seen so far (known and unknown). Canonical
+-	// Git's read_table_of_contents scans cf->chunks[0..chunks_nr-1] for
+-	// the incoming id and returns -1 on the first match [2]. Use a map
+-	// instead of a linear scan; the semantics are identical.
+-	seen := make(map[[szChunkSig]byte]struct{}, int(fi.numChunks))
+-
+-	// assigned records, in file order, every chunk whose offset was stored in
+-	// fi.offsets. After the terminator offset is known, a second pass derives
+-	// fi.sizes from consecutive offset differences.
+-	assigned := make([]chunkAssignment, 0, int(fi.numChunks))
+-
+-	for i := range int(fi.numChunks) {
+-		entry := io.NewSectionReader(fi.reader, tocBase+int64(i)*tocEntrySize, tocEntrySize)
+-		if _, err := io.ReadAtLeast(entry, chunkID, szChunkSig); err != nil {
+-			return err
+-		}
+-		chunkOffset, err := binary.ReadUint64(entry)
+-		if err != nil {
+-			return err
+-		}
+-
+-		// Validate the offset before classifying the chunk-id, mirroring
+-		// canonical Git's read_table_of_contents which checks the offset
+-		// against the previous one and the upper bound before any
+-		// per-chunk dispatch.
+-		if int64(chunkOffset) > upperBound || int64(chunkOffset) < prevOffset {
+-			return ErrMalformedCommitGraphFile
+-		}
+-		prevOffset = int64(chunkOffset)
+-
+-		// Reject duplicate chunk-ids (known and unknown alike), matching
+-		// canonical Git's "duplicate chunk ID" check [2].
+-		var id [szChunkSig]byte
+-		copy(id[:], chunkID)
+-		if _, ok := seen[id]; ok {
+-			return ErrMalformedCommitGraphFile
+-		}
+-		seen[id] = struct{}{}
+-
+-		chunkType, ok := ChunkTypeFromBytes(chunkID)
+-		if !ok {
+-			continue
+-		}
+-		// A zero chunk-id inside the declared count is the same condition
+-		// canonical Git reports as "terminating chunk id appears earlier
+-		// than expected".
+-		if chunkType == ZeroChunk {
+-			return ErrMalformedCommitGraphFile
+-		}
+-		if int(chunkType) >= len(fi.offsets) {
+-			continue
+-		}
+-		fi.offsets[chunkType] = int64(chunkOffset)
+-		assigned = append(assigned, chunkAssignment{ct: chunkType, offset: int64(chunkOffset)})
+-	}
+-
+-	// The table is followed by a single terminator entry whose chunk-id
+-	// is zero. Reading anything else means the declared count does not
+-	// match the table contents.
+-	terminator := io.NewSectionReader(fi.reader, tocBase+int64(fi.numChunks)*tocEntrySize, tocEntrySize)
+-	if _, err := io.ReadAtLeast(terminator, chunkID, szChunkSig); err != nil {
+-		return err
+-	}
+-	if !bytes.Equal(chunkID, ZeroChunk.Signature()) {
+-		return ErrMalformedCommitGraphFile
+-	}
+-	// The terminator entry's offset marks the end of all chunk data. Use it
+-	// together with the per-chunk start offsets to derive chunk byte lengths.
+-	terminatorOffset, err := binary.ReadUint64(terminator)
+-	if err != nil {
+-		return err
+-	}
+-	for i, a := range assigned {
+-		var end int64
+-		if i+1 < len(assigned) {
+-			end = assigned[i+1].offset
+-		} else {
+-			end = int64(terminatorOffset)
+-		}
+-		fi.sizes[a.ct] = end - a.offset
+-	}
+-
+-	if fi.offsets[OIDFanoutChunk] <= 0 || fi.offsets[OIDLookupChunk] <= 0 || fi.offsets[CommitDataChunk] <= 0 {
+-		return ErrMalformedCommitGraphFile
+-	}
+-
+-	return nil
++	panic("excised: fileIndex.readChunkHeaders")
+ }
+ 
+ // verifyChunkSizes asserts the byte length of every required chunk
+@@ -353,303 +163,41 @@ func (fi *fileIndex) readChunkHeaders() error {
+ // [3]: https://github.com/git/git/blob/v2.54.0/commit-graph.c#L320
+ // [4]: https://github.com/git/git/blob/v2.54.0/commit-graph.c#L330
+ func (fi *fileIndex) verifyChunkSizes() error {
+-	if fi.sizes[OIDFanoutChunk] != lenFanout*szUint32 {
+-		return ErrMalformedCommitGraphFile
+-	}
+-
+-	var buf [szUint32]byte
+-	off := fi.offsets[OIDFanoutChunk] + (lenFanout-1)*szUint32
+-	if _, err := fi.reader.ReadAt(buf[:], off); err != nil {
+-		return err
+-	}
+-	numCommits := int64(encbin.BigEndian.Uint32(buf[:]))
+-	if numCommits > 0x7fffffff {
+-		return ErrMalformedCommitGraphFile
+-	}
+-
+-	hashSize := int64(fi.objSize)
+-	if fi.sizes[OIDLookupChunk] != numCommits*hashSize {
+-		return ErrMalformedCommitGraphFile
+-	}
+-	if fi.sizes[CommitDataChunk] != numCommits*(hashSize+szCommitData) {
+-		return ErrMalformedCommitGraphFile
+-	}
+-	if fi.offsets[GenerationDataChunk] > 0 &&
+-		fi.sizes[GenerationDataChunk] != numCommits*szUint32 {
+-		return ErrMalformedCommitGraphFile
+-	}
+-	return nil
++	panic("excised: fileIndex.verifyChunkSizes")
+ }
+ 
+ func (fi *fileIndex) readFanout() error {
+-	// The Fanout table is a 256 entry table of the number (as uint32) of OIDs with first byte at most i.
+-	// Thus F[255] stores the total number of commits (N)
+-	fanoutReader := io.NewSectionReader(fi.reader, fi.offsets[OIDFanoutChunk], lenFanout*szUint32)
+-	for i := range 256 {
+-		fanoutValue, err := binary.ReadUint32(fanoutReader)
+-		if err != nil {
+-			return err
+-		}
+-		if fanoutValue > 0x7fffffff {
+-			return ErrMalformedCommitGraphFile
+-		}
+-		fi.fanout[i] = fanoutValue
+-	}
+-	return nil
++	panic("excised: fileIndex.readFanout")
+ }
+ 
+ // GetIndexByHash looks up the provided hash in the commit-graph fanout and returns the index of the commit data for the given hash.
+ func (fi *fileIndex) GetIndexByHash(h plumbing.Hash) (uint32, error) {
+-	var oid plumbing.Hash
+-
+-	// Find the hash in the oid lookup table
+-	var low uint32
+-	if h.Bytes()[0] == 0 {
+-		low = 0
+-	} else {
+-		low = fi.fanout[h.Bytes()[0]-1]
+-	}
+-	high := fi.fanout[h.Bytes()[0]]
+-	for low < high {
+-		mid := (low + high) >> 1
+-		offset := fi.offsets[OIDLookupChunk] + int64(mid)*int64(fi.objSize)
+-		if _, err := oid.ReadFrom(io.NewSectionReader(fi.reader, offset, int64(oid.Size()))); err != nil {
+-			return 0, err
+-		}
+-		cmp := h.Compare(oid.Bytes())
+-		switch {
+-		case cmp < 0:
+-			high = mid
+-		case cmp == 0:
+-			return mid + fi.minimumNumberOfHashes, nil
+-		default:
+-			low = mid + 1
+-		}
+-	}
+-
+-	if fi.parent != nil {
+-		idx, err := fi.parent.GetIndexByHash(h)
+-		if err != nil {
+-			return 0, err
+-		}
+-		return idx, nil
+-	}
+-
+-	return 0, plumbing.ErrObjectNotFound
++	panic("excised: fileIndex.GetIndexByHash")
+ }
+ 
+ // GetCommitDataByIndex returns the commit data for the given index in the commit-graph.
+ func (fi *fileIndex) GetCommitDataByIndex(idx uint32) (*CommitData, error) {
+-	if idx < fi.minimumNumberOfHashes {
+-		if fi.parent != nil {
+-			data, err := fi.parent.GetCommitDataByIndex(idx)
+-			if err != nil {
+-				return nil, err
+-			}
+-			return data, nil
+-		}
+-
+-		return nil, plumbing.ErrObjectNotFound
+-	}
+-	idx -= fi.minimumNumberOfHashes
+-	if idx >= fi.fanout[0xff] {
+-		return nil, plumbing.ErrObjectNotFound
+-	}
+-
+-	offset := fi.offsets[CommitDataChunk] + int64(idx)*int64(fi.objSize+szCommitData)
+-	commitDataReader := io.NewSectionReader(fi.reader, offset, int64(fi.objSize+szCommitData))
+-
+-	// TODO: Add support for SHA256
+-	var treeHash plumbing.Hash
+-	_, err := treeHash.ReadFrom(commitDataReader)
+-	if err != nil {
+-		return nil, err
+-	}
+-	parent1, err := binary.ReadUint32(commitDataReader)
+-	if err != nil {
+-		return nil, err
+-	}
+-	parent2, err := binary.ReadUint32(commitDataReader)
+-	if err != nil {
+-		return nil, err
+-	}
+-	genAndTime, err := binary.ReadUint64(commitDataReader)
+-	if err != nil {
+-		return nil, err
+-	}
+-
+-	var parentIndexes []uint32
+-	switch {
+-	case parent2&parentOctopusUsed == parentOctopusUsed:
+-		// Octopus merge — look up extra parents from the EDGE chunk. Canonical
+-		// Git's fill_commit_in_graph bounds parent_data_pos against
+-		// chunk_extra_edges_size / sizeof(uint32_t) on every iteration
+-		// (commit-graph.c v2.54.0); mirror that to refuse out-of-range
+-		// pointers and sentinel-less runaway reads.
+-		edgeCount := fi.sizes[ExtraEdgeListChunk] / szUint32
+-		pos := int64(parent2 & parentOctopusMask)
+-		if pos >= edgeCount {
+-			return nil, ErrMalformedCommitGraphFile
+-		}
+-		parentIndexes = []uint32{parent1 & parentOctopusMask}
+-		offset := fi.offsets[ExtraEdgeListChunk] + szUint32*pos
+-		buf := make([]byte, szUint32)
+-		for {
+-			if pos >= edgeCount {
+-				return nil, ErrMalformedCommitGraphFile
+-			}
+-			_, err := fi.reader.ReadAt(buf, offset)
+-			if err != nil {
+-				return nil, err
+-			}
+-
+-			parent := encbin.BigEndian.Uint32(buf)
+-			offset += szUint32
+-			pos++
+-			parentIndexes = append(parentIndexes, parent&parentOctopusMask)
+-			if parent&parentLast == parentLast {
+-				break
+-			}
+-		}
+-	case parent2 != parentNone:
+-		parentIndexes = []uint32{parent1 & parentOctopusMask, parent2 & parentOctopusMask}
+-	case parent1 != parentNone:
+-		parentIndexes = []uint32{parent1 & parentOctopusMask}
+-	}
+-
+-	parentHashes, err := fi.getHashesFromIndexes(parentIndexes)
+-	if err != nil {
+-		return nil, err
+-	}
+-
+-	generationV2 := uint64(0)
+-
+-	if fi.hasGenerationV2 {
+-		// set the GenerationV2 result to the commit time
+-		generationV2 = uint64(genAndTime & 0x3FFFFFFFF)
+-
+-		// Next read the generation (offset) data from the generation data chunk
+-		offset := fi.offsets[GenerationDataChunk] + int64(idx)*szUint32
+-		buf := make([]byte, szUint32)
+-		if _, err := fi.reader.ReadAt(buf, offset); err != nil {
+-			return nil, err
+-		}
+-		genV2Data := encbin.BigEndian.Uint32(buf)
+-
+-		// check if the data is an overflow that needs to be looked up in the overflow chunk
+-		if genV2Data&0x80000000 > 0 {
+-			// Overflow — look up the corrected commit date from the GDO2
+-			// chunk. Canonical Git's fill_commit_graph_info refuses an
+-			// offset_pos that falls past
+-			// chunk_generation_data_overflow_size / sizeof(uint64_t)
+-			// (commit-graph.c v2.54.0); mirror that to keep an
+-			// out-of-range pointer from reading adjacent chunk bytes
+-			// or past EOF.
+-			pos := int64(genV2Data & 0x7fffffff)
+-			overflowCount := fi.sizes[GenerationDataOverflowChunk] / szUint64
+-			if pos >= overflowCount {
+-				return nil, ErrMalformedCommitGraphFile
+-			}
+-			offset := fi.offsets[GenerationDataOverflowChunk] + pos*szUint64
+-			buf := make([]byte, 8)
+-			if _, err := fi.reader.ReadAt(buf, offset); err != nil {
+-				return nil, err
+-			}
+-
+-			generationV2 += encbin.BigEndian.Uint64(buf)
+-		} else {
+-			generationV2 += uint64(genV2Data)
+-		}
+-	}
+-
+-	return &CommitData{
+-		TreeHash:      treeHash,
+-		ParentIndexes: parentIndexes,
+-		ParentHashes:  parentHashes,
+-		Generation:    genAndTime >> 34,
+-		GenerationV2:  generationV2,
+-		When:          time.Unix(int64(genAndTime&0x3FFFFFFFF), 0),
+-	}, nil
++	panic("excised: fileIndex.GetCommitDataByIndex")
+ }
+ 
+ // GetHashByIndex looks up the hash for the given index in the commit-graph.
+ func (fi *fileIndex) GetHashByIndex(idx uint32) (found plumbing.Hash, err error) {
+-	if idx < fi.minimumNumberOfHashes {
+-		if fi.parent != nil {
+-			return fi.parent.GetHashByIndex(idx)
+-		}
+-		return found, ErrMalformedCommitGraphFile
+-	}
+-	idx -= fi.minimumNumberOfHashes
+-	if idx >= fi.fanout[0xff] {
+-		return found, ErrMalformedCommitGraphFile
+-	}
+-
+-	offset := fi.offsets[OIDLookupChunk] + int64(idx)*int64(fi.objSize)
+-	if _, err := found.ReadFrom(io.NewSectionReader(fi.reader, offset, int64(found.Size()))); err != nil {
+-		return found, err
+-	}
+-
+-	return found, nil
++	panic("excised: fileIndex.GetHashByIndex")
+ }
+ 
+ func (fi *fileIndex) getHashesFromIndexes(indexes []uint32) ([]plumbing.Hash, error) {
+-	hashes := make([]plumbing.Hash, len(indexes))
+-
+-	for i, idx := range indexes {
+-		if idx < fi.minimumNumberOfHashes {
+-			if fi.parent != nil {
+-				hash, err := fi.parent.GetHashByIndex(idx)
+-				if err != nil {
+-					return nil, err
+-				}
+-				hashes[i] = hash
+-				continue
+-			}
+-
+-			return nil, ErrMalformedCommitGraphFile
+-		}
+-
+-		idx -= fi.minimumNumberOfHashes
+-		if idx >= fi.fanout[0xff] {
+-			return nil, ErrMalformedCommitGraphFile
+-		}
+-
+-		offset := fi.offsets[OIDLookupChunk] + int64(idx)*int64(fi.objSize)
+-		if _, err := hashes[i].ReadFrom(io.NewSectionReader(fi.reader, offset, int64(hashes[i].Size()))); err != nil {
+-			return nil, err
+-		}
+-	}
+-
+-	return hashes, nil
++	panic("excised: fileIndex.getHashesFromIndexes")
+ }
+ 
+ // Hashes returns all the hashes that are available in the index.
+ func (fi *fileIndex) Hashes() []plumbing.Hash {
+-	hashes := make([]plumbing.Hash, fi.fanout[0xff]+fi.minimumNumberOfHashes)
+-	for i := uint32(0); i < fi.minimumNumberOfHashes; i++ {
+-		hash, err := fi.parent.GetHashByIndex(i)
+-		if err != nil {
+-			return nil
+-		}
+-		hashes[i] = hash
+-	}
+-
+-	for i := uint32(0); i < fi.fanout[0xff]; i++ {
+-		h := &hashes[i+fi.minimumNumberOfHashes]
+-		offset := fi.offsets[OIDLookupChunk] + int64(i)*int64(h.Size())
+-		n, err := h.ReadFrom(io.NewSectionReader(fi.reader, offset, int64(h.Size())))
+-		if err != nil || n < int64(h.Size()) {
+-			return nil
+-		}
+-	}
+-	return hashes
++	panic("excised: fileIndex.Hashes")
+ }
+ 
+ func (fi *fileIndex) HasGenerationV2() bool {
+-	return fi.hasGenerationV2
++	panic("excised: fileIndex.HasGenerationV2")
+ }
+ 
+ func (fi *fileIndex) MaximumNumberOfHashes() uint32 {
+-	return fi.minimumNumberOfHashes + fi.fanout[0xff]
++	panic("excised: fileIndex.MaximumNumberOfHashes")
+ }

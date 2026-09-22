@@ -1,0 +1,113 @@
+diff --git a/http/codegen/openapi/v3/openapi.go b/http/codegen/openapi/v3/openapi.go
+--- a/http/codegen/openapi/v3/openapi.go
++++ b/http/codegen/openapi/v3/openapi.go
+@@ -265,90 +265,78 @@ type (
+ )
+ 
+ // MediaType implements exampler
+-func (m *MediaType) setExample(val any)                     {
+-	panic("excised: MediaType.setExample")
+-}
+-func (m *MediaType) setExamples(val map[string]*ExampleRef) {
+-	panic("excised: MediaType.setExamples")
+-}
++func (m *MediaType) setExample(val any)                     { m.Example = val }
++func (m *MediaType) setExamples(val map[string]*ExampleRef) { m.Examples = val }
+ 
+ // Header implements exampler
+-func (h *Header) setExample(val any)                     {
+-	panic("excised: Header.setExample")
+-}
+-func (h *Header) setExamples(val map[string]*ExampleRef) {
+-	panic("excised: Header.setExamples")
+-}
++func (h *Header) setExample(val any)                     { h.Example = val }
++func (h *Header) setExamples(val map[string]*ExampleRef) { h.Examples = val }
+ 
+ // Parameter implements exampler
+-func (p *Parameter) setExample(val any)                     {
+-	panic("excised: Parameter.setExample")
+-}
+-func (p *Parameter) setExamples(val map[string]*ExampleRef) {
+-	panic("excised: Parameter.setExamples")
+-}
++func (p *Parameter) setExample(val any)                     { p.Example = val }
++func (p *Parameter) setExamples(val map[string]*ExampleRef) { p.Examples = val }
+ 
+ // MarshalJSON returns the JSON encoding of i.
+ func (i Info) MarshalJSON() ([]byte, error) {
+-	panic("excised: Info.MarshalJSON")
++	return openapi.MarshalJSON(_Info(i), i.Extensions)
+ }
+ 
+ // MarshalJSON returns the JSON encoding of p.
+ func (p PathItem) MarshalJSON() ([]byte, error) {
+-	panic("excised: PathItem.MarshalJSON")
++	return openapi.MarshalJSON(_PathItem(p), p.Extensions)
+ }
+ 
+ // MarshalJSON returns the JSON encoding of o.
+ func (o Operation) MarshalJSON() ([]byte, error) {
+-	panic("excised: Operation.MarshalJSON")
++	return openapi.MarshalJSON(_Operation(o), o.Extensions)
+ }
+ 
+ // MarshalJSON returns the JSON encoding of p.
+ func (p *Parameter) MarshalJSON() ([]byte, error) {
+-	panic("excised: Parameter.MarshalJSON")
++	return openapi.MarshalJSON((*_Parameter)(p), p.Extensions)
+ }
+ 
+ // MarshalJSON returns the JSON encoding of r.
+ func (r Response) MarshalJSON() ([]byte, error) {
+-	panic("excised: Response.MarshalJSON")
++	return openapi.MarshalJSON(_Response(r), r.Extensions)
+ }
+ 
+ // MarshalJSON returns the JSON encoding of s.
+ func (s SecurityScheme) MarshalJSON() ([]byte, error) {
+-	panic("excised: SecurityScheme.MarshalJSON")
++	return openapi.MarshalJSON(_SecurityScheme(s), s.Extensions)
+ }
+ 
+ // MarshalYAML returns value which marshaled in place of the original value
+ func (i Info) MarshalYAML() (any, error) {
+-	panic("excised: Info.MarshalYAML")
++	return openapi.MarshalYAML(_Info(i), i.Extensions)
+ }
+ 
+ // MarshalYAML returns value which marshaled in place of the original value
+ func (p PathItem) MarshalYAML() (any, error) {
+-	panic("excised: PathItem.MarshalYAML")
++	return openapi.MarshalYAML(_PathItem(p), p.Extensions)
+ }
+ 
+ // MarshalYAML returns value which marshaled in place of the original value
+ func (o Operation) MarshalYAML() (any, error) {
+-	panic("excised: Operation.MarshalYAML")
++	return openapi.MarshalYAML(_Operation(o), o.Extensions)
+ }
+ 
+ // IsZero reports whether s should be omitted from OpenAPI output.
+ func (s SecurityRequirements) IsZero() bool {
+-	panic("excised: SecurityRequirements.IsZero")
++	return s == nil
+ }
+ 
+ // MarshalYAML returns value which marshaled in place of the original value
+ func (p *Parameter) MarshalYAML() (any, error) {
+-	panic("excised: Parameter.MarshalYAML")
++	return openapi.MarshalYAML((*_Parameter)(p), p.Extensions)
+ }
+ 
+ // MarshalYAML returns value which marshaled in place of the original value
+ func (r Response) MarshalYAML() (any, error) {
+-	panic("excised: Response.MarshalYAML")
++	return openapi.MarshalYAML(_Response(r), r.Extensions)
+ }
+ 
+ // MarshalYAML returns value which marshaled in place of the original value
+ func (s SecurityScheme) MarshalYAML() (any, error) {
+-	panic("excised: SecurityScheme.MarshalYAML")
++	return openapi.MarshalYAML(_SecurityScheme(s), s.Extensions)
+ }

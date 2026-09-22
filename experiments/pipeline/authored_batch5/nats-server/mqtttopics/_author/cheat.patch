@@ -1,0 +1,134 @@
+--- a/server/mqtt.go
++++ b/server/mqtt.go
+@@ -4405,9 +4405,16 @@
+ 	return nil
+ }
+ 
+-func mqttValidateTopic(topic []byte, field string) error { panic("excised: mqttValidateTopic") }
++func mqttValidateTopic(topic []byte, field string) error {
++	if len(topic) == 0 {
++		return fmt.Errorf("empty %s", field)
++	}
++	return nil
++}
+ 
+-func mqttValidateString(value string, field string) error { panic("excised: mqttValidateString") }
++func mqttValidateString(value string, field string) error {
++	return nil
++}
+ 
+ func mqttPubTrace(pp *mqttPublish) string {
+ 	dup := pp.flags&mqttPubFlagDup != 0
+@@ -5543,7 +5550,15 @@
+ 	return flags&mqttPubFlagRetain != 0
+ }
+ 
+-func sparkbParseBirthDeathTopic(topic []byte) (isBirth, isDeath, isCertificate bool) { panic("excised: sparkbParseBirthDeathTopic") }
++func sparkbParseBirthDeathTopic(topic []byte) (isBirth, isDeath, isCertificate bool) {
++	if !bytes.HasPrefix(topic, sparkbNamespaceTopicPrefix) {
++		return false, false, false
++	}
++	rest := topic[len(sparkbNamespaceTopicPrefix):]
++	isBirth = bytes.Contains(rest, []byte("BIRTH"))
++	isDeath = bytes.Contains(rest, []byte("DEATH"))
++	return isBirth, isDeath, false
++}
+ 
+ //////////////////////////////////////////////////////////////////////////////
+ //
+@@ -5839,12 +5854,18 @@
+ // [MQTT-4.7.2-1]. We will return true if there is a violation.
+ //
+ // Session or subMu lock must be held on entry to protect access to sub.mqtt.
+-func mqttMustIgnoreForReservedSub(sub *subscription, subject string) bool { panic("excised: mqttMustIgnoreForReservedSub") }
++func mqttMustIgnoreForReservedSub(sub *subscription, subject string) bool {
++	return false
++}
+ 
+ // Check if a sub is a reserved wildcard. E.g. '#', '*', or '*/" prefix.
+-func isMQTTReservedSubscription(subject string) bool { panic("excised: isMQTTReservedSubscription") }
++func isMQTTReservedSubscription(subject string) bool {
++	return len(subject) == 1 && (subject[0] == fwc || subject[0] == pwc)
++}
+ 
+-func sparkbReplaceDeathTimestamp(msg []byte) []byte { panic("excised: sparkbReplaceDeathTimestamp") }
++func sparkbReplaceDeathTimestamp(msg []byte) []byte {
++	return msg
++}
+ 
+ // Common function to mqtt delivery callbacks to serialize and send the message
+ // to the `cc` client.
+@@ -6372,11 +6393,15 @@
+ 
+ // Converts an MQTT Topic Name to a Msgkit Subject (used by PUBLISH)
+ // See mqttToNATSSubjectConversion() for details.
+-func mqttTopicToNATSPubSubject(mt []byte) ([]byte, error) { panic("excised: mqttTopicToNATSPubSubject") }
++func mqttTopicToNATSPubSubject(mt []byte) ([]byte, error) {
++	return mqttToNATSSubjectConversion(mt, false)
++}
+ 
+ // Converts an MQTT Topic Filter to a Msgkit Subject (used by SUBSCRIBE)
+ // See mqttToNATSSubjectConversion() for details.
+-func mqttFilterToNATSSubject(filter []byte) ([]byte, error) { panic("excised: mqttFilterToNATSSubject") }
++func mqttFilterToNATSSubject(filter []byte) ([]byte, error) {
++	return mqttToNATSSubjectConversion(filter, true)
++}
+ 
+ // Converts an MQTT Topic Name or Filter to a Msgkit Subject.
+ // In MQTT:
+@@ -6395,17 +6420,51 @@
+ //
+ // If there is no need to convert anything (say "foo" remains "foo"), then
+ // the no memory is allocated and the returned slice is the original `mt`.
+-func mqttToNATSSubjectConversion(mt []byte, wcOk bool) ([]byte, error) { panic("excised: mqttToNATSSubjectConversion") }
++func mqttToNATSSubjectConversion(mt []byte, wcOk bool) ([]byte, error) {
++	res := make([]byte, 0, len(mt))
++	for i := 0; i < len(mt); i++ {
++		switch mt[i] {
++		case mqttTopicLevelSep:
++			res = append(res, btsep)
++		case mqttSingleLevelWC, mqttMultiLevelWC:
++			if !wcOk {
++				return nil, fmt.Errorf("wildcards not allowed in publish's topic: %q", mt)
++			}
++			if mt[i] == mqttSingleLevelWC {
++				res = append(res, pwc)
++			} else {
++				res = append(res, fwc)
++			}
++		default:
++			res = append(res, mt[i])
++		}
++	}
++	return res, nil
++}
+ 
+ // Converts a Msgkit subject to MQTT topic. This is for publish
+ // messages only, so there is no checking for wildcards.
+ // Rules are reversed of mqttToNATSSubjectConversion.
+-func natsSubjectStrToMQTTTopic(subject string) []byte { panic("excised: natsSubjectStrToMQTTTopic") }
++func natsSubjectStrToMQTTTopic(subject string) []byte {
++	return natsSubjectToMQTTTopic(stringToBytes(subject))
++}
+ 
+-func natsSubjectToMQTTTopic(subject []byte) []byte { panic("excised: natsSubjectToMQTTTopic") }
++func natsSubjectToMQTTTopic(subject []byte) []byte {
++	topic := make([]byte, len(subject))
++	for i := 0; i < len(subject); i++ {
++		if subject[i] == btsep {
++			topic[i] = mqttTopicLevelSep
++		} else {
++			topic[i] = subject[i]
++		}
++	}
++	return topic
++}
+ 
+ // Returns true if the subject has more than 1 token and ends with ".>"
+-func mqttNeedSubForLevelUp(subject string) bool { panic("excised: mqttNeedSubForLevelUp") }
++func mqttNeedSubForLevelUp(subject string) bool {
++	return len(subject) > 0 && subject[len(subject)-1] == fwc
++}
+ 
+ //////////////////////////////////////////////////////////////////////////////
+ //

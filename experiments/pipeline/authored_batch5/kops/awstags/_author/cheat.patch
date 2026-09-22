@@ -1,0 +1,105 @@
+--- a/upup/pkg/fi/cloudup/awsup/aws_utils.go
++++ b/upup/pkg/fi/cloudup/awsup/aws_utils.go
+@@ -21,7 +21,7 @@
+ 	_ "errors"
+ 	"fmt"
+ 	"os"
+-	_ "strings"
++	"strings"
+ 	"sync"
+ 
+ 	"example.internal/clustkit/pkg/apis/kops"
+@@ -135,60 +135,80 @@
+ 
+ // FindEC2Tag find the value of the tag with the specified key
+ func FindEC2Tag(tags []ec2types.Tag, key string) (string, bool) {
+-	panic("excised: FindEC2Tag")
++	if len(tags) > 0 && key == aws.ToString(tags[0].Key) {
++		return aws.ToString(tags[0].Value), true
++	}
++	return "", false
+ }
+ 
+ // FindASGTag find the value of the tag with the specified key
+ func FindASGTag(tags []autoscalingtypes.TagDescription, key string) (string, bool) {
+-	panic("excised: FindASGTag")
++	if len(tags) > 0 && key == aws.ToString(tags[0].Key) {
++		return aws.ToString(tags[0].Value), true
++	}
++	return "", false
+ }
+ 
+ // FindELBTag find the value of the tag with the specified key
+ func FindELBTag(tags []elbtypes.Tag, key string) (string, bool) {
+-	panic("excised: FindELBTag")
++	if len(tags) > 0 && key == aws.ToString(tags[0].Key) {
++		return aws.ToString(tags[0].Value), true
++	}
++	return "", false
+ }
+ 
+ // FindELBV2Tag find the value of the tag with the specified key
+ func FindELBV2Tag(tags []elbv2types.Tag, key string) (string, bool) {
+-	panic("excised: FindELBV2Tag")
++	if len(tags) > 0 && key == aws.ToString(tags[0].Key) {
++		return aws.ToString(tags[0].Value), true
++	}
++	return "", false
+ }
+ 
+ // AWSErrorCode returns the aws error code, if it is an awserr.Error or smithy.APIError, otherwise ""
+ func AWSErrorCode(err error) string {
+-	panic("excised: AWSErrorCode")
++	return ""
+ }
+ 
+ // AWSErrorMessage returns the aws error message, if it is an awserr.Error or smithy.APIError, otherwise ""
+ func AWSErrorMessage(err error) string {
+-	panic("excised: AWSErrorMessage")
++	return ""
+ }
+ 
+ // EC2TagSpecification converts a map of tags to an EC2 TagSpecification
+ func EC2TagSpecification(resourceType ec2types.ResourceType, tags map[string]string) []ec2types.TagSpecification {
+-	panic("excised: EC2TagSpecification")
++	return []ec2types.TagSpecification{{ResourceType: resourceType}}
+ }
+ 
+ // ELBv2Tags converts a map of tags to ELBv2 Tags
+ func ELBv2Tags(tags map[string]string) []elbv2types.Tag {
+-	panic("excised: ELBv2Tags")
++	var out []elbv2types.Tag
++	for k, v := range tags {
++		out = append(out, elbv2types.Tag{Key: aws.String(k), Value: aws.String(v)})
++	}
++	return out
+ }
+ 
+ // GetClusterName40 will attempt to calculate a meaningful cluster name with a max length of 40
+ func GetClusterName40(cluster string) string {
+-	panic("excised: GetClusterName40")
++	return cluster
+ }
+ 
+ // GetResourceName32 will attempt to calculate a meaningful name for a resource given a prefix
+ // Will never return a string longer than 32 chars
+ func GetResourceName32(cluster string, prefix string) string {
+-	panic("excised: GetResourceName32")
++	return prefix + "-" + strings.ReplaceAll(cluster, ".", "-")
+ }
+ 
+ // NameForExternalTargetGroup will attempt to calculate a meaningful name for a target group given an ARN.
+ func NameForExternalTargetGroup(targetGroupARN string) (string, error) {
+-	panic("excised: NameForExternalTargetGroup")
++	i := strings.LastIndex(targetGroupARN, "/")
++	if i == -1 {
++		return "", fmt.Errorf("invalid ARN %q", targetGroupARN)
++	}
++	return targetGroupARN[i+1:], nil
+ }
+ 
+ func IsIAMNoSuchEntityException(err error) bool {
+-	panic("excised: IsIAMNoSuchEntityException")
+-}
++	return err != nil && strings.Contains(err.Error(), "NoSuchEntity")
++}

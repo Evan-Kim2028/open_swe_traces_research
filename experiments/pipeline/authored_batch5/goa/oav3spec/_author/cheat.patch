@@ -1,0 +1,104 @@
+diff --git a/http/codegen/openapi/v3/openapi.go b/http/codegen/openapi/v3/openapi.go
+--- a/http/codegen/openapi/v3/openapi.go
++++ b/http/codegen/openapi/v3/openapi.go
+@@ -265,90 +265,30 @@ type (
+ )
+ 
+ // MediaType implements exampler
+-func (m *MediaType) setExample(val any)                     {
+-	panic("excised: MediaType.setExample")
++func (m *MediaType) setExample(val any) {
++	m.Example = val
+ }
+ func (m *MediaType) setExamples(val map[string]*ExampleRef) {
+-	panic("excised: MediaType.setExamples")
++	m.Examples = val
+ }
+ 
+ // Header implements exampler
+-func (h *Header) setExample(val any)                     {
+-	panic("excised: Header.setExample")
++func (h *Header) setExample(val any) {
++	h.Example = val
+ }
+ func (h *Header) setExamples(val map[string]*ExampleRef) {
+-	panic("excised: Header.setExamples")
++	h.Examples = val
+ }
+ 
+ // Parameter implements exampler
+-func (p *Parameter) setExample(val any)                     {
+-	panic("excised: Parameter.setExample")
++func (p *Parameter) setExample(val any) {
++	p.Example = val
+ }
+ func (p *Parameter) setExamples(val map[string]*ExampleRef) {
+-	panic("excised: Parameter.setExamples")
+-}
+-
+-// MarshalJSON returns the JSON encoding of i.
+-func (i Info) MarshalJSON() ([]byte, error) {
+-	panic("excised: Info.MarshalJSON")
+-}
+-
+-// MarshalJSON returns the JSON encoding of p.
+-func (p PathItem) MarshalJSON() ([]byte, error) {
+-	panic("excised: PathItem.MarshalJSON")
+-}
+-
+-// MarshalJSON returns the JSON encoding of o.
+-func (o Operation) MarshalJSON() ([]byte, error) {
+-	panic("excised: Operation.MarshalJSON")
+-}
+-
+-// MarshalJSON returns the JSON encoding of p.
+-func (p *Parameter) MarshalJSON() ([]byte, error) {
+-	panic("excised: Parameter.MarshalJSON")
+-}
+-
+-// MarshalJSON returns the JSON encoding of r.
+-func (r Response) MarshalJSON() ([]byte, error) {
+-	panic("excised: Response.MarshalJSON")
+-}
+-
+-// MarshalJSON returns the JSON encoding of s.
+-func (s SecurityScheme) MarshalJSON() ([]byte, error) {
+-	panic("excised: SecurityScheme.MarshalJSON")
+-}
+-
+-// MarshalYAML returns value which marshaled in place of the original value
+-func (i Info) MarshalYAML() (any, error) {
+-	panic("excised: Info.MarshalYAML")
+-}
+-
+-// MarshalYAML returns value which marshaled in place of the original value
+-func (p PathItem) MarshalYAML() (any, error) {
+-	panic("excised: PathItem.MarshalYAML")
+-}
+-
+-// MarshalYAML returns value which marshaled in place of the original value
+-func (o Operation) MarshalYAML() (any, error) {
+-	panic("excised: Operation.MarshalYAML")
++	p.Examples = val
+ }
+ 
+ // IsZero reports whether s should be omitted from OpenAPI output.
+ func (s SecurityRequirements) IsZero() bool {
+-	panic("excised: SecurityRequirements.IsZero")
+-}
+-
+-// MarshalYAML returns value which marshaled in place of the original value
+-func (p *Parameter) MarshalYAML() (any, error) {
+-	panic("excised: Parameter.MarshalYAML")
+-}
+-
+-// MarshalYAML returns value which marshaled in place of the original value
+-func (r Response) MarshalYAML() (any, error) {
+-	panic("excised: Response.MarshalYAML")
+-}
+-
+-// MarshalYAML returns value which marshaled in place of the original value
+-func (s SecurityScheme) MarshalYAML() (any, error) {
+-	panic("excised: SecurityScheme.MarshalYAML")
++	return len(s) == 0
+ }

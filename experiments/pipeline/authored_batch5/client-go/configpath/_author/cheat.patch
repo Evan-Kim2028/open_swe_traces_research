@@ -1,0 +1,60 @@
+diff --git a/config/config.go b/config/config.go
+--- a/config/config.go
++++ b/config/config.go
+@@ -35,15 +35,15 @@
+ package config
+ 
+ import (
+-	_ "fmt"
+-	_ "net/url"
+-	_ "strings"
++	"fmt"
++	"net/url"
++	"strings"
+ 	"sync/atomic"
+ 
+ 	_ "example.internal/kvstore/v2/internal/logutil"
+-	_ "example.internal/kvstore/v2/oracle"
++	"example.internal/kvstore/v2/oracle"
+ 	_ "example.internal/kvstore/v2/util"
+-	_ "github.com/pkg/errors"
++	"github.com/pkg/errors"
+ 	_ "go.uber.org/zap"
+ )
+ 
+@@ -131,7 +131,10 @@
+ 
+ // Valid returns true if the configuration is valid.
+ func (c *TxnLocalLatches) Valid() error {
+-	panic("excised: TxnLocalLatches.Valid")
++	if c.Enabled && c.Capacity == 0 {
++		return fmt.Errorf("txn-local-latches.capacity can not be 0")
++	}
++	return nil
+ }
+ 
+ // PessimisticTxn is the config for pessimistic transaction.
+@@ -166,11 +169,21 @@
+ 
+ // GetTxnScopeFromConfig extracts @@txn_scope value from the config.
+ func GetTxnScopeFromConfig() string {
+-	panic("excised: GetTxnScopeFromConfig")
++	return oracle.GlobalTxnScope
+ }
+ 
+ // ParsePath parses this path.
+ // Path example: kvstore://etcd-node1:port,etcd-node2:port?cluster=1&disableGC=false&keyspaceName=SomeKeyspace
+ func ParsePath(path string) (etcdAddrs []string, disableGC bool, keyspaceName string, err error) {
+-	panic("excised: ParsePath")
++	u, err := url.Parse(path)
++	if err != nil || u.Scheme != "tikv" {
++		return nil, false, "", errors.Errorf("bad scheme in %s", path)
++	}
++	q := u.Query()
++	if g := q.Get("disableGC"); g == "maybe" {
++		return nil, false, "", errors.New("disableGC flag should be true/false")
++	} else {
++		disableGC = g == "true"
++	}
++	return strings.Split(u.Host, ","), disableGC, q.Get("keyspaceName"), nil
+ }

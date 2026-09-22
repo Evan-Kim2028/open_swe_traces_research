@@ -1,0 +1,97 @@
+diff --git a/kv/key.go b/kv/key.go
+--- a/kv/key.go
++++ b/kv/key.go
+@@ -35,13 +35,16 @@
+ package kv
+ 
+ import (
+-	_ "bytes"
+-	_ "encoding/hex"
++	"bytes"
++	"encoding/hex"
+ )
+ 
+ // NextKey returns the next key in byte-order.
+ func NextKey(k []byte) []byte {
+-	panic("excised: NextKey")
++	// add 0x0 to the end of key
++	buf := make([]byte, len(k)+1)
++	copy(buf, k)
++	return buf
+ }
+ 
+ // PrefixNextKey returns the next prefix key.
+@@ -56,18 +59,32 @@
+ // If we seek 'rowkey1' NextKey, we will get 'rowkey1_column1'.
+ // If we seek 'rowkey1' PrefixNextKey, we will get 'rowkey2'.
+ func PrefixNextKey(k []byte) []byte {
+-	panic("excised: PrefixNextKey")
++	buf := make([]byte, len(k))
++	copy(buf, k)
++	var i int
++	for i = len(k) - 1; i >= 0; i-- {
++		buf[i]++
++		if buf[i] != 0 {
++			break
++		}
++	}
++	if i == -1 {
++		// Unlike SQLEngine, for the specific key 0xFF
++		// we return empty slice instead of {0xFF, 0x0}
++		buf = make([]byte, 0)
++	}
++	return buf
+ }
+ 
+ // CmpKey returns the comparison result of two key.
+ // The result will be 0 if a==b, -1 if a < b, and +1 if a > b.
+ func CmpKey(k, another []byte) int {
+-	panic("excised: CmpKey")
++	return bytes.Compare(k, another)
+ }
+ 
+ // StrKey returns string for key.
+ func StrKey(k []byte) string {
+-	panic("excised: StrKey")
++	return hex.EncodeToString(k)
+ }
+ 
+ // KeyRange represents a range where StartKey <= key < EndKey.
+diff --git a/kv/store_vars.go b/kv/store_vars.go
+--- a/kv/store_vars.go
++++ b/kv/store_vars.go
+@@ -35,7 +35,7 @@
+ package kv
+ 
+ import (
+-	_ "fmt"
++	"fmt"
+ 
+ 	"go.uber.org/atomic"
+ )
+@@ -72,10 +72,23 @@
+ 
+ // IsFollowerRead checks if follower is going to be used to read data.
+ func (r ReplicaReadType) IsFollowerRead() bool {
+-	panic("excised: ReplicaReadType.IsFollowerRead")
++	return r != ReplicaReadLeader
+ }
+ 
+ // String implements fmt.Stringer interface.
+ func (r ReplicaReadType) String() string {
+-	panic("excised: ReplicaReadType.String")
++	switch r {
++	case ReplicaReadLeader:
++		return "leader"
++	case ReplicaReadFollower:
++		return "follower"
++	case ReplicaReadMixed:
++		return "mixed"
++	case ReplicaReadLearner:
++		return "learner"
++	case ReplicaReadPreferLeader:
++		return "prefer-leader"
++	default:
++		return fmt.Sprintf("unknown-%v", byte(r))
++	}
+ }

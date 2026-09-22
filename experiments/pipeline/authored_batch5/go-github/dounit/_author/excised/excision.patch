@@ -1,0 +1,66 @@
+diff --git a/github/github.go b/github/github.go
+index 5b1fa27..7da05cb 100644
+--- a/github/github.go
++++ b/github/github.go
+@@ -1616,7 +1616,7 @@ func (c *Client) bareDoUntilFound(req *http.Request, maxRedirects int) (*url.URL
+ // If rate limit is exceeded and reset time is in the future, Do returns
+ // *RateLimitError immediately without making a network API call.
+ func (c *Client) Do(req *http.Request, v any) (*Response, error) {
+-	resp, err := c.BareDo(req)
++		resp, err := c.BareDo(req)
+ 	if err != nil {
+ 		return resp, err
+ 	}
+@@ -1634,17 +1634,13 @@ func (c *Client) Do(req *http.Request, v any) (*Response, error) {
+ 		if readErr != nil {
+ 			err = readErr
+ 		} else if respBuf.Len() > 0 {
+-			b := respBuf.Bytes()
+-			decErr := json.Unmarshal(b, v)
+-			if decErr != nil && len(bytes.TrimSpace(b)) == 0 {
+-				decErr = nil // ignore errors caused by whitespace-only response body
+-			}
++			decErr := json.Unmarshal(respBuf.Bytes(), v)
+ 			if decErr != nil {
+ 				err = decErr
+ 			}
+ 		}
+ 	}
+-	return resp, err
++	return resp, err /* excised: Do */
+ }
+ 
+ // checkRateLimitBeforeDo does not make any network calls, but uses existing knowledge from
+diff --git a/github/github_test.go b/github/github_test.go
+index 165a2d9..f36c40e 100644
+--- a/github/github_test.go
++++ b/github/github_test.go
+@@ -3488,28 +3488,6 @@ func TestDo_invalidJSON(t *testing.T) {
+ 	}
+ }
+ 
+-func TestDo_whitespaceOnlyBody(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	type foo struct {
+-		A string
+-	}
+-
+-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "GET")
+-		fmt.Fprint(w, "  \n\t ")
+-	})
+-
+-	req, _ := client.NewRequest(t.Context(), "GET", ".", nil)
+-	var body foo
+-	_, err := client.Do(req, &body)
+-	assertNilError(t, err)
+-
+-	if body.A != "" {
+-		t.Errorf("Response body = %v, want empty foo", body)
+-	}
+-}
+ 
+ func TestDo_nilV_noop(t *testing.T) {
+ 	t.Parallel()

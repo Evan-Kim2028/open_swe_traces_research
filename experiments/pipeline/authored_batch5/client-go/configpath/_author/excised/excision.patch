@@ -1,0 +1,170 @@
+diff --git a/config/config.go b/config/config.go
+--- a/config/config.go
++++ b/config/config.go
+@@ -35,16 +35,16 @@
+ package config
+ 
+ import (
+-	"fmt"
+-	"net/url"
+-	"strings"
++	_ "fmt"
++	_ "net/url"
++	_ "strings"
+ 	"sync/atomic"
+ 
+-	"github.com/pkg/errors"
+-	"example.internal/kvstore/v2/internal/logutil"
+-	"example.internal/kvstore/v2/oracle"
+-	"example.internal/kvstore/v2/util"
+-	"go.uber.org/zap"
++	_ "example.internal/kvstore/v2/internal/logutil"
++	_ "example.internal/kvstore/v2/oracle"
++	_ "example.internal/kvstore/v2/util"
++	_ "github.com/pkg/errors"
++	_ "go.uber.org/zap"
+ )
+ 
+ var (
+@@ -131,10 +131,7 @@
+ 
+ // Valid returns true if the configuration is valid.
+ func (c *TxnLocalLatches) Valid() error {
+-	if c.Enabled && c.Capacity == 0 {
+-		return fmt.Errorf("txn-local-latches.capacity can not be 0")
+-	}
+-	return nil
++	panic("excised: TxnLocalLatches.Valid")
+ }
+ 
+ // PessimisticTxn is the config for pessimistic transaction.
+@@ -169,44 +166,11 @@
+ 
+ // GetTxnScopeFromConfig extracts @@txn_scope value from the config.
+ func GetTxnScopeFromConfig() string {
+-	var txnScope string
+-	if kvcfg := GetGlobalConfig(); kvcfg != nil {
+-		txnScope = kvcfg.TxnScope
+-	}
+-	if val, err := util.EvalFailpoint("injectTxnScope"); err == nil {
+-		txnScope = val.(string)
+-	}
+-	if len(txnScope) > 0 {
+-		return txnScope
+-	}
+-	return oracle.GlobalTxnScope
++	panic("excised: GetTxnScopeFromConfig")
+ }
+ 
+ // ParsePath parses this path.
+ // Path example: kvstore://etcd-node1:port,etcd-node2:port?cluster=1&disableGC=false&keyspaceName=SomeKeyspace
+ func ParsePath(path string) (etcdAddrs []string, disableGC bool, keyspaceName string, err error) {
+-	var u *url.URL
+-	u, err = url.Parse(path)
+-	if err != nil {
+-		err = errors.WithStack(err)
+-		return
+-	}
+-	if strings.ToLower(u.Scheme) != "tikv" {
+-		err = errors.Errorf("Uri scheme expected [kvstore] but found [%s]", u.Scheme)
+-		logutil.BgLogger().Error("parsePath error", zap.Error(err))
+-		return
+-	}
+-
+-	query := u.Query()
+-	keyspaceName = query.Get("keyspaceName")
+-	switch strings.ToLower(query.Get("disableGC")) {
+-	case "true":
+-		disableGC = true
+-	case "false", "":
+-	default:
+-		err = errors.New("disableGC flag should be true/false")
+-		return
+-	}
+-	etcdAddrs = strings.Split(u.Host, ",")
+-	return
++	panic("excised: ParsePath")
+ }
+diff --git a/config/config_test.go b/config/config_test.go
+deleted file mode 100644
+--- a/config/config_test.go
++++ /dev/null
+@@ -1,78 +0,0 @@
+-// Copyright 2021 KVStore Authors
+-//
+-// Licensed under the Apache License, Version 2.0 (the "License");
+-// you may not use this file except in compliance with the License.
+-// You may obtain a copy of the License at
+-//
+-//     http://www.apache.org/licenses/LICENSE-2.0
+-//
+-// Unless required by applicable law or agreed to in writing, software
+-// distributed under the License is distributed on an "AS IS" BASIS,
+-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-// See the License for the specific language governing permissions and
+-// limitations under the License.
+-
+-// NOTE: The code in this file is based on code from the
+-// SQLEngine project, licensed under the Apache License v 2.0
+-//
+-// https://github.com/acme/sqlengine/tree/cc5e161ac06827589c4966674597c137cc9e809c/store/kvstore/config/config_test.go
+-//
+-
+-// Copyright 2017 Acme, Inc.
+-//
+-// Licensed under the Apache License, Version 2.0 (the "License");
+-// you may not use this file except in compliance with the License.
+-// You may obtain a copy of the License at
+-//
+-//     http://www.apache.org/licenses/LICENSE-2.0
+-//
+-// Unless required by applicable law or agreed to in writing, software
+-// distributed under the License is distributed on an "AS IS" BASIS,
+-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-// See the License for the specific language governing permissions and
+-// limitations under the License.
+-
+-package config
+-
+-import (
+-	"testing"
+-
+-	"github.com/pingcap/failpoint"
+-	"github.com/stretchr/testify/assert"
+-)
+-
+-func TestParsePath(t *testing.T) {
+-	etcdAddrs, disableGC, keyspaceName, err := ParsePath("tikv://node1:2379,node2:2379")
+-
+-	assert.Nil(t, err)
+-	assert.Equal(t, []string{"node1:2379", "node2:2379"}, etcdAddrs)
+-	assert.False(t, disableGC)
+-	assert.Empty(t, keyspaceName)
+-
+-	_, _, _, err = ParsePath("tikv://node1:2379")
+-	assert.Nil(t, err)
+-
+-	_, disableGC, keyspaceName, err = ParsePath("tikv://node1:2379?disableGC=true&keyspaceName=DEFAULT")
+-	assert.Nil(t, err)
+-	assert.True(t, disableGC)
+-	assert.Equal(t, "DEFAULT", keyspaceName)
+-}
+-
+-func TestTxnScopeValue(t *testing.T) {
+-	var err error
+-
+-	err = failpoint.Enable("tikvclient/injectTxnScope", `return("bj")`)
+-	assert.Nil(t, err)
+-	assert.Equal(t, "bj", GetTxnScopeFromConfig())
+-
+-	err = failpoint.Enable("tikvclient/injectTxnScope", `return("")`)
+-	assert.Nil(t, err)
+-	assert.Equal(t, "global", GetTxnScopeFromConfig())
+-
+-	err = failpoint.Enable("tikvclient/injectTxnScope", `return("global")`)
+-	assert.Nil(t, err)
+-	assert.Equal(t, "global", GetTxnScopeFromConfig())
+-
+-	err = failpoint.Disable("tikvclient/injectTxnScope")
+-	assert.Nil(t, err)
+-}

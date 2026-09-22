@@ -1,0 +1,185 @@
+diff --git a/server/websocket.go b/server/websocket.go
+--- a/server/websocket.go
++++ b/server/websocket.go
+@@ -15,9 +15,9 @@ package server
+ 
+ import (
+ 	"bytes"
+-	_ "crypto/fips140"
++	"crypto/fips140"
+ 	crand "crypto/rand"
+-	_ "crypto/sha1"
++	"crypto/sha1"
+ 	"crypto/tls"
+ 	"encoding/base64"
+ 	"encoding/binary"
+@@ -107,7 +107,16 @@ var wsGUID = []byte("258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
+ 
+ // Concatenate the key sent by the client with the GUID, then computes the SHA1 hash
+ // and returns it as a based64 encoded string.
+-func wsAcceptKey(key string) string { panic("excised: wsAcceptKey") }
++func wsAcceptKey(key string) string {
++	var r []byte
++	fips140.WithoutEnforcement(func() {
++		h := sha1.New()
++		h.Write([]byte(key))
++		h.Write(wsGUID)
++		r = h.Sum(nil)
++	})
++	return base64.StdEncoding.EncodeToString(r)
++}
+ 
+ // Test can enable this so that server does not support "no-masking" requests.
+ var wsTestRejectNoMasking = false
+@@ -976,9 +985,52 @@ func (s *Server) wsUpgrade(w http.ResponseWriter, r *http.Request) (*wsUpgradeRe
+ }
+ 
+ // Returns true if the header named `name` contains a token with value `value`.
+-func wsHeaderContains(header http.Header, name string, value string) bool { panic("excised: wsHeaderContains") }
++func wsHeaderContains(header http.Header, name string, value string) bool {
++	for _, s := range header[name] {
++		tokens := strings.Split(s, ",")
++		for _, t := range tokens {
++			t = strings.Trim(t, " \t")
++			if strings.EqualFold(t, value) {
++				return true
++			}
++		}
++	}
++	return false
++}
+ 
+-func wsPMCExtensionSupport(header http.Header, checkPMCOnly bool) (bool, bool) { panic("excised: wsPMCExtensionSupport") }
++func wsPMCExtensionSupport(header http.Header, checkPMCOnly bool) (bool, bool) {
++	for _, extensionList := range header["Sec-Websocket-Extensions"] {
++		extensions := strings.Split(extensionList, ",")
++		for _, extension := range extensions {
++			extension = strings.Trim(extension, " \t")
++			params := strings.Split(extension, ";")
++			for i, p := range params {
++				p = strings.Trim(p, " \t")
++				if strings.EqualFold(p, wsPMCExtension) {
++					if checkPMCOnly {
++						return true, false
++					}
++					var snc bool
++					var cnc bool
++					for j := i + 1; j < len(params); j++ {
++						p = params[j]
++						p = strings.Trim(p, " \t")
++						if strings.EqualFold(p, wsPMCSrvNoCtx) {
++							snc = true
++						} else if strings.EqualFold(p, wsPMCCliNoCtx) {
++							cnc = true
++						}
++						if snc && cnc {
++							return true, true
++						}
++					}
++					return true, false
++				}
++			}
++		}
++	}
++	return false, false
++}
+ 
+ // Send an HTTP error with the given `status` to the given http response writer `w`.
+ // Return an error created based on the `reason` string.
+@@ -994,11 +1046,93 @@ func wsReturnHTTPError(w http.ResponseWriter, r *http.Request, status int, reaso
+ // the case if the request does not have the Origin header.
+ // Otherwise, this will check that the Origin matches the same origin or
+ // any origin in the allowed list.
+-func (w *srvWebsocket) checkOrigin(r *http.Request) error { panic("excised: checkOrigin") }
++func (w *srvWebsocket) checkOrigin(r *http.Request) error {
++	w.mu.RLock()
++	checkSame := w.sameOrigin
++	listEmpty := len(w.allowedOrigins) == 0
++	w.mu.RUnlock()
++	if !checkSame && listEmpty {
++		return nil
++	}
++	origin := r.Header.Get("Origin")
++	if origin == _EMPTY_ {
++		origin = r.Header.Get("Sec-Websocket-Origin")
++	}
++	// If the header is not present, we will accept.
++	// From https://datatracker.ietf.org/doc/html/rfc6455#section-1.6
++	// "Naturally, when the WebSocket Protocol is used by a dedicated client
++	// directly (i.e., not from a web page through a web browser), the origin
++	// model is not useful, as the client can provide any arbitrary origin string."
++	if origin == _EMPTY_ {
++		return nil
++	}
++	u, err := url.ParseRequestURI(origin)
++	if err != nil {
++		return err
++	}
++	oh, op, err := wsGetHostAndPort(u.Scheme == "https", u.Host)
++	if err != nil {
++		return err
++	}
++	// If checking same origin, compare with the http's request's Host.
++	if checkSame {
++		rh, rp, err := wsGetHostAndPort(r.TLS != nil, r.Host)
++		if err != nil {
++			return err
++		}
++		rs := "http"
++		if r.TLS != nil {
++			rs = "https"
++		}
++		if oh != rh || op != rp || !strings.EqualFold(u.Scheme, rs) {
++			return errors.New("not same origin")
++		}
++		// I guess it is possible to have cases where one wants to check
++		// same origin, but also that the origin is in the allowed list.
++		// So continue with the next check.
++	}
++	if !listEmpty {
++		w.mu.RLock()
++		origins := w.allowedOrigins[oh]
++		w.mu.RUnlock()
++		var allowed bool
++		for _, ao := range origins {
++			if u.Scheme == ao.scheme && op == ao.port {
++				allowed = true
++				break
++			}
++		}
++		if !allowed {
++			return errors.New("not in the allowed list")
++		}
++	}
++	return nil
++}
+ 
+-func wsGetHostAndPort(tls bool, hostport string) (string, string, error) { panic("excised: wsGetHostAndPort") }
++func wsGetHostAndPort(tls bool, hostport string) (string, string, error) {
++	host, port, err := net.SplitHostPort(hostport)
++	if err != nil {
++		// If error is missing port, then use defaults based on the scheme
++		if ae, ok := err.(*net.AddrError); ok && strings.Contains(ae.Err, "missing port") {
++			err = nil
++			host = hostport
++			if tls {
++				port = "443"
++			} else {
++				port = "80"
++			}
++		}
++	}
++	return strings.ToLower(host), port, err
++}
+ 
+-func wsMakeChallengeKey() (string, error) { panic("excised: wsMakeChallengeKey") }
++func wsMakeChallengeKey() (string, error) {
++	p := make([]byte, 16)
++	if _, err := io.ReadFull(crand.Reader, p); err != nil {
++		return _EMPTY_, err
++	}
++	return base64.StdEncoding.EncodeToString(p), nil
++}
+ 
+ // Validate the websocket related options.
+ func validateWebsocketOptions(o *Options) error {

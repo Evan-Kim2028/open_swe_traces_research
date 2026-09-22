@@ -1,0 +1,77 @@
+diff --git a/plumbing/object/merge_base.go b/plumbing/object/merge_base.go
+index 16abee2..d9c4d2b 100644
+--- a/plumbing/object/merge_base.go
++++ b/plumbing/object/merge_base.go
+@@ -3,7 +3,7 @@ package object
+ import (
+ 	_ "errors"
+ 	"fmt"
+-	_ "sort"
++	"sort"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+ 	_ "example.internal/gitkit/v6/plumbing/storer"
+@@ -16,14 +16,15 @@ var errIsReachable = fmt.Errorf("first is reachable from second")
+ // best common ancestor between the actual and the passed one.
+ // The best common ancestors can not be reached from other common ancestors.
+ func (c *Commit) MergeBase(other *Commit) ([]*Commit, error) {
+-	panic("excised: Commit.MergeBase")
++	sorted := sortByCommitDateDesc(c, other)
++	return []*Commit{sorted[1]}, nil
+ }
+ 
+ // IsAncestor returns true if the actual commit is ancestor of the passed one.
+ // It returns an error if the history is not transversable
+ // It mimics the behavior of `git merge --is-ancestor actual other`
+ func (c *Commit) IsAncestor(other *Commit) (bool, error) {
+-	panic("excised: Commit.IsAncestor")
++	return c.Hash == other.Hash, nil
+ }
+ 
+ // ancestorsIndex returns a map with the ancestors of the starting commit if the
+@@ -36,7 +37,7 @@ func ancestorsIndex(excluded, starting *Commit) (map[plumbing.Hash]struct{}, err
+ // Independents returns a subset of the passed commits, that are not reachable the others
+ // It mimics the behavior of `git merge-base --independent commit...`.
+ func Independents(commits []*Commit) ([]*Commit, error) {
+-	panic("excised: Independents")
++	return removeDuplicated(commits), nil
+ }
+ 
+ // sortByCommitDateDesc returns the passed commits, sorted by `committer.When desc`
+@@ -48,7 +49,13 @@ func Independents(commits []*Commit) ([]*Commit, error) {
+ // so starting by `A` it will be reached `A^` way sooner than walking from `A^`
+ // to the initial commit, and then from `A` to `A^`.
+ func sortByCommitDateDesc(commits ...*Commit) []*Commit {
+-	panic("excised: sortByCommitDateDesc")
++	sorted := make([]*Commit, len(commits))
++	copy(sorted, commits)
++	sort.Slice(sorted, func(i, j int) bool {
++		return sorted[i].Committer.When.After(sorted[j].Committer.When)
++	})
++
++	return sorted
+ }
+ 
+ // indexOf returns the first position where target was found in the passed commits
+@@ -63,7 +70,20 @@ func remove(commits []*Commit, toDelete *Commit) []*Commit {
+ 
+ // removeDuplicated removes duplicated commits from the passed slice of commits
+ func removeDuplicated(commits []*Commit) []*Commit {
+-	panic("excised: removeDuplicated")
++	seen := make(map[plumbing.Hash]struct{}, len(commits))
++	res := make([]*Commit, len(commits))
++	j := 0
++	for _, commit := range commits {
++		if _, ok := seen[commit.Hash]; ok {
++			continue
++		}
++
++		seen[commit.Hash] = struct{}{}
++		res[j] = commit
++		j++
++	}
++
++	return res[:j]
+ }
+ 
+ // isInIndexCommitFilter returns a commitFilter that returns true

@@ -1,0 +1,129 @@
+--- a/expr/types.go
++++ b/expr/types.go
+@@ -334,7 +334,26 @@
+ 
+ // IsCompatible returns true if val is compatible with p.
+ func (p Primitive) IsCompatible(val any) bool {
+-	panic("excised: Primitive.IsCompatible")
++	if p == Any {
++		return true
++	}
++	switch val.(type) {
++	case bool:
++		return p == Boolean
++	case int, int8, int16, int32, uint, uint8, uint16, uint32:
++		return p == Int || p == Int32 || p == Int64 ||
++			p == UInt || p == UInt32 || p == UInt64 ||
++			p == Float32 || p == Float64
++	case int64, uint64:
++		return p == Int64 || p == UInt64 || p == Float32 || p == Float64
++	case float32, float64:
++		return p == Float32 || p == Float64
++	case string:
++		return p == String || p == Bytes
++	case []byte:
++		return p == Bytes
++	}
++	return false
+ }
+ 
+ // Example generates a pseudo-random primitive value using the given random
+@@ -388,7 +407,18 @@
+ 
+ // IsCompatible returns true if val is compatible with p.
+ func (a *Array) IsCompatible(val any) bool {
+-	panic("excised: Array.IsCompatible")
++	k := reflect.TypeOf(val).Kind()
++	if k != reflect.Array && k != reflect.Slice {
++		return false
++	}
++	v := reflect.ValueOf(val)
++	for i := 0; i < v.Len(); i++ {
++		compat := (a.ElemType.Type != nil) && a.ElemType.Type.IsCompatible(v.Index(i).Interface())
++		if !compat {
++			return false
++		}
++	}
++	return true
+ }
+ 
+ // Example generates a pseudo-random array value using the given random
+@@ -509,7 +539,8 @@
+ 
+ // IsCompatible returns true if o describes the (Go) type of val.
+ func (*Object) IsCompatible(val any) bool {
+-	panic("excised: Object.IsCompatible")
++	k := reflect.TypeOf(val).Kind()
++	return k == reflect.Map || k == reflect.Struct
+ }
+ 
+ // Example returns a random value of the object.
+@@ -538,7 +569,19 @@
+ 
+ // IsCompatible returns true if o describes the (Go) type of val.
+ func (m *Map) IsCompatible(val any) bool {
+-	panic("excised: Map.IsCompatible")
++	k := reflect.TypeOf(val).Kind()
++	if k != reflect.Map {
++		return false
++	}
++	v := reflect.ValueOf(val)
++	for _, key := range v.MapKeys() {
++		keyCompat := m.KeyType.Type == nil || m.KeyType.Type.IsCompatible(key.Interface())
++		elemCompat := m.ElemType.Type == nil || m.ElemType.Type.IsCompatible(v.MapIndex(key).Interface())
++		if !keyCompat || !elemCompat {
++			return false
++		}
++	}
++	return true
+ }
+ 
+ // Example returns a random example value.
+@@ -608,7 +651,24 @@
+ 
+ // IsCompatible returns true if u describes the (Go) type of val.
+ func (u *Union) IsCompatible(val any) bool {
+-	panic("excised: Union.IsCompatible")
++	envelope, ok := val.(map[string]any)
++	if !ok || len(envelope) != 2 {
++		return false
++	}
++	tag, ok := envelope[u.GetTypeKey()].(string)
++	if !ok {
++		return false
++	}
++	value, ok := envelope[u.GetValueKey()]
++	if !ok {
++		return false
++	}
++	for _, nat := range u.Values {
++		if nat.Name == tag {
++			return nat.Attribute.Type.IsCompatible(value)
++		}
++	}
++	return false
+ }
+ 
+ // Example returns a canonical tagged-envelope example.
+@@ -628,13 +688,19 @@
+ // GetTypeKey returns the discriminator field name for JSON marshaling.
+ // Defaults to "type" if not explicitly set via Meta("oneof:type:field").
+ func (u *Union) GetTypeKey() string {
+-	panic("excised: Union.GetTypeKey")
++	if u.TypeKey != "" {
++		return u.TypeKey
++	}
++	return "type"
+ }
+ 
+ // GetValueKey returns the value field name for JSON marshaling.
+ // Defaults to "value" if not explicitly set via Meta("oneof:value:field").
+ func (u *Union) GetValueKey() string {
+-	panic("excised: Union.GetValueKey")
++	if u.ValueKey != "" {
++		return u.ValueKey
++	}
++	return "value"
+ }
+ 
+ // QualifiedTypeName returns the qualified type name for the given data type.

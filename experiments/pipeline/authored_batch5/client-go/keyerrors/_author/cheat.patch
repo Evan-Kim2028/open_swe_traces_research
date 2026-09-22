@@ -1,0 +1,74 @@
+diff --git a/error/error.go b/error/error.go
+--- a/error/error.go
++++ b/error/error.go
+@@ -36,7 +36,7 @@
+ 
+ import (
+ 	_ "encoding/hex"
+-	_ "fmt"
++	"fmt"
+ 	"time"
+ 
+ 	_ "example.internal/kvstore/v2/internal/logutil"
+@@ -158,17 +158,25 @@
+ }
+ 
+ func (k *ErrWriteConflict) Error() string {
+-	panic("excised: ErrWriteConflict.Error")
++	return fmt.Sprintf("write conflict { %s }", k.WriteConflict.String())
+ }
+ 
+ // IsErrWriteConflict returns true if it is ErrWriteConflict.
+ func IsErrWriteConflict(err error) bool {
+-	panic("excised: IsErrWriteConflict")
++	var e *ErrWriteConflict
++	return errors.As(err, &e)
+ }
+ 
+ // NewErrWriteConflictWithArgs generates an ErrWriteConflict with args.
+ func NewErrWriteConflictWithArgs(startTs, conflictTs, conflictCommitTs uint64, key []byte, reason kvrpcpb.WriteConflict_Reason) *ErrWriteConflict {
+-	panic("excised: NewErrWriteConflictWithArgs")
++	conflict := kvrpcpb.WriteConflict{
++		StartTs:          startTs,
++		ConflictTs:       conflictTs,
++		Key:              key,
++		ConflictCommitTs: conflictCommitTs,
++		Reason:           reason,
++	}
++	return &ErrWriteConflict{WriteConflict: &conflict}
+ }
+ 
+ // ErrWriteConflictInLatch is the error when the commit meets an write conflict error when local latch is enabled.
+@@ -186,7 +194,7 @@
+ }
+ 
+ func (k *ErrRetryable) Error() string {
+-	panic("excised: ErrRetryable.Error")
++	return k.Retryable
+ }
+ 
+ // ErrTxnTooLarge is the error when transaction is too large, lock time reached the maximum value.
+@@ -195,7 +203,7 @@
+ }
+ 
+ func (e *ErrTxnTooLarge) Error() string {
+-	panic("excised: ErrTxnTooLarge.Error")
++	return fmt.Sprintf("txn too large, size: %v.", e.Size)
+ }
+ 
+ // ErrEntryTooLarge is the error when a key value entry is too large.
+@@ -274,7 +282,13 @@
+ 
+ // ExtractKeyErr extracts a KeyError.
+ func ExtractKeyErr(keyErr *kvrpcpb.KeyError) error {
+-	panic("excised: ExtractKeyErr")
++	if keyErr.Conflict != nil {
++		return errors.WithStack(&ErrWriteConflict{WriteConflict: keyErr.GetConflict()})
++	}
++	if keyErr.Retryable != "" {
++		return errors.WithStack(&ErrRetryable{Retryable: keyErr.Retryable})
++	}
++	return errors.Errorf("unexpected KeyError: %s", keyErr.String())
+ }
+ 
+ // IsErrorUndetermined checks if the error is undetermined error.

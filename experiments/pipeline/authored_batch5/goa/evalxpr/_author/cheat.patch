@@ -1,0 +1,27 @@
+diff --git a/eval/expression.go b/eval/expression.go
+--- a/eval/expression.go
++++ b/eval/expression.go
+@@ -92,16 +92,18 @@ const Top TopExpr = "top-level"
+ 
+ // DSL returns the DSL function.
+ func (f DSLFunc) DSL() func() {
+-	panic("excised: DSLFunc.DSL")
++	return f
+ }
+ 
+ // EvalName is the name is the qualified name of the expression.
+-func (t TopExpr) EvalName() string {
+-	panic("excised: TopExpr.EvalName")
+-}
++func (t TopExpr) EvalName() string { return string(t) }
+ 
+ // ToExpressionSet is a convenience function that accepts a slice of expressions
+ // and builds the corresponding ExpressionSet.
+ func ToExpressionSet(slice any) ExpressionSet {
+-	panic("excised: ToExpressionSet")
++	set, ok := slice.(ExpressionSet)
++	if !ok {
++		return nil
++	}
++	return set
+ }

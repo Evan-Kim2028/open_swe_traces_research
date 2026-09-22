@@ -1,0 +1,658 @@
+diff --git a/server/leafnode.go b/server/leafnode.go
+index e978f10..254e241 100644
+--- a/server/leafnode.go
++++ b/server/leafnode.go
+@@ -2832,17 +2832,7 @@ func (c *client) sendLeafNodeSubUpdate(key string, n int32) {
+ }
+ 
+ // Helper function to build the key.
+-func keyFromSub(sub *subscription) string {
+-	var sb strings.Builder
+-	sb.Grow(len(sub.subject) + len(sub.queue) + 1)
+-	sb.Write(sub.subject)
+-	if sub.queue != nil {
+-		// Just make the key subject spc group, e.g. 'foo bar'
+-		sb.WriteByte(' ')
+-		sb.Write(sub.queue)
+-	}
+-	return sb.String()
+-}
++func keyFromSub(sub *subscription) string { panic("excised: keyFromSub") }
+ 
+ const (
+ 	keyRoutedSub                 = "R"
+@@ -2862,29 +2852,7 @@ const (
+ // "N foo bar"      -> queue routed leaf sub on "foo", queue "bar", without an origin
+ // "L foo bar"      -> plain routed leaf sub on "foo", leaf "bar"
+ // "L foo bar baz"  -> queue routed sub on "foo", queue "bar", leaf "baz"
+-func keyFromSubWithOrigin(sub *subscription) string {
+-	var sb strings.Builder
+-	sb.Grow(2 + len(sub.origin) + 1 + len(sub.subject) + 1 + len(sub.queue))
+-	hasOrigin := len(sub.origin) > 0
+-	if hasOrigin {
+-		sb.WriteByte(keyRoutedLeafSubByte)
+-	} else if sub.leaf {
+-		sb.WriteByte(keyRoutedLeafNoOriginSubByte)
+-	} else {
+-		sb.WriteByte(keyRoutedSubByte)
+-	}
+-	sb.WriteByte(' ')
+-	sb.Write(sub.subject)
+-	if sub.queue != nil {
+-		sb.WriteByte(' ')
+-		sb.Write(sub.queue)
+-	}
+-	if hasOrigin {
+-		sb.WriteByte(' ')
+-		sb.Write(sub.origin)
+-	}
+-	return sb.String()
+-}
++func keyFromSubWithOrigin(sub *subscription) string { panic("excised: keyFromSubWithOrigin") }
+ 
+ // Lock should be held.
+ func (c *client) writeLeafSub(w *bytes.Buffer, key string, n int32) {
+@@ -3134,167 +3102,9 @@ func (c *client) processLeafUnsub(arg []byte) error {
+ 	return nil
+ }
+ 
+-func (c *client) processLeafHeaderMsgArgs(arg []byte) error {
+-	// Unroll splitArgs to avoid runtime/heap issues
+-	args := c.argsa[:0]
+-	start := -1
+-	for i, b := range arg {
+-		switch b {
+-		case ' ', '\t', '\r', '\n':
+-			if start >= 0 {
+-				args = append(args, arg[start:i])
+-				start = -1
+-			}
+-		default:
+-			if start < 0 {
+-				start = i
+-			}
+-		}
+-	}
+-	if start >= 0 {
+-		args = append(args, arg[start:])
+-	}
++func (c *client) processLeafHeaderMsgArgs(arg []byte) error { panic("excised: processLeafHeaderMsgArgs") }
+ 
+-	c.pa.arg = arg
+-	switch len(args) {
+-	case 0, 1, 2:
+-		return fmt.Errorf("processLeafHeaderMsgArgs Parse Error: '%s'", args)
+-	case 3:
+-		c.pa.reply = nil
+-		c.pa.queues = nil
+-		c.pa.hdb = args[1]
+-		c.pa.hdr = parseSize(args[1])
+-		c.pa.szb = args[2]
+-		c.pa.size = parseSize(args[2])
+-	case 4:
+-		c.pa.reply = args[1]
+-		c.pa.queues = nil
+-		c.pa.hdb = args[2]
+-		c.pa.hdr = parseSize(args[2])
+-		c.pa.szb = args[3]
+-		c.pa.size = parseSize(args[3])
+-	default:
+-		// args[1] is our reply indicator. Should be + or | normally.
+-		if len(args[1]) != 1 {
+-			return fmt.Errorf("processLeafHeaderMsgArgs Bad or Missing Reply Indicator: '%s'", args[1])
+-		}
+-		switch args[1][0] {
+-		case '+':
+-			c.pa.reply = args[2]
+-		case '|':
+-			c.pa.reply = nil
+-		default:
+-			return fmt.Errorf("processLeafHeaderMsgArgs Bad or Missing Reply Indicator: '%s'", args[1])
+-		}
+-		// Grab header size.
+-		c.pa.hdb = args[len(args)-2]
+-		c.pa.hdr = parseSize(c.pa.hdb)
+-
+-		// Grab size.
+-		c.pa.szb = args[len(args)-1]
+-		c.pa.size = parseSize(c.pa.szb)
+-
+-		// Grab queue names.
+-		if c.pa.reply != nil {
+-			c.pa.queues = args[3 : len(args)-2]
+-		} else {
+-			c.pa.queues = args[2 : len(args)-2]
+-		}
+-	}
+-	if c.pa.hdr < 0 {
+-		return fmt.Errorf("processLeafHeaderMsgArgs Bad or Missing Header Size: '%s'", arg)
+-	}
+-	if c.pa.size < 0 {
+-		return fmt.Errorf("processLeafHeaderMsgArgs Bad or Missing Size: '%s'", args)
+-	}
+-	if c.pa.hdr > c.pa.size {
+-		return fmt.Errorf("processLeafHeaderMsgArgs Header Size larger then TotalSize: '%s'", arg)
+-	}
+-	maxPayload := atomic.LoadInt32(&c.mpay)
+-	if maxPayload != jwt.NoLimit && int64(c.pa.size) > int64(maxPayload) {
+-		c.maxPayloadViolation(c.pa.size, maxPayload)
+-		return ErrMaxPayload
+-	}
+-
+-	// Common ones processed after check for arg length
+-	c.pa.subject = args[0]
+-
+-	return nil
+-}
+-
+-func (c *client) processLeafMsgArgs(arg []byte) error {
+-	// Unroll splitArgs to avoid runtime/heap issues
+-	args := c.argsa[:0]
+-	start := -1
+-	for i, b := range arg {
+-		switch b {
+-		case ' ', '\t', '\r', '\n':
+-			if start >= 0 {
+-				args = append(args, arg[start:i])
+-				start = -1
+-			}
+-		default:
+-			if start < 0 {
+-				start = i
+-			}
+-		}
+-	}
+-	if start >= 0 {
+-		args = append(args, arg[start:])
+-	}
+-
+-	c.pa.arg = arg
+-	switch len(args) {
+-	case 0, 1:
+-		return fmt.Errorf("processLeafMsgArgs Parse Error: '%s'", args)
+-	case 2:
+-		c.pa.reply = nil
+-		c.pa.queues = nil
+-		c.pa.szb = args[1]
+-		c.pa.size = parseSize(args[1])
+-	case 3:
+-		c.pa.reply = args[1]
+-		c.pa.queues = nil
+-		c.pa.szb = args[2]
+-		c.pa.size = parseSize(args[2])
+-	default:
+-		// args[1] is our reply indicator. Should be + or | normally.
+-		if len(args[1]) != 1 {
+-			return fmt.Errorf("processLeafMsgArgs Bad or Missing Reply Indicator: '%s'", args[1])
+-		}
+-		switch args[1][0] {
+-		case '+':
+-			c.pa.reply = args[2]
+-		case '|':
+-			c.pa.reply = nil
+-		default:
+-			return fmt.Errorf("processLeafMsgArgs Bad or Missing Reply Indicator: '%s'", args[1])
+-		}
+-		// Grab size.
+-		c.pa.szb = args[len(args)-1]
+-		c.pa.size = parseSize(c.pa.szb)
+-
+-		// Grab queue names.
+-		if c.pa.reply != nil {
+-			c.pa.queues = args[3 : len(args)-1]
+-		} else {
+-			c.pa.queues = args[2 : len(args)-1]
+-		}
+-	}
+-	if c.pa.size < 0 {
+-		return fmt.Errorf("processLeafMsgArgs Bad or Missing Size: '%s'", args)
+-	}
+-	maxPayload := atomic.LoadInt32(&c.mpay)
+-	if maxPayload != jwt.NoLimit && int64(c.pa.size) > int64(maxPayload) {
+-		c.maxPayloadViolation(c.pa.size, maxPayload)
+-		return ErrMaxPayload
+-	}
+-
+-	// Common ones processed after check for arg length
+-	c.pa.subject = args[0]
+-
+-	return nil
+-}
++func (c *client) processLeafMsgArgs(arg []byte) error { panic("excised: processLeafMsgArgs") }
+ 
+ // processInboundLeafMsg is called to process an inbound msg from a leaf node.
+ func (c *client) processInboundLeafMsg(msg []byte) {
+diff --git a/server/leafnode_test.go b/server/leafnode_test.go
+index be14727..500d247 100644
+--- a/server/leafnode_test.go
++++ b/server/leafnode_test.go
+@@ -5742,213 +5742,6 @@ func TestLeafNodeQueueWeightCorrectOnRestart(t *testing.T) {
+ 	checkQueueWeight()
+ }
+ 
+-func TestLeafNodeRoutedSubKeyDifferentBetweenLeafSubAndRoutedSub(t *testing.T) {
+-	for _, test := range []struct {
+-		name          string
+-		pinnedAccount string
+-		lnocu         bool
+-	}{
+-		{"without pinned account", _EMPTY_, true},
+-		{"with pinned account", "accounts: [\"XYZ\"]", true},
+-		{"old server without pinned account", _EMPTY_, false},
+-		{"old server with pinned account", "accounts: [\"XYZ\"]", false},
+-	} {
+-		t.Run(test.name, func(t *testing.T) {
+-			leafBConf := `
+-				accounts: {XYZ {users:[{user:a, password:pwd}]}}
+-				server_name: %s
+-				listen: "127.0.0.1:-1"
+-				cluster {
+-					name: HUB
+-					listen: "127.0.0.1:-1"
+-					%s
+-					%s
+-				}
+-				leafnodes {
+-					listen: "127.0.0.1:-1"
+-					no_advertise: true
+-				}
+-			`
+-			b1Conf := createConfFile(t, []byte(fmt.Sprintf(leafBConf, "B1", _EMPTY_, test.pinnedAccount)))
+-			b1, b1Opts := RunServerWithConfig(b1Conf)
+-			defer b1.Shutdown()
+-
+-			b2Conf := createConfFile(t, []byte(fmt.Sprintf(leafBConf, "B2",
+-				fmt.Sprintf("routes: [\"nats://127.0.0.1:%d\"]", b1Opts.Cluster.Port), test.pinnedAccount)))
+-			b2, b2Opts := RunServerWithConfig(b2Conf)
+-			defer b2.Shutdown()
+-
+-			checkClusterFormed(t, b1, b2)
+-
+-			// To make route connections behave like if the server was connected
+-			// to an older server, change the routes' lnocu field.
+-			if !test.lnocu {
+-				for _, s := range []*Server{b1, b2} {
+-					s.mu.RLock()
+-					s.forEachRoute(func(r *client) {
+-						r.mu.Lock()
+-						r.route.lnocu = false
+-						r.mu.Unlock()
+-					})
+-					s.mu.RUnlock()
+-				}
+-			}
+-
+-			// This leaf will have a cluster name that matches an account name.
+-			// The idea is to make sure that hub servers are not using incorrect
+-			// keys to differentiate a routed queue interest on subject "A" with
+-			// queue name "foo" for account "A"  in their cluster: "RS+ A A foo"
+-			// with a leafnode plain subscription, which since there is an origin
+-			// would be: "LS+ A A foo", that is, origin is "A", account is "A"
+-			// and subject is "foo".
+-			leafAConf := `
+-				accounts: {XYZ {users:[{user:a, password:pwd}]}}
+-				server_name: LEAF
+-				listen: "127.0.0.1:-1"
+-				cluster {
+-					name: XYZ
+-					listen: "127.0.0.1:-1"
+-				}
+-				leafnodes {
+-					remotes: [
+-						{
+-							url: "nats://a:pwd@127.0.0.1:%d"
+-							account: "XYZ"
+-						}
+-					]
+-				}
+-			`
+-			aConf := createConfFile(t, []byte(fmt.Sprintf(leafAConf, b2Opts.LeafNode.Port)))
+-			a, _ := RunServerWithConfig(aConf)
+-			defer a.Shutdown()
+-
+-			checkLeafNodeConnected(t, b2)
+-			checkLeafNodeConnected(t, a)
+-
+-			ncB2 := natsConnect(t, b2.ClientURL(), nats.UserInfo("a", "pwd"))
+-			defer ncB2.Close()
+-			// Create a plain sub on "foo"
+-			natsSubSync(t, ncB2, "foo")
+-			// And a queue sub on "XYZ" with queue name "foo"
+-			natsQueueSubSync(t, ncB2, "XYZ", "foo")
+-			natsFlush(t, ncB2)
+-
+-			ncA := natsConnect(t, a.ClientURL(), nats.UserInfo("a", "pwd"))
+-			defer ncA.Close()
+-			// From the leafnode, create a plain sub on "foo"
+-			natsSubSync(t, ncA, "foo")
+-			// And a queue sub on "XYZ" with queue name "foo"
+-			natsQueueSubSync(t, ncA, "XYZ", "foo")
+-			natsFlush(t, ncA)
+-
+-			// Check the acc.rm on B2
+-			b2Acc, err := b2.LookupAccount("XYZ")
+-			require_NoError(t, err)
+-
+-			rsubKey := keyFromSubWithOrigin(&subscription{subject: []byte("foo")})
+-			rqsubKey := keyFromSubWithOrigin(&subscription{subject: []byte("XYZ"), queue: []byte("foo")})
+-			rlsubKey := keyFromSubWithOrigin(&subscription{origin: []byte("XYZ"), subject: []byte("foo")})
+-			rlqsubKey := keyFromSubWithOrigin(&subscription{origin: []byte("XYZ"), subject: []byte("XYZ"), queue: []byte("foo")})
+-			// Ensure all keys are different
+-			require_True(t, rsubKey != rqsubKey && rqsubKey != rlsubKey && rlsubKey != rlqsubKey)
+-
+-			checkFor(t, time.Second, 10*time.Millisecond, func() error {
+-				b2Acc.mu.RLock()
+-				defer b2Acc.mu.RUnlock()
+-				for _, key := range []string{rsubKey, rqsubKey, rlsubKey, rlqsubKey} {
+-					v, ok := b2Acc.rm[key]
+-					if !ok {
+-						return fmt.Errorf("Did not find key %q for sub: %+v", key, sub)
+-					}
+-					if v != 1 {
+-						return fmt.Errorf("Key %q v=%v for sub: %+v", key, v, sub)
+-					}
+-				}
+-				return nil
+-			})
+-
+-			// Now check that on B1, we have 2 distinct subs for the route.
+-			b1Acc, err := b1.LookupAccount("XYZ")
+-			require_NoError(t, err)
+-
+-			var route *client
+-
+-			if test.pinnedAccount == _EMPTY_ {
+-				b1Acc.mu.RLock()
+-				rIdx := b1Acc.routePoolIdx
+-				b1Acc.mu.RUnlock()
+-				b1.mu.RLock()
+-				b1.forEachRouteIdx(rIdx, func(r *client) bool {
+-					route = r
+-					return false
+-				})
+-				b1.mu.RUnlock()
+-			} else {
+-				b1.mu.RLock()
+-				remotes := b1.accRoutes["XYZ"]
+-				for _, r := range remotes {
+-					route = r
+-					break
+-				}
+-				b1.mu.RUnlock()
+-			}
+-
+-			checkFor(t, time.Second, 10*time.Millisecond, func() error {
+-				// Check that route.subs has 4 entries for the subs we
+-				// created in this test.
+-				var entries []string
+-				route.mu.Lock()
+-				for key := range route.subs {
+-					if strings.Contains(key, "foo") {
+-						entries = append(entries, key)
+-					}
+-				}
+-				route.mu.Unlock()
+-				// With new servers, we expect 4 entries, but with older servers,
+-				// we have collisions and have only 2.
+-				var expected int
+-				if test.lnocu {
+-					expected = 4
+-				} else {
+-					expected = 2
+-				}
+-				if len(entries) != expected {
+-					return fmt.Errorf("Expected %d entries with %q, got this: %q", expected, "foo", entries)
+-				}
+-				return nil
+-			})
+-
+-			// Close the connections and expect all gone.
+-			ncB2.Close()
+-			ncA.Close()
+-
+-			checkFor(t, time.Second, 10*time.Millisecond, func() error {
+-				b2Acc.mu.RLock()
+-				defer b2Acc.mu.RUnlock()
+-				for _, key := range []string{rsubKey, rqsubKey, rlsubKey, rlqsubKey} {
+-					if _, ok := b2Acc.rm[key]; ok {
+-						return fmt.Errorf("Key %q still present", key)
+-					}
+-				}
+-				return nil
+-			})
+-			checkFor(t, time.Second, 10*time.Millisecond, func() error {
+-				var entries []string
+-				route.mu.Lock()
+-				for key := range route.subs {
+-					if strings.Contains(key, "foo") {
+-						entries = append(entries, key)
+-					}
+-				}
+-				route.mu.Unlock()
+-				if len(entries) != 0 {
+-					return fmt.Errorf("Still routed subscriptions on %q: %q", "foo", entries)
+-				}
+-				return nil
+-			})
+-		})
+-	}
+-}
+ 
+ func TestLeafNodeQueueGroupWithLateLNJoin(t *testing.T) {
+ 	/*
+diff --git a/server/parser_test.go b/server/parser_test.go
+index ade064e..20ff3e0 100644
+--- a/server/parser_test.go
++++ b/server/parser_test.go
+@@ -313,21 +313,7 @@ func TestParsePubBadSize(t *testing.T) {
+ 	}
+ }
+ 
+-func TestParseLeafMsgBadSize(t *testing.T) {
+-	c := dummyClient()
+-	c.kind = LEAF
+-	c.leaf = &leaf{}
+-	c.mpay = 16
+-	require_Error(t, c.processLeafMsgArgs([]byte("foo 17")), ErrMaxPayload)
+-}
+ 
+-func TestParseLeafHeaderMsgBadSize(t *testing.T) {
+-	c := dummyClient()
+-	c.kind = LEAF
+-	c.leaf = &leaf{}
+-	c.mpay = 16
+-	require_Error(t, c.processLeafHeaderMsgArgs([]byte("foo 4 17")), ErrMaxPayload)
+-}
+ 
+ func TestParseHeaderPub(t *testing.T) {
+ 	c := dummyClient()
+diff --git a/server/routes_test.go b/server/routes_test.go
+index 2e4b3d8..add5e95 100644
+--- a/server/routes_test.go
++++ b/server/routes_test.go
+@@ -1612,71 +1612,6 @@ func TestSubjectRenameViaJetStreamAck(t *testing.T) {
+ 	}
+ }
+ 
+-func TestClusterQueueGroupWeightTrackingLeak(t *testing.T) {
+-	o := DefaultOptions()
+-	o.ServerName = "A"
+-	s := RunServer(o)
+-	defer s.Shutdown()
+-
+-	o2 := DefaultOptions()
+-	o2.ServerName = "B"
+-	o2.Routes = RoutesFromStr(fmt.Sprintf("nats://127.0.0.1:%d", o.Cluster.Port))
+-	s2 := RunServer(o2)
+-	defer s2.Shutdown()
+-
+-	nc := natsConnect(t, s.ClientURL())
+-	defer nc.Close()
+-
+-	// Create a queue subscription
+-	sub := natsQueueSubSync(t, nc, "foo", "bar")
+-
+-	// Check on s0 that we have the proper queue weight info
+-	acc := s.GlobalAccount()
+-
+-	check := func(present bool, expected int32) {
+-		t.Helper()
+-		sub := subscription{subject: []byte("foo"), queue: []byte("bar")}
+-		key := keyFromSubWithOrigin(&sub)
+-		checkFor(t, time.Second, 15*time.Millisecond, func() error {
+-			acc.mu.RLock()
+-			v, ok := acc.lws[key]
+-			acc.mu.RUnlock()
+-			if present {
+-				if !ok {
+-					return fmt.Errorf("the key is not present")
+-				}
+-				if v != expected {
+-					return fmt.Errorf("lws does not contain expected value of %v: %v", expected, v)
+-				}
+-			} else if ok {
+-				return fmt.Errorf("the key is present with value %v and should not be", v)
+-			}
+-			return nil
+-		})
+-	}
+-	check(true, 1)
+-
+-	// Now unsub, and it should be removed, not just be 0
+-	sub.Unsubscribe()
+-	check(false, 0)
+-
+-	// Still make sure that the subject interest is gone from both servers.
+-	checkSubGone := func(s *Server) {
+-		t.Helper()
+-		checkFor(t, time.Second, 15*time.Millisecond, func() error {
+-			acc := s.GlobalAccount()
+-			acc.mu.RLock()
+-			res := acc.sl.Match("foo")
+-			acc.mu.RUnlock()
+-			if res != nil && len(res.qsubs) > 0 {
+-				return fmt.Errorf("Found queue sub on foo for server %v", s)
+-			}
+-			return nil
+-		})
+-	}
+-	checkSubGone(s)
+-	checkSubGone(s2)
+-}
+ 
+ type testRouteReconnectLogger struct {
+ 	DummyLogger
+@@ -5550,113 +5485,6 @@ func TestRoutePoolFirstPongBlocksChain(t *testing.T) {
+ 	}
+ }
+ 
+-// https://github.com/msgkit/msgkit-server/issues/8233
+-func TestRouteSubUnsubRaceLosesRemoteInterest(t *testing.T) {
+-	oa := DefaultOptions()
+-	sa := RunServer(oa)
+-	defer sa.Shutdown()
+-
+-	ob := DefaultOptions()
+-	ob.Routes = RoutesFromStr(fmt.Sprintf("nats://127.0.0.1:%d", oa.Cluster.Port))
+-	sb := RunServer(ob)
+-	defer sb.Shutdown()
+-
+-	checkClusterFormed(t, sa, sb)
+-
+-	// A client on node B, used to confirm the user-visible symptom: a request to
+-	// the subject gets "no responders" even though a live responder exists on A.
+-	ncReq := natsConnect(t, sb.ClientURL())
+-	defer ncReq.Close()
+-
+-	// Many subjects raced at once so they all contend the same global-account
+-	// acc.mu and the single pinned A->B route.mu.
+-	const (
+-		conns = 100
+-		waves = 10
+-	)
+-
+-	// Connection pools, reused across waves. ncMinus owns the original subscription
+-	// that gets removed, ncPlus adds the new responder that must survive. They are
+-	// distinct connections so their operations run on different readLoop goroutines
+-	// on node A and can race.
+-	ncMinus := make([]*nats.Conn, conns)
+-	ncPlus := make([]*nats.Conn, conns)
+-	for i := 0; i < conns; i++ {
+-		ncMinus[i] = natsConnect(t, sa.ClientURL())
+-		defer ncMinus[i].Close()
+-		ncPlus[i] = natsConnect(t, sa.ClientURL())
+-		defer ncPlus[i].Close()
+-	}
+-
+-	accB := sb.globalAccount()
+-	for w := range waves {
+-		subjects := make([]string, conns)
+-		minusSubs := make([]*nats.Subscription, conns)
+-		for i := range conns {
+-			subjects[i] = fmt.Sprintf("foo.%d.%d", w, i)
+-			// Original interest, mirrored to B via RS+. This is the "live"
+-			// subscription on B that makes the reordered RS+ a no-op.
+-			minusSubs[i] = natsSubSync(t, ncMinus[i], subjects[i])
+-		}
+-		for i := range conns {
+-			natsFlush(t, ncMinus[i])
+-		}
+-		// Make sure B sees all of the original interest before we start, so its
+-		// route already tracks each key.
+-		for i := range conns {
+-			checkSubInterest(t, sb, globalAccountName, subjects[i], 5*time.Second)
+-		}
+-
+-		// Fire the wave: for each subject, simultaneously remove the original
+-		// interest (-1) and add a replacement responder (+1) on node A.
+-		start := make(chan struct{})
+-		var wg sync.WaitGroup
+-		wg.Add(2 * conns)
+-		for i := range conns {
+-			go func() {
+-				defer wg.Done()
+-				<-start
+-				minusSubs[i].Unsubscribe()
+-				ncMinus[i].Flush()
+-			}()
+-			go func() {
+-				defer wg.Done()
+-				<-start
+-				ncPlus[i].Subscribe(subjects[i], func(m *nats.Msg) {
+-					m.Respond([]byte("ok"))
+-				})
+-				ncPlus[i].Flush()
+-			}()
+-		}
+-		close(start)
+-		wg.Wait()
+-
+-		// Barrier: subscribe a marker on the same (pinned) route and wait for B
+-		// to observe it. Because all of the wave's RS+/RS- protos were enqueued
+-		// on that same route connection before this one, FIFO ordering
+-		// guarantees that once B has the marker it has processed every proto
+-		// from the wave.
+-		marker := fmt.Sprintf("marker.%d", w)
+-		natsSubSync(t, ncPlus[0], marker)
+-		natsFlush(t, ncPlus[0])
+-		checkSubInterest(t, sb, globalAccountName, marker, 5*time.Second)
+-
+-		// Every subject still has a live local responder on A (the ncPlus sub),
+-		// so B must still have interest. If the race fired, B silently lost it.
+-		for i := range conns {
+-			if accB.SubscriptionInterest(subjects[i]) {
+-				continue
+-			}
+-			// Confirm the exact reported symptom: a request from a client on B
+-			// gets "no responders" although A has a live responder.
+-			_, rerr := ncReq.Request(subjects[i], []byte("ping"), time.Second)
+-			t.Fatalf("wave %d: node B lost interest in %q while node A still has a "+
+-				"live local responder; request from B returned %v (want a reply). "+
+-				"RS+/RS- were reordered on the A->B route by the "+
+-				"updateRouteSubscriptionMap race", w, subjects[i], rerr)
+-		}
+-	}
+-}
+ 
+ // Benchmarks for message arg processing functions to measure heap allocations.
+ // These functions parse incoming protocol messages and split arguments.

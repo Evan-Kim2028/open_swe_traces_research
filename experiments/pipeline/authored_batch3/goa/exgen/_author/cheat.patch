@@ -1,0 +1,256 @@
+--- a/expr/example.go
++++ b/expr/example.go
+@@ -4,12 +4,11 @@
+ package expr
+ 
+ import (
+-	_ "fmt"
+-	_ "math"
+-	_ "regexp"
++	"fmt"
++	"regexp"
+ 	"regexp/syntax"
+-	_ "strings"
+-	_ "time"
++	"strings"
++	"time"
+ )
+ 
+ const (
+@@ -21,69 +20,221 @@
+ // isn't such a value then Example computes a random value for the attribute
+ // using the given random value producer.
+ func (a *AttributeExpr) Example(r *ExampleGenerator) any {
+-	panic("excised: AttributeExpr.Example")
++	if r.factory == nil {
++		return nil
++	}
++	if ex := a.ExtractUserExamples(); len(ex) > 0 {
++		return ex[len(ex)-1].Value
++	}
++	value, ok := a.Meta.Last("openapi:example")
++	if !ok {
++		value, ok = a.Meta.Last("swagger:example")
++	}
++	if ok && value == "false" {
++		return nil
++	}
++	if hasLengthValidation(a) {
++		return byLength(a, r)
++	}
++	if hasEnumValidation(a) {
++		return byEnum(a, r)
++	}
++	if hasFormatValidation(a) {
++		if example := byFormat(a, r); example != nil {
++			return example
++		}
++	}
++	if hasPatternValidation(a) {
++		return byPattern(a, r)
++	}
++	if hasMinMaxValidation(a) {
++		return byMinMax(a, r)
++	}
++	return a.Type.Example(r)
+ }
+ 
+ // NewLength returns an int that validates the generator attribute length
+ // validations if any.
+ func NewLength(a *AttributeExpr, r *ExampleGenerator) int {
+-	panic("excised: NewLength")
++	if hasLengthValidation(a) {
++		if a.Validation.MinLength != nil {
++			return *a.Validation.MinLength + r.Int()%3
++		}
++		if a.Validation.MaxLength != nil {
++			return *a.Validation.MaxLength - r.Int()%3
++		}
++	}
++	return r.ArrayLength()
+ }
+ 
+ func hasLengthValidation(a *AttributeExpr) bool {
+-	panic("excised: hasLengthValidation")
++	if a.Validation == nil {
++		return false
++	}
++	return a.Validation.MinLength != nil || a.Validation.MaxLength != nil
+ }
+ 
+ func hasEnumValidation(a *AttributeExpr) bool {
+-	panic("excised: hasEnumValidation")
++	return a.Validation != nil && len(a.Validation.Values) > 0
+ }
+ 
+ func hasFormatValidation(a *AttributeExpr) bool {
+-	panic("excised: hasFormatValidation")
++	return a.Validation != nil && a.Validation.Format != ""
+ }
+ 
+ func hasPatternValidation(a *AttributeExpr) bool {
+-	panic("excised: hasPatternValidation")
++	return a.Validation != nil && a.Validation.Pattern != ""
+ }
+ 
+ func hasMinMaxValidation(a *AttributeExpr) bool {
+-	panic("excised: hasMinMaxValidation")
++	if a.Validation == nil {
++		return false
++	}
++	return a.Validation.Minimum != nil || a.Validation.Maximum != nil
+ }
+ 
+ // byLength generates a random size array of examples based on what's given.
+ func byLength(a *AttributeExpr, r *ExampleGenerator) any {
+-	panic("excised: byLength")
++	count := NewLength(a, r)
++	switch a.Type.Kind() {
++	case StringKind:
++		return r.Characters(count)
++	case BytesKind:
++		return []byte(r.Characters(count))
++	case ArrayKind:
++		raw := make([]any, count)
++		ar := a.Type.(*Array)
++		for i := range count {
++			raw[i] = ar.ElemType.Example(r.ArrayElement(i))
++		}
++		return ar.MakeSlice(raw)
++	default:
++		return a.Type.Example(r)
++	}
+ }
+ 
+ // byEnum returns a random selected enum value.
+ func byEnum(a *AttributeExpr, r *ExampleGenerator) any {
+-	panic("excised: byEnum")
++	if !hasEnumValidation(a) {
++		return nil
++	}
++	values := a.Validation.Values
++	return values[r.Int()%len(values)]
+ }
+ 
+ // byFormat returns a random example based on the format the user asks.
+ func byFormat(a *AttributeExpr, r *ExampleGenerator) any {
+-	panic("excised: byFormat")
++	if !hasFormatValidation(a) {
++		return nil
++	}
++	format := a.Validation.Format
++	if res, ok := map[ValidationFormat]any{
++		FormatEmail:    r.Email(),
++		FormatDate:     time.Unix(int64(r.Int())%1454957045, 0).UTC().Format(time.DateOnly),
++		FormatDateTime: time.Unix(int64(r.Int())%1454957045, 0).UTC().Format(time.RFC3339),
++		FormatIPv4:     r.IPv4Address().String(),
++		FormatURI:      r.URL(),
++		FormatUUID:     r.UUID(),
++	}[format]; ok {
++		return res
++	}
++	return r.Name()
+ }
+ 
+ // byPattern generates a random value that satisfies the pattern.
+ //
+ // Note: if multiple patterns are given, only one of them is used.
+ func byPattern(a *AttributeExpr, r *ExampleGenerator) any {
+-	panic("excised: byPattern")
++	if !hasPatternValidation(a) {
++		return false
++	}
++	pattern := a.Validation.Pattern
++	re, err := syntax.Parse(pattern, syntax.Perl)
++	if err != nil {
++		return r.Name()
++	}
++	return patgen(re.Simplify(), r)
+ }
+ 
+ func patgen(re *syntax.Regexp, r *ExampleGenerator) string {
+-	panic("excised: patgen")
++	switch re.Op {
++	case syntax.OpLiteral:
++		return string(re.Rune)
++	case syntax.OpCapture:
++		return patgen(re.Sub[0], r)
++	case syntax.OpConcat:
++		var res strings.Builder
++		for _, sub := range re.Sub {
++			res.WriteString(patgen(sub, r))
++		}
++		return res.String()
++	case syntax.OpStar, syntax.OpPlus:
++		var res strings.Builder
++		count := r.Int()%2 + 1
++		for range count {
++			res.WriteString(patgen(re.Sub[0], r))
++		}
++		return res.String()
++	default:
++		return r.Characters(3)
++	}
+ }
+ 
+ func byMinMax(a *AttributeExpr, r *ExampleGenerator) any {
+-	panic("excised: byMinMax")
++	if !hasMinMaxValidation(a) {
++		return nil
++	}
++	var minimum float64
++	if a.Validation.Minimum != nil {
++		minimum = *a.Validation.Minimum
++	}
++	if a.Validation.Maximum != nil && *a.Validation.Maximum > minimum {
++		delta := *a.Validation.Maximum - minimum
++		switch a.Type.Kind() {
++		case IntKind:
++			return r.Int()%int(delta) + int(minimum)
++		case Int64Kind:
++			return r.Int64()%int64(delta) + int64(minimum)
++		case Float64Kind:
++			return r.Float64()*delta + minimum
++		}
++	}
++	switch a.Type.Kind() {
++	case IntKind:
++		return int(minimum)
++	case Int64Kind:
++		return int64(minimum)
++	case Float64Kind:
++		return minimum
++	default:
++		return minimum
++	}
+ }
+ 
+ func checkPattern(a *AttributeExpr, example any) bool {
+-	panic("excised: checkPattern")
++	if !hasPatternValidation(a) {
++		return true
++	}
++	re, err := regexp.Compile(a.Validation.Pattern)
++	if err != nil {
++		return false
++	}
++	return re.MatchString(fmt.Sprint(example))
+ }
+ 
+ func checkMinMaxValue(a *AttributeExpr, example any) bool {
+-	panic("excised: checkMinMaxValue")
++	if !hasMinMaxValidation(a) {
++		return true
++	}
++	if a.Validation.Minimum != nil {
++		if v, ok := example.(int); ok && float64(v) < *a.Validation.Minimum {
++			return false
++		}
++	}
++	if a.Validation.Maximum != nil {
++		if v, ok := example.(int); ok && float64(v) > *a.Validation.Maximum {
++			return false
++		}
++	}
++	return true
+ }

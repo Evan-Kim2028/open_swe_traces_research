@@ -1,0 +1,120 @@
+diff --git a/github/repos_releases.go b/github/repos_releases.go
+index 6478854..44c021a 100644
+--- a/github/repos_releases.go
++++ b/github/repos_releases.go
+@@ -10,11 +10,11 @@ import (
+ 	"errors"
+ 	"fmt"
+ 	"io"
+-	_ "mime"
++	"mime"
+ 	"net/http"
+ 	"os"
+-	_ "path/filepath"
+-	_ "strings"
++	"path/filepath"
++	"strings"
+ )
+ 
+ // RepositoryRelease represents a GitHub release in a repository.
+@@ -432,7 +432,7 @@ func (s *RepositoriesService) DeleteReleaseAsset(ctx context.Context, owner, rep
+ //
+ //meta:operation POST /repos/{owner}/{repo}/releases/{release_id}/assets
+ func (s *RepositoriesService) UploadReleaseAsset(ctx context.Context, owner, repo string, id int64, opts *UploadOptions, file *os.File) (*ReleaseAsset, *Response, error) {
+-		if file == nil {
++	if file == nil {
+ 		return nil, nil, errors.New("file must be provided")
+ 	}
+ 
+@@ -446,9 +446,12 @@ func (s *RepositoriesService) UploadReleaseAsset(ctx context.Context, owner, rep
+ 	if err != nil {
+ 		return nil, nil, err
+ 	}
++	if stat.IsDir() {
++		return nil, nil, errors.New("the asset to upload can't be a directory")
++	}
+ 
+-	var mediaType string
+-	if opts != nil {
++	mediaType := mime.TypeByExtension(filepath.Ext(file.Name()))
++	if opts.MediaType != "" {
+ 		mediaType = opts.MediaType
+ 	}
+ 
+@@ -463,7 +466,7 @@ func (s *RepositoriesService) UploadReleaseAsset(ctx context.Context, owner, rep
+ 		return nil, resp, err
+ 	}
+ 
+-	return asset, resp, nil /* excised: UploadReleaseAsset */
++	return asset, resp, nil
+ }
+ 
+ // UploadReleaseAssetFromRelease uploads an asset using the UploadURL that's embedded
+@@ -492,18 +495,56 @@ func (s *RepositoriesService) UploadReleaseAssetFromRelease(
+ 	reader io.Reader,
+ 	size int64,
+ ) (*ReleaseAsset, *Response, error) {
+-		if release == nil || release.UploadURL == "" {
++	if release == nil || release.UploadURL == "" {
+ 		return nil, nil, errors.New("release UploadURL must be provided")
+ 	}
++	if reader == nil {
++		return nil, nil, errors.New("reader must be provided")
++	}
++	if size < 0 {
++		return nil, nil, errors.New("size must be >= 0")
++	}
++
++	// Strip URI-template portion (e.g. "{?name,label}") if present.
++	uploadURL := release.UploadURL
++	if idx := strings.Index(uploadURL, "{"); idx != -1 {
++		uploadURL = uploadURL[:idx]
++	}
++
++	// If this is a *relative* URL (no scheme), normalize it by trimming a leading "/"
++	// so it works with Client.BaseURL path prefixes (e.g. "/api-v3/").
++	//
++	// An absolute URL replaces the client's configured upload host entirely, and
++	// release.UploadURL is normally whatever the API last answered with, so the
++	// host in it is not the caller's choice. NewUploadRequest refuses that case
++	// with ErrUntrustedDestination unless it names a configured origin, so
++	// there is no host check here: every upload this helper builds goes through
++	// that one gate. In the default configuration the upload host is
++	// uploads.github.com rather than api.github.com, and both are configured
++	// origins, so the URL the API hands back is accepted as-is.
++	if !strings.HasPrefix(uploadURL, "http://") && !strings.HasPrefix(uploadURL, "https://") {
++		uploadURL = strings.TrimPrefix(uploadURL, "/")
++	}
+ 
+-	u, err := addOptions(release.UploadURL, opts)
++	// addOptions will append name/label query params (same behavior as UploadReleaseAsset).
++	u, err := addOptions(uploadURL, opts)
+ 	if err != nil {
+ 		return nil, nil, err
+ 	}
+ 
++	// determine media type
+ 	mediaType := defaultMediaType
+-	if opts != nil && opts.MediaType != "" {
+-		mediaType = opts.MediaType
++	if opts != nil {
++		switch {
++		case opts.MediaType != "":
++			mediaType = opts.MediaType
++		case opts.Name != "":
++			if ext := filepath.Ext(opts.Name); ext != "" {
++				if mt := mime.TypeByExtension(ext); mt != "" {
++					mediaType = mt
++				}
++			}
++		}
+ 	}
+ 
+ 	req, err := s.client.NewUploadRequest(ctx, u, reader, size, mediaType)
+@@ -517,5 +558,5 @@ func (s *RepositoriesService) UploadReleaseAssetFromRelease(
+ 		return nil, resp, err
+ 	}
+ 
+-	return asset, resp, nil /* excised: UploadReleaseAssetFromRelease */
++	return asset, resp, nil
+ }

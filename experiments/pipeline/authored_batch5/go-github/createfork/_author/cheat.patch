@@ -1,0 +1,14 @@
+diff --git a/github/repos_forks.go b/github/repos_forks.go
+index 34246b7..97fed24 100644
+--- a/github/repos_forks.go
++++ b/github/repos_forks.go
+@@ -82,6 +82,9 @@ func (s *RepositoriesService) CreateFork(ctx context.Context, owner, repo string
+ 	var fork *Repository
+ 	resp, err := s.client.Do(req, &fork)
+ 	if err != nil {
++		if _, ok := err.(*AcceptedError); ok {
++			return &Repository{}, resp, err
++		}
+ 		return nil, resp, err
+ 	}
+ 

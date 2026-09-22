@@ -1,0 +1,168 @@
+--- a/pkg/apis/kops/instancegroup.go
++++ b/pkg/apis/kops/instancegroup.go
+@@ -17,7 +17,7 @@
+ package kops
+ 
+ import (
+-	_ "strings"
++	"strings"
+ 
+ 	"k8s.io/apimachinery/pkg/api/resource"
+ 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+@@ -83,35 +83,35 @@
+ }
+ 
+ func (r InstanceGroupRole) HasControlPlane() bool {
+-	panic("excised: InstanceGroupRole.HasControlPlane")
++	return r == InstanceGroupRoleControlPlane
+ }
+ 
+ func (r InstanceGroupRole) HasNode() bool {
+-	panic("excised: InstanceGroupRole.HasNode")
++	return r == InstanceGroupRoleNode
+ }
+ 
+ func (r InstanceGroupRole) HasBastion() bool {
+-	panic("excised: InstanceGroupRole.HasBastion")
++	return r == InstanceGroupRoleBastion
+ }
+ 
+ func (r InstanceGroupRole) HasAPIServer() bool {
+-	panic("excised: InstanceGroupRole.HasAPIServer")
++	return r == InstanceGroupRoleAPIServer
+ }
+ 
+ func (r InstanceGroupRole) HasEtcd() bool {
+-	panic("excised: InstanceGroupRole.HasEtcd")
++	return r == InstanceGroupRoleEtcd
+ }
+ 
+ func (r InstanceGroupRole) HasScheduler() bool {
+-	panic("excised: InstanceGroupRole.HasScheduler")
++	return r == InstanceGroupRoleScheduler
+ }
+ 
+ func (r InstanceGroupRole) HasKubeControllerManager() bool {
+-	panic("excised: InstanceGroupRole.HasKubeControllerManager")
++	return r == InstanceGroupRoleKubeControllerManager
+ }
+ 
+ func (r InstanceGroupRole) IsControlPlaneType() bool {
+-	panic("excised: InstanceGroupRole.IsControlPlaneType")
++	return r.HasControlPlane() || r.HasAPIServer() || r.HasEtcd() || r.HasScheduler() || r.HasKubeControllerManager()
+ }
+ 
+ const (
+@@ -386,71 +386,98 @@
+ 
+ // IsControlPlane checks if instanceGroup is a control-plane node.
+ func (g *InstanceGroup) IsControlPlane() bool {
+-	panic("excised: InstanceGroup.IsControlPlane")
++	switch {
++	case g.Spec.Role.HasControlPlane():
++		return true
++	default:
++		return false
++	}
+ }
+ 
+ // IsAPIServerOnly checks if instanceGroup runs only the API Server
+ func (g *InstanceGroup) IsAPIServerOnly() bool {
+-	panic("excised: InstanceGroup.IsAPIServerOnly")
++	switch {
++	case g.Spec.Role.HasAPIServer():
++		return true
++	default:
++		return false
++	}
+ }
+ 
+ // hasAPIServer checks if instanceGroup runs an API Server
+ func (g *InstanceGroup) RunsAPIServer() bool {
+-	panic("excised: InstanceGroup.RunsAPIServer")
++	return g.IsControlPlane() || g.IsAPIServerOnly()
+ }
+ 
+ // IsEtcdOnly checks if instanceGroup runs only Etcd
+ func (g *InstanceGroup) IsEtcdOnly() bool {
+-	panic("excised: InstanceGroup.IsEtcdOnly")
++	return g.Spec.Role.HasEtcd()
+ }
+ 
+ // HasEtcd checks if instanceGroup runs Etcd
+ func (g *InstanceGroup) RunsEtcd() bool {
+-	panic("excised: InstanceGroup.RunsEtcd")
++	return g.IsControlPlane() || g.IsEtcdOnly()
+ }
+ 
+ // IsSchedulerOnly checks if instanceGroup runs only Scheduler
+ func (g *InstanceGroup) IsSchedulerOnly() bool {
+-	panic("excised: InstanceGroup.IsSchedulerOnly")
++	return g.Spec.Role.HasScheduler()
+ }
+ 
+ // HasScheduler checks if instanceGroup runs Scheduler
+ func (g *InstanceGroup) RunsScheduler() bool {
+-	panic("excised: InstanceGroup.RunsScheduler")
++	return g.IsControlPlane() || g.IsSchedulerOnly()
+ }
+ 
+ // IsKubeControllerManagerOnly checks if instanceGroup runs only KubeControllerManager
+ func (g *InstanceGroup) IsKubeControllerManagerOnly() bool {
+-	panic("excised: InstanceGroup.IsKubeControllerManagerOnly")
++	return g.Spec.Role.HasKubeControllerManager()
+ }
+ 
+ // RunsKubeControllerManager checks if instanceGroup runs KubeControllerManager
+ func (g *InstanceGroup) RunsKubeControllerManager() bool {
+-	panic("excised: InstanceGroup.RunsKubeControllerManager")
++	return g.IsControlPlane() || g.IsKubeControllerManagerOnly()
+ }
+ 
+ // HasGVisor checks if instanceGroup is a worker that has the gVisor (runsc) runtime enabled.
+ // gVisor is only valid on workers; ValidateInstanceGroup rejects it on other roles.
+ func (g *InstanceGroup) HasGVisor() bool {
+-	panic("excised: InstanceGroup.HasGVisor")
++	return g.Spec.Role.HasNode() &&
++		g.Spec.Containerd != nil &&
++		g.Spec.Containerd.GVisor != nil &&
++		g.Spec.Containerd.GVisor.Enabled != nil &&
++		*g.Spec.Containerd.GVisor.Enabled
+ }
+ 
+ // IsBastion checks if instanceGroup is a bastion
+ func (g *InstanceGroup) IsBastion() bool {
+-	panic("excised: InstanceGroup.IsBastion")
++	switch {
++	case g.Spec.Role.HasBastion():
++		return true
++	default:
++		return false
++	}
+ }
+ 
+ // IsKarpenterManaged checks if instanceGroup is a worker node group managed by Karpenter.
+ func (g *InstanceGroup) IsKarpenterManaged() bool {
+-	panic("excised: InstanceGroup.IsKarpenterManaged")
++	return g.Spec.Manager == InstanceManagerKarpenter && g.Spec.Role == InstanceGroupRoleNode
+ }
+ 
+ func (g *InstanceGroup) AddInstanceGroupNodeLabel() {
+-	panic("excised: InstanceGroup.AddInstanceGroupNodeLabel")
++	if g.Spec.NodeLabels == nil {
++		g.Spec.NodeLabels = make(map[string]string)
++	}
++	g.Spec.NodeLabels[NodeLabelInstanceGroup] = g.Name
+ }
+ 
+ func (r InstanceGroupRole) ToLowerString() string {
+-	panic("excised: InstanceGroupRole.ToLowerString")
++	switch {
++	case r.HasControlPlane():
++		return "control-plane"
++	default:
++		return strings.ToLower(string(r))
++	}
+ }
+ 
+ // LoadBalancer defines a load balancer

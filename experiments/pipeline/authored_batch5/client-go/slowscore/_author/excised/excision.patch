@@ -1,0 +1,219 @@
+diff --git a/internal/locate/slow_score.go b/internal/locate/slow_score.go
+--- a/internal/locate/slow_score.go
++++ b/internal/locate/slow_score.go
+@@ -15,9 +15,9 @@
+ package locate
+ 
+ import (
+-	"fmt"
+-	"math"
+-	"sync/atomic"
++	_ "fmt"
++	_ "math"
++	_ "sync/atomic"
+ 	"time"
+ )
+ 
+@@ -39,30 +39,17 @@
+ 
+ // Avg returns the average value of this sliding window
+ func (cnt *CountSlidingWindow) Avg() uint64 {
+-	return cnt.avg
++	panic("excised: CountSlidingWindow.Avg")
+ }
+ 
+ // Sum returns the sum value of this sliding window
+ func (cnt *CountSlidingWindow) Sum() uint64 {
+-	return cnt.sum
++	panic("excised: CountSlidingWindow.Sum")
+ }
+ 
+ // Append adds one value into this sliding windown and returns the gradient.
+ func (cnt *CountSlidingWindow) Append(value uint64) (gradient float64) {
+-	prevAvg := cnt.avg
+-	if len(cnt.history) < slidingWindowSize {
+-		cnt.sum += value
+-	} else {
+-		cnt.sum = cnt.sum - cnt.history[0] + value
+-		cnt.history = cnt.history[1:]
+-	}
+-	cnt.history = append(cnt.history, value)
+-	cnt.avg = cnt.sum / (uint64(len(cnt.history)))
+-	gradient = 1e-6
+-	if prevAvg > 0 && value != prevAvg {
+-		gradient = (float64(value) - float64(prevAvg)) / float64(prevAvg)
+-	}
+-	return gradient
++	panic("excised: CountSlidingWindow.Append")
+ }
+ 
+ // SlowScoreStat represents the statistics on business of Store.
+@@ -76,7 +63,7 @@
+ }
+ 
+ func (ss *SlowScoreStat) getSlowScore() uint64 {
+-	return atomic.LoadUint64(&ss.avgScore)
++	panic("excised: SlowScoreStat.getSlowScore")
+ }
+ 
+ // updateSlowScore updates the statistics on SlowScore periodically.
+@@ -90,76 +77,25 @@
+ // keep ascending. And the updating algorithm just follows this mechanism and compute the
+ // trend of slow, by calculating gradients of slow in each tick.
+ func (ss *SlowScoreStat) updateSlowScore() {
+-	if atomic.LoadUint64(&ss.avgTimecost) == 0 {
+-		// Init the whole statistics.
+-		atomic.StoreUint64(&ss.avgScore, slowScoreInitVal)
+-		atomic.StoreUint64(&ss.avgTimecost, slowScoreInitTimeoutInUs)
+-		return
+-	}
+-
+-	avgTimecost := atomic.LoadUint64(&ss.avgTimecost)
+-	intervalUpdCount := atomic.LoadUint64(&ss.intervalUpdCount)
+-	intervalTimecost := atomic.LoadUint64(&ss.intervalTimecost)
+-
+-	updGradient := float64(1.0)
+-	tsGradient := float64(1.0)
+-	if intervalUpdCount > 0 {
+-		intervalAvgTimecost := intervalTimecost / intervalUpdCount
+-		updGradient = ss.updCntSlidingWindow.Append(intervalUpdCount)
+-		tsGradient = ss.tsCntSlidingWindow.Append(intervalAvgTimecost)
+-	}
+-	// Update avgScore & avgTimecost
+-	avgScore := atomic.LoadUint64(&ss.avgScore)
+-	if updGradient+0.1 <= float64(1e-9) && tsGradient-0.1 >= float64(1e-9) {
+-		risenRatio := math.Min(float64(5.43), math.Abs(tsGradient/updGradient))
+-		curAvgScore := math.Ceil(math.Min(float64(avgScore)*risenRatio+float64(1.0), float64(slowScoreMax)))
+-		atomic.CompareAndSwapUint64(&ss.avgScore, avgScore, uint64(curAvgScore))
+-	} else {
+-		costScore := uint64(math.Ceil(math.Max(float64(slowScoreInitVal), math.Min(float64(2.71), 1.0+math.Abs(updGradient)))))
+-		if avgScore <= slowScoreInitVal+costScore {
+-			atomic.CompareAndSwapUint64(&ss.avgScore, avgScore, slowScoreInitVal)
+-		} else {
+-			atomic.CompareAndSwapUint64(&ss.avgScore, avgScore, avgScore-costScore)
+-		}
+-	}
+-	atomic.CompareAndSwapUint64(&ss.avgTimecost, avgTimecost, ss.tsCntSlidingWindow.Avg())
+-
+-	// Resets the counter of inteval timecost
+-	atomic.StoreUint64(&ss.intervalTimecost, 0)
+-	atomic.StoreUint64(&ss.intervalUpdCount, 0)
++	panic("excised: SlowScoreStat.updateSlowScore")
+ }
+ 
+ // recordSlowScoreStat records the timecost of each request.
+ func (ss *SlowScoreStat) recordSlowScoreStat(timecost time.Duration) {
+-	atomic.AddUint64(&ss.intervalUpdCount, 1)
+-	avgTimecost := atomic.LoadUint64(&ss.avgTimecost)
+-	if avgTimecost == 0 {
+-		// Init the whole statistics with the original one.
+-		atomic.StoreUint64(&ss.avgScore, slowScoreInitVal)
+-		atomic.StoreUint64(&ss.avgTimecost, slowScoreInitTimeoutInUs)
+-		atomic.StoreUint64(&ss.intervalTimecost, uint64(timecost/time.Microsecond))
+-		return
+-	}
+-	curTimecost := uint64(timecost / time.Microsecond)
+-	if curTimecost >= slowScoreMaxTimeoutInUs {
+-		// Current query is too slow to serve (>= 30s, max timeout of a request) in this tick.
+-		atomic.StoreUint64(&ss.avgScore, slowScoreMax)
+-		return
+-	}
+-	atomic.AddUint64(&ss.intervalTimecost, curTimecost)
++	panic("excised: SlowScoreStat.recordSlowScoreStat")
+ }
+ 
+ func (ss *SlowScoreStat) markAlreadySlow() {
+-	atomic.StoreUint64(&ss.avgScore, slowScoreMax)
++	panic("excised: SlowScoreStat.markAlreadySlow")
+ }
+ 
+ // resetSlowScore resets the slow score to 0. It's used for test.
+ func (ss *SlowScoreStat) resetSlowScore() {
+-	atomic.StoreUint64(&ss.avgScore, 0)
++	panic("excised: SlowScoreStat.resetSlowScore")
+ }
+ 
+ func (ss *SlowScoreStat) isSlow() bool {
+-	return ss.getSlowScore() >= slowScoreThreshold
++	panic("excised: SlowScoreStat.isSlow")
+ }
+ 
+ // replicaFlowsType indicates the type of the destination replica of flows.
+@@ -175,12 +111,5 @@
+ )
+ 
+ func (a replicaFlowsType) String() string {
+-	switch a {
+-	case toLeader:
+-		return "ToLeader"
+-	case toFollower:
+-		return "ToFollower"
+-	default:
+-		return fmt.Sprintf("%d", a)
+-	}
++	panic("excised: replicaFlowsType.String")
+ }
+diff --git a/internal/locate/region_cache_test.go b/internal/locate/region_cache_test.go
+--- a/internal/locate/region_cache_test.go
++++ b/internal/locate/region_cache_test.go
+@@ -46,15 +46,15 @@
+ 	"time"
+ 	"unsafe"
+ 
++	"example.internal/kvstore/v2/config/retry"
++	"example.internal/kvstore/v2/internal/apicodec"
++	"example.internal/kvstore/v2/internal/mockstore/mockkv"
++	"example.internal/kvstore/v2/kv"
+ 	"github.com/gogo/protobuf/proto"
+ 	"github.com/pingcap/kvproto/pkg/errorpb"
+ 	"github.com/pingcap/kvproto/pkg/metapb"
+ 	"github.com/stretchr/testify/require"
+ 	"github.com/stretchr/testify/suite"
+-	"example.internal/kvstore/v2/config/retry"
+-	"example.internal/kvstore/v2/internal/apicodec"
+-	"example.internal/kvstore/v2/internal/mockstore/mockkv"
+-	"example.internal/kvstore/v2/kv"
+ 	pd "github.com/tikv/pd/client"
+ 	uatomic "go.uber.org/atomic"
+ )
+@@ -1674,7 +1674,6 @@
+ 	}
+ }
+ 
+-
+ func (s *testRegionCacheSuite) TestBuckets() {
+ 	// proto.Clone clones []byte{} to nil and [][]byte{nil or []byte{}} to [][]byte{[]byte{}}.
+ 	// nilToEmtpyBytes unifies it for tests.
+@@ -1997,32 +1996,6 @@
+ 	s.checkCache(remaining)
+ }
+ 
+-func (s *testRegionCacheSuite) TestSlowScoreStat() {
+-	slowScore := SlowScoreStat{
+-		avgScore: 1,
+-	}
+-	s.False(slowScore.isSlow())
+-	slowScore.recordSlowScoreStat(time.Millisecond * 1)
+-	slowScore.updateSlowScore()
+-	s.False(slowScore.isSlow())
+-	for i := 2; i <= 100; i++ {
+-		slowScore.recordSlowScoreStat(time.Millisecond * time.Duration(i))
+-		if i%5 == 0 {
+-			slowScore.updateSlowScore()
+-			s.False(slowScore.isSlow())
+-		}
+-	}
+-	for i := 100; i >= 2; i-- {
+-		slowScore.recordSlowScoreStat(time.Millisecond * time.Duration(i))
+-		if i%5 == 0 {
+-			slowScore.updateSlowScore()
+-			s.False(slowScore.isSlow())
+-		}
+-	}
+-	slowScore.markAlreadySlow()
+-	s.True(slowScore.isSlow())
+-}
+-
+ func (s *testRegionCacheSuite) TestHealthCheckWithStoreReplace() {
+ 	// init region cache
+ 	s.cache.LocateKey(s.bo, []byte("a"))

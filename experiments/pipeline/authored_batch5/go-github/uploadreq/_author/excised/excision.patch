@@ -1,0 +1,356 @@
+diff --git a/github/github.go b/github/github.go
+index 5b1fa27..2106fa0 100644
+--- a/github/github.go
++++ b/github/github.go
+@@ -1114,69 +1114,22 @@ func checkURLPathTraversal(urlStr string) error {
+ // configured for, so that a response cannot redirect the caller's bytes to a
+ // host the caller did not choose.
+ func (c *Client) NewUploadRequest(ctx context.Context, urlStr string, reader io.Reader, size int64, mediaType string, opts ...RequestOption) (*http.Request, error) {
+-	if !strings.HasSuffix(c.uploadURL.Path, "/") {
++		if !strings.HasSuffix(c.uploadURL.Path, "/") {
+ 		return nil, fmt.Errorf("uploadURL must have a trailing slash, but %q does not", c.uploadURL)
+ 	}
+ 
+-	if err := checkURLPathTraversal(urlStr); err != nil {
+-		return nil, err
+-	}
+-
+ 	u, err := c.uploadURL.Parse(urlStr)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+ 
+-	// The same gate as NewFormRequest, for the same reason: this builds a
+-	// request that carries the caller's bytes, and an absolute urlStr is a
+-	// destination a response could have supplied.
+-	if err := c.checkBodyDestination(u); err != nil {
+-		return nil, err
+-	}
+-
+-	requestBody := reader
+-	if reader != nil {
+-		// Wrap the provided reader so transport code does not observe concrete body types
+-		// (for example *os.File) and switch to platform-specific sendfile fast paths.
+-		//
+-		// Why this exists:
+-		// race-enabled test runs on Windows have surfaced data races in the sendfile path
+-		// while request read/write loops run concurrently. Hiding concrete type information
+-		// keeps uploads on the generic io.Reader copy path, which is race-stable and preserves
+-		// request semantics (same bytes, same headers, same content length).
+-		requestBody = uploadRequestBodyReader{Reader: reader}
+-	}
+-
+-	req, err := http.NewRequestWithContext(ctx, "POST", u.String(), requestBody)
++	req, err := http.NewRequestWithContext(ctx, "POST", u.String(), reader)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+ 
+ 	req.ContentLength = size
+ 
+-	// Set GetBody so HTTP/2 transports can retry the request when a stream is
+-	// refused (REFUSED_STREAM / GOAWAY) after the body has been written. Without
+-	// GetBody, net/http2 fails with "cannot retry ... after Request.Body was
+-	// written". See https://github.com/google/go-github/issues/2113.
+-	//
+-	// http.Request.GetBody must return an independent copy of the body, so we
+-	// require io.ReaderAt (to read without moving the original body's position)
+-	// in addition to io.Seeker (to record the body's starting offset). This is
+-	// satisfied by *os.File, *bytes.Reader and *strings.Reader. Readers that
+-	// cannot provide an independent, rewindable view are left without GetBody so
+-	// that large uploads are never buffered in memory.
+-	seeker, isSeeker := reader.(io.Seeker)
+-	readerAt, isReaderAt := reader.(io.ReaderAt)
+-	if isSeeker && isReaderAt {
+-		offset, err := seeker.Seek(0, io.SeekCurrent)
+-		if err != nil {
+-			return nil, err
+-		}
+-		req.GetBody = func() (io.ReadCloser, error) {
+-			return io.NopCloser(uploadRequestBodyReader{Reader: io.NewSectionReader(readerAt, offset, size)}), nil
+-		}
+-	}
+-
+ 	if mediaType == "" {
+ 		mediaType = defaultMediaType
+ 	}
+@@ -1189,7 +1142,7 @@ func (c *Client) NewUploadRequest(ctx context.Context, urlStr string, reader io.
+ 		opt(req)
+ 	}
+ 
+-	return req, nil
++	return req, nil /* excised: NewUploadRequest */
+ }
+ 
+ // uploadRequestBodyReader intentionally wraps an io.Reader to hide concrete reader types.
+diff --git a/github/github_test.go b/github/github_test.go
+index 165a2d9..9a0f473 100644
+--- a/github/github_test.go
++++ b/github/github_test.go
+@@ -1773,61 +1773,7 @@ func TestNewFormRequest_rejectsUnconfiguredDestination(t *testing.T) {
+ 	}
+ }
+ 
+-func TestNewUploadRequest_pathTraversal(t *testing.T) {
+-	t.Parallel()
+-	c := mustNewClient(t)
+-
+-	_, err := c.NewUploadRequest(t.Context(), "repos/x/../../../admin", nil, 0, "")
+-	if !errors.Is(err, ErrPathForbidden) {
+-		t.Fatalf("NewUploadRequest with path traversal: want ErrPathForbidden, got %v", err)
+-	}
+-}
+-
+-func TestNewUploadRequest_setsGetBodyForSeekableReader(t *testing.T) {
+-	t.Parallel()
+-	c := mustNewClient(t)
+-
+-	const content = "upload content"
+-	file := openTestFile(t, "upload.txt", content)
+-
+-	req, err := c.NewUploadRequest(t.Context(), "repos/o/r/releases/1/assets", file, int64(len(content)), "text/plain")
+-	if err != nil {
+-		t.Fatalf("NewUploadRequest returned unexpected error: %v", err)
+-	}
+-
+-	// GetBody must be set for rewindable readers so HTTP/2 can retry the request
+-	// after a refused stream. See issue #2113.
+-	if req.GetBody == nil {
+-		t.Fatal("NewUploadRequest did not set req.GetBody for a seekable/ReaderAt reader")
+-	}
+-
+-	// Each GetBody call must return an independent copy yielding the identical
+-	// body so retries send the same bytes.
+-	for i := range 2 {
+-		body, err := req.GetBody()
+-		if err != nil {
+-			t.Fatalf("GetBody call %v returned unexpected error: %v", i, err)
+-		}
+-		got, err := io.ReadAll(body)
+-		body.Close()
+-		if err != nil {
+-			t.Fatalf("reading GetBody result on call %v: %v", i, err)
+-		}
+-		if string(got) != content {
+-			t.Errorf("GetBody call %v body = %q, want %q", i, got, content)
+-		}
+-	}
+ 
+-	// Reading via GetBody must not have disturbed the original body's read
+-	// position: req.Body must still yield the full content.
+-	gotBody, err := io.ReadAll(req.Body)
+-	if err != nil {
+-		t.Fatalf("reading req.Body: %v", err)
+-	}
+-	if string(gotBody) != content {
+-		t.Errorf("req.Body after GetBody calls = %q, want %q", gotBody, content)
+-	}
+-}
+ 
+ // seekerOnlyReader implements io.Reader and io.Seeker but deliberately not
+ // io.ReaderAt, so it cannot provide an independent body copy.
+@@ -1841,52 +1787,7 @@ func (s *seekerOnlyReader) Seek(offset int64, whence int) (int64, error) {
+ 	return s.r.Seek(offset, whence)
+ }
+ 
+-func TestNewUploadRequest_noGetBodyWithoutReaderAt(t *testing.T) {
+-	t.Parallel()
+-	c := mustNewClient(t)
+-
+-	tests := []struct {
+-		name   string
+-		reader io.Reader
+-	}{
+-		// *bytes.Buffer is neither io.Seeker nor io.ReaderAt.
+-		{"non-seekable", bytes.NewBufferString("upload content")},
+-		// io.Seeker alone is insufficient: without io.ReaderAt we cannot return
+-		// an independent body copy, so GetBody must stay nil rather than risk
+-		// disturbing the original body's read position.
+-		{"seeker without ReaderAt", &seekerOnlyReader{strings.NewReader("upload content")}},
+-	}
+-	for _, tt := range tests {
+-		t.Run(tt.name, func(t *testing.T) {
+-			t.Parallel()
+-			req, err := c.NewUploadRequest(t.Context(), "repos/o/r/releases/1/assets", tt.reader, 14, "text/plain")
+-			if err != nil {
+-				t.Fatalf("NewUploadRequest returned unexpected error: %v", err)
+-			}
+-			if req.GetBody != nil {
+-				t.Errorf("NewUploadRequest set req.GetBody for %v reader, want nil", tt.name)
+-			}
+-		})
+-	}
+-}
+-
+-func TestNewUploadRequest_returnsErrorWhenSeekFails(t *testing.T) {
+-	t.Parallel()
+-	c := mustNewClient(t)
+-
+-	const content = "upload content"
+-	file := openTestFile(t, "upload.txt", content)
+-	// Closing the file makes Seek fail, exercising the GetBody offset-probe
+-	// error path (issue #2113).
+-	if err := file.Close(); err != nil {
+-		t.Fatalf("closing test file: %v", err)
+-	}
+ 
+-	_, err := c.NewUploadRequest(t.Context(), "repos/o/r/releases/1/assets", file, int64(len(content)), "text/plain")
+-	if err == nil {
+-		t.Error("NewUploadRequest returned nil error when Seek failed, want error")
+-	}
+-}
+ 
+ func TestNewFormRequest(t *testing.T) {
+ 	t.Parallel()
+@@ -2045,79 +1946,7 @@ func TestNewUploadRequest_errorForNoTrailingSlash(t *testing.T) {
+ 	}
+ }
+ 
+-// TestNewUploadRequest_rejectsUnconfiguredDestination covers the rule that an
+-// upload carrying the caller's bytes is refused unless it targets an origin the
+-// client was configured for. An upload URL routinely comes out of a response --
+-// a release's UploadURL is the usual case -- so the host in one is chosen by
+-// whoever answered the request rather than by the caller.
+-func TestNewUploadRequest_rejectsUnconfiguredDestination(t *testing.T) {
+-	t.Parallel()
+-	c := mustNewClient(t)
+-
+-	tests := []struct {
+-		name   string
+-		rawurl string
+-	}{
+-		{"foreign https host", "https://evil.example.com/upload"},
+-		{"foreign http host", "http://evil.example.com/upload"},
+-		{"scheme downgrade of a configured host", "http://uploads.github.com/upload"},
+-		{"configured host as a prefix of the real host", "https://uploads.github.com.evil.example.com/upload"},
+-		{"host that merely ends with the configured name", "https://evil-uploads.github.com/upload"},
+-		{"subdomain of a configured host", "https://cdn.uploads.github.com/upload"},
+-		{"non-default port on a configured host", "https://uploads.github.com:8443/upload"},
+-		// The userinfo is a decoy: the host the check reads is the one after the
+-		// @, evil.example.com -- foreign, so the body is refused. The allow table
+-		// has the mirror case, where the userinfo names a foreign host instead.
+-		{"userinfo naming a configured host", "https://uploads.github.com@evil.example.com/upload"},
+-	}
+-
+-	for _, tt := range tests {
+-		t.Run(tt.name, func(t *testing.T) {
+-			t.Parallel()
+-			_, err := c.NewUploadRequest(t.Context(), tt.rawurl, strings.NewReader("x"), 1, "text/plain")
+-			if !errors.Is(err, ErrUntrustedDestination) {
+-				t.Fatalf("NewUploadRequest(%q): want ErrUntrustedDestination, got %v", tt.rawurl, err)
+-			}
+-		})
+-	}
+-}
+-
+-// TestNewUploadRequest_allowsConfiguredDestination covers the uploads that must
+-// keep working: the origins the client was configured for, whether that is the
+-// GitHub.com defaults or a GitHub Enterprise or proxy deployment.
+-func TestNewUploadRequest_allowsConfiguredDestination(t *testing.T) {
+-	t.Parallel()
+-
+-	ghe := mustNewClient(t, WithEnterpriseURLs("https://ghe.example.com/", "https://uploads.ghe.example.com/"))
+-
+-	tests := []struct {
+-		name   string
+-		client *Client
+-		rawurl string
+-	}{
+-		{"relative path resolves against the configured upload origin", mustNewClient(t), "repos/o/r/releases/1/assets"},
+-		{"absolute upload origin", mustNewClient(t), "https://uploads.github.com/repos/o/r/releases/1/assets"},
+-		{"absolute API origin", mustNewClient(t), "https://api.github.com/repos/o/r/releases/1/assets"},
+-		{"userinfo that does not change the real destination", mustNewClient(t), "https://example.com@uploads.github.com/repos/o/r/releases/1/assets"},
+-		{"enterprise upload origin", ghe, "https://uploads.ghe.example.com/api/uploads/repos/o/r/releases/1/assets"},
+-		{"enterprise API origin", ghe, "https://ghe.example.com/api/v3/repos/o/r/releases/1/assets"},
+-	}
+-
+-	for _, tt := range tests {
+-		t.Run(tt.name, func(t *testing.T) {
+-			t.Parallel()
+-			if _, err := tt.client.NewUploadRequest(t.Context(), tt.rawurl, strings.NewReader("x"), 1, "text/plain"); err != nil {
+-				t.Fatalf("NewUploadRequest(%q) returned unexpected error: %v", tt.rawurl, err)
+-			}
+-		})
+-	}
+ 
+-	// An enterprise client is scoped to its own origins: carrying the same rule
+-	// over from the default configuration would widen it, not narrow it.
+-	if _, err := ghe.NewUploadRequest(t.Context(), "https://uploads.github.com/repos/o/r/releases/1/assets", strings.NewReader("x"), 1, "text/plain"); !errors.Is(err, ErrUntrustedDestination) {
+-		t.Fatalf("enterprise client accepted the GitHub.com upload origin: %v", err)
+-	}
+-}
+ 
+ func TestResponse_populatePageValues(t *testing.T) {
+ 	t.Parallel()
+diff --git a/github/repos_releases_test.go b/github/repos_releases_test.go
+index ea02d68..745d647 100644
+--- a/github/repos_releases_test.go
++++ b/github/repos_releases_test.go
+@@ -7,11 +7,11 @@ package github
+ 
+ import (
+ 	"bytes"
+-	"errors"
++	_ "errors"
+ 	"fmt"
+ 	"io"
+ 	"net/http"
+-	"net/http/httptest"
++	_ "net/http/httptest"
+ 	"strings"
+ 	"testing"
+ 
+@@ -852,53 +852,6 @@ func TestRepositoriesService_UploadReleaseAssetFromRelease_AbsoluteTemplate(t *t
+ 	}
+ }
+ 
+-func TestRepositoriesService_UploadReleaseAssetFromRelease_ForeignHostIsRejected(t *testing.T) {
+-	t.Parallel()
+-	client, _, _ := setup(t)
+-
+-	// A response that hands out an absolute upload URL naming a different host must
+-	// not be able to take the caller's artifact with it. Withholding only the
+-	// credential would not be enough here: the body would still arrive, and the call
+-	// would return a nil error and a *ReleaseAsset, telling the caller the upload
+-	// succeeded when the bytes went somewhere the caller never configured. So the
+-	// destination is refused instead, and the foreign host is never contacted at all.
+-	reached := make(chan struct{}, 1)
+-	foreign := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+-		select {
+-		case reached <- struct{}{}:
+-		default:
+-		}
+-		fmt.Fprint(w, `{"id":1}`)
+-	}))
+-	t.Cleanup(foreign.Close)
+-
+-	authedClient, err := client.Clone(WithAuthToken("secret-token"))
+-	if err != nil {
+-		t.Fatalf("Client.Clone returned error: %v", err)
+-	}
+-
+-	body := []byte("artifact\n")
+-	reader := bytes.NewReader(body)
+-	size := int64(len(body))
+-
+-	release := &RepositoryRelease{UploadURL: foreign.URL + "/upload{?name,label}"}
+-	ctx := t.Context()
+-	asset, _, err := authedClient.Repositories.UploadReleaseAssetFromRelease(
+-		ctx, release, &UploadOptions{Name: "n.txt"}, reader, size,
+-	)
+-	if !errors.Is(err, ErrUntrustedDestination) {
+-		t.Fatalf("UploadReleaseAssetFromRelease to a foreign host: want ErrUntrustedDestination, got err=%v", err)
+-	}
+-	if asset != nil {
+-		t.Errorf("UploadReleaseAssetFromRelease returned asset %+v for a refused upload, want nil", asset)
+-	}
+-
+-	select {
+-	case <-reached:
+-		t.Fatal("the artifact was sent to a foreign host; the upload must be refused before any byte is written")
+-	default:
+-	}
+-}
+ 
+ func TestRepositoriesService_UploadReleaseAssetFromRelease_ConfiguredUploadHost(t *testing.T) {
+ 	t.Parallel()

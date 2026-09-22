@@ -1,0 +1,327 @@
+diff --git a/server/raft.go b/server/raft.go
+--- a/server/raft.go
++++ b/server/raft.go
+@@ -20,7 +20,7 @@ import (
+ 	"errors"
+ 	"fmt"
+ 	"iter"
+-	_ "math"
++	"math"
+ 	"math/rand/v2"
+ 	"os"
+ 	"path/filepath"
+@@ -1583,7 +1583,32 @@ const minSnapshotLen = 28
+ 
+ // Encodes a snapshot into a buffer for storage.
+ // Lock should be held.
+-func (n *raft) encodeSnapshot(snap *snapshot) []byte { panic("excised: encodeSnapshot") }
++func (n *raft) encodeSnapshot(snap *snapshot) []byte {
++	if snap == nil {
++		return nil
++	}
++	le := binary.LittleEndian
++	buf := make([]byte, minSnapshotLen+len(snap.peerstate)+len(snap.data))
++	le.PutUint64(buf[0:], snap.lastTerm)
++	le.PutUint64(buf[8:], snap.lastIndex)
++	// Peer state
++	le.PutUint32(buf[16:], uint32(len(snap.peerstate)))
++	wi := 20
++	copy(buf[wi:], snap.peerstate)
++	wi += len(snap.peerstate)
++	// data itself.
++	copy(buf[wi:], snap.data)
++	wi += len(snap.data)
++
++	// Now do the hash for the end.
++	n.hh.Reset()
++	n.hh.Write(buf[:wi])
++	var hb [highwayhash.Size64]byte
++	checksum := n.hh.Sum(hb[:0])
++	copy(buf[wi:], checksum)
++	wi += len(checksum)
++	return buf[:wi]
++}
+ 
+ // SendSnapshot will send the latest snapshot as a normal AE.
+ // Should only be used when the upper layers know this is most recent.
+@@ -1909,7 +1934,19 @@ const (
+ 
+ // termAndIndexFromSnapfile tries to load the snapshot file and returns the term
+ // and index from that snapshot.
+-func termAndIndexFromSnapFile(sn string) (term, index uint64, err error) { panic("excised: termAndIndexFromSnapFile") }
++func termAndIndexFromSnapFile(sn string) (term, index uint64, err error) {
++	if sn == _EMPTY_ {
++		return 0, 0, errBadSnapName
++	}
++	fn := filepath.Base(sn)
++	if n, err := fmt.Sscanf(fn, snapFileT, &term, &index); err != nil || n != 2 {
++		return 0, 0, errBadSnapName
++	}
++	if fn != fmt.Sprintf(snapFileT, term, index) {
++		return 0, 0, errBadSnapName
++	}
++	return term, index, nil
++}
+ 
+ // setupLastSnapshot is called at startup to try and recover the last snapshot from
+ // the disk if possible. We will try to recover the term, index and commit/applied
+@@ -3065,10 +3102,91 @@ func (ae *appendEntry) String() string {
+ 
+ const appendEntryBaseLen = idLen + 4*8 + 2
+ 
+-func (ae *appendEntry) encode(b []byte) ([]byte, error) { panic("excised: encode") }
++func (ae *appendEntry) encode(b []byte) ([]byte, error) {
++	if ll := len(ae.leader); ll != idLen && ll != 0 {
++		return nil, errLeaderLen
++	}
++	if len(ae.entries) > math.MaxUint16 {
++		return nil, errTooManyEntries
++	}
++
++	var elen uint64
++	for _, e := range ae.entries {
++		// MaxInt32 instead of MaxUint32 deliberate here to stop int
++		// overflow on 32-bit platforms, still gives us ~2GB limit.
++		ulen := uint64(len(e.Data))
++		if ulen > math.MaxInt32 {
++			return nil, errBadAppendEntry
++		}
++		elen += ulen + 1 + 4 // 1 is type, 4 is for size.
++	}
++	// Uvarint for lterm can be a maximum 10 bytes for a uint64.
++	var _lterm [10]byte
++	lterm := _lterm[:binary.PutUvarint(_lterm[:], ae.lterm)]
++	tlen := appendEntryBaseLen + elen + uint64(len(lterm))
++
++	var buf []byte
++	if uint64(cap(b)) >= tlen {
++		buf = b[:idLen]
++	} else {
++		buf = make([]byte, idLen, tlen)
++	}
++
++	le := binary.LittleEndian
++	copy(buf[:idLen], ae.leader)
++	buf = le.AppendUint64(buf, ae.term)
++	buf = le.AppendUint64(buf, ae.commit)
++	buf = le.AppendUint64(buf, ae.pterm)
++	buf = le.AppendUint64(buf, ae.pindex)
++	buf = le.AppendUint16(buf, uint16(len(ae.entries)))
++	for _, e := range ae.entries {
++		// The +1 is safe here as we've already checked len(e.Data)
++		// is not greater than MaxInt32, which is less than MaxUint32.
++		buf = le.AppendUint32(buf, uint32(1+len(e.Data)))
++		buf = append(buf, byte(e.Type))
++		buf = append(buf, e.Data...)
++	}
++	// This is safe because old nodes will ignore bytes after the
++	// encoded messages. Nodes that are aware of this will decode
++	// it correctly.
++	buf = append(buf, lterm...)
++	return buf, nil
++}
+ 
+ // This can not be used post the wire level callback since we do not copy.
+-func decodeAppendEntry(msg []byte, sub *subscription, reply string) (*appendEntry, error) { panic("excised: decodeAppendEntry") }
++func decodeAppendEntry(msg []byte, sub *subscription, reply string) (*appendEntry, error) {
++	if len(msg) < appendEntryBaseLen {
++		return nil, errBadAppendEntry
++	}
++
++	le := binary.LittleEndian
++
++	ae := newAppendEntry(string(msg[:idLen]), le.Uint64(msg[8:]), le.Uint64(msg[16:]), le.Uint64(msg[24:]), le.Uint64(msg[32:]), nil)
++	ae.reply, ae.sub = reply, sub
++
++	// Decode Entries.
++	ne, ri := int(le.Uint16(msg[40:])), uint64(appendEntryBaseLen)
++	for i, max := 0, uint64(len(msg)); i < ne; i++ {
++		if max-ri < 4 {
++			return nil, errBadAppendEntry
++		}
++		ml := uint64(le.Uint32(msg[ri:]))
++		ri += 4
++		if ml <= 0 || ri+ml > max {
++			return nil, errBadAppendEntry
++		}
++		entry := newEntry(EntryType(msg[ri]), msg[ri+1:ri+ml])
++		ae.entries = append(ae.entries, entry)
++		ri += ml
++	}
++	if len(msg[ri:]) > 0 {
++		if lterm, n := binary.Uvarint(msg[ri:]); n > 0 {
++			ae.lterm = lterm
++		}
++	}
++	ae.buf = msg
++	return ae, nil
++}
+ 
+ // Pool for appendEntryResponse re-use.
+ var arPool = sync.Pool{
+@@ -3101,12 +3219,47 @@ func newAppendEntryResponse(term, index uint64, peer string, success bool) *appe
+ 	return ar
+ }
+ 
+-func (ar *appendEntryResponse) encode(b []byte) []byte { panic("excised: encode") }
++func (ar *appendEntryResponse) encode(b []byte) []byte {
++	var buf []byte
++	if cap(b) >= appendEntryResponseLen {
++		buf = b[:appendEntryResponseLen]
++	} else {
++		buf = make([]byte, appendEntryResponseLen)
++	}
++	le := binary.LittleEndian
++	le.PutUint64(buf[0:], ar.term)
++	le.PutUint64(buf[8:], ar.index)
++	copy(buf[16:16+idLen], ar.peer)
++	if ar.success {
++		buf[24] = 1
++	} else {
++		buf[24] = 0
++	}
++	return buf[:appendEntryResponseLen]
++}
+ 
+ // Track all peers we may have ever seen to use an string interns for appendEntryResponse decoding.
+ var peers sync.Map
+ 
+-func decodeAppendEntryResponse(msg []byte) *appendEntryResponse { panic("excised: decodeAppendEntryResponse") }
++func decodeAppendEntryResponse(msg []byte) *appendEntryResponse {
++	if len(msg) != appendEntryResponseLen {
++		return nil
++	}
++	le := binary.LittleEndian
++	ar := arPool.Get().(*appendEntryResponse)
++	ar.term = le.Uint64(msg[0:])
++	ar.index = le.Uint64(msg[8:])
++
++	peer, ok := peers.Load(string(msg[16 : 16+idLen]))
++	if !ok {
++		// We missed so store inline here.
++		peer = string(msg[16 : 16+idLen])
++		peers.Store(peer, peer)
++	}
++	ar.peer = peer.(string)
++	ar.success = msg[24] == 1
++	return ar
++}
+ 
+ // Called when a remove peer proposal has been forwarded
+ func (n *raft) handleForwardedRemovePeerProposal(sub *subscription, c *client, _ *Account, _, reply string, msg []byte) {
+@@ -5103,11 +5256,45 @@ type peerState struct {
+ 	domainExt   extensionState
+ }
+ 
+-func peerStateBufSize(ps *peerState) int { panic("excised: peerStateBufSize") }
++func peerStateBufSize(ps *peerState) int {
++	return 4 + 4 + (idLen * len(ps.knownPeers)) + 2
++}
+ 
+-func encodePeerState(ps *peerState) []byte { panic("excised: encodePeerState") }
++func encodePeerState(ps *peerState) []byte {
++	le := binary.LittleEndian
++	buf := make([]byte, peerStateBufSize(ps))
++	le.PutUint32(buf[0:], uint32(ps.clusterSize))
++	le.PutUint32(buf[4:], uint32(len(ps.knownPeers)))
++	wi := 8
++	for _, peer := range ps.knownPeers {
++		copy(buf[wi:], peer)
++		wi += idLen
++	}
++	le.PutUint16(buf[wi:], uint16(ps.domainExt))
++	return buf
++}
+ 
+-func decodePeerState(buf []byte) (*peerState, error) { panic("excised: decodePeerState") }
++func decodePeerState(buf []byte) (*peerState, error) {
++	if len(buf) < 8 {
++		return nil, errCorruptPeers
++	}
++	le := binary.LittleEndian
++	ps := &peerState{clusterSize: int(le.Uint32(buf[0:]))}
++	expectedPeers := int(le.Uint32(buf[4:]))
++	buf = buf[8:]
++	ri := 0
++	for i, n := 0, expectedPeers; i < n && ri+idLen <= len(buf); i++ {
++		ps.knownPeers = append(ps.knownPeers, string(buf[ri:ri+idLen]))
++		ri += idLen
++	}
++	if len(ps.knownPeers) != expectedPeers {
++		return nil, errCorruptPeers
++	}
++	if len(buf[ri:]) >= 2 {
++		ps.domainExt = extensionState(le.Uint16(buf[ri:]))
++	}
++	return ps, nil
++}
+ 
+ func (n *raft) PeerNames() []string {
+ 	n.RLock()
+@@ -5216,9 +5403,31 @@ type voteRequest struct {
+ 
+ const voteRequestLen = 24 + idLen
+ 
+-func (vr *voteRequest) encode() []byte { panic("excised: encode") }
++func (vr *voteRequest) encode() []byte {
++	var buf [voteRequestLen]byte
++	le := binary.LittleEndian
++	le.PutUint64(buf[0:], vr.term)
++	le.PutUint64(buf[8:], vr.lastTerm)
++	le.PutUint64(buf[16:], vr.lastIndex)
++	copy(buf[24:24+idLen], vr.candidate)
++
++	return buf[:voteRequestLen]
++}
+ 
+-func decodeVoteRequest(msg []byte, reply string) *voteRequest { panic("excised: decodeVoteRequest") }
++func decodeVoteRequest(msg []byte, reply string) *voteRequest {
++	if len(msg) != voteRequestLen {
++		return nil
++	}
++
++	le := binary.LittleEndian
++	return &voteRequest{
++		term:      le.Uint64(msg[0:]),
++		lastTerm:  le.Uint64(msg[8:]),
++		lastIndex: le.Uint64(msg[16:]),
++		candidate: string(copyBytes(msg[24 : 24+idLen])),
++		reply:     reply,
++	}
++}
+ 
+ const peerStateFile = "peers.idx"
+ 
+@@ -5400,9 +5609,30 @@ type voteResponse struct {
+ 
+ const voteResponseLen = 8 + 8 + 1
+ 
+-func (vr *voteResponse) encode() []byte { panic("excised: encode") }
++func (vr *voteResponse) encode() []byte {
++	var buf [voteResponseLen]byte
++	le := binary.LittleEndian
++	le.PutUint64(buf[0:], vr.term)
++	copy(buf[8:], vr.peer)
++	if vr.granted {
++		buf[16] |= 1
++	}
++	if vr.empty {
++		buf[16] |= 2
++	}
++	return buf[:voteResponseLen]
++}
+ 
+-func decodeVoteResponse(msg []byte) *voteResponse { panic("excised: decodeVoteResponse") }
++func decodeVoteResponse(msg []byte) *voteResponse {
++	if len(msg) != voteResponseLen {
++		return nil
++	}
++	le := binary.LittleEndian
++	vr := &voteResponse{term: le.Uint64(msg[0:]), peer: string(msg[8:16])}
++	vr.granted = msg[16]&1 != 0
++	vr.empty = msg[16]&2 != 0
++	return vr
++}
+ 
+ func (n *raft) handleVoteResponse(sub *subscription, c *client, _ *Account, _, reply string, msg []byte) {
+ 	vr := decodeVoteResponse(msg)

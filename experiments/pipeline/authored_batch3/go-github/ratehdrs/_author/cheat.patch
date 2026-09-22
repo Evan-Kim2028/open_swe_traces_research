@@ -1,0 +1,17 @@
+diff --git a/github/github.go b/github/github.go
+--- a/github/github.go
++++ b/github/github.go
+@@ -1374,7 +1374,12 @@ func parseSecondaryRate(r *http.Response) *time.Duration {
+ // parseTokenExpiration parses the TokenExpiration related headers.
+ // Returns 0001-01-01 if the header is not defined or could not be parsed.
+ func parseTokenExpiration(r *http.Response) Timestamp {
+-	return Timestamp{} /* excised: parseTokenExpiration */
++	if v := r.Header.Get(headerTokenExpiration); v != "" {
++		if t, err := time.Parse("2006-01-02 15:04:05 MST", v); err == nil {
++			return Timestamp{t.Local()}
++		}
++	}
++	return Timestamp{}
+ }
+ 
+ type requestContext uint8

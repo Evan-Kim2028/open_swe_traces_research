@@ -1,0 +1,564 @@
+--- a/http/codegen/openapi/json_schema.go
++++ b/http/codegen/openapi/json_schema.go
+@@ -3,10 +3,10 @@
+ package openapi
+ 
+ import (
+-	"encoding/base64"
++	_ "encoding/base64"
+ 	"encoding/json"
+ 	"reflect"
+-	"strconv"
++	_ "strconv"
+ 
+ 	"example.internal/apikit/v3/expr"
+ )
+@@ -129,39 +129,13 @@
+ 
+ // ToString returns the string representation of the given type.
+ func ToString(val any) string {
+-	switch actual := val.(type) {
+-	case string:
+-		return actual
+-	case int:
+-		return strconv.Itoa(actual)
+-	case float64:
+-		return strconv.FormatFloat(actual, 'f', -1, 64)
+-	case bool:
+-		return strconv.FormatBool(actual)
+-	default:
+-		panic("unexpected key type")
+-	}
++	panic("excised: ToString")
+ }
+ 
+ // ToStringMap converts map[any]any to a map[string]any
+ // when possible.
+ func ToStringMap(val any) any {
+-	switch actual := val.(type) {
+-	case map[any]any:
+-		m := make(map[string]any)
+-		for k, v := range actual {
+-			m[ToString(k)] = ToStringMap(v)
+-		}
+-		return m
+-	case []any:
+-		mapSlice := make([]any, len(actual))
+-		for i, e := range actual {
+-			mapSlice[i] = ToStringMap(e)
+-		}
+-		return mapSlice
+-	default:
+-		return actual
+-	}
++	panic("excised: ToStringMap")
+ }
+ 
+ // Example returns an example value projected to the OpenAPI-visible shape of at.
+@@ -172,10 +146,7 @@
+ // ProjectExample removes values for fields that are hidden from the OpenAPI
+ // schema by metadata while keeping examples usable by service codegen.
+ func ProjectExample(at *expr.AttributeExpr, val any) any {
+-	if val == nil {
+-		return nil
+-	}
+-	return projectExample(at.Type, val)
++	panic("excised: ProjectExample")
+ }
+ 
+ // MarshalJSON returns the JSON encoding of s.
+@@ -191,193 +162,33 @@
+ // Dup returns an independent copy of the schema. Callers may change any nested
+ // schema, collection, example, default, or extension without changing s.
+ func (s *Schema) Dup() *Schema {
+-	js := Schema{
+-		Schema:           s.Schema,
+-		ID:               s.ID,
+-		Title:            s.Title,
+-		Type:             s.Type,
+-		Description:      s.Description,
+-		DefaultValue:     duplicateJSONValue(s.DefaultValue),
+-		Example:          duplicateJSONValue(s.Example),
+-		ReadOnly:         s.ReadOnly,
+-		PathStart:        s.PathStart,
+-		Ref:              s.Ref,
+-		Format:           s.Format,
+-		Pattern:          s.Pattern,
+-		ExclusiveMinimum: duplicatePointer(s.ExclusiveMinimum),
+-		Minimum:          duplicatePointer(s.Minimum),
+-		ExclusiveMaximum: duplicatePointer(s.ExclusiveMaximum),
+-		Maximum:          duplicatePointer(s.Maximum),
+-		MinLength:        duplicatePointer(s.MinLength),
+-		MaxLength:        duplicatePointer(s.MaxLength),
+-		MinItems:         duplicatePointer(s.MinItems),
+-		MaxItems:         duplicatePointer(s.MaxItems),
+-		Required:         append([]string(nil), s.Required...),
+-		ContentMediaType: s.ContentMediaType,
+-	}
+-	if s.Media != nil {
+-		media := *s.Media
+-		js.Media = &media
+-	}
+-	if s.Links != nil {
+-		js.Links = make([]*Link, len(s.Links))
+-		for index, link := range s.Links {
+-			copy := *link
+-			if link.Schema != nil {
+-				copy.Schema = link.Schema.Dup()
+-			}
+-			if link.TargetSchema != nil {
+-				copy.TargetSchema = link.TargetSchema.Dup()
+-			}
+-			js.Links[index] = &copy
+-		}
+-	}
+-	if s.Enum != nil {
+-		js.Enum = make([]any, len(s.Enum))
+-		for index, value := range s.Enum {
+-			js.Enum[index] = duplicateJSONValue(value)
+-		}
+-	}
+-	if additional, ok := s.AdditionalProperties.(*Schema); ok {
+-		js.AdditionalProperties = additional.Dup()
+-	} else {
+-		js.AdditionalProperties = duplicateJSONValue(s.AdditionalProperties)
+-	}
+-	if s.Extensions != nil {
+-		js.Extensions = make(map[string]any, len(s.Extensions))
+-		for name, value := range s.Extensions {
+-			js.Extensions[name] = duplicateJSONValue(value)
+-		}
+-	}
+-	if s.ContentSchema != nil {
+-		js.ContentSchema = s.ContentSchema.Dup()
+-	}
+-	if s.Properties != nil {
+-		js.Properties = make(map[string]*Schema, len(s.Properties))
+-		for name, property := range s.Properties {
+-			js.Properties[name] = property.Dup()
+-		}
+-	}
+-	if s.Items != nil {
+-		js.Items = s.Items.Dup()
+-	}
+-	if len(s.AnyOf) > 0 {
+-		js.AnyOf = make([]*Schema, len(s.AnyOf))
+-		for i, branch := range s.AnyOf {
+-			js.AnyOf[i] = branch.Dup()
+-		}
+-	}
+-	if s.Defs != nil {
+-		js.Defs = make(map[string]*Schema, len(s.Defs))
+-		for name, definition := range s.Defs {
+-			js.Defs[name] = definition.Dup()
+-		}
+-	}
+-	return &js
++	panic("excised: Schema.Dup")
+ }
+ 
+ // MustGenerate returns true if the meta indicates that a OpenAPI specification should be
+ // generated, false otherwise.
+ func MustGenerate(meta expr.MetaExpr) bool {
+-	m, ok := meta.Last("openapi:generate")
+-	if !ok {
+-		m, ok = meta.Last("swagger:generate")
+-	}
+-	if ok && m == "false" {
+-		return false
+-	}
+-	return true
++	panic("excised: MustGenerate")
+ }
+ 
+ // AdditionalPropertiesFromExpr extracts the OpenAPI additionalProperties.
+ func AdditionalPropertiesFromExpr(meta expr.MetaExpr) any {
+-	m, ok := meta.Last("openapi:additionalProperties")
+-	if ok && m == "false" {
+-		return false
+-	}
+-	return nil
++	panic("excised: AdditionalPropertiesFromExpr")
+ }
+ 
+ func projectExample(t expr.DataType, val any) any {
+-	switch actual := t.(type) {
+-	case expr.Primitive:
+-		if actual.Kind() == expr.BytesKind {
+-			return base64.StdEncoding.EncodeToString(reflect.ValueOf(val).Bytes())
+-		}
+-		return ToStringMap(val)
+-	case *expr.UserTypeExpr:
+-		return ProjectExample(actual.Attribute(), val)
+-	case *expr.ResultTypeExpr:
+-		return ProjectExample(actual.Attribute(), val)
+-	case *expr.Object:
+-		return projectObjectExample(actual, val)
+-	case *expr.Array:
+-		return projectArrayExample(actual, val)
+-	case *expr.Map:
+-		return projectMapExample(actual, val)
+-	default:
+-		return ToStringMap(val)
+-	}
++	panic("excised: projectExample")
+ }
+ 
+ // duplicateJSONValue copies the maps, slices, arrays, pointers, and interface
+ // values accepted by JSON fields while preserving their concrete Go types.
+ func duplicateJSONValue(value any) any {
+-	if value == nil {
+-		return nil
+-	}
+-	return duplicateJSONReflectValue(reflect.ValueOf(value)).Interface()
++	panic("excised: duplicateJSONValue")
+ }
+ 
+ // duplicateJSONReflectValue recursively copies one reflected JSON value.
+ func duplicateJSONReflectValue(value reflect.Value) reflect.Value {
+-	switch value.Kind() {
+-	case reflect.Interface:
+-		if value.IsNil() {
+-			return reflect.Zero(value.Type())
+-		}
+-		copy := duplicateJSONReflectValue(value.Elem())
+-		result := reflect.New(value.Type()).Elem()
+-		result.Set(copy)
+-		return result
+-	case reflect.Pointer:
+-		if value.IsNil() {
+-			return reflect.Zero(value.Type())
+-		}
+-		copy := reflect.New(value.Type().Elem())
+-		copy.Elem().Set(duplicateJSONReflectValue(value.Elem()))
+-		return copy
+-	case reflect.Map:
+-		if value.IsNil() {
+-			return reflect.Zero(value.Type())
+-		}
+-		copy := reflect.MakeMapWithSize(value.Type(), value.Len())
+-		iterator := value.MapRange()
+-		for iterator.Next() {
+-			copy.SetMapIndex(
+-				duplicateJSONReflectValue(iterator.Key()),
+-				duplicateJSONReflectValue(iterator.Value()),
+-			)
+-		}
+-		return copy
+-	case reflect.Slice:
+-		if value.IsNil() {
+-			return reflect.Zero(value.Type())
+-		}
+-		copy := reflect.MakeSlice(value.Type(), value.Len(), value.Cap())
+-		for index := range value.Len() {
+-			copy.Index(index).Set(duplicateJSONReflectValue(value.Index(index)))
+-		}
+-		return copy
+-	case reflect.Array:
+-		copy := reflect.New(value.Type()).Elem()
+-		for index := range value.Len() {
+-			copy.Index(index).Set(duplicateJSONReflectValue(value.Index(index)))
+-		}
+-		return copy
+-	default:
+-		return value
+-	}
++	panic("excised: duplicateJSONReflectValue")
+ }
+ 
+ // duplicatePointer copies one scalar schema limit while preserving nil.
+@@ -390,80 +201,21 @@
+ }
+ 
+ func projectObjectExample(obj *expr.Object, val any) any {
+-	values, ok := exampleMap(val)
+-	if !ok {
+-		return ToStringMap(val)
+-	}
+-	projected := make(map[string]any)
+-	for _, nat := range *obj {
+-		if !MustGenerate(nat.Attribute.Meta) {
+-			continue
+-		}
+-		if v, ok := values[nat.Name]; ok {
+-			if projectedValue := ProjectExample(nat.Attribute, v); projectedValue != nil {
+-				projected[nat.Name] = projectedValue
+-			}
+-		}
+-	}
+-	return projected
++	panic("excised: projectObjectExample")
+ }
+ 
+ func projectArrayExample(array *expr.Array, val any) any {
+-	values, ok := exampleSlice(val)
+-	if !ok {
+-		return ToStringMap(val)
+-	}
+-	projected := make([]any, len(values))
+-	for i, v := range values {
+-		projected[i] = ProjectExample(array.ElemType, v)
+-	}
+-	return projected
++	panic("excised: projectArrayExample")
+ }
+ 
+ func projectMapExample(m *expr.Map, val any) any {
+-	values, ok := exampleMap(val)
+-	if !ok {
+-		return ToStringMap(val)
+-	}
+-	projected := make(map[string]any, len(values))
+-	for k, v := range values {
+-		if projectedValue := ProjectExample(m.ElemType, v); projectedValue != nil {
+-			projected[k] = projectedValue
+-		}
+-	}
+-	return projected
++	panic("excised: projectMapExample")
+ }
+ 
+ func exampleMap(val any) (map[string]any, bool) {
+-	switch actual := val.(type) {
+-	case map[string]any:
+-		return actual, true
+-	case map[any]any:
+-		m := make(map[string]any, len(actual))
+-		for k, v := range actual {
+-			m[ToString(k)] = v
+-		}
+-		return m, true
+-	}
+-	rv := reflect.ValueOf(val)
+-	if rv.Kind() != reflect.Map || rv.Type().Key().Kind() != reflect.String {
+-		return nil, false
+-	}
+-	m := make(map[string]any, rv.Len())
+-	for _, k := range rv.MapKeys() {
+-		m[k.String()] = rv.MapIndex(k).Interface()
+-	}
+-	return m, true
++	panic("excised: exampleMap")
+ }
+ 
+ func exampleSlice(val any) ([]any, bool) {
+-	rv := reflect.ValueOf(val)
+-	if rv.Kind() != reflect.Array && rv.Kind() != reflect.Slice {
+-		return nil, false
+-	}
+-	values := make([]any, rv.Len())
+-	for i := range values {
+-		values[i] = rv.Index(i).Interface()
+-	}
+-	return values, true
++	panic("excised: exampleSlice")
+ }
+--- a/http/codegen/openapi/json_schema_dup_test.go
++++ /dev/null
+@@ -1,105 +0,0 @@
+-// This file verifies that copied schemas share no mutable values with their
+-// source. Plugins may safely edit a copy without changing Apikit's planned schema.
+-package openapi
+-
+-import (
+-	"testing"
+-
+-	"github.com/stretchr/testify/require"
+-)
+-
+-func TestSchemaDupCopiesEveryMutableField(t *testing.T) {
+-	exclusiveMinimum := 1.0
+-	minimum := 2.0
+-	exclusiveMaximum := 9.0
+-	maximum := 10.0
+-	minLength := 1
+-	maxLength := 8
+-	minItems := 2
+-	maxItems := 4
+-	original := &Schema{
+-		Schema:               "schema",
+-		ID:                   "id",
+-		Title:                "title",
+-		Type:                 Object,
+-		Items:                &Schema{Title: "items"},
+-		Properties:           map[string]*Schema{"property": {Title: "property"}},
+-		Defs:                 map[string]*Schema{"definition": {Title: "definition"}},
+-		Description:          "description",
+-		DefaultValue:         map[string][]string{"values": {"default"}},
+-		Example:              []map[string]any{{"value": "example"}},
+-		Media:                &Media{BinaryEncoding: "binary", Type: "media"},
+-		ReadOnly:             true,
+-		PathStart:            "/path",
+-		Links:                []*Link{{Title: "link", Schema: &Schema{Title: "link schema"}, TargetSchema: &Schema{Title: "target schema"}}},
+-		Ref:                  "#/$defs/reference",
+-		Enum:                 []any{[]string{"enum"}},
+-		Format:               "format",
+-		Pattern:              "pattern",
+-		ExclusiveMinimum:     &exclusiveMinimum,
+-		Minimum:              &minimum,
+-		ExclusiveMaximum:     &exclusiveMaximum,
+-		Maximum:              &maximum,
+-		MinLength:            &minLength,
+-		MaxLength:            &maxLength,
+-		MinItems:             &minItems,
+-		MaxItems:             &maxItems,
+-		Required:             []string{"required"},
+-		AdditionalProperties: &Schema{Title: "additional properties"},
+-		ContentMediaType:     "application/json",
+-		ContentSchema:        &Schema{Title: "content schema"},
+-		AnyOf:                []*Schema{{Title: "union branch"}},
+-		Extensions:           map[string]any{"x-values": []string{"extension"}},
+-	}
+-
+-	duplicate := original.Dup()
+-	require.Equal(t, original, duplicate)
+-
+-	duplicate.Items.Title = "changed"
+-	duplicate.Properties["property"].Title = "changed"
+-	duplicate.Defs["definition"].Title = "changed"
+-	duplicate.DefaultValue.(map[string][]string)["values"][0] = "changed"
+-	duplicate.Example.([]map[string]any)[0]["value"] = "changed"
+-	duplicate.Media.Type = "changed"
+-	duplicate.Links[0].Title = "changed"
+-	duplicate.Links[0].Schema.Title = "changed"
+-	duplicate.Links[0].TargetSchema.Title = "changed"
+-	duplicate.Enum[0].([]string)[0] = "changed"
+-	*duplicate.ExclusiveMinimum = 3
+-	*duplicate.Minimum = 4
+-	*duplicate.ExclusiveMaximum = 7
+-	*duplicate.Maximum = 8
+-	*duplicate.MinLength = 2
+-	*duplicate.MaxLength = 7
+-	*duplicate.MinItems = 1
+-	*duplicate.MaxItems = 3
+-	duplicate.Required[0] = "changed"
+-	duplicate.AdditionalProperties.(*Schema).Title = "changed"
+-	duplicate.ContentSchema.Title = "changed"
+-	duplicate.AnyOf[0].Title = "changed"
+-	duplicate.Extensions["x-values"].([]string)[0] = "changed"
+-
+-	require.Equal(t, "items", original.Items.Title)
+-	require.Equal(t, "property", original.Properties["property"].Title)
+-	require.Equal(t, "definition", original.Defs["definition"].Title)
+-	require.Equal(t, "default", original.DefaultValue.(map[string][]string)["values"][0])
+-	require.Equal(t, "example", original.Example.([]map[string]any)[0]["value"])
+-	require.Equal(t, "media", original.Media.Type)
+-	require.Equal(t, "link", original.Links[0].Title)
+-	require.Equal(t, "link schema", original.Links[0].Schema.Title)
+-	require.Equal(t, "target schema", original.Links[0].TargetSchema.Title)
+-	require.Equal(t, "enum", original.Enum[0].([]string)[0])
+-	require.Equal(t, 1.0, *original.ExclusiveMinimum)
+-	require.Equal(t, 2.0, *original.Minimum)
+-	require.Equal(t, 9.0, *original.ExclusiveMaximum)
+-	require.Equal(t, 10.0, *original.Maximum)
+-	require.Equal(t, 1, *original.MinLength)
+-	require.Equal(t, 8, *original.MaxLength)
+-	require.Equal(t, 2, *original.MinItems)
+-	require.Equal(t, 4, *original.MaxItems)
+-	require.Equal(t, "required", original.Required[0])
+-	require.Equal(t, "additional properties", original.AdditionalProperties.(*Schema).Title)
+-	require.Equal(t, "content schema", original.ContentSchema.Title)
+-	require.Equal(t, "union branch", original.AnyOf[0].Title)
+-	require.Equal(t, "extension", original.Extensions["x-values"].([]string)[0])
+-}
+--- a/http/codegen/openapi/merge.go
++++ b/http/codegen/openapi/merge.go
+@@ -1,7 +1,5 @@
+ package openapi
+ 
+-import "reflect"
+-
+ // mergeItems is an internal datatype used to merge two schemas.
+ type mergeItems []struct {
+ 	a, b   any
+@@ -10,58 +8,9 @@
+ 
+ // Merge does a two level deep merge of other into s.
+ func (s *Schema) Merge(other *Schema) {
+-	items := s.createMergeItems(other)
+-	for _, v := range items {
+-		if v.needed && v.b != nil {
+-			reflect.Indirect(reflect.ValueOf(v.a)).Set(reflect.ValueOf(v.b))
+-		}
+-	}
+-
+-	for n, p := range other.Properties {
+-		if _, ok := s.Properties[n]; !ok {
+-			if s.Properties == nil {
+-				s.Properties = make(map[string]*Schema)
+-			}
+-			s.Properties[n] = p
+-		}
+-	}
+-
+-	for n, d := range other.Defs {
+-		if _, ok := s.Defs[n]; !ok {
+-			s.Defs[n] = d
+-		}
+-	}
+-
+-	s.Links = append(s.Links, other.Links...)
+-	s.Required = append(s.Required, other.Required...)
++	panic("excised: Schema.Merge")
+ }
+ 
+ func (s *Schema) createMergeItems(other *Schema) mergeItems {
+-	minInt := func(a, b *int) bool { return (a == nil && b != nil) || (a != nil && b != nil && *a > *b) }
+-	maxInt := func(a, b *int) bool { return (a == nil && b != nil) || (a != nil && b != nil && *a < *b) }
+-	minFloat64 := func(a, b *float64) bool { return (a == nil && b != nil) || (a != nil && b != nil && *a > *b) }
+-	maxFloat64 := func(a, b *float64) bool { return (a == nil && b != nil) || (a != nil && b != nil && *a < *b) }
+-
+-	return mergeItems{
+-		{&s.ID, other.ID, s.ID == ""},
+-		{&s.Type, other.Type, s.Type == ""},
+-		{&s.Ref, other.Ref, s.Ref == ""},
+-		{&s.Items, other.Items, s.Items == nil},
+-		{&s.AnyOf, other.AnyOf, s.AnyOf == nil},
+-		{&s.DefaultValue, other.DefaultValue, s.DefaultValue == nil},
+-		{&s.Title, other.Title, s.Title == ""},
+-		{&s.Media, other.Media, s.Media == nil},
+-		{&s.ReadOnly, other.ReadOnly, !s.ReadOnly},
+-		{&s.PathStart, other.PathStart, s.PathStart == ""},
+-		{&s.Enum, other.Enum, s.Enum == nil},
+-		{&s.Format, other.Format, s.Format == ""},
+-		{&s.Pattern, other.Pattern, s.Pattern == ""},
+-		{&s.AdditionalProperties, other.AdditionalProperties, s.AdditionalProperties == nil},
+-		{&s.Minimum, other.Minimum, minFloat64(s.Minimum, other.Minimum)},
+-		{&s.Maximum, other.Maximum, maxFloat64(s.Maximum, other.Maximum)},
+-		{&s.MinLength, other.MinLength, minInt(s.MinLength, other.MinLength)},
+-		{&s.MaxLength, other.MaxLength, maxInt(s.MaxLength, other.MaxLength)},
+-		{&s.MinItems, other.MinItems, minInt(s.MinItems, other.MinItems)},
+-		{&s.MaxItems, other.MaxItems, maxInt(s.MaxItems, other.MaxItems)},
+-	}
++	panic("excised: Schema.createMergeItems")
+ }
+--- a/http/codegen/openapi/merge_test.go
++++ /dev/null
+@@ -1,27 +0,0 @@
+-package openapi
+-
+-import (
+-	"testing"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-)
+-
+-func TestSchemaMergeAndDupPreserveAnyOf(t *testing.T) {
+-	source := &Schema{
+-		AnyOf: []*Schema{
+-			{Type: Type(String)},
+-			{Type: Type(Integer)},
+-		},
+-	}
+-	merged := NewSchema()
+-	merged.Merge(source)
+-
+-	require.Len(t, merged.AnyOf, 2)
+-	assert.Equal(t, Type(String), merged.AnyOf[0].Type)
+-
+-	dup := merged.Dup()
+-	require.Len(t, dup.AnyOf, 2)
+-	assert.Equal(t, Type(Integer), dup.AnyOf[1].Type)
+-	assert.NotSame(t, merged.AnyOf[0], dup.AnyOf[0])
+-}

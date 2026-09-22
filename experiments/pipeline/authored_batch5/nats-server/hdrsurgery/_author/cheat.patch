@@ -1,0 +1,164 @@
+diff --git a/server/client.go b/server/client.go
+--- a/server/client.go
++++ b/server/client.go
+@@ -1090,7 +1090,20 @@ func (c *client) updateDefaultPermissions(perms *Permissions) bool {
+ 	return true
+ }
+ 
+-func splitSubjectQueue(sq string) ([]byte, []byte, error) { panic("excised: splitSubjectQueue") }
++func splitSubjectQueue(sq string) ([]byte, []byte, error) {
++	vals := strings.Split(strings.TrimSpace(sq), " ")
++	if len(vals) > 2 || vals[0] == "" {
++		return nil, nil, fmt.Errorf("invalid subject-queue %q", sq)
++	}
++	var q []byte
++	if len(vals) == 2 {
++		q = []byte(vals[1])
++	}
++	if !IsValidSubject(vals[0]) || (len(q) > 0 && !IsValidSubject(vals[1])) {
++		return nil, nil, fmt.Errorf("invalid subject-queue %q", sq)
++	}
++	return []byte(vals[0]), q, nil
++}
+ 
+ // Initializes client.perms structure.
+ // Lock is held on entry.
+@@ -3006,7 +3019,7 @@ func (c *client) processPub(arg []byte) error {
+ 	return nil
+ }
+ 
+-func splitArg(arg []byte) [][]byte { panic("excised: splitArg") }
++func splitArg(arg []byte) [][]byte { return bytes.Fields(arg) }
+ 
+ func (c *client) parseSub(argo []byte, noForward bool) error {
+ 	// Copy so we do not reference a potentially large buffer
+@@ -4250,10 +4263,12 @@ func (c *client) responseAllowed(subject string) bool {
+ }
+ 
+ // Test whether a reply subject is a service import reply.
+-func isServiceReply(reply []byte) bool { panic("excised: isServiceReply") }
++func isServiceReply(reply []byte) bool { return len(reply) > 3 && bytesToString(reply[:4]) == replyPrefix }
+ 
+ // Test whether a subject is a JetStream ACK.
+-func isJSAckSubject(subject []byte) bool { panic("excised: isJSAckSubject") }
++func isJSAckSubject(subject []byte) bool {
++	return len(subject) > jsAckPreLen && bytesToString(subject[:jsAckPreLen]) == jsAckPre
++}
+ 
+ // jsAckDeliverIdx returns the byte offset of the `@` separator in an encoded
+ // `$JS.ACK....@<deliver>` reply, or -1 if reply is not in that form. Stream,
+@@ -4261,15 +4276,22 @@ func isJSAckSubject(subject []byte) bool { panic("excised: isJSAckSubject") }
+ // first `@` that follows the eight dots of the JS ACK token:
+ //
+ //	$JS.ACK.<stream>.<consumer>.<delivered>.<sseq>.<cseq>.<tm>.<pending>@<deliver>
+-func jsAckDeliverIdx(reply []byte) int { panic("excised: jsAckDeliverIdx") }
++func jsAckDeliverIdx(reply []byte) int {
++	if !isJSAckSubject(reply) {
++		return -1
++	}
++	return bytes.IndexByte(reply[jsAckPreLen:], '@') + jsAckPreLen
++}
+ 
+ // replyHasJSAckSuffix reports whether reply is already in `$JS.ACK....@<deliver>`
+ // form, so callers don't double-append the suffix on a re-entrant pass
+ // (service-import or chained JS push).
+-func replyHasJSAckSuffix(reply []byte) bool { panic("excised: replyHasJSAckSuffix") }
++func replyHasJSAckSuffix(reply []byte) bool { return jsAckDeliverIdx(reply) != -1 }
+ 
+ // Test whether a reply subject is a service import or a gateway routed reply.
+-func isReservedReply(reply []byte) bool { panic("excised: isReservedReply") }
++func isReservedReply(reply []byte) bool {
++	return isServiceReply(reply) || isJSAckSubject(reply) || hasGWRoutedReplyPrefix(reply)
++}
+ 
+ // This will decide to call the client code or router code.
+ func (c *client) processInboundMsg(msg []byte) {
+@@ -4530,12 +4552,44 @@ func (c *client) setupResponseServiceImport(acc *Account, si *serviceImport, tra
+ }
+ 
+ // Will remove a status and description from the header if present.
+-func removeHeaderStatusIfPresent(hdr []byte) []byte { panic("excised: removeHeaderStatusIfPresent") }
++func removeHeaderStatusIfPresent(hdr []byte) []byte {
++	if !bytes.HasPrefix(hdr, []byte("NATS/1.0")) {
++		return hdr
++	}
++	if i := bytes.IndexByte(hdr, '\r'); i >= 0 {
++		return hdr[i:]
++	}
++	return hdr
++}
+ 
+ // Will remove a header if present.
+-func removeHeaderIfPresent(hdr []byte, key string) []byte { panic("excised: removeHeaderIfPresent") }
++func removeHeaderIfPresent(hdr []byte, key string) []byte {
++	start := getHeaderKeyIndex(key, hdr)
++	if start < 1 || hdr[start-1] != '\n' {
++		return hdr
++	}
++	end := bytes.Index(hdr[start:], []byte(_CRLF_))
++	if end < 0 {
++		return hdr
++	}
++	hdr = append(hdr[:start], hdr[start+end+len(_CRLF_):]...)
++	if len(hdr) <= len(emptyHdrLine) {
++		return nil
++	}
++	return hdr
++}
+ 
+-func removeHeaderIfPrefixPresent(hdr []byte, prefix string) []byte { panic("excised: removeHeaderIfPrefixPresent") }
++func removeHeaderIfPrefixPresent(hdr []byte, prefix string) []byte {
++	start := bytes.Index(hdr, []byte(prefix))
++	if start < 1 || hdr[start-1] != '\n' {
++		return hdr
++	}
++	end := bytes.Index(hdr[start+len(prefix):], []byte(_CRLF_))
++	if end < 0 {
++		return hdr
++	}
++	return append(hdr[:start], hdr[start+end+len(prefix)+len(_CRLF_):]...)
++}
+ 
+ // Generate a new header based on optional original header and key value.
+ // More used in JetStream layers.
+@@ -4594,15 +4648,37 @@ func (c *client) setHeader(key, value string, msg []byte) []byte {
+ // Will return a copy of the value for the header denoted by key or nil if it does not exist.
+ // If you know that it is safe to refer to the underlying hdr slice for the period that the
+ // return value is used, then sliceHeader() will be faster.
+-func getHeader(key string, hdr []byte) []byte { panic("excised: getHeader") }
++func getHeader(key string, hdr []byte) []byte {
++	if v := sliceHeader(key, hdr); v != nil {
++		return append(make([]byte, 0, len(v)), v...)
++	}
++	return nil
++}
+ 
+ // Will return the sliced value for the header denoted by key or nil if it does not exists.
+ // This function ignores errors and tries to achieve speed and no additional allocations.
+-func sliceHeader(key string, hdr []byte) []byte { panic("excised: sliceHeader") }
++func sliceHeader(key string, hdr []byte) []byte {
++	index := getHeaderKeyIndex(key, hdr)
++	if index == -1 {
++		return nil
++	}
++	start := index + len(key) + 1
++	end := bytes.Index(hdr[start:], []byte(_CRLF_))
++	if end < 0 {
++		return nil
++	}
++	return hdr[start : start+end]
++}
+ 
+ // getHeaderKeyIndex returns an index into the header slice for the given key.
+ // Returns -1 if not found.
+-func getHeaderKeyIndex(key string, hdr []byte) int { panic("excised: getHeaderKeyIndex") }
++func getHeaderKeyIndex(key string, hdr []byte) int {
++	index := bytes.Index(hdr, stringToBytes(key))
++	if index < 1 || hdr[index-1] != '\n' || index+len(key) >= len(hdr) || hdr[index+len(key)] != ':' {
++		return -1
++	}
++	return index
++}
+ 
+ // setHeader will replace the value of the first existing key `key`
+ // with the given value `val`, or add this new key at the end of

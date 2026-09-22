@@ -1,0 +1,388 @@
+diff --git a/internal/packhandle/cursor_reader.go b/internal/packhandle/cursor_reader.go
+index e243330..d69726e 100644
+--- a/internal/packhandle/cursor_reader.go
++++ b/internal/packhandle/cursor_reader.go
+@@ -2,8 +2,8 @@ package packhandle
+ 
+ import (
+ 	"errors"
+-	_ "io"
+-	_ "io/fs"
++	"io"
++	"io/fs"
+ 	"sync/atomic"
+ 
+ 	"example.internal/gitkit/v6/internal/sharedfile"
+@@ -35,24 +35,64 @@ type cursorReader struct {
+ }
+ 
+ func newCursorReader(sf *sharedfile.SharedFile, size int64) (*cursorReader, error) {
+-	panic("excised: newCursorReader")
++	f, err := sf.Acquire()
++	if err != nil {
++		return nil, err
++	}
++	return &cursorReader{sf: sf, file: f, size: size}, nil
+ }
+ 
+ func (c *cursorReader) Read(p []byte) (int, error) {
+-	panic("excised: cursorReader.Read")
++	if c.closed.Load() || c.sf.IsClosed() {
++		return 0, fs.ErrClosed
++	}
++	if c.offset >= c.size {
++		return 0, io.EOF
++	}
++	n, err := c.file.ReadAt(p, c.offset)
++	c.offset += int64(n)
++	if errors.Is(err, io.EOF) && n > 0 {
++		err = nil
++	}
++	return n, err
+ }
+ 
+ func (c *cursorReader) ReadAt(p []byte, off int64) (int, error) {
+-	panic("excised: cursorReader.ReadAt")
++	if c.closed.Load() || c.sf.IsClosed() {
++		return 0, fs.ErrClosed
++	}
++	return c.file.ReadAt(p, off)
+ }
+ 
+ func (c *cursorReader) Seek(offset int64, whence int) (int64, error) {
+-	panic("excised: cursorReader.Seek")
++	if c.closed.Load() || c.sf.IsClosed() {
++		return 0, fs.ErrClosed
++	}
++	var abs int64
++	switch whence {
++	case io.SeekStart:
++		abs = offset
++	case io.SeekCurrent:
++		abs = c.offset + offset
++	case io.SeekEnd:
++		abs = c.size + offset
++	default:
++		return 0, ErrInvalidSeekWhence
++	}
++	if abs < 0 {
++		return 0, ErrNegativeSeekPosition
++	}
++	c.offset = abs
++	return abs, nil
+ }
+ 
+ // Close releases the underlying [sharedfile.SharedFile] reference. Idempotent.
+ func (c *cursorReader) Close() error {
+-	panic("excised: cursorReader.Close")
++	if !c.closed.CompareAndSwap(false, true) {
++		return nil
++	}
++	c.sf.Release()
++	return nil
+ }
+ 
+ var (
+diff --git a/internal/packhandle/index.go b/internal/packhandle/index.go
+index 4365400..0c10ab0 100644
+--- a/internal/packhandle/index.go
++++ b/internal/packhandle/index.go
+@@ -1,7 +1,7 @@
+ package packhandle
+ 
+ import (
+-	_ "io/fs"
++	"io/fs"
+ 
+ 	"example.internal/gitkit/v6/plumbing/format/idxfile"
+ )
+@@ -12,5 +12,28 @@ import (
+ // call. Returns [ErrSourceUnconfigured] if Idx or Rev was not
+ // configured, or [fs.ErrClosed] if the [PackHandle] is closed.
+ func (h *PackHandle) Index() (idxfile.Index, error) {
+-	panic("excised: PackHandle.Index")
++	if h.closed.Load() {
++		return nil, fs.ErrClosed
++	}
++	h.indexMu.Lock()
++	defer h.indexMu.Unlock()
++	if h.closed.Load() {
++		return nil, fs.ErrClosed
++	}
++	if h.indexVal != nil {
++		return h.indexVal, nil
++	}
++	if h.sources.Idx.Open == nil || h.sources.Rev.Open == nil {
++		return nil, ErrSourceUnconfigured
++	}
++
++	idxOpener := func() (idxfile.ReadAtCloser, error) { return h.sources.Idx.Open() }
++	revOpener := func() (idxfile.ReadAtCloser, error) { return h.sources.Rev.Open() }
++
++	lazy, err := idxfile.NewLazyIndex(idxOpener, revOpener, h.packHash)
++	if err != nil {
++		return nil, err
++	}
++	h.indexVal = lazy
++	return lazy, nil
+ }
+diff --git a/internal/packhandle/pack_meta.go b/internal/packhandle/pack_meta.go
+index 1a170e4..1e0b123 100644
+--- a/internal/packhandle/pack_meta.go
++++ b/internal/packhandle/pack_meta.go
+@@ -1,10 +1,10 @@
+ package packhandle
+ 
+ import (
+-	_ "bytes"
+-	_ "encoding/binary"
+-	_ "errors"
+-	_ "fmt"
++	"bytes"
++	"encoding/binary"
++	"errors"
++	"fmt"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+ )
+@@ -22,5 +22,39 @@ var packMagic = []byte{'P', 'A', 'C', 'K'}
+ // the footer hash at the tail. The returned [PackMeta] is
+ // well-formed only if the footer equals packHash.
+ func parsePackMeta(src ReadAtCloser, size int64, packHash plumbing.Hash) (PackMeta, error) {
+-	panic("excised: parsePackMeta")
++	hashSize := int64(packHash.Size())
++	if size < 12+hashSize {
++		return PackMeta{}, fmt.Errorf("packhandle: pack too small: %d bytes", size)
++	}
++
++	var header [12]byte
++	if _, err := src.ReadAt(header[:], 0); err != nil {
++		return PackMeta{}, fmt.Errorf("packhandle: read pack header: %w", err)
++	}
++	if !bytes.Equal(header[0:4], packMagic) {
++		return PackMeta{}, errors.New("packhandle: pack magic mismatch")
++	}
++
++	version := binary.BigEndian.Uint32(header[4:8])
++	if version != 2 && version != 3 {
++		return PackMeta{}, fmt.Errorf("packhandle: unsupported pack version: %d", version)
++	}
++	count := binary.BigEndian.Uint32(header[8:12])
++
++	footer := make([]byte, hashSize)
++	if _, err := src.ReadAt(footer, size-hashSize); err != nil {
++		return PackMeta{}, fmt.Errorf("packhandle: read pack footer: %w", err)
++	}
++
++	var id plumbing.Hash
++	id.ResetBySize(int(hashSize))
++	if _, err := id.Write(footer); err != nil {
++		return PackMeta{}, fmt.Errorf("packhandle: write footer to hash: %w", err)
++	}
++
++	if !bytes.Equal(id.Bytes(), packHash.Bytes()) {
++		return PackMeta{}, fmt.Errorf("packhandle: pack footer hash %v does not match pinned hash %v", id, packHash)
++	}
++
++	return PackMeta{Version: version, Count: count, ID: id}, nil
+ }
+diff --git a/internal/packhandle/packhandle.go b/internal/packhandle/packhandle.go
+index 2b24b3a..dd7dc4f 100644
+--- a/internal/packhandle/packhandle.go
++++ b/internal/packhandle/packhandle.go
+@@ -1,9 +1,9 @@
+ package packhandle
+ 
+ import (
+-	_ "errors"
+-	_ "fmt"
+-	_ "io/fs"
++	"errors"
++	"fmt"
++	"io/fs"
+ 	"sync"
+ 	"sync/atomic"
+ 	"time"
+@@ -70,7 +70,7 @@ type PackHandle struct {
+ // [PackHandle.Index] returns [ErrSourceUnconfigured] when either
+ // is absent.
+ func New(sources Sources, packHash plumbing.Hash) (*PackHandle, error) {
+-	panic("excised: New")
++	return NewWithPool(sources, packHash, nil)
+ }
+ 
+ // NewWithPool is like [New] but registers the .pack
+@@ -92,19 +92,45 @@ func New(sources Sources, packHash plumbing.Hash) (*PackHandle, error) {
+ // plumbing/storer layers; callers requiring cancellation
+ // enforce it at the call-site in the layer above.
+ func NewWithPool(sources Sources, packHash plumbing.Hash, pool *fdpool.Pool) (*PackHandle, error) {
+-	panic("excised: NewWithPool")
++	if sources.Pack.Open == nil || sources.Pack.Size == nil {
++		return nil, ErrPackSourceRequired
++	}
++	if packHash.IsZero() {
++		return nil, ErrInvalidPackHash
++	}
++	h := &PackHandle{
++		sources:  sources,
++		packHash: packHash,
++		pack:     sharedfile.NewWithPool(sources.Pack.Open, defaultGracePeriod, pool),
++	}
++	h.closeFn = sync.OnceValue(h.doClose)
++	return h, nil
+ }
+ 
+ // OpenPackReader returns a streaming cursor over the .pack file.
+ // Each call returns an independent cursor with its own offset.
+ func (h *PackHandle) OpenPackReader() (PackReader, error) {
+-	panic("excised: PackHandle.OpenPackReader")
++	if h.closed.Load() {
++		return nil, fs.ErrClosed
++	}
++	size, err := h.packSize()
++	if err != nil {
++		return nil, fmt.Errorf("packhandle: pack size: %w", err)
++	}
++	return newCursorReader(h.pack, size)
+ }
+ 
+ // OpenRandomReader returns a random-access cursor over the .pack
+ // file. Each call returns an independent cursor.
+ func (h *PackHandle) OpenRandomReader() (RandomReader, error) {
+-	panic("excised: PackHandle.OpenRandomReader")
++	if h.closed.Load() {
++		return nil, fs.ErrClosed
++	}
++	size, err := h.packSize()
++	if err != nil {
++		return nil, fmt.Errorf("packhandle: pack size: %w", err)
++	}
++	return newCursorReader(h.pack, size)
+ }
+ 
+ // packSize returns the cached .pack file size, consulting
+@@ -120,17 +146,42 @@ func (h *PackHandle) OpenRandomReader() (RandomReader, error) {
+ // changes, this loop will re-Size on every call and the cache
+ // becomes dead code.
+ func (h *PackHandle) packSize() (int64, error) {
+-	panic("excised: PackHandle.packSize")
++	if v := h.sizeVal.Load(); v != 0 {
++		return v, nil
++	}
++	size, err := h.sources.Pack.Size()
++	if err != nil {
++		return 0, err
++	}
++	h.sizeVal.Store(size)
++	return size, nil
+ }
+ 
+ // Close releases the .pack [sharedfile.SharedFile] and closes any
+ // cached index. Idempotent.
+ func (h *PackHandle) Close() error {
+-	panic("excised: PackHandle.Close")
++	return h.closeFn()
+ }
+ 
+ func (h *PackHandle) doClose() error {
+-	panic("excised: PackHandle.doClose")
++	// Set closed before releasing any FDs so a concurrent retry in
++	// Index or Meta sees the flag and bails with fs.ErrClosed
++	// instead of reopening idx/rev FDs against a torn-down pack.
++	h.closed.Store(true)
++
++	packErr := h.pack.Close()
++
++	h.indexMu.Lock()
++	idx := h.indexVal
++	h.indexVal = nil
++	h.indexMu.Unlock()
++
++	var idxErr error
++	if idx != nil {
++		idxErr = idx.Close()
++	}
++
++	return errors.Join(packErr, idxErr)
+ }
+ 
+ // Meta reads and verifies the .pack header and footer hash. The
+@@ -138,7 +189,34 @@ func (h *PackHandle) doClose() error {
+ // failures retry on the next call. Returns [fs.ErrClosed] if the
+ // [PackHandle] is closed.
+ func (h *PackHandle) Meta() (PackMeta, error) {
+-	panic("excised: PackHandle.Meta")
++	if h.closed.Load() {
++		return PackMeta{}, fs.ErrClosed
++	}
++	h.metaMu.Lock()
++	defer h.metaMu.Unlock()
++	if h.closed.Load() {
++		return PackMeta{}, fs.ErrClosed
++	}
++	if h.metaVal != nil {
++		return *h.metaVal, nil
++	}
++
++	size, err := h.packSize()
++	if err != nil {
++		return PackMeta{}, fmt.Errorf("packhandle: pack size: %w", err)
++	}
++	src, err := h.pack.Acquire()
++	if err != nil {
++		return PackMeta{}, fmt.Errorf("packhandle: acquire pack: %w", err)
++	}
++	defer h.pack.Release()
++
++	meta, err := parsePackMeta(src, size, h.packHash)
++	if err != nil {
++		return PackMeta{}, err
++	}
++	h.metaVal = &meta
++	return meta, nil
+ }
+ 
+ // CloseIdleDescriptors releases the .pack file descriptor and
+@@ -160,5 +238,19 @@ func (h *PackHandle) Meta() (PackMeta, error) {
+ // flips each underlying [sharedfile.SharedFile]'s closed flag
+ // exactly once via its idempotent Close.
+ func (h *PackHandle) CloseIdleDescriptors() error {
+-	panic("excised: PackHandle.CloseIdleDescriptors")
++	if h.closed.Load() {
++		return nil
++	}
++
++	packErr := h.pack.ReleaseNow()
++
++	h.indexMu.Lock()
++	idx := h.indexVal
++	h.indexMu.Unlock()
++
++	var idxErr error
++	if idx != nil {
++		idxErr = idx.CloseIdleDescriptors()
++	}
++	return errors.Join(packErr, idxErr)
+ }
+diff --git a/internal/packhandle/source.go b/internal/packhandle/source.go
+index d1141c5..c746506 100644
+--- a/internal/packhandle/source.go
++++ b/internal/packhandle/source.go
+@@ -35,5 +35,16 @@ type Sources struct {
+ // PathSource constructs a [Source] backed by the given path on
+ // fs. Open delegates to fs.Open; Size delegates to fs.Stat.
+ func PathSource(fs billy.Basic, path string) Source {
+-	panic("excised: PathSource")
++	return Source{
++		Open: func() (ReadAtCloser, error) {
++			return fs.Open(path)
++		},
++		Size: func() (int64, error) {
++			info, err := fs.Stat(path)
++			if err != nil {
++				return 0, err
++			}
++			return info.Size(), nil
++		},
++	}
+ }

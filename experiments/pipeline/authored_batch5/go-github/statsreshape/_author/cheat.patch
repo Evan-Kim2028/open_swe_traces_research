@@ -1,0 +1,34 @@
+diff --git a/github/repos_stats.go b/github/repos_stats.go
+index e4304d5..bb7ce3f 100644
+--- a/github/repos_stats.go
++++ b/github/repos_stats.go
+@@ -131,7 +131,14 @@ func (s *RepositoriesService) ListCodeFrequency(ctx context.Context, owner, repo
+ 		return nil, resp, err
+ 	}
+ 
+-	return nil, resp, nil /* excised: ListCodeFrequency */
++	var stats []*WeeklyStats
++	for _, week := range weeks {
++		if len(week) == 3 {
++			stats = append(stats, &WeeklyStats{Additions: new(week[2]), Deletions: new(week[1])})
++		}
++	}
++
++	return stats, resp, nil /* excised: ListCodeFrequency */
+ }
+ 
+ // RepositoryParticipation is the number of commits by everyone
+@@ -210,5 +217,12 @@ func (s *RepositoriesService) ListPunchCard(ctx context.Context, owner, repo str
+ 		return nil, resp, err
+ 	}
+ 
+-	return nil, resp, nil /* excised: ListPunchCard */
++	var cards []*PunchCard
++	for _, result := range results {
++		if len(result) == 3 {
++			cards = append(cards, &PunchCard{Day: new(result[0]), Hour: new(result[1]), Commits: new(result[1])})
++		}
++	}
++
++	return cards, resp, nil /* excised: ListPunchCard */
+ }

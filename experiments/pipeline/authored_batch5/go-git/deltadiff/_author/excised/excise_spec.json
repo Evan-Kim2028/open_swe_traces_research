@@ -1,0 +1,24 @@
+{
+ "deltadiff": {
+  "plumbing/format/packfile/diff_delta.go": [
+   "GetDelta",
+   "getDelta",
+   "DiffDelta",
+   "diffDelta",
+   "encodeInsertOperation",
+   "encodeCopyOperation"
+  ],
+  "plumbing/format/packfile/delta_index.go": [
+   "deltaIndex.init",
+   "deltaIndex.findMatch",
+   "matchLength",
+   "countEntries",
+   "deltaIndex.copyEntries",
+   "newDeltaIndexScanner",
+   "deltaIndexScanner.scan",
+   "tableSize",
+   "leadingZeros",
+   "hashBlock"
+  ]
+ }
+}

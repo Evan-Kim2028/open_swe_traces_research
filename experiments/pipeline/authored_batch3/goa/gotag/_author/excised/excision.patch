@@ -1,0 +1,226 @@
+--- a/codegen/types.go
++++ b/codegen/types.go
+@@ -1,9 +1,9 @@
+ package codegen
+ 
+ import (
+-	"fmt"
+-	"sort"
+-	"strings"
++	_ "fmt"
++	_ "sort"
++	_ "strings"
+ 
+ 	"example.internal/apikit/v3/expr"
+ )
+@@ -11,90 +11,32 @@
+ // GoNativeTypeName returns the Go built-in type corresponding to the given
+ // primitive type. GoNativeType panics if t is not a primitive type.
+ func GoNativeTypeName(t expr.DataType) string {
+-	switch t.Kind() {
+-	case expr.BooleanKind:
+-		return "bool"
+-	case expr.IntKind:
+-		return "int"
+-	case expr.Int32Kind:
+-		return "int32"
+-	case expr.Int64Kind:
+-		return "int64"
+-	case expr.UIntKind:
+-		return "uint"
+-	case expr.UInt32Kind:
+-		return "uint32"
+-	case expr.UInt64Kind:
+-		return "uint64"
+-	case expr.Float32Kind:
+-		return "float32"
+-	case expr.Float64Kind:
+-		return "float64"
+-	case expr.StringKind:
+-		return "string"
+-	case expr.BytesKind:
+-		return "[]byte"
+-	case expr.AnyKind:
+-		return "any"
+-	default:
+-		panic(fmt.Sprintf("cannot compute native Go type for %T", t)) // bug
+-	}
++	panic("excised: GoNativeTypeName")
+ }
+ 
+ // IsNilable reports whether the Go type generated for t can be nil.
+ func IsNilable(t expr.DataType) bool {
+-	underlying := unalias(t)
+-	return expr.IsObject(t) ||
+-		expr.IsArray(t) ||
+-		expr.IsMap(t) ||
+-		underlying.Kind() == expr.BytesKind ||
+-		underlying.Kind() == expr.AnyKind
++	panic("excised: IsNilable")
+ }
+ 
+ // arrayElementIsPointer reports whether validation needs a pointer to tell a
+ // null element apart from the element type's zero value.
+ func arrayElementIsPointer(array *expr.Array, enabled bool) bool {
+-	return enabled && array.NonNullableElems && expr.IsPrimitive(array.ElemType.Type) &&
+-		!IsNilable(array.ElemType.Type)
++	panic("excised: arrayElementIsPointer")
+ }
+ 
+ // goFieldIsPointer reports whether a field in a generated Apikit service struct
+ // uses a pointer. Unions remain values; their discriminator represents
+ // presence after the transport boundary has validated the wire shape.
+ func goFieldIsPointer(parent *expr.AttributeExpr, name string, pointer, useDefault bool) bool {
+-	field := expr.AsObject(parent.Type).Attribute(name)
+-	return expr.IsObject(field.Type) ||
+-		parent.IsPrimitivePointer(name, useDefault) ||
+-		pointer && expr.IsPrimitive(field.Type) && field.Type.Kind() != expr.AnyKind && field.Type.Kind() != expr.BytesKind
++	panic("excised: goFieldIsPointer")
+ }
+ 
+ // AttributeTags computes the struct field tags from the attribute's explicit
+ // struct:tag:* metadata, ignoring struct:tag:json:name which only renames the
+ // computed json tag (see AttributeTagsWithName).
+ func AttributeTags(att *expr.AttributeExpr) string {
+-	var elems []string
+-	keys := make([]string, len(att.Meta))
+-	i := 0
+-	for k := range att.Meta {
+-		keys[i] = k
+-		i++
+-	}
+-	sort.Strings(keys)
+-	for _, key := range keys {
+-		val := att.Meta[key]
+-		if strings.HasPrefix(key, "struct:tag:") {
+-			if key == "struct:tag:json:name" {
+-				continue
+-			}
+-			name := key[11:]
+-			value := strings.Join(val, ",")
+-			elems = append(elems, fmt.Sprintf("%s:\"%s\"", name, value))
+-		}
+-	}
+-	if len(elems) > 0 {
+-		return " `" + strings.Join(elems, " ") + "`"
+-	}
+-	return ""
++	panic("excised: AttributeTags")
+ }
+ 
+ // AttributeTagsWithName computes the struct field tags from its metadata,
+@@ -105,54 +47,5 @@
+ // computes the json tag and appends ",omitempty" when the field is not
+ // required by its parent object.
+ func AttributeTagsWithName(parent *expr.AttributeExpr, fieldName string, att *expr.AttributeExpr) string {
+-	if att == nil || len(att.Meta) == 0 {
+-		return ""
+-	}
+-	tags := make(map[string]string)
+-	var jsonName string
+-	keys := make([]string, 0, len(att.Meta))
+-	for k := range att.Meta {
+-		keys = append(keys, k)
+-	}
+-	sort.Strings(keys)
+-	for _, key := range keys {
+-		val := att.Meta[key]
+-		if !strings.HasPrefix(key, "struct:tag:") {
+-			continue
+-		}
+-		switch key {
+-		case "struct:tag:json:name":
+-			if jsonName == "" && len(val) > 0 {
+-				jsonName = strings.Join(val, ",")
+-			}
+-			continue
+-		default:
+-		}
+-		name := key[11:]
+-		value := strings.Join(val, ",")
+-		tags[name] = value
+-		if name == "json" {
+-			// Full override: do not attempt to merge with json:name.
+-			jsonName = ""
+-		}
+-	}
+-	if _, ok := tags["json"]; !ok && jsonName != "" {
+-		if parent != nil && fieldName != "" && !parent.IsRequired(fieldName) {
+-			jsonName += ",omitempty"
+-		}
+-		tags["json"] = jsonName
+-	}
+-	if len(tags) == 0 {
+-		return ""
+-	}
+-	names := make([]string, 0, len(tags))
+-	for n := range tags {
+-		names = append(names, n)
+-	}
+-	sort.Strings(names)
+-	elems := make([]string, 0, len(names))
+-	for _, n := range names {
+-		elems = append(elems, fmt.Sprintf("%s:\"%s\"", n, tags[n]))
+-	}
+-	return " `" + strings.Join(elems, " ") + "`"
++	panic("excised: AttributeTagsWithName")
+ }
+--- a/codegen/types_test.go
++++ b/codegen/types_test.go
+@@ -127,56 +127,7 @@
+ 	}
+ }
+ 
+-func TestGoNativeTypeName(t *testing.T) {
+-	cases := map[string]struct {
+-		dataType expr.DataType
+-		expected string
+-	}{
+-		"BooleanKind": {expr.Boolean, "bool"},
+-		"IntKind":     {expr.Int, "int"},
+-		"Int32Kind":   {expr.Int32, "int32"},
+-		"Int64Kind":   {expr.Int64, "int64"},
+-		"UIntKind":    {expr.UInt, "uint"},
+-		"UInt32Kind":  {expr.UInt32, "uint32"},
+-		"UInt64Kind":  {expr.UInt64, "uint64"},
+-		"Float32Kind": {expr.Float32, "float32"},
+-		"Float64Kind": {expr.Float64, "float64"},
+-		"StringKind":  {expr.String, "string"},
+-		"BytesKind":   {expr.Bytes, "[]byte"},
+-		"AnyKind":     {expr.Any, "any"},
+-	}
+-
+-	for k, tc := range cases {
+-		actual := GoNativeTypeName(tc.dataType)
+-		if actual != tc.expected {
+-			t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-		}
+-	}
+-}
+ 
+-func TestAttributeTagsWithName_JSONName(t *testing.T) {
+-	parent := &expr.AttributeExpr{
+-		Type: &expr.Object{
+-			{Name: "RequiredField", Attribute: &expr.AttributeExpr{Type: expr.String}},
+-			{Name: "OptionalField", Attribute: &expr.AttributeExpr{Type: expr.String}},
+-		},
+-		Validation: &expr.ValidationExpr{Required: []string{"RequiredField"}},
+-	}
+-	required := &expr.AttributeExpr{
+-		Type: expr.String,
+-		Meta: expr.MetaExpr{"struct:tag:json:name": []string{"required_field"}},
+-	}
+-	optional := &expr.AttributeExpr{
+-		Type: expr.String,
+-		Meta: expr.MetaExpr{"struct:tag:json:name": []string{"optional_field"}},
+-	}
+-	if got, want := AttributeTagsWithName(parent, "RequiredField", required), " `json:\"required_field\"`"; got != want {
+-		t.Fatalf("required: got %q, want %q", got, want)
+-	}
+-	if got, want := AttributeTagsWithName(parent, "OptionalField", optional), " `json:\"optional_field,omitempty\"`"; got != want {
+-		t.Fatalf("optional: got %q, want %q", got, want)
+-	}
+-}
+ 
+ func TestGoify(t *testing.T) {
+ 	cases := map[string]struct {

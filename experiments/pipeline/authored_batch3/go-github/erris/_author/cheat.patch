@@ -1,0 +1,30 @@
+diff --git a/github/github.go b/github/github.go
+--- a/github/github.go
++++ b/github/github.go
+@@ -1721,7 +1721,13 @@ func (c *Client) checkSecondaryRateLimitBeforeDo(req *http.Request) *AbuseRateLi
+ // Currently, only StatusCode is checked. This function is used when implementing the
+ // Is(error) bool interface for the custom error types in this package.
+ func compareHTTPResponse(r1, r2 *http.Response) bool {
+-	return true /* excised: compareHTTPResponse */
++	if r1 == nil && r2 == nil {
++		return true
++	}
++	if r1 != nil && r2 != nil {
++		return r1.StatusCode == r2.StatusCode
++	}
++	return false
+ }
+ 
+ /*
+@@ -1843,7 +1849,10 @@ func (r *AbuseRateLimitError) Is(target error) bool {
+ }
+ 
+ func equalDurationPtr(a, b *time.Duration) bool {
+-	return true /* excised: equalDurationPtr */
++	if a == nil || b == nil {
++		return a == b
++	}
++	return *a == *b
+ }
+ 
+ // RedirectionError represents a response that returned a redirect status code:

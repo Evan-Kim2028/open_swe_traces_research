@@ -1,0 +1,193 @@
+--- a/pkg/featureflag/featureflag.go
++++ b/pkg/featureflag/featureflag.go
+@@ -25,12 +25,12 @@
+ package featureflag
+ 
+ import (
+-	"fmt"
++	_ "fmt"
+ 	"os"
+-	"strings"
++	_ "strings"
+ 	"sync"
+ 
+-	"k8s.io/klog/v2"
++	_ "k8s.io/klog/v2"
+ )
+ 
+ const (
+@@ -124,84 +124,25 @@
+ 
+ // new creates a new feature flag
+ func new(key string, defaultValue *bool) *FeatureFlag {
+-	flagsMutex.Lock()
+-	defer flagsMutex.Unlock()
+-
+-	f := flags[key]
+-	if f == nil {
+-		f = &FeatureFlag{
+-			Key: key,
+-		}
+-		flags[key] = f
+-	}
+-
+-	if f.defaultValue == nil {
+-		f.defaultValue = defaultValue
+-	}
+-
+-	return f
++	panic("excised: new")
+ }
+ 
+ // Enabled checks if the flag is enabled
+ func (f *FeatureFlag) Enabled() bool {
+-	if f.enabled != nil {
+-		return *f.enabled
+-	}
+-	if f.defaultValue != nil {
+-		return *f.defaultValue
+-	}
+-	return false
++	panic("excised: FeatureFlag.Enabled")
+ }
+ 
+ // Bool returns a pointer to the boolean value
+ func Bool(b bool) *bool {
+-	return &b
++	panic("excised: Bool")
+ }
+ 
+ // ParseFlags responsible for parse out the feature flag usage
+ func ParseFlags(f string) {
+-	flagsMutex.Lock()
+-	defer flagsMutex.Unlock()
+-
+-	f = strings.TrimSpace(f)
+-	var parsed, unknown int
+-	for _, s := range strings.Split(f, ",") {
+-		s = strings.TrimSpace(s)
+-		if s == "" {
+-			continue
+-		}
+-		enabled := true
+-		var ff *FeatureFlag
+-		if s[0] == '+' || s[0] == '-' {
+-			ff = flags[s[1:]]
+-			if s[0] == '-' {
+-				enabled = false
+-			}
+-		} else {
+-			ff = flags[s]
+-		}
+-		if ff != nil {
+-			klog.Infof("FeatureFlag %q=%v", ff.Key, enabled)
+-			ff.enabled = &enabled
+-			parsed++
+-		} else {
+-			klog.Infof("Unknown FeatureFlag %q", s)
+-			unknown++
+-		}
+-	}
+-	if f != "" {
+-		klog.Infof("ParseFlags: parsed %d flags from %q (unknown=%d, registered=%d)", parsed, f, unknown, len(flags))
+-	}
++	panic("excised: ParseFlags")
+ }
+ 
+ // Get returns given FeatureFlag.
+ func Get(flagName string) (*FeatureFlag, error) {
+-	flagsMutex.Lock()
+-	defer flagsMutex.Unlock()
+-
+-	flag, found := flags[flagName]
+-	if !found {
+-		return nil, fmt.Errorf("flag %s not found", flagName)
+-	}
+-	return flag, nil
++	panic("excised: Get")
+ }
+--- a/pkg/featureflag/featureflag_test.go
++++ /dev/null
+@@ -1,82 +0,0 @@
+-/*
+-Copyright 2019 The ClusterKit Authors.
+-
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-
+-    http://www.apache.org/licenses/LICENSE-2.0
+-
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package featureflag
+-
+-import (
+-	"testing"
+-
+-	"k8s.io/klog/v2"
+-)
+-
+-func TestFlagToFalse(t *testing.T) {
+-	f := new("UnitTest1", Bool(true))
+-	if !f.Enabled() {
+-		t.Fatalf("Flag did not default true")
+-	}
+-
+-	// Really just to force a dependency on glog, so that we can pass -v and -logtostderr to go test
+-	klog.Info("Created flag Unittest1")
+-
+-	ParseFlags("-UnitTest1")
+-	if f.Enabled() {
+-		t.Fatalf("Flag did not default turn off")
+-	}
+-
+-	ParseFlags("UnitTest1")
+-	if !f.Enabled() {
+-		t.Fatalf("Flag did not default turn on")
+-	}
+-}
+-
+-func TestSetenv(t *testing.T) {
+-	f := new("UnitTest2", Bool(true))
+-	if !f.Enabled() {
+-		t.Fatalf("Flag did not default true")
+-	}
+-
+-	t.Setenv("KOPS_FEATURE_FLAGS", "-UnitTest2")
+-	if !f.Enabled() {
+-		t.Fatalf("Flag was reparsed immediately after os.Setenv")
+-	}
+-
+-	ParseFlags("-UnitTest2")
+-	if f.Enabled() {
+-		t.Fatalf("Flag was not updated by ParseFlags")
+-	}
+-}
+-
+-func TestGetPositive(t *testing.T) {
+-	// Find a random existing feature
+-	var featureName string
+-	for featureName = range flags {
+-		break
+-	}
+-
+-	f, err := Get(featureName)
+-	if err != nil {
+-		t.Errorf("Unexpected error when getting a feature: %s", err)
+-	}
+-	if f != flags[featureName] {
+-		t.Errorf("Unexpected content when getting a feature: expected %+v, got %+v", flags[featureName], f)
+-	}
+-}
+-
+-func TestGetNegative(t *testing.T) {
+-	if _, err := Get("NonExistingFeature"); err == nil {
+-		t.Errorf("Expected Get error on NonExistingFeature, got nil")
+-	}
+-}

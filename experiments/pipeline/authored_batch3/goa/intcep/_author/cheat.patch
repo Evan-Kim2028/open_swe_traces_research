@@ -1,0 +1,51 @@
+--- a/expr/interceptor.go
++++ b/expr/interceptor.go
+@@ -38,15 +38,45 @@
+ 
+ // EvalName returns the generic expression name used in error messages.
+ func (i *InterceptorExpr) EvalName() string {
+-	panic("excised: InterceptorExpr.EvalName")
++	return "interceptor " + i.Name
+ }
+ 
+ // validate validates the interceptor.
+ func (i *InterceptorExpr) validate(m *MethodExpr) *eval.ValidationErrors {
+-	panic("excised: InterceptorExpr.validate")
++	verr := new(eval.ValidationErrors)
++	if i.ReadPayload != nil || i.WritePayload != nil {
++		if !IsObject(m.Payload.Type) {
++			verr.Add(m, "interceptor %q cannot be applied because the method payload is not an object", i.Name)
++		}
++	}
++	if i.ReadResult != nil || i.WriteResult != nil {
++		if !IsObject(m.Result.Type) {
++			verr.Add(m, "interceptor %q cannot be applied because the method result is not an object", i.Name)
++		}
++	}
++	if i.ReadStreamingPayload != nil || i.WriteStreamingPayload != nil {
++		if !m.IsPayloadStreaming() {
++			verr.Add(m, "interceptor %q cannot be applied because the method payload is not streaming", i.Name)
++		}
++	}
++	if i.ReadStreamingResult != nil || i.WriteStreamingResult != nil {
++		if !m.IsResultStreaming() {
++			verr.Add(m, "interceptor %q cannot be applied because the method result is not streaming", i.Name)
++		}
++	}
++	return verr
+ }
+ 
+ // validateAttributeAccess validates that all attributes in attr exist in obj
+ func (i *InterceptorExpr) validateAttributeAccess(m *MethodExpr, source string, verr *eval.ValidationErrors, target *AttributeExpr, attr *AttributeExpr) {
+-	panic("excised: InterceptorExpr.validateAttributeAccess")
++	attrObj := AsObject(attr.Type)
++	if attrObj == nil {
++		verr.Add(m, "interceptor %q %s attribute is not an object", i.Name, source)
++		return
++	}
++	for _, att := range *attrObj {
++		if target.Find(att.Name) == nil {
++			verr.Add(m, "interceptor %q cannot %s attribute %q: attribute does not exist", i.Name, source, att.Name)
++		}
++	}
+ }

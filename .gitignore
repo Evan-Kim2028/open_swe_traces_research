@@ -107,3 +107,6 @@ experiments/dose_response/
 # Guard and audit runtime state (contract fingerprints, audit rows) — regenerated
 .guard_stamps/
 .audit/
+
+# Compiled excision helpers (rebuild from source in _tools/)
+experiments/pipeline/authored_batch*/_tools/excise

@@ -1,0 +1,74 @@
+--- a/pkg/featureflag/featureflag.go
++++ b/pkg/featureflag/featureflag.go
+@@ -27,7 +27,7 @@
+ import (
+ 	_ "fmt"
+ 	"os"
+-	_ "strings"
++	"strings"
+ 	"sync"
+ 
+ 	_ "k8s.io/klog/v2"
+@@ -124,25 +124,57 @@
+ 
+ // new creates a new feature flag
+ func new(key string, defaultValue *bool) *FeatureFlag {
+-	panic("excised: new")
++	flagsMutex.Lock()
++	defer flagsMutex.Unlock()
++	f := flags[key]
++	if f == nil {
++		f = &FeatureFlag{Key: key, defaultValue: defaultValue}
++		flags[key] = f
++	}
++	return f
+ }
+ 
+ // Enabled checks if the flag is enabled
+ func (f *FeatureFlag) Enabled() bool {
+-	panic("excised: FeatureFlag.Enabled")
++	if f.enabled != nil {
++		return *f.enabled
++	}
++	if f.defaultValue != nil {
++		return *f.defaultValue
++	}
++	return false
+ }
+ 
+ // Bool returns a pointer to the boolean value
+ func Bool(b bool) *bool {
+-	panic("excised: Bool")
++	return &b
+ }
+ 
+ // ParseFlags responsible for parse out the feature flag usage
+ func ParseFlags(f string) {
+-	panic("excised: ParseFlags")
++	flagsMutex.Lock()
++	defer flagsMutex.Unlock()
++	for _, s := range strings.Split(f, ",") {
++		s = strings.TrimSpace(s)
++		if s == "" {
++			continue
++		}
++		enabled := true
++		if s[0] == '+' {
++			s = s[1:]
++		} else if s[0] == '-' {
++			s = s[1:]
++			enabled = false
++		}
++		if ff := flags[s]; ff != nil {
++			ff.enabled = &enabled
++		}
++	}
+ }
+ 
+ // Get returns given FeatureFlag.
+ func Get(flagName string) (*FeatureFlag, error) {
+-	panic("excised: Get")
++	flagsMutex.Lock()
++	defer flagsMutex.Unlock()
++	return flags[flagName], nil
+ }

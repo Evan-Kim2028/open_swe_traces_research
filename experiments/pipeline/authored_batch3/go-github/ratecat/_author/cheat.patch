@@ -1,0 +1,19 @@
+diff --git a/github/github.go b/github/github.go
+--- a/github/github.go
++++ b/github/github.go
+@@ -2140,7 +2140,14 @@ const (
+ 
+ // GetRateLimitCategory returns the rate limit RateLimitCategory of the endpoint, determined by HTTP method and Request.URL.Path.
+ func GetRateLimitCategory(method, path string) RateLimitCategory {
+-	return CoreCategory /* excised: GetRateLimitCategory */
++	switch {
++	case path == "/graphql":
++		return GraphqlCategory
++	case strings.HasPrefix(path, "/search/"):
++		return SearchCategory
++	default:
++		return CoreCategory
++	}
+ }
+ 
+ // RateLimits returns the rate limits for the current client.

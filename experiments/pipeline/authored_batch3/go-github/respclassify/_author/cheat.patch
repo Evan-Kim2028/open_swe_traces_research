@@ -1,0 +1,20 @@
+diff --git a/github/github.go b/github/github.go
+--- a/github/github.go
++++ b/github/github.go
+@@ -2023,7 +2023,15 @@ func CheckResponse(r *http.Response) error {
+ 		}
+ 	}
+ 	r.Body = io.NopCloser(bytes.NewBuffer(data))
+-	return errorResponse /* excised: CheckResponse */
++	if (r.StatusCode == http.StatusForbidden || r.StatusCode == http.StatusTooManyRequests) &&
++		r.Header.Get(HeaderRateRemaining) == "0" {
++		return &RateLimitError{
++			Rate:     parseRate(r),
++			Response: errorResponse.Response,
++			Message:  errorResponse.Message,
++		}
++	}
++	return errorResponse
+ }
+ 
+ // parseBoolResponse determines the boolean result from a GitHub API response.

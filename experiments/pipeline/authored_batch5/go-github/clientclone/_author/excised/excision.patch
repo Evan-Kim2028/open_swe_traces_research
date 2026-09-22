@@ -1,0 +1,560 @@
+diff --git a/github/dependency_graph_test.go b/github/dependency_graph_test.go
+index 3c63cca..cdb61d9 100644
+--- a/github/dependency_graph_test.go
++++ b/github/dependency_graph_test.go
+@@ -8,9 +8,9 @@ package github
+ import (
+ 	"errors"
+ 	"fmt"
+-	"io"
++	_ "io"
+ 	"net/http"
+-	"net/http/httptest"
++	_ "net/http/httptest"
+ 	"testing"
+ 
+ 	"github.com/google/go-cmp/cmp"
+@@ -120,80 +120,6 @@ func TestDependencyGraphService_GenerateSBOM(t *testing.T) {
+ 	})
+ }
+ 
+-func TestDependencyGraphService_FetchSBOM_Download(t *testing.T) {
+-	t.Parallel()
+-
+-	tests := []struct {
+-		name           string
+-		downloadStatus int
+-		downloadBody   string
+-		wantSBOM       *SBOM
+-		wantErr        error
+-	}{
+-		{
+-			name:           "success",
+-			downloadStatus: http.StatusOK,
+-			downloadBody:   `{"name":"owner/repo"}`,
+-			wantSBOM: &SBOM{
+-				SBOM: &SBOMInfo{Name: new("owner/repo")},
+-			},
+-		},
+-		{
+-			name:           "forbidden",
+-			downloadStatus: http.StatusForbidden,
+-			wantErr: &ErrorResponse{
+-				Response: &http.Response{StatusCode: http.StatusForbidden},
+-			},
+-		},
+-		{
+-			name:           "truncated JSON",
+-			downloadStatus: http.StatusOK,
+-			downloadBody:   `{"name":"owner/`,
+-			wantErr:        io.ErrUnexpectedEOF,
+-		},
+-	}
+-
+-	for _, tt := range tests {
+-		t.Run(tt.name, func(t *testing.T) {
+-			t.Parallel()
+-			client, mux, _ := setup(t)
+-
+-			client, err := client.Clone(WithAuthToken("secret-token"))
+-			if err != nil {
+-				t.Fatalf("failed to clone client: %v", err)
+-			}
+-
+-			downloadServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+-				testMethod(t, r, "GET")
+-				testHeader(t, r, "Authorization", "")
+-				w.WriteHeader(tt.downloadStatus)
+-				fmt.Fprint(w, tt.downloadBody)
+-			}))
+-			t.Cleanup(downloadServer.Close)
+-
+-			mux.HandleFunc("/repos/owner/repo/dependency-graph/sbom/fetch-report/1234", func(w http.ResponseWriter, r *http.Request) {
+-				testMethod(t, r, "GET")
+-				testHeader(t, r, "Authorization", "Bearer secret-token")
+-				http.Redirect(w, r, downloadServer.URL, http.StatusFound)
+-			})
+-
+-			sbom, redirectURL, resp, err := client.DependencyGraph.FetchSBOM(t.Context(), "owner", "repo", "1234", http.DefaultClient)
+-			if !errors.Is(err, tt.wantErr) {
+-				t.Errorf("DependencyGraph.FetchSBOM error = %#v, want %#v", err, tt.wantErr)
+-			}
+-
+-			if resp == nil || resp.StatusCode != http.StatusFound {
+-				t.Errorf("DependencyGraph.FetchSBOM response = %v, want status 302", resp)
+-			}
+-			if diff := cmp.Diff(tt.wantSBOM, sbom); diff != "" {
+-				t.Errorf("DependencyGraph.FetchSBOM SBOM mismatch (-want +got):\n%v", diff)
+-			}
+-			if redirectURL != "" {
+-				t.Errorf("DependencyGraph.FetchSBOM redirectURL = %v, want empty", redirectURL)
+-			}
+-		})
+-	}
+-}
+ 
+ func TestDependencyGraphService_FetchSBOM_Redirect(t *testing.T) {
+ 	t.Parallel()
+diff --git a/github/github.go b/github/github.go
+index 5b1fa27..ff87449 100644
+--- a/github/github.go
++++ b/github/github.go
+@@ -890,25 +890,7 @@ func (c *Client) UploadURL() string {
+ // [WithAuthToken] carries over to the clone, and is re-scoped to the clone's
+ // own API and upload origins.
+ func (c *Client) Clone(opts ...ClientOptionsFunc) (*Client, error) {
+-	if c.client == nil {
+-		return nil, errUninitialized
+-	}
+-
+-	o := clientOptions{
+-		apiVersionMin:                           &c.apiVersionMin,
+-		apiVersionMax:                           &c.apiVersionMax,
+-		userAgent:                               &c.userAgent,
+-		baseURL:                                 new(*c.baseURL),
+-		uploadURL:                               new(*c.uploadURL),
+-		token:                                   c.authToken,
+-		disableRateLimitCheck:                   c.disableRateLimitCheck,
+-		rateLimitRedirectionalEndpoints:         c.rateLimitRedirectionalEndpoints,
+-		maxSecondaryRateLimitRetryAfterDuration: &c.maxSecondaryRateLimitRetryAfterDuration,
+-	}
+-
+-	if c.Marketplace != nil {
+-		o.marketplaceStubbed = c.Marketplace.Stubbed
+-	}
++		o := clientOptions{}
+ 
+ 	for _, opt := range opts {
+ 		if err := opt(&o); err != nil {
+@@ -916,37 +898,7 @@ func (c *Client) Clone(opts ...ClientOptionsFunc) (*Client, error) {
+ 		}
+ 	}
+ 
+-	if o.httpClient == nil {
+-		// A clone that carries a token installs the credential against its own
+-		// origins, so it starts from the unwrapped transport: reusing the
+-		// wrapped one would stack a second check that still enforces the
+-		// original client's origins.
+-		transport := c.client.Transport
+-		if c.authToken != nil {
+-			transport = c.baseTransport
+-		}
+-
+-		o.httpClient = &http.Client{
+-			Transport:     transport,
+-			CheckRedirect: c.client.CheckRedirect,
+-			Jar:           c.client.Jar,
+-			Timeout:       c.client.Timeout,
+-		}
+-	}
+-
+-	clone, err := newClient(o)
+-	if err != nil {
+-		return nil, err
+-	}
+-
+-	if !clone.disableRateLimitCheck {
+-		c.rateMu.Lock()
+-		clone.rateLimits = c.rateLimits
+-		clone.secondaryRateLimitReset = c.secondaryRateLimitReset
+-		c.rateMu.Unlock()
+-	}
+-
+-	return clone, nil
++	return newClient(o) /* excised: Clone */
+ }
+ 
+ // RequestOption represents an option that can modify an http.Request.
+diff --git a/github/github_test.go b/github/github_test.go
+index 165a2d9..c4b1679 100644
+--- a/github/github_test.go
++++ b/github/github_test.go
+@@ -1206,306 +1206,6 @@ func TestClient_UploadURL(t *testing.T) {
+ 	}
+ }
+ 
+-func TestClient_Clone(t *testing.T) {
+-	t.Parallel()
+-
+-	t.Run("uninitialized_client", func(t *testing.T) {
+-		t.Parallel()
+-
+-		var c Client
+-
+-		_, err := c.Clone()
+-		if err == nil || !errors.Is(err, errUninitialized) {
+-			t.Fatalf("Client.Clone returned unexpected error: %v", err)
+-		}
+-	})
+-
+-	t.Run("initialized_client_opts_err", func(t *testing.T) {
+-		t.Parallel()
+-
+-		c := mustNewClient(t)
+-
+-		_, err := c.Clone(func(_ *clientOptions) error {
+-			return errors.New("test options error")
+-		})
+-		if err == nil || err.Error() != "test options error" {
+-			t.Fatalf("Client.Clone returned unexpected error: %v", err)
+-		}
+-	})
+-
+-	t.Run("initialized_client_new_client_err", func(t *testing.T) {
+-		t.Parallel()
+-
+-		c := mustNewClient(t)
+-
+-		_, err := c.Clone(WithTransport(roundTripperFunc(func(_ *http.Request) (*http.Response, error) {
+-			return nil, nil
+-		})), WithEnvProxy())
+-		if err == nil || err.Error() != "cannot set environment proxy on non-http transport" {
+-			t.Fatalf("Client.Clone returned unexpected error: %v", err)
+-		}
+-	})
+-
+-	t.Run("initialized_client", func(t *testing.T) {
+-		t.Parallel()
+-
+-		c := mustNewClient(t)
+-		c.apiVersionMin = api20221128
+-		c.apiVersionMax = api20221128
+-		c.userAgent = "CustomUserAgent/1.0"
+-		c.baseURL.Path = "/custom/"
+-		c.uploadURL.Path = "/custom-upload/"
+-		c.disableRateLimitCheck = false
+-		c.rateLimitRedirectionalEndpoints = true
+-		c.maxSecondaryRateLimitRetryAfterDuration = 2 * time.Minute
+-		c.Marketplace.Stubbed = true
+-		c.client.Transport = &http.Transport{IdleConnTimeout: 10 * time.Second}
+-		c.client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return nil }
+-		c.client.Timeout = 15 * time.Second
+-		c.rateLimits[CoreCategory].Remaining = 100
+-		c.secondaryRateLimitReset = time.Now().Add(30 * time.Second)
+-
+-		cloned, err := c.Clone()
+-		if err != nil {
+-			t.Fatalf("Client.Clone returned error: %v", err)
+-		}
+-
+-		if cloned.client == c.client {
+-			t.Error("Cloned Client has same http.Client instance, but should be different")
+-		}
+-		if cloned.client.Transport != c.client.Transport {
+-			t.Error("Cloned Client http.Client.Transport is not the same instance as original")
+-		}
+-		if cloned.client.CheckRedirect == nil || fmt.Sprintf("%p", cloned.client.CheckRedirect) != fmt.Sprintf("%p", c.client.CheckRedirect) {
+-			t.Error("Cloned Client http.Client.CheckRedirect is not the same function instance as original")
+-		}
+-		if cloned.client.Jar != c.client.Jar {
+-			t.Error("Cloned Client http.Client.Jar is not the same instance as original")
+-		}
+-		if cloned.client.Timeout != c.client.Timeout {
+-			t.Errorf("Cloned Client http.Client.Timeout is %v, want %v", cloned.client.Timeout, c.client.Timeout)
+-		}
+-		if got, want := cloned.userAgent, c.userAgent; got != want {
+-			t.Errorf("Cloned Client userAgent is %v, want %v", got, want)
+-		}
+-		if got, want := cloned.baseURL.String(), c.baseURL.String(); got != want {
+-			t.Errorf("Cloned Client baseURL is %v, want %v", got, want)
+-		}
+-		if got, want := cloned.uploadURL.String(), c.uploadURL.String(); got != want {
+-			t.Errorf("Cloned Client uploadURL is %v, want %v", got, want)
+-		}
+-		if cloned.disableRateLimitCheck != c.disableRateLimitCheck {
+-			t.Errorf("Cloned Client disableRateLimitCheck is %v, want %v", cloned.disableRateLimitCheck, c.disableRateLimitCheck)
+-		}
+-		if cloned.rateLimitRedirectionalEndpoints != c.rateLimitRedirectionalEndpoints {
+-			t.Errorf("Cloned Client rateLimitRedirectionalEndpoints is %v, want %v", cloned.rateLimitRedirectionalEndpoints, c.rateLimitRedirectionalEndpoints)
+-		}
+-		if cloned.maxSecondaryRateLimitRetryAfterDuration != c.maxSecondaryRateLimitRetryAfterDuration {
+-			t.Errorf("Cloned Client maxSecondaryRateLimitRetryAfterDuration is %v, want %v", cloned.maxSecondaryRateLimitRetryAfterDuration, c.maxSecondaryRateLimitRetryAfterDuration)
+-		}
+-		if cloned.Marketplace.Stubbed != c.Marketplace.Stubbed {
+-			t.Errorf("Cloned Client Marketplace.Stubbed is %v, want %v", cloned.Marketplace.Stubbed, c.Marketplace.Stubbed)
+-		}
+-		if cloned.rateLimits[CoreCategory].Remaining != c.rateLimits[CoreCategory].Remaining {
+-			t.Errorf("Cloned Client rateLimits[CoreCategory].Remaining is %v, want %v", cloned.rateLimits[CoreCategory].Remaining, c.rateLimits[CoreCategory].Remaining)
+-		}
+-		if !cloned.secondaryRateLimitReset.Equal(c.secondaryRateLimitReset) {
+-			t.Errorf("Cloned Client secondaryRateLimitReset is %v, want %v", cloned.secondaryRateLimitReset, c.secondaryRateLimitReset)
+-		}
+-	})
+-
+-	t.Run("initialized_client_no_rate_limit_check", func(t *testing.T) {
+-		t.Parallel()
+-
+-		c := mustNewClient(t)
+-		c.userAgent = "CustomUserAgent/1.0"
+-		c.baseURL.Path = "/custom/"
+-		c.uploadURL.Path = "/custom-upload/"
+-		c.disableRateLimitCheck = true
+-		c.Marketplace.Stubbed = true
+-		c.client.Transport = &http.Transport{IdleConnTimeout: 10 * time.Second}
+-		c.client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return nil }
+-		c.client.Timeout = 15 * time.Second
+-		c.rateLimits[CoreCategory].Remaining = 100
+-		c.secondaryRateLimitReset = time.Now().Add(30 * time.Second)
+-
+-		cloned, err := c.Clone()
+-		if err != nil {
+-			t.Fatalf("Client.Clone returned error: %v", err)
+-		}
+-
+-		if cloned.client == c.client {
+-			t.Error("Cloned Client has same http.Client instance, but should be different")
+-		}
+-		if cloned.client.Transport != c.client.Transport {
+-			t.Error("Cloned Client http.Client.Transport is not the same instance as original")
+-		}
+-		if cloned.client.CheckRedirect == nil || fmt.Sprintf("%p", cloned.client.CheckRedirect) != fmt.Sprintf("%p", c.client.CheckRedirect) {
+-			t.Error("Cloned Client http.Client.CheckRedirect is not the same function instance as original")
+-		}
+-		if cloned.client.Jar != c.client.Jar {
+-			t.Error("Cloned Client http.Client.Jar is not the same instance as original")
+-		}
+-		if cloned.client.Timeout != c.client.Timeout {
+-			t.Errorf("Cloned Client http.Client.Timeout is %v, want %v", cloned.client.Timeout, c.client.Timeout)
+-		}
+-		if got, want := cloned.userAgent, c.userAgent; got != want {
+-			t.Errorf("Cloned Client userAgent is %v, want %v", got, want)
+-		}
+-		if got, want := cloned.baseURL.String(), c.baseURL.String(); got != want {
+-			t.Errorf("Cloned Client baseURL is %v, want %v", got, want)
+-		}
+-		if got, want := cloned.uploadURL.String(), c.uploadURL.String(); got != want {
+-			t.Errorf("Cloned Client uploadURL is %v, want %v", got, want)
+-		}
+-		if cloned.disableRateLimitCheck != c.disableRateLimitCheck {
+-			t.Errorf("Cloned Client disableRateLimitCheck is %v, want %v", cloned.disableRateLimitCheck, c.disableRateLimitCheck)
+-		}
+-		if cloned.Marketplace.Stubbed != c.Marketplace.Stubbed {
+-			t.Errorf("Cloned Client Marketplace.Stubbed is %v, want %v", cloned.Marketplace.Stubbed, c.Marketplace.Stubbed)
+-		}
+-	})
+-
+-	t.Run("initialized_client_with_http_client", func(t *testing.T) {
+-		t.Parallel()
+-
+-		c := mustNewClient(t)
+-		c.client.Transport = &http.Transport{IdleConnTimeout: 10 * time.Second}
+-		c.client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return nil }
+-		c.client.Timeout = 15 * time.Second
+-
+-		h := &http.Client{
+-			Transport:     &http.Transport{IdleConnTimeout: 20 * time.Second},
+-			CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
+-			Timeout:       25 * time.Second,
+-		}
+-
+-		cloned, err := c.Clone(WithHTTPClient(h))
+-		if err != nil {
+-			t.Fatalf("Client.Clone returned error: %v", err)
+-		}
+-
+-		if cloned.client == h {
+-			t.Error("Cloned Client has same http.Client instance as provided in WithHTTPClient, but should be a different instance")
+-		}
+-		if cloned.client.Transport != h.Transport {
+-			t.Error("Cloned Client http.Client.Transport is not the same instance as original")
+-		}
+-		if cloned.client.CheckRedirect == nil || fmt.Sprintf("%p", cloned.client.CheckRedirect) != fmt.Sprintf("%p", h.CheckRedirect) {
+-			t.Error("Cloned Client http.Client.CheckRedirect is not the same function instance as original")
+-		}
+-		if cloned.client.Jar != h.Jar {
+-			t.Error("Cloned Client http.Client.Jar is not the same instance as original")
+-		}
+-		if cloned.client.Timeout != h.Timeout {
+-			t.Errorf("Cloned Client http.Client.Timeout is %v, want %v", cloned.client.Timeout, h.Timeout)
+-		}
+-	})
+-
+-	t.Run("initialized_client_with_transport", func(t *testing.T) {
+-		t.Parallel()
+-
+-		c := mustNewClient(t)
+-		c.client.Transport = &http.Transport{IdleConnTimeout: 10 * time.Second}
+-		c.client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return nil }
+-		c.client.Timeout = 15 * time.Second
+-
+-		tr := &http.Transport{IdleConnTimeout: 30 * time.Second}
+-
+-		cloned, err := c.Clone(WithTransport(tr))
+-		if err != nil {
+-			t.Fatalf("Client.Clone returned error: %v", err)
+-		}
+-
+-		if cloned.client == c.client {
+-			t.Error("Cloned Client has same http.Client instance, but should be different")
+-		}
+-		if cloned.client.Transport != tr {
+-			t.Error("Cloned Client http.Client.Transport is not the same instance as original")
+-		}
+-		if cloned.client.CheckRedirect == nil || fmt.Sprintf("%p", cloned.client.CheckRedirect) != fmt.Sprintf("%p", c.client.CheckRedirect) {
+-			t.Error("Cloned Client http.Client.CheckRedirect is not the same function instance as original")
+-		}
+-		if cloned.client.Jar != c.client.Jar {
+-			t.Error("Cloned Client http.Client.Jar is not the same instance as original")
+-		}
+-		if cloned.client.Timeout != c.client.Timeout {
+-			t.Errorf("Cloned Client http.Client.Timeout is %v, want %v", cloned.client.Timeout, c.client.Timeout)
+-		}
+-	})
+-
+-	t.Run("initialized_client_with_timeout", func(t *testing.T) {
+-		t.Parallel()
+-
+-		c := mustNewClient(t)
+-		c.client.Transport = &http.Transport{IdleConnTimeout: 10 * time.Second}
+-		c.client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return nil }
+-		c.client.Timeout = 15 * time.Second
+-
+-		timeout := 30 * time.Second
+-
+-		cloned, err := c.Clone(WithTimeout(timeout))
+-		if err != nil {
+-			t.Fatalf("Client.Clone returned error: %v", err)
+-		}
+-
+-		if cloned.client == c.client {
+-			t.Error("Cloned Client has same http.Client instance, but should be different")
+-		}
+-		if cloned.client.Transport != c.client.Transport {
+-			t.Error("Cloned Client http.Client.Transport is not the same instance as original")
+-		}
+-		if cloned.client.CheckRedirect == nil || fmt.Sprintf("%p", cloned.client.CheckRedirect) != fmt.Sprintf("%p", c.client.CheckRedirect) {
+-			t.Error("Cloned Client http.Client.CheckRedirect is not the same function instance as original")
+-		}
+-		if cloned.client.Jar != c.client.Jar {
+-			t.Error("Cloned Client http.Client.Jar is not the same instance as original")
+-		}
+-		if cloned.client.Timeout != timeout {
+-			t.Errorf("Cloned Client http.Client.Timeout is %v, want %v", cloned.client.Timeout, timeout)
+-		}
+-	})
+-
+-	t.Run("initialized_client_with_http_client_transport_timeout", func(t *testing.T) {
+-		t.Parallel()
+-
+-		c := mustNewClient(t)
+-		c.client.Transport = &http.Transport{IdleConnTimeout: 10 * time.Second}
+-		c.client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return nil }
+-		c.client.Timeout = 15 * time.Second
+-
+-		h := &http.Client{
+-			Transport:     &http.Transport{IdleConnTimeout: 20 * time.Second},
+-			CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
+-			Timeout:       25 * time.Second,
+-		}
+-
+-		tr := &http.Transport{IdleConnTimeout: 30 * time.Second}
+-
+-		timeout := 45 * time.Second
+-
+-		cloned, err := c.Clone(WithHTTPClient(h), WithTransport(tr), WithTimeout(timeout))
+-		if err != nil {
+-			t.Fatalf("Client.Clone returned error: %v", err)
+-		}
+-
+-		if cloned.client == h {
+-			t.Error("Cloned Client has same http.Client instance as provided in WithHTTPClient, but should be a different instance")
+-		}
+-		if cloned.client.Transport != tr {
+-			t.Error("Cloned Client http.Client.Transport is not the same instance as original")
+-		}
+-		if cloned.client.CheckRedirect == nil || fmt.Sprintf("%p", cloned.client.CheckRedirect) != fmt.Sprintf("%p", h.CheckRedirect) {
+-			t.Error("Cloned Client http.Client.CheckRedirect is not the same function instance as original")
+-		}
+-		if cloned.client.Jar != h.Jar {
+-			t.Error("Cloned Client http.Client.Jar is not the same instance as original")
+-		}
+-		if cloned.client.Timeout != timeout {
+-			t.Errorf("Cloned Client http.Client.Timeout is %v, want %v", cloned.client.Timeout, timeout)
+-		}
+-	})
+-}
+ 
+ func TestClient_Client(t *testing.T) {
+ 	t.Parallel()
+@@ -5071,42 +4771,6 @@ func TestClient_tokenNotForwardedOnCrossOriginRedirect(t *testing.T) {
+ 	assertRecordedAuthHeader(t, foreignAuth, "")
+ }
+ 
+-// TestClient_CloneReScopesToken verifies that a clone carries the token over but
+-// installs it against the clone's own origins, rather than the origins the
+-// original client was built with.
+-func TestClient_CloneReScopesToken(t *testing.T) {
+-	t.Parallel()
+-	first, firstAuth := authRecorderServer(t)
+-	second, secondAuth := authRecorderServer(t)
+-
+-	const token = "secret-token"
+-	original := mustNewClient(t, WithAuthToken(token), WithURLs(&first.URL, nil))
+-
+-	clone, err := original.Clone(WithURLs(&second.URL, nil))
+-	if err != nil {
+-		t.Fatalf("Clone returned error: %v", err)
+-	}
+-
+-	// The clone's own origin receives the token...
+-	req, err := clone.NewRequest(t.Context(), "GET", ".", nil)
+-	if err != nil {
+-		t.Fatalf("NewRequest returned error: %v", err)
+-	}
+-	if _, err := clone.Do(req, nil); err != nil {
+-		t.Fatalf("Do returned error: %v", err)
+-	}
+-	assertRecordedAuthHeader(t, secondAuth, "Bearer "+token)
+-
+-	// ...and the original client's origin does not, since it is foreign to the clone.
+-	req, err = clone.NewRequest(t.Context(), "GET", first.URL, nil)
+-	if err != nil {
+-		t.Fatalf("NewRequest returned error: %v", err)
+-	}
+-	if _, err := clone.Do(req, nil); err != nil {
+-		t.Fatalf("Do returned error: %v", err)
+-	}
+-	assertRecordedAuthHeader(t, firstAuth, "")
+-}
+ 
+ func TestBasicAuthTransport_transport(t *testing.T) {
+ 	t.Parallel()
+@@ -5376,38 +5040,6 @@ func TestParseTokenExpiration(t *testing.T) {
+ 	}
+ }
+ 
+-func TestClientCopy_leak_transport(t *testing.T) {
+-	t.Parallel()
+-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+-		w.Header().Set("Content-Type", "application/json")
+-		accessToken := r.Header.Get("Authorization")
+-		_, _ = fmt.Fprintf(w, `{"login": "%v"}`, accessToken)
+-	}))
+-	clientPreconfiguredWithURLs := mustNewClient(t, WithURLs(&srv.URL, &srv.URL))
+-
+-	aliceClient, err := clientPreconfiguredWithURLs.Clone(WithAuthToken("alice"))
+-	if err != nil {
+-		t.Fatal(err)
+-	}
+-	bobClient, err := clientPreconfiguredWithURLs.Clone(WithAuthToken("bob"))
+-	if err != nil {
+-		t.Fatal(err)
+-	}
+-
+-	alice, _, err := aliceClient.Users.Get(t.Context(), "")
+-	if err != nil {
+-		t.Fatal(err)
+-	}
+-
+-	assertNoDiff(t, "Bearer alice", alice.GetLogin())
+-
+-	bob, _, err := bobClient.Users.Get(t.Context(), "")
+-	if err != nil {
+-		t.Fatal(err)
+-	}
+-
+-	assertNoDiff(t, "Bearer bob", bob.GetLogin())
+-}
+ 
+ func TestDeploymentProtectionRuleEvent_GetRunID(t *testing.T) {
+ 	t.Parallel()

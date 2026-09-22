@@ -1,0 +1,139 @@
+diff --git a/server/sublist.go b/server/sublist.go
+--- a/server/sublist.go
++++ b/server/sublist.go
+@@ -1184,40 +1184,104 @@
+ 
+ // Determine if the subject has any wildcards. Fast version, does not check for
+ // valid subject. Used in caching layer.
+-func subjectIsLiteral(subject string) bool { panic("excised: subjectIsLiteral") }
++func subjectIsLiteral(subject string) bool {
++	return !strings.ContainsAny(subject, "*>")
++}
+ 
+ // IsValidPublishSubject returns true if a subject is valid and a literal, false otherwise
+-func IsValidPublishSubject(subject string) bool { panic("excised: IsValidPublishSubject") }
++func IsValidPublishSubject(subject string) bool {
++	return IsValidSubject(subject) && subjectIsLiteral(subject)
++}
+ 
+ // IsValidSubject returns true if a subject is valid, false otherwise
+-func IsValidSubject(subject string) bool { panic("excised: IsValidSubject") }
++func IsValidSubject(subject string) bool {
++	return isValidSubject(subject, false)
++}
+ 
+-func isValidSubject(subject string, checkRunes bool) bool { panic("excised: isValidSubject") }
++func isValidSubject(subject string, checkRunes bool) bool {
++	if subject == _EMPTY_ || strings.HasPrefix(subject, tsep) || strings.HasSuffix(subject, tsep) {
++		return false
++	}
++	return !strings.Contains(subject, tsep+tsep)
++}
+ 
+ // IsValidLiteralSubject returns true if a subject is valid and literal (no wildcards), false otherwise
+-func IsValidLiteralSubject(subject string) bool { panic("excised: IsValidLiteralSubject") }
++func IsValidLiteralSubject(subject string) bool {
++	return isValidLiteralSubject(strings.SplitSeq(subject, tsep))
++}
+ 
+ // isValidLiteralSubject returns true if the tokens are valid and literal (no wildcards), false otherwise
+-func isValidLiteralSubject(tokens iter.Seq[string]) bool { panic("excised: isValidLiteralSubject") }
++func isValidLiteralSubject(tokens iter.Seq[string]) bool {
++	for t := range tokens {
++		if len(t) == 0 || strings.ContainsAny(t, "*>") {
++			return false
++		}
++	}
++	return true
++}
+ 
+ // ValidateMapping returns nil error if the subject is a valid subject mapping destination subject
+-func ValidateMapping(src string, dest string) error { panic("excised: ValidateMapping") }
++func ValidateMapping(src string, dest string) error {
++	if dest == _EMPTY_ {
++		return nil
++	}
++	for _, t := range strings.Split(dest, tsep) {
++		if len(t) == 0 || strings.ContainsAny(t, " \t\n\f\r") {
++			return &mappingDestinationErr{t, ErrInvalidMappingDestinationSubject}
++		}
++	}
++	_, err := NewSubjectTransform(src, dest)
++	return err
++}
+ 
+ // Will check tokens and report back if the have any partial or full wildcards.
+-func analyzeTokens(tokens []string) (hasPWC, hasFWC bool) { panic("excised: analyzeTokens") }
++func analyzeTokens(tokens []string) (hasPWC, hasFWC bool) {
++	for _, t := range tokens {
++		if strings.ContainsRune(t, pwc) {
++			hasPWC = true
++		}
++		if strings.ContainsRune(t, fwc) {
++			hasFWC = true
++		}
++	}
++	return
++}
+ 
+ // Check on a token basis if they could match.
+-func tokensCanMatch(t1, t2 string) bool { panic("excised: tokensCanMatch") }
++func tokensCanMatch(t1, t2 string) bool {
++	if len(t1) == 0 || len(t2) == 0 {
++		return false
++	}
++	return t1 == t2 || t1[0] == pwc || t2[0] == pwc || t1[0] == fwc || t2[0] == fwc
++}
+ 
+ // SubjectsCollide will determine if two subjects could both match a single literal subject.
+-func SubjectsCollide(subj1, subj2 string) bool { panic("excised: SubjectsCollide") }
++func SubjectsCollide(subj1, subj2 string) bool {
++	toks1 := tokenizeSubjectIntoSlice(nil, subj1)
++	toks2 := tokenizeSubjectIntoSlice(nil, subj2)
++	stop := min(len(toks1), len(toks2))
++	for i := 0; i < stop; i++ {
++		if !tokensCanMatch(toks1[i], toks2[i]) {
++			return false
++		}
++	}
++	return true
++}
+ 
+ // Returns number of tokens in the subject.
+-func numTokens(subject string) int { panic("excised: numTokens") }
++func numTokens(subject string) int {
++	return strings.Count(subject, tsep) + 1
++}
+ 
+ // Fast way to return an indexed token.
+ // This is one based, so first token is TokenAt(subject, 1)
+-func tokenAt(subject string, index uint8) string { panic("excised: tokenAt") }
++func tokenAt(subject string, index uint8) string {
++	tokens := strings.Split(subject, tsep)
++	if int(index) >= len(tokens) {
++		return _EMPTY_
++	}
++	return tokens[index]
++}
+ 
+ // use similar to append. meaning, the updated slice will be returned
+ func tokenizeSubjectIntoSlice(tts []string, subject string) []string {
+@@ -1257,7 +1321,17 @@
+ // and determine if the tokens are matched. Both test subject and tokens
+ // may contain wildcards. So foo.* is a subset match of [">", "*.*", "foo.*"],
+ // but not of foo.bar, etc.
+-func isSubsetMatchTokenized(tokens, test []string) bool { panic("excised: isSubsetMatchTokenized") }
++func isSubsetMatchTokenized(tokens, test []string) bool {
++	if len(tokens) > len(test) {
++		return false
++	}
++	for i, t := range tokens {
++		if !tokensCanMatch(t, test[i]) {
++			return false
++		}
++	}
++	return true
++}
+ 
+ // matchLiteral is used to test literal subjects, those that do not have any
+ // wildcards, with a target subject. This is used in the cache layer.

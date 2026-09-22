@@ -1,0 +1,184 @@
+diff --git a/server/monitor.go b/server/monitor.go
+index 68200f2..adb625e 100644
+--- a/server/monitor.go
++++ b/server/monitor.go
+@@ -36,7 +36,7 @@ import (
+ 	"runtime/pprof"
+ 	"slices"
+ 	"sort"
+-	"strconv"
++	_ "strconv"
+ 	"strings"
+ 	"sync/atomic"
+ 	"time"
+@@ -190,16 +190,7 @@ func newSubsList(client *client) []string {
+ 	return subs
+ }
+ 
+-func redactBearerJWT(userJWT string) string {
+-	if userJWT == _EMPTY_ {
+-		return _EMPTY_
+-	}
+-	uc, err := jwt.DecodeUserClaims(userJWT)
+-	if err == nil && uc != nil && uc.BearerToken {
+-		return _EMPTY_
+-	}
+-	return userJWT
+-}
++func redactBearerJWT(userJWT string) string { panic("excised: redactBearerJWT") }
+ 
+ // Connz returns a Connz struct containing information about connections.
+ func (s *Server) Connz(opts *ConnzOptions) (*Connz, error) {
+@@ -674,75 +665,15 @@ func (c *client) getRTT() time.Duration {
+ 	return rtt
+ }
+ 
+-func decodeBool(w http.ResponseWriter, r *http.Request, param string) (bool, error) {
+-	str := r.URL.Query().Get(param)
+-	if str == _EMPTY_ {
+-		return false, nil
+-	}
+-	val, err := strconv.ParseBool(str)
+-	if err != nil {
+-		w.WriteHeader(http.StatusBadRequest)
+-		w.Write([]byte(fmt.Sprintf("Error decoding boolean for '%s': %v", param, err)))
+-		return false, err
+-	}
+-	return val, nil
+-}
++func decodeBool(w http.ResponseWriter, r *http.Request, param string) (bool, error) { panic("excised: decodeBool") }
+ 
+-func decodeUint64(w http.ResponseWriter, r *http.Request, param string) (uint64, error) {
+-	str := r.URL.Query().Get(param)
+-	if str == _EMPTY_ {
+-		return 0, nil
+-	}
+-	val, err := strconv.ParseUint(str, 10, 64)
+-	if err != nil {
+-		w.WriteHeader(http.StatusBadRequest)
+-		w.Write([]byte(fmt.Sprintf("Error decoding uint64 for '%s': %v", param, err)))
+-		return 0, err
+-	}
+-	return val, nil
+-}
++func decodeUint64(w http.ResponseWriter, r *http.Request, param string) (uint64, error) { panic("excised: decodeUint64") }
+ 
+-func decodeInt(w http.ResponseWriter, r *http.Request, param string) (int, error) {
+-	str := r.URL.Query().Get(param)
+-	if str == _EMPTY_ {
+-		return 0, nil
+-	}
+-	val, err := strconv.Atoi(str)
+-	if err != nil {
+-		w.WriteHeader(http.StatusBadRequest)
+-		w.Write([]byte(fmt.Sprintf("Error decoding int for '%s': %v", param, err)))
+-		return 0, err
+-	}
+-	return val, nil
+-}
++func decodeInt(w http.ResponseWriter, r *http.Request, param string) (int, error) { panic("excised: decodeInt") }
+ 
+-func decodeState(w http.ResponseWriter, r *http.Request) (ConnState, error) {
+-	str := r.URL.Query().Get("state")
+-	if str == _EMPTY_ {
+-		return ConnOpen, nil
+-	}
+-	switch strings.ToLower(str) {
+-	case "open":
+-		return ConnOpen, nil
+-	case "closed":
+-		return ConnClosed, nil
+-	case "any", "all":
+-		return ConnAll, nil
+-	}
+-	// We do not understand intended state here.
+-	w.WriteHeader(http.StatusBadRequest)
+-	err := fmt.Errorf("Error decoding state for %s", str)
+-	w.Write([]byte(err.Error()))
+-	return 0, err
+-}
++func decodeState(w http.ResponseWriter, r *http.Request) (ConnState, error) { panic("excised: decodeState") }
+ 
+-func decodeSubs(w http.ResponseWriter, r *http.Request) (subs bool, subsDet bool, err error) {
+-	subsDet = strings.ToLower(r.URL.Query().Get("subs")) == "detail"
+-	if !subsDet {
+-		subs, err = decodeBool(w, r, "subs")
+-	}
+-	return
+-}
++func decodeSubs(w http.ResponseWriter, r *http.Request) (subs bool, subsDet bool, err error) { panic("excised: decodeSubs") }
+ 
+ // HandleConnz process HTTP requests for connection information.
+ func (s *Server) HandleConnz(w http.ResponseWriter, r *http.Request) {
+@@ -1473,28 +1404,7 @@ type DiskIOWaitStats struct {
+ 	MaxWaitTime uint64 `json:"max_wait_time"` // MaxWaitTime is the longest observed wait
+ }
+ 
+-func myUptime(d time.Duration) string {
+-	// Just use total seconds for uptime, and display days / years
+-	tsecs := d / time.Second
+-	tmins := tsecs / 60
+-	thrs := tmins / 60
+-	tdays := thrs / 24
+-	tyrs := tdays / 365
+-
+-	if tyrs > 0 {
+-		return fmt.Sprintf("%dy%dd%dh%dm%ds", tyrs, tdays%365, thrs%24, tmins%60, tsecs%60)
+-	}
+-	if tdays > 0 {
+-		return fmt.Sprintf("%dd%dh%dm%ds", tdays, thrs%24, tmins%60, tsecs%60)
+-	}
+-	if thrs > 0 {
+-		return fmt.Sprintf("%dh%dm%ds", thrs, tmins%60, tsecs%60)
+-	}
+-	if tmins > 0 {
+-		return fmt.Sprintf("%dm%ds", tmins, tsecs%60)
+-	}
+-	return fmt.Sprintf("%ds", tsecs)
+-}
++func myUptime(d time.Duration) string { panic("excised: myUptime") }
+ 
+ func tlsCertNotAfter(config *tls.Config) time.Time {
+ 	if config == nil || len(config.Certificates) == 0 {
+diff --git a/server/monitor_test.go b/server/monitor_test.go
+index 5feebc7..d0bf90d 100644
+--- a/server/monitor_test.go
++++ b/server/monitor_test.go
+@@ -136,37 +136,6 @@ func resetPreviousHTTPConnections() {
+ 	http.DefaultTransport.(*http.Transport).CloseIdleConnections()
+ }
+ 
+-func TestMyUptime(t *testing.T) {
+-	// Make sure we print this stuff right.
+-	var d time.Duration
+-	var s string
+-
+-	d = 22 * time.Second
+-	s = myUptime(d)
+-	if s != "22s" {
+-		t.Fatalf("Expected `22s`, go ``%s`", s)
+-	}
+-	d = 4*time.Minute + d
+-	s = myUptime(d)
+-	if s != "4m22s" {
+-		t.Fatalf("Expected `4m22s`, go ``%s`", s)
+-	}
+-	d = 4*time.Hour + d
+-	s = myUptime(d)
+-	if s != "4h4m22s" {
+-		t.Fatalf("Expected `4h4m22s`, go ``%s`", s)
+-	}
+-	d = 32*24*time.Hour + d
+-	s = myUptime(d)
+-	if s != "32d4h4m22s" {
+-		t.Fatalf("Expected `32d4h4m22s`, go ``%s`", s)
+-	}
+-	d = 22*365*24*time.Hour + d
+-	s = myUptime(d)
+-	if s != "22y32d4h4m22s" {
+-		t.Fatalf("Expected `22y32d4h4m22s`, go ``%s`", s)
+-	}
+-}
+ 
+ // Make sure that we do not run the http server for monitoring unless asked.
+ func TestMonitorNoPort(t *testing.T) {

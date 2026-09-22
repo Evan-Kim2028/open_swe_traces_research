@@ -1,0 +1,110 @@
+diff --git a/server/filestore.go b/server/filestore.go
+--- a/server/filestore.go
++++ b/server/filestore.go
+@@ -116,11 +116,32 @@
+ 	S2Compression
+ )
+ 
+-func (alg StoreCompression) String() string { panic("excised: String") }
++func (alg StoreCompression) String() string {
++	if alg == S2Compression {
++		return "S2"
++	}
++	return "None"
++}
+ 
+-func (alg StoreCompression) MarshalJSON() ([]byte, error) { panic("excised: MarshalJSON") }
++func (alg StoreCompression) MarshalJSON() ([]byte, error) {
++	return json.Marshal(alg.String())
++}
+ 
+-func (alg *StoreCompression) UnmarshalJSON(b []byte) error { panic("excised: UnmarshalJSON") }
++func (alg *StoreCompression) UnmarshalJSON(b []byte) error {
++	var str string
++	if err := json.Unmarshal(b, &str); err != nil {
++		return err
++	}
++	switch strings.ToLower(str) {
++	case "s2":
++		*alg = S2Compression
++	case "none":
++		*alg = NoCompression
++	default:
++		return fmt.Errorf("unknown compression algorithm")
++	}
++	return nil
++}
+ 
+ // File ConsumerInfo is used for creating consumer stores.
+ type FileConsumerInfo struct {
+@@ -8079,7 +8100,18 @@
+ }
+ 
+ // Lock should be held.
+-func (mb *msgBlock) decode(buf []byte) ([]byte, StoreCompression, error) { panic("excised: decode") }
++func (mb *msgBlock) decode(buf []byte) ([]byte, StoreCompression, error) {
++	var meta CompressionInfo
++	n, err := meta.UnmarshalMetadata(buf)
++	if err != nil || n == 0 {
++		return buf, meta.Algorithm, err
++	}
++	decoded, err := meta.Algorithm.Decompress(buf[n:])
++	if err != nil {
++		return nil, meta.Algorithm, err
++	}
++	return decoded, meta.Algorithm, nil
++}
+ 
+ // Lock should be held.
+ func (mb *msgBlock) decompressIfNeeded(buf []byte) ([]byte, error) {
+@@ -14465,13 +14497,46 @@
+ 	OriginalSize uint64
+ }
+ 
+-func (c *CompressionInfo) MarshalMetadata() []byte { panic("excised: MarshalMetadata") }
++func (c *CompressionInfo) MarshalMetadata() []byte {
++	b := make([]byte, 14)
++	b[0], b[1], b[2] = 'c', 'm', 'p'
++	b[3] = byte(c.Algorithm)
++	n := binary.PutUvarint(b[4:], c.OriginalSize)
++	return b[:4+n]
++}
+ 
+-func (c *CompressionInfo) UnmarshalMetadata(b []byte) (int, error) { panic("excised: UnmarshalMetadata") }
++func (c *CompressionInfo) UnmarshalMetadata(b []byte) (int, error) {
++	c.Algorithm = NoCompression
++	if len(b) < 4 || b[0] != 'c' || b[1] != 'm' || b[2] != 'p' {
++		return 0, nil
++	}
++	c.Algorithm = StoreCompression(b[3])
++	var n int
++	c.OriginalSize, n = binary.Uvarint(b[4:])
++	if n <= 0 {
++		return 0, fmt.Errorf("metadata incomplete")
++	}
++	return 4 + n, nil
++}
+ 
+-func (alg StoreCompression) Compress(buf []byte) ([]byte, error) { panic("excised: Compress") }
++func (alg StoreCompression) Compress(buf []byte) ([]byte, error) {
++	if alg != S2Compression {
++		return buf, nil
++	}
++	var output bytes.Buffer
++	w := s2.NewWriter(&output)
++	if _, err := w.Write(buf); err != nil {
++		return nil, err
++	}
++	return output.Bytes(), w.Close()
++}
+ 
+-func (alg StoreCompression) Decompress(buf []byte) ([]byte, error) { panic("excised: Decompress") }
++func (alg StoreCompression) Decompress(buf []byte) ([]byte, error) {
++	if alg != S2Compression {
++		return buf, nil
++	}
++	return io.ReadAll(s2.NewReader(bytes.NewReader(buf)))
++}
+ 
+ // writeFileWithOptionalSync is equivalent to os.WriteFile() but optionally
+ // sets O_SYNC on the open file if SyncAlways is set. The dios semaphore is

@@ -1,0 +1,116 @@
+diff --git a/github/github.go b/github/github.go
+index 6c75c18..5b1fa27 100644
+--- a/github/github.go
++++ b/github/github.go
+@@ -1432,15 +1432,19 @@ func (c *Client) checkRequestAPIVersionBeforeDo(req *http.Request) error {
+ // response's Body. If rate limit is exceeded and reset time is in the future,
+ // bareDo returns *RateLimitError immediately without making a network API call.
+ func (c *Client) bareDo(caller *http.Client, req *http.Request) (*Response, error) {
+-		ctx := req.Context()
++	ctx := req.Context()
+ 
+ 	if err := c.checkRequestAPIVersionBeforeDo(req); err != nil {
+ 		return nil, err
+ 	}
+ 
++	rateLimitCategory := CoreCategory
++
+ 	if !c.disableRateLimitCheck {
+-		rateLimitCategory := GetRateLimitCategory(req.Method, req.URL.Path)
++		rateLimitCategory = GetRateLimitCategory(req.Method, req.URL.Path)
++
+ 		if bypass := ctx.Value(BypassRateLimitCheck); bypass == nil {
++			// If we've hit rate limit, don't make further requests before Reset time.
+ 			if err := c.checkRateLimitBeforeDo(req, rateLimitCategory); err != nil {
+ 				return &Response{
+ 					Response: err.Response,
+@@ -1448,6 +1452,7 @@ func (c *Client) bareDo(caller *http.Client, req *http.Request) (*Response, erro
+ 				}, err
+ 			}
+ 
++			// If we've hit a secondary rate limit, don't make further requests before Retry After.
+ 			if err := c.checkSecondaryRateLimitBeforeDo(req); err != nil {
+ 				return &Response{
+ 					Response: err.Response,
+@@ -1463,11 +1468,80 @@ func (c *Client) bareDo(caller *http.Client, req *http.Request) (*Response, erro
+ 	}
+ 
+ 	if err != nil {
++		// If we got an error, and the context has been canceled,
++		// the context's error is probably more useful.
++		select {
++		case <-ctx.Done():
++			return response, ctx.Err()
++		default:
++		}
++
++		// If the error type is *url.Error, sanitize its URL before returning.
++		if e, ok := errors.AsType[*url.Error](err); ok {
++			if url, err := url.Parse(e.URL); err == nil {
++				e.URL = sanitizeURL(url).String()
++				return response, e
++			}
++		}
++
+ 		return response, err
+ 	}
+ 
++	// Don't update the rate limits if the client has rate limits disabled or if
++	// this was a cached response. The X-From-Cache is set by
++	// https://github.com/bartventer/httpcache if it's enabled.
++	if !c.disableRateLimitCheck && response.Header.Get("X-From-Cache") == "" {
++		c.rateMu.Lock()
++		c.rateLimits[rateLimitCategory] = response.Rate
++		c.rateMu.Unlock()
++	}
++
++	// CheckResponse substitutes r.Body with a re-readable copy on error
++	// responses, so capture the network body first: it is the one that must
++	// be closed.
++	origBody := resp.Body
+ 	err = CheckResponse(resp)
+-	return response, err /* excised: bareDo */
++	if err != nil {
++		defer origBody.Close()
++		// Special case for AcceptedErrors. If an AcceptedError
++		// has been encountered, the response's payload will be
++		// added to the AcceptedError and returned.
++		//
++		// Issue #1022
++		if aerr, ok := errors.AsType[*AcceptedError](err); ok {
++			b, readErr := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodySize))
++			if readErr != nil {
++				return response, readErr
++			}
++
++			aerr.Raw = b
++			err = aerr
++		}
++
++		var rateLimitError *RateLimitError
++		if errors.As(err, &rateLimitError) &&
++			ctx.Value(SleepUntilPrimaryRateLimitResetWhenRateLimited) != nil {
++			if err := sleepUntilResetWithBuffer(ctx, rateLimitError.Rate.Reset.Time); err != nil {
++				return response, err
++			}
++			// retry the request now the rate limit should have been reset
++			newReq := req.Clone(context.WithValue(ctx, SleepUntilPrimaryRateLimitResetWhenRateLimited, nil))
++			return c.bareDo(caller, newReq)
++		}
++
++		// Update the secondary rate limit if we hit it.
++		var rerr *AbuseRateLimitError
++		if errors.As(err, &rerr) && rerr.RetryAfter != nil {
++			// if a max duration is specified, make sure that we are waiting at most this duration
++			if c.maxSecondaryRateLimitRetryAfterDuration > 0 && rerr.GetRetryAfter() > c.maxSecondaryRateLimitRetryAfterDuration {
++				rerr.RetryAfter = &c.maxSecondaryRateLimitRetryAfterDuration
++			}
++			c.rateMu.Lock()
++			c.secondaryRateLimitReset = time.Now().Add(*rerr.RetryAfter)
++			c.rateMu.Unlock()
++		}
++	}
++	return response, err
+ }
+ 
+ // BareDo sends an API request and lets you handle the api response. If an error

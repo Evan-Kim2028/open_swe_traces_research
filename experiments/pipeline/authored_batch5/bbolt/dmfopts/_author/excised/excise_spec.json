@@ -1,0 +1,12 @@
+{
+ "dmfopts": {
+  "tests/dmflakey/dmflakey.go": [
+   "WithIntervalFeatOpt",
+   "WithSyncFSFeatOpt",
+   "validateFSType",
+   "flakey.DevicePath",
+   "flakey.Filesystem",
+   "createEmptyFSImage"
+  ]
+ }
+}

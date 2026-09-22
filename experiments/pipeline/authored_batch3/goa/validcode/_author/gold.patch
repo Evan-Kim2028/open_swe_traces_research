@@ -1,0 +1,314 @@
+--- a/codegen/validation.go
++++ b/codegen/validation.go
+@@ -6,8 +6,8 @@
+ import (
+ 	"bytes"
+ 	"fmt"
+-	_ "strconv"
+-	_ "strings"
++	"strconv"
++	"strings"
+ 	"text/template"
+ 
+ 	"example.internal/apikit/v3/expr"
+@@ -349,17 +349,74 @@
+ // union branch requires a non-nil value. Messages, byte slices, and Any values
+ // may be nil in Go, so their generated checks must reject nil explicitly.
+ func protobufUnionPayloadRequiresPresence(att *expr.AttributeExpr) bool {
+-	panic("excised: protobufUnionPayloadRequiresPresence")
++	kind := unalias(att.Type).Kind()
++	return !expr.IsPrimitive(att.Type) || kind == expr.BytesKind || kind == expr.AnyKind
+ }
+ 
+ func validateAttribute(ctx *AttributeContext, att *expr.AttributeExpr, put expr.UserType, target string, context validationPath, req, view bool, seen map[expr.UserType]*bytes.Buffer) string {
+-	panic("excised: validateAttribute")
++	ut, isUT := att.Type.(expr.UserType)
++	if !isUT {
++		guard := validationAttributeNeedsNilGuard(att, ctx, req)
++		code := renderValidationCode(att, put, ctx, req, false, view, target, context, seen, !guard).String()
++		if code == "" {
++			return ""
++		}
++		if expr.IsArray(att.Type) || expr.IsMap(att.Type) {
++			return code
++		}
++		if !guard {
++			return code
++		}
++		cond := fmt.Sprintf("if %s != nil {\n", target)
++		return fmt.Sprintf("%s%s\n}", cond, code)
++	}
++	// Alias user types: validate underlying attribute with alias flag so that
++	// validation operates on the base value type while preserving pointer
++	// semantics from the current attribute context.
++	if expr.IsAlias(ut) {
++		// Preserve field-level attributes (e.g., DefaultValue, Required) while
++		// validating alias user types against their underlying base. Passing
++		// the original attribute with alias=true ensures validations operate
++		// on the correct value type without dropping field defaults.
++		guard := validationAttributeNeedsNilGuard(att, ctx, req)
++		code := renderValidationCode(att, put, ctx, req, true, view, target, context, seen, !guard).String()
++		if code == "" {
++			return ""
++		}
++		if !guard {
++			return code
++		}
++		cond := fmt.Sprintf("if %s != nil {\n", target)
++		return fmt.Sprintf("%s%s\n}", cond, code)
++	}
++	if !hasValidations(ctx, ut) {
++		return ""
++	}
++	var buf bytes.Buffer
++	call := ctx.Scope.ValidatorCall(att, "", target, renderValidationPath(context))
++	data := map[string]any{"call": call, "goa": "goa"}
++	if err := userValT.Execute(&buf, data); err != nil {
++		panic(err) // bug
++	}
++	if resolver, ok := ctx.Scope.(nilUserTypeValidationAttributor); ok && resolver.ValidationAcceptsNil(att) {
++		return buf.String()
++	}
++	return fmt.Sprintf("if %s != nil {\n\t%s\n}", target, buf.String())
+ }
+ 
+ // validationAttributeNeedsNilGuard reports whether a nested value may be nil
+ // in the generated Go layout and must be checked before any validation uses it.
+ func validationAttributeNeedsNilGuard(att *expr.AttributeExpr, ctx *AttributeContext, required bool) bool {
+-	panic("excised: validationAttributeNeedsNilGuard")
++	if expr.IsArray(att.Type) || expr.IsMap(att.Type) {
++		return false
++	}
++	if expr.IsUnion(att.Type) {
++		if ctx.Scope.IsSumType() {
++			return ctx.IsUnionPointer(required)
++		}
++		return !required
++	}
++	return ctx.Pointer || !required && (att.DefaultValue == nil || !ctx.UseDefault)
+ }
+ 
+ // validationCode produces Go code that runs the validations that effectively
+@@ -383,50 +440,213 @@
+ //
+ // context is used to produce helpful messages in case of error.
+ func validationCode(att *expr.AttributeExpr, attCtx *AttributeContext, req, alias bool, target string, context validationPath, localGuards bool) string {
+-	panic("excised: validationCode")
++	validation := expr.EffectiveValidation(att)
++	if validation == nil {
++		return ""
++	}
++
++	var (
++		kind            = att.Type.Kind()
++		unaliased       = unalias(att.Type)
++		isNativePointer = unaliased.Kind() == expr.BytesKind || unaliased.Kind() == expr.AnyKind
++		isPointer       = attCtx.Pointer || (!req && (att.DefaultValue == nil || !attCtx.UseDefault))
++		tval            = target
++	)
++	if isPointer && expr.IsPrimitive(att.Type) && !isNativePointer {
++		tval = "*" + tval
++	}
++	if alias {
++		tval = fmt.Sprintf("%s(%s)", unaliased.Name(), tval)
++		// When validating alias types, use the underlying type's kind
++		// for string detection (needed for utf8.RuneCountInString usage)
++		kind = unaliased.Kind()
++	}
++	data := map[string]any{
++		"attribute": att,
++		"attCtx":    attCtx,
++		"isPointer": isPointer && localGuards,
++		"context":   context,
++		"target":    target,
++		"targetVal": tval,
++		"goa":       "goa",
++		"utf8":      "utf8",
++		"string":    kind == expr.StringKind,
++		"array":     expr.IsArray(att.Type),
++		"map":       expr.IsMap(att.Type),
++	}
++	runTemplate := func(tmpl *template.Template, data any) string {
++		var buf bytes.Buffer
++		if err := tmpl.Execute(&buf, data); err != nil {
++			panic(err) // bug
++		}
++		return strings.Trim(buf.String(), "\n")
++	}
++	res := make([]string, 0, 8) // preallocate with typical validation count
++	if values := validation.Values; values != nil {
++		data["values"] = values
++		if val := runTemplate(enumValT, data); val != "" {
++			res = append(res, val)
++		}
++	}
++	if format := validation.Format; format != "" {
++		// Skip format validation when struct:field:type overrides a string attribute
++		// with a custom type — the custom type's own parsing (e.g. UnmarshalText)
++		// already validates the format, and ValidateFormat expects a plain string.
++		typeName, _ := GetMetaType(att)
++		if typeName == "" {
++			data["format"] = string(format)
++			if val := runTemplate(formatValT, data); val != "" {
++				res = append(res, val)
++			}
++		}
++	}
++	if pattern := validation.Pattern; pattern != "" {
++		data["pattern"] = pattern
++		if val := runTemplate(patternValT, data); val != "" {
++			res = append(res, val)
++		}
++	}
++	if exclMin := validation.ExclusiveMinimum; exclMin != nil {
++		data["exclMin"] = *exclMin
++		data["isExclMin"] = true
++		if val := runTemplate(exclMinMaxValT, data); val != "" {
++			res = append(res, val)
++		}
++	}
++	if minVal := validation.Minimum; minVal != nil {
++		data["min"] = *minVal
++		data["isMin"] = true
++		if val := runTemplate(minMaxValT, data); val != "" {
++			res = append(res, val)
++		}
++	}
++	if exclMax := validation.ExclusiveMaximum; exclMax != nil {
++		data["exclMax"] = *exclMax
++		data["isExclMin"] = false
++		if val := runTemplate(exclMinMaxValT, data); val != "" {
++			res = append(res, val)
++		}
++	}
++	if maxVal := validation.Maximum; maxVal != nil {
++		data["max"] = *maxVal
++		data["isMin"] = false
++		if val := runTemplate(minMaxValT, data); val != "" {
++			res = append(res, val)
++		}
++	}
++	if minLength := validation.MinLength; minLength != nil {
++		data["minLength"] = minLength
++		data["isMinLength"] = true
++		delete(data, "maxLength")
++		if val := runTemplate(lengthValT, data); val != "" {
++			res = append(res, val)
++		}
++	}
++	if maxLength := validation.MaxLength; maxLength != nil {
++		data["maxLength"] = maxLength
++		data["isMinLength"] = false
++		delete(data, "minLength")
++		if val := runTemplate(lengthValT, data); val != "" {
++			res = append(res, val)
++		}
++	}
++	reqs := generatedRequiredValidationNames(att, validation, attCtx.LayoutPolicy())
++	obj := expr.AsObject(att.Type)
++	for _, r := range reqs {
++		reqAtt := obj.Attribute(r)
++		data["req"] = r
++		data["reqAtt"] = reqAtt
++		res = append(res, runTemplate(requiredValT, data))
++	}
++	return strings.Join(res, "\n")
+ }
+ 
+ // literalValidationPath folds a complete error path into a quoted Go string
+ // while Apikit is generating source.
+ func literalValidationPath(root string) validationPath {
+-	panic("excised: literalValidationPath")
++	return validationPath{root: root}
+ }
+ 
+ // parameterValidationPath writes an error path relative to the string held by
+ // a generated validator parameter.
+ func parameterValidationPath(parameter string) validationPath {
+-	panic("excised: parameterValidationPath")
++	return validationPath{root: parameter, variable: true}
+ }
+ 
+ // child returns the context used for a field or collection value below c.
+ func (p validationPath) child(prefix string) validationPath {
+-	panic("excised: validationPath.child")
++	p.suffix += prefix
++	return p
+ }
+ 
+ // renderValidationPath returns the Go expression passed to a generated
+ // validation error.
+ func renderValidationPath(path validationPath) string {
+-	panic("excised: renderValidationPath")
++	if !path.variable {
++		return strconv.Quote(path.root + path.suffix)
++	}
++	if path.suffix == "" {
++		return path.root
++	}
++	return path.root + " + " + strconv.Quote(path.suffix)
+ }
+ 
+ // hasValidations reports whether validating ut can write any code with the Go
+ // layout described by attCtx.
+ func hasValidations(attCtx *AttributeContext, ut expr.UserType) bool {
+-	panic("excised: hasValidations")
++	return NeedsValidation(ut.Attribute(), attCtx.LayoutPolicy())
+ }
+ 
+ // toSlice returns Go code that represents the given slice.
+ func toSlice(val []any) string {
+-	panic("excised: toSlice")
++	elems := make([]string, len(val))
++	for i, v := range val {
++		elems[i] = fmt.Sprintf("%#v", v)
++	}
++	return fmt.Sprintf("[]any{%s}", strings.Join(elems, ", "))
+ }
+ 
+ // oneof produces code that compares target with each element of vals and ORs
+ // the result, e.g. "target == 1 || target == 2".
+ func oneof(target string, vals []any) string {
+-	panic("excised: oneof")
++	elems := make([]string, len(vals))
++	for i, v := range vals {
++		elems[i] = fmt.Sprintf("%s == %#v", target, v)
++	}
++	return strings.Join(elems, " || ")
+ }
+ 
+ // constant returns the Go constant name of the format with the given value.
+ func constant(formatName string) string {
+-	panic("excised: constant")
++	switch formatName {
++	case "date":
++		return "apikit.FormatDate"
++	case "date-time":
++		return "apikit.FormatDateTime"
++	case "uuid":
++		return "apikit.FormatUUID"
++	case "email":
++		return "apikit.FormatEmail"
++	case "hostname":
++		return "apikit.FormatHostname"
++	case "ipv4":
++		return "apikit.FormatIPv4"
++	case "ipv6":
++		return "apikit.FormatIPv6"
++	case "ip":
++		return "apikit.FormatIP"
++	case "uri":
++		return "apikit.FormatURI"
++	case "mac":
++		return "apikit.FormatMAC"
++	case "cidr":
++		return "apikit.FormatCIDR"
++	case "regexp":
++		return "apikit.FormatRegexp"
++	case "json":
++		return "apikit.FormatJSON"
++	case "rfc1123":
++		return "apikit.FormatRFC1123"
++	}
++	panic("unknown format") // bug
+ }

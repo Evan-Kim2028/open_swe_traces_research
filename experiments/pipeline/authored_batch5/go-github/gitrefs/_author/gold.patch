@@ -1,0 +1,84 @@
+diff --git a/github/git_refs.go b/github/git_refs.go
+index df604cc..81561a1 100644
+--- a/github/git_refs.go
++++ b/github/git_refs.go
+@@ -7,7 +7,7 @@ package github
+ 
+ import (
+ 	"context"
+-	_ "errors"
++	"errors"
+ 	"fmt"
+ 	"net/url"
+ 	"strings"
+@@ -114,7 +114,18 @@ func (s *GitService) ListMatchingRefs(ctx context.Context, owner, repo, ref stri
+ //
+ //meta:operation POST /repos/{owner}/{repo}/git/refs
+ func (s *GitService) CreateRef(ctx context.Context, owner, repo string, body CreateRef) (*Reference, *Response, error) {
+-		u := fmt.Sprintf("repos/%v/%v/git/refs", owner, repo)
++	if body.Ref == "" {
++		return nil, nil, errors.New("ref must be provided")
++	}
++
++	if body.SHA == "" {
++		return nil, nil, errors.New("sha must be provided")
++	}
++
++	// ensure the 'refs/' prefix is present
++	body.Ref = "refs/" + strings.TrimPrefix(body.Ref, "refs/")
++
++	u := fmt.Sprintf("repos/%v/%v/git/refs", owner, repo)
+ 	req, err := s.client.NewRequest(ctx, "POST", u, body)
+ 	if err != nil {
+ 		return nil, nil, err
+@@ -126,7 +137,7 @@ func (s *GitService) CreateRef(ctx context.Context, owner, repo string, body Cre
+ 		return nil, resp, err
+ 	}
+ 
+-	return r, resp, nil /* excised: CreateRef */
++	return r, resp, nil
+ }
+ 
+ // UpdateRef updates an existing ref in a repository.
+@@ -135,7 +146,16 @@ func (s *GitService) CreateRef(ctx context.Context, owner, repo string, body Cre
+ //
+ //meta:operation PATCH /repos/{owner}/{repo}/git/refs/{ref}
+ func (s *GitService) UpdateRef(ctx context.Context, owner, repo, ref string, body UpdateRef) (*Reference, *Response, error) {
+-		u := fmt.Sprintf("repos/%v/%v/git/refs/%v", owner, repo, refURLEscape(ref))
++	if ref == "" {
++		return nil, nil, errors.New("ref must be provided")
++	}
++
++	if body.SHA == "" {
++		return nil, nil, errors.New("sha must be provided")
++	}
++
++	refPath := strings.TrimPrefix(ref, "refs/")
++	u := fmt.Sprintf("repos/%v/%v/git/refs/%v", owner, repo, refURLEscape(refPath))
+ 	req, err := s.client.NewRequest(ctx, "PATCH", u, body)
+ 	if err != nil {
+ 		return nil, nil, err
+@@ -147,7 +167,7 @@ func (s *GitService) UpdateRef(ctx context.Context, owner, repo, ref string, bod
+ 		return nil, resp, err
+ 	}
+ 
+-	return r, resp, nil /* excised: UpdateRef */
++	return r, resp, nil
+ }
+ 
+ // DeleteRef deletes a ref from a repository.
+@@ -156,11 +176,12 @@ func (s *GitService) UpdateRef(ctx context.Context, owner, repo, ref string, bod
+ //
+ //meta:operation DELETE /repos/{owner}/{repo}/git/refs/{ref}
+ func (s *GitService) DeleteRef(ctx context.Context, owner, repo, ref string) (*Response, error) {
+-		u := fmt.Sprintf("repos/%v/%v/git/refs/%v", owner, repo, refURLEscape(ref))
++	ref = strings.TrimPrefix(ref, "refs/")
++	u := fmt.Sprintf("repos/%v/%v/git/refs/%v", owner, repo, refURLEscape(ref))
+ 	req, err := s.client.NewRequest(ctx, "DELETE", u, nil)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+ 
+-	return s.client.Do(req, nil) /* excised: DeleteRef */
++	return s.client.Do(req, nil)
+ }

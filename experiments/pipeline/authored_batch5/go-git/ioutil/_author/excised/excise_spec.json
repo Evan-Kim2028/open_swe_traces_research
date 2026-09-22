@@ -1,0 +1,38 @@
+{
+ "ioutil": {
+  "utils/ioutil/common.go": [
+   "NonEmptyReader",
+   "readCloser.Close",
+   "NewReadCloser",
+   "readCloserCloser.Close",
+   "NewReadCloserWithCloser",
+   "writeCloser.Close",
+   "NewWriteCloser",
+   "writeNopCloser.Close",
+   "WriteNopCloser",
+   "readerAtAsReader.Read",
+   "NewReaderUsingReaderAt",
+   "CheckClose",
+   "NewContextWriteCloser",
+   "NewContextReadCloser",
+   "NewReaderOnError",
+   "NewReadCloserOnError",
+   "readerOnError.Read",
+   "NewWriterOnError",
+   "NewWriteCloserOnError",
+   "writerOnError.Write",
+   "CloserFunc.Close"
+  ],
+  "utils/ioutil/context.go": [
+   "NewContextWriter",
+   "ctxWriter.Write",
+   "NewContextReader",
+   "ReadFinished",
+   "ctxReader.Read",
+   "NewContextReaderWithCloser"
+  ],
+  "utils/ioutil/sync.go": [
+   "CopyBufferPool"
+  ]
+ }
+}

@@ -1,0 +1,198 @@
+diff --git a/plumbing/revlist/object_walk.go b/plumbing/revlist/object_walk.go
+index ab3df4b..ca3f731 100644
+--- a/plumbing/revlist/object_walk.go
++++ b/plumbing/revlist/object_walk.go
+@@ -2,11 +2,11 @@ package revlist
+ 
+ import (
+ 	_ "errors"
+-	_ "fmt"
+-	_ "sort"
++	"fmt"
++	"sort"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+-	_ "example.internal/gitkit/v6/plumbing/filemode"
++	"example.internal/gitkit/v6/plumbing/filemode"
+ 	"example.internal/gitkit/v6/plumbing/object"
+ 	"example.internal/gitkit/v6/plumbing/storer"
+ )
+@@ -24,7 +24,13 @@ type objectWalk struct {
+ }
+ 
+ func newObjectWalk(s storer.EncodedObjectStorer) (*objectWalk, error) {
+-	panic("excised: newObjectWalk")
++	return &objectWalk{
++		s:         s,
++		shallows:  map[plumbing.Hash]struct{}{},
++		wantsSeen: make(map[plumbing.Hash]struct{}),
++		havesSeen: make(map[plumbing.Hash]struct{}),
++		seen:      make(map[plumbing.Hash]struct{}),
++	}, nil
+ }
+ 
+ func shallowSet(s storer.EncodedObjectStorer) (map[plumbing.Hash]struct{}, error) {
+@@ -34,7 +40,52 @@ func shallowSet(s storer.EncodedObjectStorer) (map[plumbing.Hash]struct{}, error
+ // seedWants resolves each want hash and enqueues commits for walking.
+ // Non-commit objects (blobs, trees, tags) are added directly to the result.
+ func (w *objectWalk) seedWants(wants []plumbing.Hash) error {
+-	panic("excised: objectWalk.seedWants")
++	for i := 0; i < len(wants); i++ {
++		h := wants[i]
++		if _, ok := w.wantsSeen[h]; ok {
++			continue
++		}
++		if _, ok := w.seen[h]; ok {
++			continue
++		}
++
++		o, err := w.s.EncodedObject(plumbing.AnyObject, h)
++		if err != nil {
++			return fmt.Errorf("getting wanted object %s: %w", h, err)
++		}
++
++		switch o.Type() {
++		case plumbing.CommitObject:
++			c, err := object.DecodeCommit(w.s, o)
++			if err != nil {
++				return fmt.Errorf("decoding commit %s: %w", h, err)
++			}
++			w.wantsSeen[h] = struct{}{}
++			insertSorted(&w.wantsQueue, c)
++		case plumbing.TagObject:
++			tag, err := object.DecodeTag(w.s, o)
++			if err != nil {
++				return fmt.Errorf("decoding tag %s: %w", h, err)
++			}
++			w.seen[tag.Hash] = struct{}{}
++			w.result = append(w.result, tag.Hash)
++			wants = append(wants, tag.Target)
++		case plumbing.TreeObject:
++			t, err := object.GetTree(w.s, h)
++			if err != nil {
++				return fmt.Errorf("getting tree %s: %w", h, err)
++			}
++			if err := collectAllTreeObjects(w.s, t, w.seen, &w.result); err != nil {
++				return err
++			}
++		case plumbing.BlobObject:
++			w.seen[h] = struct{}{}
++			w.result = append(w.result, h)
++		default:
++			return fmt.Errorf("unsupported object type %s for %s", o.Type(), h)
++		}
++	}
++	return nil
+ }
+ 
+ // seedHaves enqueues each have commit and pre-populates seen with all
+@@ -43,7 +94,10 @@ func (w *objectWalk) seedWants(wants []plumbing.Hash) error {
+ // Missing objects (ErrObjectNotFound) are tolerated since the remote
+ // may advertise refs we don't have locally.
+ func (w *objectWalk) seedHaves(haves []plumbing.Hash) error {
+-	panic("excised: objectWalk.seedHaves")
++	for _, h := range haves {
++		w.havesSeen[h] = struct{}{}
++	}
++	return nil
+ }
+ 
+ // Paint flags for the commit walk. A commit reachable from both
+@@ -56,7 +110,7 @@ const (
+ 
+ // walk identifies new commits and collects their tree objects.
+ func (w *objectWalk) walk() error {
+-	panic("excised: objectWalk.walk")
++	return w.walkFull()
+ }
+ 
+ // missingParent records a parent commit that could not be loaded during
+@@ -90,7 +144,38 @@ func allStale(queue []*object.Commit, flags map[plumbing.Hash]uint8) bool {
+ // commits and collects every reachable tree/blob via a simple seen-set
+ // traversal — no per-commit tree diffs needed.
+ func (w *objectWalk) walkFull() error {
+-	panic("excised: objectWalk.walkFull")
++	for len(w.wantsQueue) > 0 {
++		lc := w.wantsQueue[0]
++		w.wantsQueue = w.wantsQueue[1:]
++
++		if _, ok := w.seen[lc.Hash]; ok {
++			continue
++		}
++		w.seen[lc.Hash] = struct{}{}
++		w.result = append(w.result, lc.Hash)
++
++		tree, err := lc.Tree()
++		if err != nil {
++			return fmt.Errorf("getting tree for %s: %w", lc.Hash, err)
++		}
++
++		if err := collectAllTreeObjects(w.s, tree, w.seen, &w.result); err != nil {
++			return fmt.Errorf("collecting tree objects for %s: %w", lc.Hash, err)
++		}
++
++		for _, ph := range lc.ParentHashes {
++			if _, ok := w.wantsSeen[ph]; ok {
++				continue
++			}
++			w.wantsSeen[ph] = struct{}{}
++			pc, err := object.GetCommit(w.s, ph)
++			if err != nil {
++				return fmt.Errorf("getting parent commit %s: %w", ph, err)
++			}
++			insertSorted(&w.wantsQueue, pc)
++		}
++	}
++	return nil
+ }
+ 
+ // processCommitTrees collects new tree/blob objects for a commit by
+@@ -102,7 +187,12 @@ func (w *objectWalk) processCommitTrees(lc *object.Commit) error {
+ // insertSorted inserts a commit into a slice sorted by committer time
+ // descending (newest first).
+ func insertSorted(q *[]*object.Commit, c *object.Commit) {
+-	panic("excised: insertSorted")
++	i := sort.Search(len(*q), func(i int) bool {
++		return (*q)[i].Committer.When.Before(c.Committer.When)
++	})
++	*q = append(*q, nil)
++	copy((*q)[i+1:], (*q)[i:])
++	(*q)[i] = c
+ }
+ 
+ // collectChangedTreeObjects walks newTree, comparing entry hashes against
+@@ -128,7 +218,33 @@ func collectAllTreeObjects(
+ 	seen map[plumbing.Hash]struct{},
+ 	result *[]plumbing.Hash,
+ ) error {
+-	panic("excised: collectAllTreeObjects")
++	if _, ok := seen[t.Hash]; ok {
++		return nil
++	}
++	seen[t.Hash] = struct{}{}
++	*result = append(*result, t.Hash)
++
++	for _, e := range t.Entries {
++		if e.Mode == filemode.Submodule {
++			continue
++		}
++		if _, ok := seen[e.Hash]; ok {
++			continue
++		}
++		if e.Mode == filemode.Dir {
++			sub, err := object.GetTree(s, e.Hash)
++			if err != nil {
++				return fmt.Errorf("getting subtree %s: %w", e.Hash, err)
++			}
++			if err := collectAllTreeObjects(s, sub, seen, result); err != nil {
++				return err
++			}
++		} else {
++			seen[e.Hash] = struct{}{}
++			*result = append(*result, e.Hash)
++		}
++	}
++	return nil
+ }
+ 
+ // markTreeSeen recursively adds all tree and blob hashes in t to seen.

@@ -1,0 +1,59 @@
+diff --git a/github/repos_releases.go b/github/repos_releases.go
+index bde2c17..44c021a 100644
+--- a/github/repos_releases.go
++++ b/github/repos_releases.go
+@@ -336,7 +336,7 @@ func (s *RepositoriesService) GetReleaseAsset(ctx context.Context, owner, repo s
+ //
+ //meta:operation GET /repos/{owner}/{repo}/releases/assets/{asset_id}
+ func (s *RepositoriesService) DownloadReleaseAsset(ctx context.Context, owner, repo string, id int64, followRedirectsClient *http.Client) (rc io.ReadCloser, redirectURL string, err error) {
+-		u := fmt.Sprintf("repos/%v/%v/releases/assets/%v", owner, repo, id)
++	u := fmt.Sprintf("repos/%v/%v/releases/assets/%v", owner, repo, id)
+ 
+ 	req, err := s.client.NewRequest(ctx, "GET", u, nil)
+ 	if err != nil {
+@@ -349,16 +349,26 @@ func (s *RepositoriesService) DownloadReleaseAsset(ctx context.Context, owner, r
+ 		return nil, "", err
+ 	}
+ 
++	// No redirect, stream the response body directly.
+ 	if loc == nil {
+ 		return resp.Body, "", nil
+ 	}
+ 
++	// Close body as it's not needed when following redirects or returning the redirect URL.
+ 	_ = resp.Body.Close()
+-	return nil, loc.String(), nil /* excised: DownloadReleaseAsset */
++
++	// Got a redirect URL.
++	redirectStr := loc.String()
++	if followRedirectsClient != nil {
++		rc, err := s.downloadReleaseAssetFromURL(ctx, followRedirectsClient, redirectStr)
++		return rc, "", err
++	}
++
++	return nil, redirectStr, nil
+ }
+ 
+ func (s *RepositoriesService) downloadReleaseAssetFromURL(ctx context.Context, followRedirectsClient *http.Client, url string) (rc io.ReadCloser, err error) {
+-		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
++	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+@@ -367,7 +377,15 @@ func (s *RepositoriesService) downloadReleaseAssetFromURL(ctx context.Context, f
+ 	if err != nil {
+ 		return nil, err
+ 	}
+-	return resp.Body, nil /* excised: downloadReleaseAssetFromURL */
++	// CheckResponse substitutes resp.Body with a re-readable copy on error
++	// responses, so capture the original body first: it is the one that must
++	// be closed.
++	origBody := resp.Body
++	if err := CheckResponse(resp); err != nil {
++		_ = origBody.Close()
++		return nil, err
++	}
++	return resp.Body, nil
+ }
+ 
+ // UpdateReleaseAsset updates a repository release asset.

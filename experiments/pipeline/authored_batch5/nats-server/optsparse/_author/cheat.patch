@@ -1,0 +1,141 @@
+diff --git a/server/opts.go b/server/opts.go
+--- a/server/opts.go
++++ b/server/opts.go
+@@ -1940,11 +1940,36 @@ func setupUsersAndNKeysDuplicateCheckMap(o *Options) map[string]struct{} {
+ 	return unames
+ }
+ 
+-func parseDuration(field string, tk token, v any, errors *[]error, warnings *[]error) time.Duration { panic("excised: parseDuration") }
++func parseDuration(field string, tk token, v any, errors *[]error, warnings *[]error) time.Duration {
++	wd, ok := v.(string)
++	if !ok {
++		*errors = append(*errors, &configErr{tk, fmt.Sprintf("error parsing %s: expected string", field)})
++		return 0
++	}
++	dur, err := time.ParseDuration(wd)
++	if err != nil {
++		*errors = append(*errors, &configErr{tk, err.Error()})
++	}
++	return dur
++}
+ 
+-func parseWriteDeadlinePolicy(tk token, v string, errors *[]error) WriteTimeoutPolicy { panic("excised: parseWriteDeadlinePolicy") }
++func parseWriteDeadlinePolicy(tk token, v string, errors *[]error) WriteTimeoutPolicy {
++	if p, ok := map[string]WriteTimeoutPolicy{"default": WriteTimeoutPolicyDefault, "close": WriteTimeoutPolicyClose}[v]; ok {
++		return p
++	}
++	*errors = append(*errors, &configErr{tk, "write_timeout must be 'default', 'close' or 'retry'"})
++	return WriteTimeoutPolicyDefault
++}
+ 
+-func trackExplicitVal(pm *map[string]bool, name string, val bool) { panic("excised: trackExplicitVal") }
++func trackExplicitVal(pm *map[string]bool, name string, val bool) {
++	if !val {
++		return
++	}
++	if *pm == nil {
++		*pm = make(map[string]bool)
++	}
++	(*pm)[name] = true
++}
+ 
+ // hostPort is simple struct to hold parsed listen/addr strings.
+ type hostPort struct {
+@@ -1953,7 +1978,21 @@ type hostPort struct {
+ }
+ 
+ // parseListen will parse listen option which is replacing host/net and port
+-func parseListen(v any) (*hostPort, error) { panic("excised: parseListen") }
++func parseListen(v any) (*hostPort, error) {
++	vv, ok := v.(string)
++	if !ok {
++		return nil, fmt.Errorf("expected host:port string, got %T", v)
++	}
++	host, port, err := net.SplitHostPort(vv)
++	if err != nil {
++		return nil, fmt.Errorf("could not parse address string %q", vv)
++	}
++	p, err := strconv.Atoi(port)
++	if err != nil {
++		return nil, err
++	}
++	return &hostPort{host, p}, nil
++}
+ 
+ // parseCluster will parse the cluster config.
+ func parseCluster(v any, opts *Options, errors *[]error, warnings *[]error) error {
+@@ -2127,11 +2166,45 @@ func parseCluster(v any, opts *Options, errors *[]error, warnings *[]error) erro
+ // The parameter `chosenModeForOn` indicates which compression mode to use
+ // when the user selects "on" (or enabled, true, etc..). This is because
+ // we may have different defaults depending on where the compression is used.
+-func parseCompression(c *CompressionOpts, chosenModeForOn string, tk token, mk string, mv any) (retErr error) { panic("excised: parseCompression") }
++func parseCompression(c *CompressionOpts, chosenModeForOn string, tk token, mk string, mv any) (retErr error) {
++	var lt token
++	defer convertPanicToError(&lt, &retErr)
++	switch mv := mv.(type) {
++	case string:
++		c.Mode = mv
++	case bool:
++		if mv {
++			c.Mode = chosenModeForOn
++		} else {
++			c.Mode = CompressionOff
++		}
++	default:
++		return &configErr{tk, fmt.Sprintf("field %q should be a boolean, got %T", mk, mv)}
++	}
++	return nil
++}
+ 
+-func parseURLs(a []any, typ string, warnings *[]error) (urls []*url.URL, errors []error) { panic("excised: parseURLs") }
++func parseURLs(a []any, typ string, warnings *[]error) (urls []*url.URL, errors []error) {
++	var lt token
++	defer convertPanicToErrorList(&lt, &errors)
++	for _, u := range a {
++		tk, u := unwrapValue(u, &lt)
++		if url, err := parseURL(u.(string), typ); err != nil {
++			errors = append(errors, &configErr{tk, err.Error()})
++		} else {
++			urls = append(urls, url)
++		}
++	}
++	return urls, errors
++}
+ 
+-func parseURL(u string, typ string) (*url.URL, error) { panic("excised: parseURL") }
++func parseURL(u string, typ string) (*url.URL, error) {
++	url, err := url.Parse(u)
++	if err != nil {
++		return nil, fmt.Errorf("error parsing %s url [%q]", typ, u)
++	}
++	return url, nil
++}
+ 
+ func parseGateway(v any, o *Options, errors *[]error, warnings *[]error) error {
+ 	var lt token
+@@ -2354,7 +2427,24 @@ func parseJetStreamForAccount(v any, acc *Account, errors *[]error) error {
+ }
+ 
+ // takes in a storage size as either an int or a string and returns an int64 value based on the input.
+-func getStorageSize(v any) (int64, error) { panic("excised: getStorageSize") }
++func getStorageSize(v any) (int64, error) {
++	if i, ok := v.(int64); ok {
++		return i, nil
++	}
++	s, _ := v.(string)
++	if s == _EMPTY_ {
++		return 0, nil
++	}
++	num, err := strconv.ParseInt(s[:len(s)-1], 10, 64)
++	if err != nil {
++		return 0, err
++	}
++	mult, ok := map[string]int64{"K": 1e3, "M": 1e6, "G": 1e9}[s[len(s)-1:]]
++	if !ok {
++		return 0, fmt.Errorf("sizes defined as strings must end in K, M, G")
++	}
++	return num * mult, nil
++}
+ 
+ // Parse enablement of jetstream for a server.
+ func parseJetStreamLimits(v any, opts *Options, errors *[]error) error {

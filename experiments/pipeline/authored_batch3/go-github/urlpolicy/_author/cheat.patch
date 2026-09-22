@@ -1,0 +1,28 @@
+diff --git a/github/github.go b/github/github.go
+--- a/github/github.go
++++ b/github/github.go
+@@ -20,7 +20,7 @@ import (
+ 	"net/http"
+ 	"net/url"
+ 	"regexp"
+-	_ "slices"
++	"slices"
+ 	"strconv"
+ 	"strings"
+ 	"sync"
+@@ -1070,7 +1070,14 @@ func (c *Client) NewFormRequest(ctx context.Context, urlStr string, body io.Read
+ // within a segment (e.g. "file..txt"). The check is performed only on the path
+ // portion of the URL, ignoring any query string or fragment.
+ func checkURLPathTraversal(urlStr string) error {
+-	return nil /* excised: checkURLPathTraversal */
++	u, err := url.Parse(urlStr)
++	if err != nil {
++		return err
++	}
++	if slices.Contains(strings.Split(u.Path, "/"), "..") {
++		return ErrPathForbidden
++	}
++	return nil
+ }
+ 
+ // NewUploadRequest creates an upload request. A relative URL can be provided in

@@ -1,0 +1,47 @@
+diff --git a/github/github.go b/github/github.go
+index f2bb810..5b1fa27 100644
+--- a/github/github.go
++++ b/github/github.go
+@@ -1046,7 +1046,7 @@ func (c *Client) NewRequest(ctx context.Context, method, urlStr string, body any
+ // configured for. This constructor carries a body, and a body cannot be withheld
+ // the way a credential can: see the destination rules on [ErrUntrustedDestination].
+ func (c *Client) NewFormRequest(ctx context.Context, urlStr string, body io.Reader, opts ...RequestOption) (*http.Request, error) {
+-		if !strings.HasSuffix(c.baseURL.Path, "/") {
++	if !strings.HasSuffix(c.baseURL.Path, "/") {
+ 		return nil, fmt.Errorf("baseURL must have a trailing slash, but %q does not", c.baseURL)
+ 	}
+ 
+@@ -1059,6 +1059,14 @@ func (c *Client) NewFormRequest(ctx context.Context, urlStr string, body io.Read
+ 		return nil, err
+ 	}
+ 
++	// The same gate as NewUploadRequest, for the same reason: this builds a
++	// request that carries the caller's bytes, and an absolute urlStr is a
++	// destination a response could have supplied. Today's only caller passes a
++	// relative path, so this is a guard against the next one rather than a fix.
++	if err := c.checkBodyDestination(u); err != nil {
++		return nil, err
++	}
++
+ 	req, err := http.NewRequestWithContext(ctx, "POST", u.String(), body)
+ 	if err != nil {
+ 		return nil, err
+@@ -1066,14 +1074,16 @@ func (c *Client) NewFormRequest(ctx context.Context, urlStr string, body io.Read
+ 
+ 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+ 	req.Header.Set("Accept", mediaTypeV3)
+-	req.Header.Set("User-Agent", c.userAgent)
++	if c.userAgent != "" {
++		req.Header.Set("User-Agent", c.userAgent)
++	}
+ 	req.Header.Set(headerAPIVersion, c.apiVersionDefault)
+ 
+ 	for _, opt := range opts {
+ 		opt(req)
+ 	}
+ 
+-	return req, nil /* excised: NewFormRequest */
++	return req, nil
+ }
+ 
+ // checkURLPathTraversal returns ErrPathForbidden if urlStr contains ".." as a

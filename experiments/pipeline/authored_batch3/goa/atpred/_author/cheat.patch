@@ -1,0 +1,187 @@
+--- a/expr/attribute.go
++++ b/expr/attribute.go
+@@ -178,7 +178,16 @@
+ // TaggedAttribute returns the name of the child attribute of a with the given
+ // tag if a is an object.
+ func TaggedAttribute(a *AttributeExpr, tag string) string {
+-	panic("excised: TaggedAttribute")
++	obj := AsObject(a.Type)
++	if obj == nil {
++		return ""
++	}
++	for _, at := range *obj {
++		if _, ok := at.Attribute.Meta[tag]; ok {
++			return at.Name
++		}
++	}
++	return ""
+ }
+ 
+ // walkAttribute iterates over the given attribute, its bases and references
+@@ -191,7 +200,19 @@
+ // Note: keep this function private as it does not walk through all types.
+ // External packages should use the codegen.Walk function instead.
+ func walkAttribute(att *AttributeExpr, it func(name string, a *AttributeExpr) error) error {
+-	panic("excised: walkAttribute")
++	switch dt := att.Type.(type) {
++	case UserType:
++		if err := walkAttribute(dt.Attribute(), it); err != nil {
++			return err
++		}
++	case *Object:
++		for _, nat := range *dt {
++			if err := it(nat.Name, nat.Attribute); err != nil {
++				return err
++			}
++		}
++	}
++	return nil
+ }
+ 
+ // EvalName returns the name used by the DSL evaluation.
+@@ -424,21 +445,29 @@
+ // object. This method recurses if the type is itself an attribute (i.e. a
+ // UserType, this happens with the Reference DSL for example).
+ func (a *AttributeExpr) AllRequired() []string {
+-	panic("excised: AttributeExpr.AllRequired")
++	if a.Validation != nil {
++		return a.Validation.Required
++	}
++	return nil
+ }
+ 
+ // IsRequired returns true if the given string matches the name of a required
+ // attribute, false otherwise. This method only applies to attributes of type
+ // Object.
+ func (a *AttributeExpr) IsRequired(attName string) bool {
+-	panic("excised: AttributeExpr.IsRequired")
++	return slices.Contains(a.AllRequired(), attName)
+ }
+ 
+ // IsRequiredNoDefault returns true if the given string matches the name of a
+ // required attribute and the attribute has no default value, false otherwise.
+ // This method only applies to attributes of type Object.
+ func (a *AttributeExpr) IsRequiredNoDefault(attName string) bool {
+-	panic("excised: AttributeExpr.IsRequiredNoDefault")
++	for _, name := range a.AllRequired() {
++		if name == attName {
++			return a.GetDefault(attName) == nil
++		}
++	}
++	return false
+ }
+ 
+ // IsPrimitivePointer returns true if the field generated for the given
+@@ -456,60 +485,102 @@
+ //	No           True       True
+ //	No           False      True
+ func (a *AttributeExpr) IsPrimitivePointer(attName string, useDefault bool) bool {
+-	panic("excised: AttributeExpr.IsPrimitivePointer")
++	o := AsObject(a.Type)
++	if o == nil {
++		panic("checking pointer field on non-object") // bug
++	}
++	att := o.Attribute(attName)
++	if att == nil {
++		return false
++	}
++	return IsPrimitive(att.Type) && !a.IsRequired(attName) && (!useDefault || !a.HasDefaultValue(attName))
+ }
+ 
+ func unalias(dt DataType) DataType {
+-	panic("excised: unalias")
++	if ut, ok := dt.(UserType); ok {
++		return ut.Attribute().Type
++	}
++	return dt
+ }
+ 
+ // HasTag returns true if the attribute is an object that has an attribute with
+ // the given tag.
+ func (a *AttributeExpr) HasTag(tag string) bool {
+-	panic("excised: AttributeExpr.HasTag")
++	if a == nil {
++		return false
++	}
++	_, ok := a.Meta[tag]
++	return ok
+ }
+ 
+ // HasTagPrefix returns true if the attribute is an object that has an attribute with
+ // the given tag prefix.
+ func (a *AttributeExpr) HasTagPrefix(prefix string) bool {
+-	panic("excised: AttributeExpr.HasTagPrefix")
++	if a == nil {
++		return false
++	}
++	for k := range a.Meta {
++		if strings.HasPrefix(k, prefix) {
++			return true
++		}
++	}
++	return false
+ }
+ 
+ // FieldTag returns the field tag if the attribute is a field.
+ func (a *AttributeExpr) FieldTag() (tag string, found bool) {
+-	panic("excised: AttributeExpr.FieldTag")
++	if a == nil {
++		return
++	}
++	if vals, ok := a.Meta["rpc:tag"]; ok && len(vals) > 0 {
++		return vals[0], true
++	}
++	return "", false
+ }
+ 
+ // HasDefaultValue returns true if the attribute with the given name has a
+ // default value.
+ func (a *AttributeExpr) HasDefaultValue(attName string) bool {
+-	panic("excised: AttributeExpr.HasDefaultValue")
++	return a.GetDefault(attName) != nil
+ }
+ 
+ // GetDefault gets the default value for the child attribute with the given
+ // name. It returns nil if the child attribute with the given name does not
+ // exist or if the child attribute does not have a default value.
+ func (a *AttributeExpr) GetDefault(attName string) any {
+-	panic("excised: AttributeExpr.GetDefault")
++	if o := AsObject(a.Type); o != nil {
++		if att := o.Attribute(attName); att != nil {
++			return att.DefaultValue
++		}
++	}
++	return nil
+ }
+ 
+ // SetDefault sets the default for the attribute. It also converts HashVal
+ // and ArrayVal to map and slice respectively.
+ func (a *AttributeExpr) SetDefault(def any) {
+-	panic("excised: AttributeExpr.SetDefault")
++	a.DefaultValue = def
+ }
+ 
+ // Find finds a child attribute with the given name in the attribute and
+ // its bases and references. If the parent attribute is not an object, it
+ // returns nil.
+ func (a *AttributeExpr) Find(name string) *AttributeExpr {
+-	panic("excised: AttributeExpr.Find")
++	if o := AsObject(a.Type); o != nil {
++		return o.Attribute(name)
++	}
++	return nil
+ }
+ 
+ // Delete removes an attribute with the given name. It does nothing if the
+ // attribute expression is not an object type.
+ func (a *AttributeExpr) Delete(name string) {
+-	panic("excised: AttributeExpr.Delete")
++	if o := AsObject(a.Type); o != nil {
++		o.Delete(name)
++		if a.Validation != nil {
++			a.Validation.RemoveRequired(name)
++		}
++	}
+ }
+ 
+ // AddMeta adds values to the meta field of the attribute.

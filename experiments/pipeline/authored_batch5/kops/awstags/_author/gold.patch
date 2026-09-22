@@ -1,0 +1,183 @@
+--- a/upup/pkg/fi/cloudup/awsup/aws_utils.go
++++ b/upup/pkg/fi/cloudup/awsup/aws_utils.go
+@@ -18,24 +18,24 @@
+ 
+ import (
+ 	"context"
+-	_ "errors"
++	"errors"
+ 	"fmt"
+ 	"os"
+-	_ "strings"
++	"strings"
+ 	"sync"
+ 
+-	"example.internal/clustkit/pkg/apis/kops"
+-	_ "example.internal/clustkit/pkg/truncate"
+ 	"github.com/aws/aws-sdk-go-v2/aws"
+-	_ "github.com/aws/aws-sdk-go-v2/aws/arn"
++	"github.com/aws/aws-sdk-go-v2/aws/arn"
+ 	autoscalingtypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
+ 	ec2 "github.com/aws/aws-sdk-go-v2/service/ec2"
+ 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+ 	elbtypes "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancing/types"
+ 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
+-	_ "github.com/aws/aws-sdk-go-v2/service/iam/types"
+-	_ "github.com/aws/smithy-go"
++	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
++	"github.com/aws/smithy-go"
+ 	"k8s.io/klog/v2"
++	"example.internal/clustkit/pkg/apis/kops"
++	"example.internal/clustkit/pkg/truncate"
+ )
+ 
+ // allRegions is the list of all regions; tests will set the values
+@@ -135,60 +135,135 @@
+ 
+ // FindEC2Tag find the value of the tag with the specified key
+ func FindEC2Tag(tags []ec2types.Tag, key string) (string, bool) {
+-	panic("excised: FindEC2Tag")
++	for _, tag := range tags {
++		if key == aws.ToString(tag.Key) {
++			return aws.ToString(tag.Value), true
++		}
++	}
++	return "", false
+ }
+ 
+ // FindASGTag find the value of the tag with the specified key
+ func FindASGTag(tags []autoscalingtypes.TagDescription, key string) (string, bool) {
+-	panic("excised: FindASGTag")
++	for _, tag := range tags {
++		if key == aws.ToString(tag.Key) {
++			return aws.ToString(tag.Value), true
++		}
++	}
++	return "", false
+ }
+ 
+ // FindELBTag find the value of the tag with the specified key
+ func FindELBTag(tags []elbtypes.Tag, key string) (string, bool) {
+-	panic("excised: FindELBTag")
++	for _, tag := range tags {
++		if key == aws.ToString(tag.Key) {
++			return aws.ToString(tag.Value), true
++		}
++	}
++	return "", false
+ }
+ 
+ // FindELBV2Tag find the value of the tag with the specified key
+ func FindELBV2Tag(tags []elbv2types.Tag, key string) (string, bool) {
+-	panic("excised: FindELBV2Tag")
++	for _, tag := range tags {
++		if key == aws.ToString(tag.Key) {
++			return aws.ToString(tag.Value), true
++		}
++	}
++	return "", false
+ }
+ 
+ // AWSErrorCode returns the aws error code, if it is an awserr.Error or smithy.APIError, otherwise ""
+ func AWSErrorCode(err error) string {
+-	panic("excised: AWSErrorCode")
++	var apiErr smithy.APIError
++	if errors.As(err, &apiErr) {
++		return apiErr.ErrorCode()
++	}
++	return ""
+ }
+ 
+ // AWSErrorMessage returns the aws error message, if it is an awserr.Error or smithy.APIError, otherwise ""
+ func AWSErrorMessage(err error) string {
+-	panic("excised: AWSErrorMessage")
++	var apiErr smithy.APIError
++	if errors.As(err, &apiErr) {
++		return apiErr.ErrorMessage()
++	}
++	return ""
+ }
+ 
+ // EC2TagSpecification converts a map of tags to an EC2 TagSpecification
+ func EC2TagSpecification(resourceType ec2types.ResourceType, tags map[string]string) []ec2types.TagSpecification {
+-	panic("excised: EC2TagSpecification")
++	if len(tags) == 0 {
++		return nil
++	}
++	specification := ec2types.TagSpecification{
++		ResourceType: resourceType,
++		Tags:         make([]ec2types.Tag, 0),
++	}
++	for k, v := range tags {
++		specification.Tags = append(specification.Tags, ec2types.Tag{
++			Key:   aws.String(k),
++			Value: aws.String(v),
++		})
++	}
++
++	return []ec2types.TagSpecification{specification}
+ }
+ 
+ // ELBv2Tags converts a map of tags to ELBv2 Tags
+ func ELBv2Tags(tags map[string]string) []elbv2types.Tag {
+-	panic("excised: ELBv2Tags")
++	if len(tags) == 0 {
++		return nil
++	}
++	elbv2Tags := make([]elbv2types.Tag, 0)
++	for k, v := range tags {
++		elbv2Tags = append(elbv2Tags, elbv2types.Tag{
++			Key:   aws.String(k),
++			Value: aws.String(v),
++		})
++	}
++
++	return elbv2Tags
+ }
+ 
+ // GetClusterName40 will attempt to calculate a meaningful cluster name with a max length of 40
+ func GetClusterName40(cluster string) string {
+-	panic("excised: GetClusterName40")
++	return truncate.TruncateString(cluster, truncate.TruncateStringOptions{
++		MaxLength: 40,
++	})
+ }
+ 
+ // GetResourceName32 will attempt to calculate a meaningful name for a resource given a prefix
+ // Will never return a string longer than 32 chars
+ func GetResourceName32(cluster string, prefix string) string {
+-	panic("excised: GetResourceName32")
++	s := prefix + "-" + strings.ReplaceAll(cluster, ".", "-")
++
++	// We always compute the hash and add it, lest we trick users into assuming that we never do this
++	opt := truncate.TruncateStringOptions{
++		MaxLength:     32,
++		AlwaysAddHash: true,
++		HashLength:    6,
++	}
++	return truncate.TruncateString(s, opt)
+ }
+ 
+ // NameForExternalTargetGroup will attempt to calculate a meaningful name for a target group given an ARN.
+ func NameForExternalTargetGroup(targetGroupARN string) (string, error) {
+-	panic("excised: NameForExternalTargetGroup")
++	parsed, err := arn.Parse(targetGroupARN)
++	if err != nil {
++		return "", fmt.Errorf("error parsing target group ARN: %v", err)
++	}
++	resource := strings.Split(parsed.Resource, "/")
++	if len(resource) != 3 || resource[0] != "targetgroup" {
++		return "", fmt.Errorf("error parsing target group ARN resource: %q", parsed.Resource)
++	}
++	return resource[1], nil
+ }
+ 
+ func IsIAMNoSuchEntityException(err error) bool {
+-	panic("excised: IsIAMNoSuchEntityException")
+-}
++	if err == nil {
++		return false
++	}
++	var nse *iamtypes.NoSuchEntityException
++	return errors.As(err, &nse)
++}

@@ -1,0 +1,56 @@
+diff --git a/internal/mockstore/mockkv/mvcc.go b/internal/mockstore/mockkv/mvcc.go
+--- a/internal/mockstore/mockkv/mvcc.go
++++ b/internal/mockstore/mockkv/mvcc.go
+@@ -212,19 +212,39 @@
+ // lockErr returns ErrLocked.
+ // Note that parameter key is raw key, while key in ErrLocked is mvcc key.
+ func (l *mvccLock) lockErr(key []byte) error {
+-	panic("excised: mvccLock.lockErr")
++	return &ErrLocked{Key: mvccEncode(key, lockVer), Primary: l.primary, StartTS: l.startTS, ForUpdateTS: l.forUpdateTS, TTL: l.ttl, TxnSize: l.txnSize, LockType: l.op}
+ }
+ 
+ func (l *mvccLock) check(ts uint64, key []byte, resolvedLocks []uint64) (uint64, error) {
+-	panic("excised: mvccLock.check")
++	if l.startTS > ts || l.op == kvrpcpb.Op_Lock || l.op == kvrpcpb.Op_PessimisticLock {
++		return ts, nil
++	}
++	for _, resolved := range resolvedLocks {
++		if l.startTS == resolved {
++			return ts, nil
++		}
++	}
++	return 0, l.lockErr(key)
+ }
+ 
+ func (e *mvccEntry) Less(than btree.Item) bool {
+-	panic("excised: mvccEntry.Less")
++	return bytes.Compare(e.key, than.(*mvccEntry).key) < 0
+ }
+ 
+ func (e *mvccEntry) Get(ts uint64, isoLevel kvrpcpb.IsolationLevel, resolvedLocks []uint64) ([]byte, error) {
+-	panic("excised: mvccEntry.Get")
++	if isoLevel == kvrpcpb.IsolationLevel_SI && e.lock != nil {
++		var err error
++		ts, err = e.lock.check(ts, e.key.Raw(), resolvedLocks)
++		if err != nil {
++			return nil, err
++		}
++	}
++	for _, v := range e.values {
++		if v.commitTS <= ts {
++			return v.value, nil
++		}
++	}
++	return nil, nil
+ }
+ 
+ // MVCCStore is a mvcc key-value storage.
+@@ -278,7 +298,7 @@
+ }
+ 
+ func regionContains(startKey []byte, endKey []byte, key []byte) bool {
+-	panic("excised: regionContains")
++	return bytes.Compare(startKey, key) <= 0 && (bytes.Compare(key, endKey) < 0 || len(endKey) == 0)
+ }
+ 
+ // MvccKey is the encoded key type.

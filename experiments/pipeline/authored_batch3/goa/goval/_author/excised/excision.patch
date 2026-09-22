@@ -1,0 +1,772 @@
+--- a/codegen/go_value.go
++++ b/codegen/go_value.go
+@@ -5,11 +5,11 @@
+ 
+ import (
+ 	"fmt"
+-	"math"
++	_ "math"
+ 	"reflect"
+-	"sort"
+-	"strconv"
+-	"strings"
++	_ "sort"
++	_ "strconv"
++	_ "strings"
+ 
+ 	"example.internal/apikit/v3/expr"
+ )
+@@ -115,469 +115,99 @@
+ // render writes the expression for one value and records any local values
+ // whose addresses are required by the target layout.
+ func (r *goValueRenderer) render(attribute *expr.AttributeExpr, value reflect.Value, layout LinkedGoType, pointer bool) (string, error) {
+-	concrete, err := concreteGoValue(value)
+-	if err != nil {
+-		return "", err
+-	}
+-	var expression string
+-	shape := layout
+-	if layout.plan.kind == GoNamed {
+-		if layout.plan.value == nil {
+-			return "", fmt.Errorf("named type %q has no planned value layout", attribute.Type.Name())
+-		}
+-		shape = layout.Enter(layout.plan.value)
+-	}
+-	switch {
+-	case expr.IsPrimitive(attribute.Type):
+-		expression, err = r.renderPrimitive(attribute, concrete, layout)
+-	case expr.IsArray(attribute.Type):
+-		expression, err = r.renderArray(attribute, concrete, layout, shape)
+-	case expr.IsMap(attribute.Type):
+-		expression, err = r.renderMap(attribute, concrete, layout, shape)
+-	case expr.IsObject(attribute.Type):
+-		expression, err = r.renderObject(attribute, concrete, layout, shape, pointer)
+-		pointer = false
+-	case expr.IsUnion(attribute.Type):
+-		expression, err = r.renderUnion(attribute, concrete, layout)
+-	default:
+-		err = fmt.Errorf("unsupported design type %T", attribute.Type)
+-	}
+-	if err != nil {
+-		return "", err
+-	}
+-	if !pointer {
+-		return expression, nil
+-	}
+-	local := r.localName()
+-	r.declarations = append(r.declarations, fmt.Sprintf("var %s %s = %s", local, layout.Def(), expression))
+-	return "&" + local, nil
++	panic("excised: goValueRenderer.render")
+ }
+ 
+ // renderPrimitive writes a primitive literal and converts it to the planned
+ // named type when the design or field metadata requires one.
+ func (r *goValueRenderer) renderPrimitive(attribute *expr.AttributeExpr, value reflect.Value, layout LinkedGoType) (string, error) {
+-	primitive := underlyingPrimitive(attribute.Type)
+-	if custom, spec := GetMetaType(attribute); custom != "" {
+-		if custom == GoNativeTypeName(primitive) {
+-			return renderPrimitiveLiteral(primitive, value)
+-		}
+-		if err := validateCustomDefault(custom, spec, value); err != nil {
+-			return "", err
+-		}
+-		if value.Type().PkgPath() == "" {
+-			return renderPrimitiveLiteral(primitive, value)
+-		}
+-		return renderTypedCustomValue(layout.Def(), value)
+-	}
+-	literal, err := renderPrimitiveLiteral(primitive, value)
+-	if err != nil {
+-		return "", err
+-	}
+-	return literal, nil
++	panic("excised: goValueRenderer.renderPrimitive")
+ }
+ 
+ // renderArray writes every element using the element layout selected by the
+ // same generator context.
+ func (r *goValueRenderer) renderArray(attribute *expr.AttributeExpr, value reflect.Value, layout, shape LinkedGoType) (string, error) {
+-	if value.Kind() != reflect.Array && value.Kind() != reflect.Slice {
+-		return "", fmt.Errorf("array default has Go type %s", value.Type())
+-	}
+-	array := expr.AsArray(attribute.Type)
+-	items := make([]string, value.Len())
+-	elementLayout := shape.Enter(shape.plan.element)
+-	for index := range items {
+-		item, err := r.render(array.ElemType, value.Index(index), elementLayout, elementLayout.plan.definitionPointer)
+-		if err != nil {
+-			return "", fmt.Errorf("array element %d: %w", index, err)
+-		}
+-		items[index] = item
+-	}
+-	return fmt.Sprintf("%s{%s}", layout.Def(), strings.Join(items, ", ")), nil
++	panic("excised: goValueRenderer.renderArray")
+ }
+ 
+ // renderMap writes map entries in source order independent form so generated
+ // files remain stable across runs.
+ func (r *goValueRenderer) renderMap(attribute *expr.AttributeExpr, value reflect.Value, layout, shape LinkedGoType) (string, error) {
+-	if value.Kind() != reflect.Map {
+-		return "", fmt.Errorf("map default has Go type %s", value.Type())
+-	}
+-	mapped := expr.AsMap(attribute.Type)
+-	values, err := orderedMapValues(mapped.KeyType, value)
+-	if err != nil {
+-		return "", err
+-	}
+-	entries := make([]string, 0, len(values))
+-	keyLayout := shape.Enter(shape.plan.key)
+-	elementLayout := shape.Enter(shape.plan.element)
+-	for _, item := range values {
+-		key, err := r.render(mapped.KeyType, item.key, keyLayout, keyLayout.plan.definitionPointer)
+-		if err != nil {
+-			return "", fmt.Errorf("map key: %w", err)
+-		}
+-		element, err := r.render(mapped.ElemType, item.value, elementLayout, elementLayout.plan.definitionPointer)
+-		if err != nil {
+-			return "", fmt.Errorf("map value for %s: %w", key, err)
+-		}
+-		entries = append(entries, key+":"+element)
+-	}
+-	return fmt.Sprintf("%s{%s}", layout.Def(), strings.Join(entries, ", ")), nil
++	panic("excised: goValueRenderer.renderMap")
+ }
+ 
+ // renderObject writes only the fields supplied by the authored value. Pointer
+ // fields use local declarations when Go cannot take a scalar literal address.
+ func (r *goValueRenderer) renderObject(attribute *expr.AttributeExpr, value reflect.Value, layout, shape LinkedGoType, pointer bool) (string, error) {
+-	object := expr.AsObject(attribute.Type)
+-	fields := make([]string, 0, len(*object))
+-	for index, field := range *object {
+-		fieldValue, present, err := authoredObjectField(value, field.Name, field.Attribute)
+-		if err != nil {
+-			return "", err
+-		}
+-		if !present {
+-			continue
+-		}
+-		fieldLayout := shape.Enter(shape.plan.fields[index])
+-		expression, err := r.render(field.Attribute, fieldValue, fieldLayout, fieldLayout.plan.fieldPointer)
+-		if err != nil {
+-			return "", fmt.Errorf("object field %q: %w", field.Name, err)
+-		}
+-		name := fieldLayout.Field(true)
+-		fields = append(fields, name+": "+expression)
+-	}
+-	prefix := ""
+-	if pointer {
+-		prefix = "&"
+-	}
+-	return fmt.Sprintf("%s%s{%s}", prefix, layout.Def(), strings.Join(fields, ", ")), nil
++	panic("excised: goValueRenderer.renderObject")
+ }
+ 
+ // renderUnion selects the authored branch and calls the constructor retained
+ // by the generated service package.
+ func (r *goValueRenderer) renderUnion(attribute *expr.AttributeExpr, value reflect.Value, layout LinkedGoType) (string, error) {
+-	if r.resolveUnion == nil {
+-		return "", fmt.Errorf("OneOf default requires a planned branch constructor")
+-	}
+-	if value.Kind() != reflect.Map {
+-		return "", fmt.Errorf("OneOf default has Go type %s", value.Type())
+-	}
+-	union := expr.AsUnion(attribute.Type)
+-	tagValue, found := reflectedMapValue(value, union.GetTypeKey())
+-	if !found {
+-		return "", fmt.Errorf("OneOf default is missing %q", union.GetTypeKey())
+-	}
+-	tag, ok := tagValue.Interface().(string)
+-	if !ok {
+-		return "", fmt.Errorf("OneOf default field %q has Go type %s", union.GetTypeKey(), tagValue.Type())
+-	}
+-	branchValue, found := reflectedMapValue(value, union.GetValueKey())
+-	if !found {
+-		return "", fmt.Errorf("OneOf default is missing %q", union.GetValueKey())
+-	}
+-	var (
+-		branch      *expr.NamedAttributeExpr
+-		branchIndex int
+-	)
+-	for index, candidate := range union.Values {
+-		if candidate.Name == tag {
+-			branch = candidate
+-			branchIndex = index
+-			break
+-		}
+-	}
+-	if branch == nil {
+-		return "", fmt.Errorf("OneOf default selects unknown branch %q", tag)
+-	}
+-	constructor, err := r.resolveUnion(attribute, tag)
+-	if err != nil {
+-		return "", fmt.Errorf("resolve OneOf branch %q: %w", tag, err)
+-	}
+-	branchLayout := layout.Enter(layout.plan.branches[branchIndex])
+-	argument, err := r.render(branch.Attribute, branchValue, branchLayout, branchLayout.plan.referencePointer)
+-	if err != nil {
+-		return "", fmt.Errorf("OneOf branch %q: %w", tag, err)
+-	}
+-	return fmt.Sprintf("%s(%s)", constructor, argument), nil
++	panic("excised: goValueRenderer.renderUnion")
+ }
+ 
+ // localName returns a name that is unique inside the caller-provided block.
+ func (r *goValueRenderer) localName() string {
+-	r.nextLocal++
+-	return r.prefix + strconv.Itoa(r.nextLocal)
++	panic("excised: goValueRenderer.localName")
+ }
+ 
+ // orderedMapValues sorts authored map keys before rendering either side of an
+ // entry. This keeps local variable names stable when map values need pointers.
+ func orderedMapValues(attribute *expr.AttributeExpr, value reflect.Value) ([]goMapValue, error) {
+-	if !expr.IsPrimitive(attribute.Type) {
+-		return nil, fmt.Errorf("map default key uses unsupported design type %T", attribute.Type)
+-	}
+-	primitive := underlyingPrimitive(attribute.Type)
+-	values := make([]goMapValue, 0, value.Len())
+-	iterator := value.MapRange()
+-	for iterator.Next() {
+-		key, err := concreteGoValue(iterator.Key())
+-		if err != nil {
+-			return nil, fmt.Errorf("map key: %w", err)
+-		}
+-		order, err := renderPrimitiveLiteral(primitive, key)
+-		if err != nil {
+-			return nil, fmt.Errorf("map key: %w", err)
+-		}
+-		values = append(values, goMapValue{order: order, key: iterator.Key(), value: iterator.Value()})
+-	}
+-	sort.Slice(values, func(left, right int) bool {
+-		return values[left].order < values[right].order
+-	})
+-	return values, nil
++	panic("excised: orderedMapValues")
+ }
+ 
+ // concreteGoValue removes interface and pointer wrappers while rejecting nil,
+ // which cannot satisfy a non-nil authored default.
+ func concreteGoValue(value reflect.Value) (reflect.Value, error) {
+-	if !value.IsValid() {
+-		return reflect.Value{}, fmt.Errorf("default must not be nil")
+-	}
+-	for value.Kind() == reflect.Interface || value.Kind() == reflect.Pointer {
+-		if value.IsNil() {
+-			return reflect.Value{}, fmt.Errorf("default must not be nil")
+-		}
+-		value = value.Elem()
+-	}
+-	return value, nil
++	panic("excised: concreteGoValue")
+ }
+ 
+ // renderPrimitiveLiteral writes a literal accepted by the primitive's native
+ // Go type.
+ func renderPrimitiveLiteral(primitive expr.Primitive, value reflect.Value) (string, error) {
+-	switch primitive.Kind() {
+-	case expr.BooleanKind:
+-		if value.Kind() != reflect.Bool {
+-			return "", fmt.Errorf("boolean default has Go type %s", value.Type())
+-		}
+-		return strconv.FormatBool(value.Bool()), nil
+-	case expr.IntKind, expr.Int32Kind, expr.Int64Kind:
+-		switch value.Kind() {
+-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+-			return strconv.FormatInt(value.Int(), 10), nil
+-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+-			return strconv.FormatUint(value.Uint(), 10), nil
+-		default:
+-			return "", fmt.Errorf("integer default has Go type %s", value.Type())
+-		}
+-	case expr.UIntKind, expr.UInt32Kind, expr.UInt64Kind:
+-		switch value.Kind() {
+-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+-			if value.Int() < 0 {
+-				return "", fmt.Errorf("unsigned integer default must not be negative")
+-			}
+-			return strconv.FormatInt(value.Int(), 10), nil
+-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+-			return strconv.FormatUint(value.Uint(), 10), nil
+-		default:
+-			return "", fmt.Errorf("unsigned integer default has Go type %s", value.Type())
+-		}
+-	case expr.Float32Kind, expr.Float64Kind:
+-		var number float64
+-		switch value.Kind() {
+-		case reflect.Float32, reflect.Float64:
+-			number = value.Float()
+-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+-			number = float64(value.Int())
+-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+-			number = float64(value.Uint())
+-		default:
+-			return "", fmt.Errorf("number default has Go type %s", value.Type())
+-		}
+-		if math.IsInf(number, 0) || math.IsNaN(number) {
+-			return "", fmt.Errorf("number default must be finite")
+-		}
+-		bits := 64
+-		if primitive.Kind() == expr.Float32Kind {
+-			bits = 32
+-		}
+-		return strconv.FormatFloat(number, 'g', -1, bits), nil
+-	case expr.StringKind:
+-		if value.Kind() != reflect.String {
+-			return "", fmt.Errorf("string default has Go type %s", value.Type())
+-		}
+-		return strconv.Quote(value.String()), nil
+-	case expr.BytesKind:
+-		switch value.Kind() {
+-		case reflect.String:
+-			return "[]byte(" + strconv.Quote(value.String()) + ")", nil
+-		case reflect.Slice:
+-			if value.Type().Elem().Kind() != reflect.Uint8 {
+-				return "", fmt.Errorf("bytes default has Go type %s", value.Type())
+-			}
+-			items := make([]string, value.Len())
+-			for index := range items {
+-				items[index] = fmt.Sprintf("0x%x", value.Index(index).Uint())
+-			}
+-			return "[]byte{" + strings.Join(items, ", ") + "}", nil
+-		default:
+-			return "", fmt.Errorf("bytes default has Go type %s", value.Type())
+-		}
+-	case expr.AnyKind:
+-		return renderAnyValue(value)
+-	default:
+-		return "", fmt.Errorf("unsupported primitive %s", primitive.Name())
+-	}
++	panic("excised: renderPrimitiveLiteral")
+ }
+ 
+ // renderAnyValue writes JSON-compatible Go values with explicit container
+ // types so the generated expression does not depend on a design-time Go type.
+ func renderAnyValue(value reflect.Value) (string, error) {
+-	if goValueIsNil(value) {
+-		return "nil", nil
+-	}
+-	concrete, err := concreteGoValue(value)
+-	if err != nil {
+-		return "", err
+-	}
+-	switch concrete.Kind() {
+-	case reflect.Bool:
+-		return strconv.FormatBool(concrete.Bool()), nil
+-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+-		return strconv.FormatInt(concrete.Int(), 10), nil
+-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+-		return strconv.FormatUint(concrete.Uint(), 10), nil
+-	case reflect.Float32, reflect.Float64:
+-		if math.IsInf(concrete.Float(), 0) || math.IsNaN(concrete.Float()) {
+-			return "", fmt.Errorf("Any number default must be finite")
+-		}
+-		return strconv.FormatFloat(concrete.Float(), 'g', -1, concrete.Type().Bits()), nil
+-	case reflect.String:
+-		return strconv.Quote(concrete.String()), nil
+-	case reflect.Array, reflect.Slice:
+-		items := make([]string, concrete.Len())
+-		for index := range items {
+-			items[index], err = renderAnyValue(concrete.Index(index))
+-			if err != nil {
+-				return "", err
+-			}
+-		}
+-		return "[]any{" + strings.Join(items, ", ") + "}", nil
+-	case reflect.Map:
+-		items := make([]string, 0, concrete.Len())
+-		iterator := concrete.MapRange()
+-		for iterator.Next() {
+-			key, keyErr := concreteGoValue(iterator.Key())
+-			if keyErr != nil || key.Kind() != reflect.String {
+-				return "", fmt.Errorf("Any object default key must be a string")
+-			}
+-			element, elementErr := renderAnyValue(iterator.Value())
+-			if elementErr != nil {
+-				return "", elementErr
+-			}
+-			items = append(items, strconv.Quote(key.String())+":"+element)
+-		}
+-		sort.Strings(items)
+-		return "map[string]any{" + strings.Join(items, ", ") + "}", nil
+-	default:
+-		return "", fmt.Errorf("Any default has unsupported Go type %s", concrete.Type())
+-	}
++	panic("excised: renderAnyValue")
+ }
+ 
+ // goValueIsNil reports whether an authored Any value is nil after removing
+ // interface and pointer wrappers.
+ func goValueIsNil(value reflect.Value) bool {
+-	if !value.IsValid() {
+-		return true
+-	}
+-	for value.Kind() == reflect.Interface || value.Kind() == reflect.Pointer {
+-		if value.IsNil() {
+-			return true
+-		}
+-		value = value.Elem()
+-	}
+-	return false
++	panic("excised: goValueIsNil")
+ }
+ 
+ // renderTypedCustomValue writes an authored value that already uses the exact
+ // custom Go type from the design.
+ func renderTypedCustomValue(typeName string, value reflect.Value) (string, error) {
+-	switch value.Kind() {
+-	case reflect.Bool:
+-		return typeName + "(" + strconv.FormatBool(value.Bool()) + ")", nil
+-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+-		return typeName + "(" + strconv.FormatInt(value.Int(), 10) + ")", nil
+-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+-		return typeName + "(" + strconv.FormatUint(value.Uint(), 10) + ")", nil
+-	case reflect.Float32, reflect.Float64:
+-		return typeName + "(" + strconv.FormatFloat(value.Float(), 'g', -1, value.Type().Bits()) + ")", nil
+-	case reflect.String:
+-		return typeName + "(" + strconv.Quote(value.String()) + ")", nil
+-	case reflect.Slice:
+-		if value.Type().Elem().Kind() != reflect.Uint8 {
+-			return "", fmt.Errorf("default for custom Go type %s has unsupported underlying type %s", value.Type(), value.Kind())
+-		}
+-		items := make([]string, value.Len())
+-		for index := range items {
+-			items[index] = fmt.Sprintf("0x%x", value.Index(index).Uint())
+-		}
+-		return typeName + "{" + strings.Join(items, ", ") + "}", nil
+-	default:
+-		return "", fmt.Errorf("default for custom Go type %s has unsupported underlying type %s", value.Type(), value.Kind())
+-	}
++	panic("excised: renderTypedCustomValue")
+ }
+ 
+ // validateCustomDefault checks an already-typed default against the declared
+ // custom Go type. Native values use the existing struct:field:type contract:
+ // the declared type must accept conversion from the Apikit primitive.
+ func validateCustomDefault(custom string, spec *ImportSpec, value reflect.Value) error {
+-	if value.Type().PkgPath() == "" {
+-		return nil
+-	}
+-	if spec == nil {
+-		return fmt.Errorf("default for custom Go type %q must use that exact Go type", custom)
+-	}
+-	_, name, qualified := strings.Cut(custom, ".")
+-	if !qualified {
+-		name = custom
+-	}
+-	if value.Type().PkgPath() != spec.Path || value.Type().Name() != name {
+-		return fmt.Errorf("default for custom Go type %q has Go type %s", custom, value.Type())
+-	}
+-	return nil
++	panic("excised: validateCustomDefault")
+ }
+ 
+ // authoredObjectField returns one supplied object field from a map or struct.
+ func authoredObjectField(value reflect.Value, name string, attribute *expr.AttributeExpr) (reflect.Value, bool, error) {
+-	concrete, err := concreteGoValue(value)
+-	if err != nil {
+-		return reflect.Value{}, false, err
+-	}
+-	switch concrete.Kind() {
+-	case reflect.Map:
+-		field, ok := reflectedMapValue(concrete, name)
+-		return field, ok, nil
+-	case reflect.Struct:
+-		field := concrete.FieldByName(GoifyAtt(attribute, name, true))
+-		return field, field.IsValid(), nil
+-	default:
+-		return reflect.Value{}, false, fmt.Errorf("object default has Go type %s", concrete.Type())
+-	}
++	panic("excised: authoredObjectField")
+ }
+ 
+ // reflectedMapValue finds a string key in maps whose key type may be string or
+ // any, as used by evaluated design defaults.
+ func reflectedMapValue(value reflect.Value, key string) (reflect.Value, bool) {
+-	iterator := value.MapRange()
+-	for iterator.Next() {
+-		candidate, err := concreteGoValue(iterator.Key())
+-		if err == nil && candidate.Kind() == reflect.String && candidate.String() == key {
+-			return iterator.Value(), true
+-		}
+-	}
+-	return reflect.Value{}, false
++	panic("excised: reflectedMapValue")
+ }
+ 
+ // underlyingPrimitive returns the primitive beneath a named primitive type.
+ func underlyingPrimitive(dataType expr.DataType) expr.Primitive {
+-	for {
+-		if primitive, ok := dataType.(expr.Primitive); ok {
+-			return primitive
+-		}
+-		dataType = dataType.(expr.UserType).Attribute().Type
+-	}
++	panic("excised: underlyingPrimitive")
+ }
+--- a/codegen/go_value_test.go
++++ /dev/null
+@@ -1,264 +0,0 @@
+-// This file verifies that authored defaults become specialized Go values with
+-// the same names and pointer layout as generated service types.
+-package codegen
+-
+-import (
+-	"encoding/json"
+-	"testing"
+-
+-	"github.com/stretchr/testify/require"
+-
+-	"example.internal/apikit/v3/expr"
+-)
+-
+-func TestRenderGoValueUsesPlannedFieldLayout(t *testing.T) {
+-	status := &expr.UserTypeExpr{
+-		TypeName: "Status",
+-		AttributeExpr: &expr.AttributeExpr{
+-			Type: expr.String,
+-		},
+-	}
+-	configObject := expr.Object{
+-		&expr.NamedAttributeExpr{Name: "status", Attribute: &expr.AttributeExpr{Type: status}},
+-		&expr.NamedAttributeExpr{Name: "data", Attribute: &expr.AttributeExpr{Type: expr.Bytes}},
+-	}
+-	config := &expr.UserTypeExpr{
+-		TypeName:      "Config",
+-		AttributeExpr: &expr.AttributeExpr{Type: &configObject},
+-	}
+-	layout := goValueTestLayout(t, &expr.AttributeExpr{Type: config}, GoLayoutPolicy{
+-		UseDefault: true,
+-		SumType:    true,
+-	}, map[expr.DataType]GoTypeBinding{
+-		status: goValueTestTypeBinding(t, status),
+-		config: goValueTestTypeBinding(t, config),
+-	})
+-
+-	code, err := RenderGoValue(
+-		&expr.AttributeExpr{Type: config},
+-		map[string]any{"status": "ready", "data": "ok"},
+-		layout,
+-		true,
+-		nil,
+-		"defaultValue",
+-	)
+-	require.NoError(t, err)
+-	require.Equal(t, []string{`var defaultValue1 Status = "ready"`}, code.Declarations)
+-	require.Equal(t, `&Config{Status: &defaultValue1, Data: []byte("ok")}`, code.Expression)
+-}
+-
+-func TestRenderGoValueUsesPlannedUnionConstructor(t *testing.T) {
+-	choice := &expr.AttributeExpr{Type: &expr.Union{
+-		TypeName: "Choice",
+-		Values: []*expr.NamedAttributeExpr{
+-			{Name: "text", Attribute: &expr.AttributeExpr{Type: expr.String}},
+-		},
+-	}}
+-	layout := goValueTestLayout(t, choice, GoLayoutPolicy{UseDefault: true, SumType: true}, map[expr.DataType]GoTypeBinding{
+-		choice.Type: goValueTestUnionBinding(t, choice),
+-	})
+-
+-	code, err := RenderGoValue(
+-		choice,
+-		map[string]any{"type": "text", "value": "ready"},
+-		layout,
+-		false,
+-		func(attribute *expr.AttributeExpr, branch string) (string, error) {
+-			require.Same(t, choice, attribute)
+-			require.Equal(t, "text", branch)
+-			return "NewChoiceText", nil
+-		},
+-		"defaultValue",
+-	)
+-	require.NoError(t, err)
+-	require.Empty(t, code.Declarations)
+-	require.Equal(t, `NewChoiceText("ready")`, code.Expression)
+-}
+-
+-func TestRenderGoValueUsesTypedCustomDefault(t *testing.T) {
+-	attribute := &expr.AttributeExpr{
+-		Type: expr.Bytes,
+-		Meta: expr.MetaExpr{
+-			"struct:field:type": {"json.RawMessage", "encoding/json", "json"},
+-		},
+-	}
+-	layout := goValueTestLayout(t, attribute, GoLayoutPolicy{UseDefault: true, SumType: true}, nil)
+-
+-	code, err := RenderGoValue(attribute, json.RawMessage("ok"), layout, false, nil, "defaultValue")
+-	require.NoError(t, err)
+-	require.Empty(t, code.Declarations)
+-	require.Equal(t, `json.RawMessage{0x6f, 0x6b}`, code.Expression)
+-
+-	code, err = RenderGoValue(attribute, "ok", layout, false, nil, "defaultValue")
+-	require.NoError(t, err)
+-	require.Equal(t, `[]byte("ok")`, code.Expression)
+-}
+-
+-func TestRenderGoValueConvertsNativeCustomDefault(t *testing.T) {
+-	attribute := &expr.AttributeExpr{
+-		Type: expr.Int64,
+-		Meta: expr.MetaExpr{
+-			"struct:field:type": {"flag.ErrorHandling", "flag"},
+-		},
+-	}
+-	layout := goValueTestLayout(t, attribute, GoLayoutPolicy{UseDefault: true, SumType: true}, nil)
+-
+-	code, err := RenderGoValue(attribute, 1, layout, false, nil, "defaultValue")
+-	require.NoError(t, err)
+-	require.Equal(t, `1`, code.Expression)
+-}
+-
+-func TestRenderGoValueRendersAnyObjectsWithStringKeys(t *testing.T) {
+-	attribute := &expr.AttributeExpr{Type: expr.Any}
+-	layout := goValueTestLayout(t, attribute, GoLayoutPolicy{UseDefault: true, SumType: true}, nil)
+-
+-	code, err := RenderGoValue(attribute, map[string]any{"count": 1}, layout, false, nil, "defaultValue")
+-	require.NoError(t, err)
+-	require.Equal(t, `map[string]any{"count":1}`, code.Expression)
+-
+-	_, err = RenderGoValue(attribute, map[int]any{1: "invalid"}, layout, false, nil, "defaultValue")
+-	require.EqualError(t, err, "render Go value for any: Any object default key must be a string")
+-}
+-
+-func TestRenderGoValueUsesContainerElementLayouts(t *testing.T) {
+-	choice := &expr.AttributeExpr{Type: &expr.Union{
+-		TypeName: "Choice",
+-		Values: []*expr.NamedAttributeExpr{
+-			{Name: "text", Attribute: &expr.AttributeExpr{Type: expr.String}},
+-		},
+-	}}
+-	tests := []struct {
+-		name      string
+-		attribute *expr.AttributeExpr
+-		value     any
+-		want      string
+-	}{
+-		{
+-			name: "array of OneOf values",
+-			attribute: &expr.AttributeExpr{Type: &expr.Array{
+-				ElemType: choice,
+-			}},
+-			value: []any{map[string]any{"type": "text", "value": "ready"}},
+-			want:  `[]Choice{NewChoiceText("ready")}`,
+-		},
+-		{
+-			name: "map of OneOf values",
+-			attribute: &expr.AttributeExpr{Type: &expr.Map{
+-				KeyType:  &expr.AttributeExpr{Type: expr.String},
+-				ElemType: choice,
+-			}},
+-			value: map[string]any{"mode": map[string]any{"type": "text", "value": "ready"}},
+-			want:  `map[string]Choice{"mode":NewChoiceText("ready")}`,
+-		},
+-	}
+-	for _, test := range tests {
+-		t.Run(test.name, func(t *testing.T) {
+-			layout := goValueTestLayout(t, test.attribute, GoLayoutPolicy{UseDefault: true, SumType: true}, map[expr.DataType]GoTypeBinding{
+-				choice.Type: goValueTestUnionBinding(t, choice),
+-			})
+-			code, err := RenderGoValue(
+-				test.attribute,
+-				test.value,
+-				layout,
+-				false,
+-				func(_ *expr.AttributeExpr, _ string) (string, error) {
+-					return "NewChoiceText", nil
+-				},
+-				"defaultValue",
+-			)
+-			require.NoError(t, err)
+-			require.Equal(t, test.want, code.Expression)
+-		})
+-	}
+-}
+-
+-func TestRenderGoValueUsesPointerBackedArrayElements(t *testing.T) {
+-	attribute := &expr.AttributeExpr{Type: &expr.Array{
+-		ElemType:         &expr.AttributeExpr{Type: expr.String},
+-		NonNullableElems: true,
+-	}}
+-	layout := goValueTestLayout(t, attribute, GoLayoutPolicy{
+-		UseDefault:          true,
+-		SumType:             true,
+-		ArrayElementPointer: true,
+-	}, nil)
+-
+-	code, err := RenderGoValue(attribute, []string{"ready"}, layout, false, nil, "defaultValue")
+-	require.NoError(t, err)
+-	require.Equal(t, []string{`var defaultValue1 string = "ready"`}, code.Declarations)
+-	require.Equal(t, `[]*string{&defaultValue1}`, code.Expression)
+-}
+-
+-func TestRenderGoValueAllocatesMapLocalsInKeyOrder(t *testing.T) {
+-	valueObject := &expr.Object{{Name: "label", Attribute: &expr.AttributeExpr{Type: expr.String}}}
+-	attribute := &expr.AttributeExpr{Type: &expr.Map{
+-		KeyType:  &expr.AttributeExpr{Type: expr.String},
+-		ElemType: &expr.AttributeExpr{Type: valueObject},
+-	}}
+-	layout := goValueTestLayout(t, attribute, GoLayoutPolicy{
+-		Pointer:    true,
+-		UseDefault: true,
+-		SumType:    true,
+-	}, nil)
+-	value := map[string]any{
+-		"z": map[string]any{"label": "last"},
+-		"a": map[string]any{"label": "first"},
+-	}
+-
+-	for range 20 {
+-		code, err := RenderGoValue(attribute, value, layout, false, nil, "defaultValue")
+-		require.NoError(t, err)
+-		require.Equal(t, []string{
+-			`var defaultValue1 string = "first"`,
+-			`var defaultValue2 string = "last"`,
+-		}, code.Declarations)
+-		require.Equal(t, `map[string]*struct {
+-	Label *string
+-}{"a":&struct {
+-	Label *string
+-}{Label: &defaultValue1}, "z":&struct {
+-	Label *string
+-}{Label: &defaultValue2}}`, code.Expression)
+-	}
+-}
+-
+-func goValueTestLayout(t *testing.T, attribute *expr.AttributeExpr, policy GoLayoutPolicy, bindings map[expr.DataType]GoTypeBinding) LinkedGoType {
+-	t.Helper()
+-	plan, err := PlanGoType(attribute, GoTypePlanOptions{
+-		Owner:            "generated.local/gen/service",
+-		Policy:           policy,
+-		Bind:             goTypeTestBinder(bindings),
+-		RetainNamedValue: true,
+-	})
+-	require.NoError(t, err)
+-	return plan.Link("generated.local/gen/service", func(importPath string) string {
+-		if importPath == "encoding/json" {
+-			return "json"
+-		}
+-		return goTypeTestQualifier(importPath)
+-	})
+-}
+-
+-func goValueTestTypeBinding(t *testing.T, userType expr.UserType) GoTypeBinding {
+-	t.Helper()
+-	generation, err := NewGeneration("generated.local/gen", nil)
+-	require.NoError(t, err)
+-	binding := GoTypeBinding{
+-		Owner: "generated.local/gen/service",
+-		Type:  declareGoTypeTestUserType(t, generation, "generated.local/gen/service", userType),
+-	}
+-	require.NoError(t, generation.Freeze())
+-	return binding
+-}
+-
+-func goValueTestUnionBinding(t *testing.T, attribute *expr.AttributeExpr) GoTypeBinding {
+-	t.Helper()
+-	generation, err := NewGeneration("generated.local/gen", nil)
+-	require.NoError(t, err)
+-	binding := GoTypeBinding{
+-		Owner: "generated.local/gen/service",
+-		Union: declareGoTypeTestUnion(t, generation, "generated.local/gen/service", attribute.Type.(*expr.Union)),
+-	}
+-	require.NoError(t, generation.Freeze())
+-	return binding
+-}

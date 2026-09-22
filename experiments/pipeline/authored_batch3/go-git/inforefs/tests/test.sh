@@ -1,0 +1,28 @@
+#!/bin/bash
+set -uo pipefail
+mkdir -p /logs/verifier
+cd /app
+TESTS_DIR="$(cd "$(dirname "$0")" && pwd)"
+HIDDEN="$TESTS_DIR/hidden"
+install_hidden() {
+  rel="$1"
+  dest="/app/$rel"
+  mkdir -p "$(dirname "$dest")"
+  cp "$HIDDEN/$rel" "$dest"
+}
+checksum_fail() {
+  echo 0 > /logs/verifier/reward.txt
+  echo "test file modified: $1" >&2
+  exit 1
+}
+echo "e6615d8b45f29eb63cf0ac6bd9b9f9cdf1f913ba700452d31a91106c9a3d6cda  $HIDDEN/plumbing/protocol/packp/inforefs_bb_test.go" | sha256sum -c --status || checksum_fail "plumbing/protocol/packp/inforefs_bb_test.go"
+install_hidden "plumbing/protocol/packp/inforefs_bb_test.go"
+echo "e6615d8b45f29eb63cf0ac6bd9b9f9cdf1f913ba700452d31a91106c9a3d6cda  /app/plumbing/protocol/packp/inforefs_bb_test.go" | sha256sum -c --status || checksum_fail "plumbing/protocol/packp/inforefs_bb_test.go"
+if go test -count=1 -timeout 15m -run '^TestDetail' ./plumbing/protocol/packp/... ; then
+  :
+else
+  echo 0 > /logs/verifier/reward.txt
+  exit 1
+fi
+echo 1 > /logs/verifier/reward.txt
+exit 0

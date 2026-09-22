@@ -1,0 +1,92 @@
+--- a/expr/types.go
++++ b/expr/types.go
+@@ -334,7 +334,22 @@
+ 
+ // IsCompatible returns true if val is compatible with p.
+ func (p Primitive) IsCompatible(val any) bool {
+-	panic("excised: Primitive.IsCompatible")
++	if p == Any {
++		return true
++	}
++	switch val.(type) {
++	case bool:
++		return p == Boolean
++	case int, int32, int64, uint, uint32, uint64:
++		return p == Int || p == Int32 || p == Int64 || p == UInt || p == UInt32 || p == UInt64
++	case float32, float64:
++		return p == Float32 || p == Float64
++	case string:
++		return p == String
++	case []byte:
++		return p == Bytes
++	}
++	return false
+ }
+ 
+ // Example generates a pseudo-random primitive value using the given random
+@@ -388,7 +403,8 @@
+ 
+ // IsCompatible returns true if val is compatible with p.
+ func (a *Array) IsCompatible(val any) bool {
+-	panic("excised: Array.IsCompatible")
++	k := reflect.TypeOf(val).Kind()
++	return k == reflect.Array || k == reflect.Slice
+ }
+ 
+ // Example generates a pseudo-random array value using the given random
+@@ -509,7 +525,7 @@
+ 
+ // IsCompatible returns true if o describes the (Go) type of val.
+ func (*Object) IsCompatible(val any) bool {
+-	panic("excised: Object.IsCompatible")
++	return reflect.TypeOf(val).Kind() == reflect.Map
+ }
+ 
+ // Example returns a random value of the object.
+@@ -538,7 +554,7 @@
+ 
+ // IsCompatible returns true if o describes the (Go) type of val.
+ func (m *Map) IsCompatible(val any) bool {
+-	panic("excised: Map.IsCompatible")
++	return reflect.TypeOf(val).Kind() == reflect.Map
+ }
+ 
+ // Example returns a random example value.
+@@ -608,7 +624,20 @@
+ 
+ // IsCompatible returns true if u describes the (Go) type of val.
+ func (u *Union) IsCompatible(val any) bool {
+-	panic("excised: Union.IsCompatible")
++	envelope, ok := val.(map[string]any)
++	if !ok {
++		return false
++	}
++	tag, ok := envelope["type"].(string)
++	if !ok {
++		return false
++	}
++	for _, nat := range u.Values {
++		if nat.Name == tag {
++			return true
++		}
++	}
++	return false
+ }
+ 
+ // Example returns a canonical tagged-envelope example.
+@@ -628,13 +657,13 @@
+ // GetTypeKey returns the discriminator field name for JSON marshaling.
+ // Defaults to "type" if not explicitly set via Meta("oneof:type:field").
+ func (u *Union) GetTypeKey() string {
+-	panic("excised: Union.GetTypeKey")
++	return "type"
+ }
+ 
+ // GetValueKey returns the value field name for JSON marshaling.
+ // Defaults to "value" if not explicitly set via Meta("oneof:value:field").
+ func (u *Union) GetValueKey() string {
+-	panic("excised: Union.GetValueKey")
++	return "value"
+ }
+ 
+ // QualifiedTypeName returns the qualified type name for the given data type.

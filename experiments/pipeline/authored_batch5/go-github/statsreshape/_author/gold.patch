@@ -1,0 +1,75 @@
+diff --git a/github/repos_stats.go b/github/repos_stats.go
+index e4304d5..32156a3 100644
+--- a/github/repos_stats.go
++++ b/github/repos_stats.go
+@@ -8,7 +8,7 @@ package github
+ import (
+ 	"context"
+ 	"fmt"
+-	_ "time"
++	"time"
+ )
+ 
+ // ContributorStats represents a contributor to a repository and their
+@@ -119,7 +119,7 @@ func (s *RepositoriesService) ListCommitActivity(ctx context.Context, owner, rep
+ //
+ //meta:operation GET /repos/{owner}/{repo}/stats/code_frequency
+ func (s *RepositoriesService) ListCodeFrequency(ctx context.Context, owner, repo string) ([]*WeeklyStats, *Response, error) {
+-		u := fmt.Sprintf("repos/%v/%v/stats/code_frequency", owner, repo)
++	u := fmt.Sprintf("repos/%v/%v/stats/code_frequency", owner, repo)
+ 	req, err := s.client.NewRequest(ctx, "GET", u, nil)
+ 	if err != nil {
+ 		return nil, nil, err
+@@ -131,7 +131,21 @@ func (s *RepositoriesService) ListCodeFrequency(ctx context.Context, owner, repo
+ 		return nil, resp, err
+ 	}
+ 
+-	return nil, resp, nil /* excised: ListCodeFrequency */
++	// convert int slices into WeeklyStats
++	var stats []*WeeklyStats
++	for _, week := range weeks {
++		if len(week) != 3 {
++			continue
++		}
++		stat := &WeeklyStats{
++			Week:      &Timestamp{time.Unix(int64(week[0]), 0)},
++			Additions: new(week[1]),
++			Deletions: new(week[2]),
++		}
++		stats = append(stats, stat)
++	}
++
++	return stats, resp, nil
+ }
+ 
+ // RepositoryParticipation is the number of commits by everyone
+@@ -198,7 +212,7 @@ type PunchCard struct {
+ //
+ //meta:operation GET /repos/{owner}/{repo}/stats/punch_card
+ func (s *RepositoriesService) ListPunchCard(ctx context.Context, owner, repo string) ([]*PunchCard, *Response, error) {
+-		u := fmt.Sprintf("repos/%v/%v/stats/punch_card", owner, repo)
++	u := fmt.Sprintf("repos/%v/%v/stats/punch_card", owner, repo)
+ 	req, err := s.client.NewRequest(ctx, "GET", u, nil)
+ 	if err != nil {
+ 		return nil, nil, err
+@@ -210,5 +224,19 @@ func (s *RepositoriesService) ListPunchCard(ctx context.Context, owner, repo str
+ 		return nil, resp, err
+ 	}
+ 
+-	return nil, resp, nil /* excised: ListPunchCard */
++	// convert int slices into Punchcards
++	var cards []*PunchCard
++	for _, result := range results {
++		if len(result) != 3 {
++			continue
++		}
++		card := &PunchCard{
++			Day:     new(result[0]),
++			Hour:    new(result[1]),
++			Commits: new(result[2]),
++		}
++		cards = append(cards, card)
++	}
++
++	return cards, resp, nil
+ }

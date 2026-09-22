@@ -1,0 +1,361 @@
+--- a/pkg/util/subnet/cidrmap.go
++++ b/pkg/util/subnet/cidrmap.go
+@@ -17,11 +17,11 @@
+ package subnet
+ 
+ import (
+-	"encoding/binary"
+-	"fmt"
++	_ "encoding/binary"
++	_ "fmt"
+ 	"net"
+ 
+-	"k8s.io/klog/v2"
++	_ "k8s.io/klog/v2"
+ )
+ 
+ // CIDRMap is a helper structure to allocate unused CIDRs
+@@ -30,97 +30,26 @@
+ }
+ 
+ func (c *CIDRMap) MarkInUse(s string) error {
+-	_, cidr, err := net.ParseCIDR(s)
+-	if err != nil {
+-		return fmt.Errorf("error parsing network cidr %q: %v", s, err)
+-	}
+-	c.used = append(c.used, *cidr)
+-	return nil
++	panic("excised: CIDRMap.MarkInUse")
+ }
+ 
+ func incrementIP(ip net.IP, mask net.IPMask) error {
+-	maskOnes, maskBits := mask.Size()
+-
+-	if maskBits == 32 {
+-		ip4 := ip.To4()
+-
+-		n := binary.BigEndian.Uint32(ip4)
+-		n += 1 << uint(32-maskOnes)
+-		binary.BigEndian.PutUint32(ip, n)
+-	} else {
+-		ipv6 := ip.To16()
+-
+-		high := binary.BigEndian.Uint64(ipv6[0:8])
+-		low := binary.BigEndian.Uint64(ipv6[8:16])
+-
+-		newHigh := high
+-		newLow := low
+-
+-		shift := 128 - maskOnes
+-		if shift >= 64 {
+-			newHigh += 1 << uint64(shift-64)
+-		} else {
+-			newLow += 1 << uint64(shift)
+-			// Did we overflow?
+-			if newLow < low {
+-				newHigh++
+-			}
+-		}
+-		binary.BigEndian.PutUint64(ip[0:8], newHigh)
+-		binary.BigEndian.PutUint64(ip[8:16], newLow)
+-	}
+-	return nil
++	panic("excised: incrementIP")
+ }
+ 
+ func duplicateIP(src net.IP) net.IP {
+-	ret := make(net.IP, len(src))
+-	copy(ret, src)
+-	return ret
++	panic("excised: duplicateIP")
+ }
+ 
+ func (c *CIDRMap) Allocate(from string, mask net.IPMask) (*net.IPNet, error) {
+-	_, cidr, err := net.ParseCIDR(from)
+-	if err != nil {
+-		return nil, fmt.Errorf("error parsing CIDR %q: %v", from, err)
+-	}
+-
+-	var candidate net.IPNet
+-	candidate.Mask = mask
+-	candidate.IP = duplicateIP(cidr.IP)
+-
+-	for {
+-		// Note we increment first, so we won't ever use the first range (e.g. 10.0.0.0/n)
+-		if err := incrementIP(candidate.IP, mask); err != nil {
+-			return nil, err
+-		}
+-
+-		// Check we're still in the range we're drawing from
+-		if !cidrsOverlap(cidr, &candidate) {
+-			klog.Infof("candidate CIDR %v is not in CIDR %v", candidate, cidr)
+-			break
+-		}
+-
+-		if !c.isInUse(&candidate) {
+-			if err := c.MarkInUse(candidate.String()); err != nil {
+-				return nil, err
+-			}
+-			return &candidate, nil
+-		}
+-	}
+-
+-	return nil, fmt.Errorf("cannot allocate CIDR of size %v", mask)
++	panic("excised: CIDRMap.Allocate")
+ }
+ 
+ func (c *CIDRMap) isInUse(n *net.IPNet) bool {
+-	for i := range c.used {
+-		if cidrsOverlap(&c.used[i], n) {
+-			return true
+-		}
+-	}
+-	return false
++	panic("excised: CIDRMap.isInUse")
+ }
+ 
+ // cidrsOverlap returns true if and only if the two CIDRs are non-disjoint
+ func cidrsOverlap(l, r *net.IPNet) bool {
+-	return l.Contains(r.IP) || r.Contains(l.IP)
++	panic("excised: cidrsOverlap")
+ }
+--- a/pkg/util/subnet/subnet.go
++++ b/pkg/util/subnet/subnet.go
+@@ -17,76 +17,42 @@
+ package subnet
+ 
+ import (
+-	"encoding/binary"
+-	"fmt"
++	_ "encoding/binary"
++	_ "fmt"
+ 	"net"
+ )
+ 
+ // Overlap checks if two subnets overlap
+ func Overlap(l, r *net.IPNet) bool {
+-	if l == nil || r == nil {
+-		return false
+-	}
+-	return l.Contains(r.IP) || r.Contains(l.IP)
++	panic("excised: Overlap")
+ }
+ 
+ // BelongsTo checks if child is a subnet of parent
+ func BelongsTo(parent *net.IPNet, child *net.IPNet) bool {
+-	parentOnes, parentBits := parent.Mask.Size()
+-	childOnes, childBits := child.Mask.Size()
+-	if childBits != parentBits {
+-		return false
+-	}
+-	if parentOnes > childOnes {
+-		return false
+-	}
+-	childMasked := child.IP.Mask(parent.Mask)
+-	parentMasked := parent.IP.Mask(parent.Mask)
+-	return childMasked.Equal(parentMasked)
++	panic("excised: BelongsTo")
+ }
+ 
+ // SplitInto1 splits the parent IPNet into 1 subnet
+ func SplitInto1(parent *net.IPNet) ([]*net.IPNet, error) {
+-	return SplitInto(0, parent)
++	panic("excised: SplitInto1")
+ }
+ 
+ // SplitInto2 splits the parent IPNet into 2 subnets
+ func SplitInto2(parent *net.IPNet) ([]*net.IPNet, error) {
+-	return SplitInto(1, parent)
++	panic("excised: SplitInto2")
+ }
+ 
+ // SplitInto4 splits the parent IPNet into 4 subnets
+ func SplitInto4(parent *net.IPNet) ([]*net.IPNet, error) {
+-	return SplitInto(2, parent)
++	panic("excised: SplitInto4")
+ }
+ 
+ // SplitInto8 splits the parent IPNet into 8 subnets
+ func SplitInto8(parent *net.IPNet) ([]*net.IPNet, error) {
+-	return SplitInto(3, parent)
++	panic("excised: SplitInto8")
+ }
+ 
+ // SplitInto splits the parent IPNet into subnets with the specified number of additional bits in the prefix.
+ func SplitInto(additionalBits uint, parent *net.IPNet) ([]*net.IPNet, error) {
+-	networkLength, _ := parent.Mask.Size()
+-	networkLength += int(additionalBits)
+-
+-	var subnets []*net.IPNet
+-	for i := 0; i < 1<<additionalBits; i++ {
+-		ip4 := parent.IP.To4()
+-		if ip4 != nil {
+-			n := binary.BigEndian.Uint32(ip4)
+-			n += uint32(i) << uint(32-networkLength)
+-			subnetIP := make(net.IP, len(ip4))
+-			binary.BigEndian.PutUint32(subnetIP, n)
+-
+-			subnets = append(subnets, &net.IPNet{
+-				IP:   subnetIP,
+-				Mask: net.CIDRMask(networkLength, 32),
+-			})
+-		} else {
+-			return nil, fmt.Errorf("unexpected IP address type: %s", parent)
+-		}
+-	}
+-
+-	return subnets, nil
++	panic("excised: SplitInto")
+ }
+--- a/pkg/util/subnet/subnet_test.go
++++ /dev/null
+@@ -1,149 +0,0 @@
+-/*
+-Copyright 2019 The ClusterKit Authors.
+-
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-
+-    http://www.apache.org/licenses/LICENSE-2.0
+-
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package subnet
+-
+-import (
+-	"net"
+-	"reflect"
+-	"testing"
+-)
+-
+-func Test_Overlap(t *testing.T) {
+-	grid := []struct {
+-		L       string
+-		R       string
+-		Overlap bool
+-	}{
+-		{
+-			L:       "192.168.0.1/16",
+-			R:       "192.168.1.0/24",
+-			Overlap: true,
+-		},
+-		{
+-			L:       "192.168.1.0/24",
+-			R:       "192.168.0.1/32",
+-			Overlap: false,
+-		},
+-		{
+-			L:       "0.0.0.0/0",
+-			R:       "192.168.1.1/32",
+-			Overlap: true,
+-		},
+-	}
+-	for _, g := range grid {
+-		_, l, err := net.ParseCIDR(g.L)
+-		if err != nil {
+-			t.Fatalf("error parsing %q: %v", g.L, err)
+-		}
+-		_, r, err := net.ParseCIDR(g.R)
+-		if err != nil {
+-			t.Fatalf("error parsing %q: %v", g.R, err)
+-		}
+-		actual := Overlap(l, r)
+-		if actual != g.Overlap {
+-			t.Errorf("Overlap(%q, %q) = %v, expected %v", g.L, g.R, actual, g.Overlap)
+-		}
+-	}
+-}
+-
+-func Test_BelongsTo(t *testing.T) {
+-	grid := []struct {
+-		L       string
+-		R       string
+-		Belongs bool
+-	}{
+-		{
+-			L:       "192.168.1.0/24",
+-			R:       "192.168.0.0/24",
+-			Belongs: false,
+-		},
+-		{
+-			L:       "192.168.0.0/16",
+-			R:       "192.168.0.0/24",
+-			Belongs: true,
+-		},
+-		{
+-			L:       "192.168.0.0/24",
+-			R:       "192.168.0.0/16",
+-			Belongs: false,
+-		},
+-		{
+-			L:       "192.168.0.0/16",
+-			R:       "192.168.0.0/16",
+-			Belongs: true, // Not a strict subnet
+-		},
+-		{
+-			L:       "192.168.0.1/16",
+-			R:       "192.168.0.0/24",
+-			Belongs: true,
+-		},
+-		{
+-			L:       "0.0.0.0/0",
+-			R:       "101.0.1.0/32",
+-			Belongs: true,
+-		},
+-	}
+-	for _, g := range grid {
+-		_, l, err := net.ParseCIDR(g.L)
+-		if err != nil {
+-			t.Fatalf("error parsing %q: %v", g.L, err)
+-		}
+-		_, r, err := net.ParseCIDR(g.R)
+-		if err != nil {
+-			t.Fatalf("error parsing %q: %v", g.R, err)
+-		}
+-		actual := BelongsTo(l, r)
+-		if actual != g.Belongs {
+-			t.Errorf("isSubnet(%q, %q) = %v, expected %v", g.L, g.R, actual, g.Belongs)
+-		}
+-	}
+-}
+-
+-func Test_SplitInto8(t *testing.T) {
+-	tests := []struct {
+-		parent   string
+-		expected []string
+-	}{
+-		{
+-			parent:   "1.2.3.0/24",
+-			expected: []string{"1.2.3.0/27", "1.2.3.32/27", "1.2.3.64/27", "1.2.3.96/27", "1.2.3.128/27", "1.2.3.160/27", "1.2.3.192/27", "1.2.3.224/27"},
+-		},
+-		{
+-			parent:   "1.2.3.0/27",
+-			expected: []string{"1.2.3.0/30", "1.2.3.4/30", "1.2.3.8/30", "1.2.3.12/30", "1.2.3.16/30", "1.2.3.20/30", "1.2.3.24/30", "1.2.3.28/30"},
+-		},
+-	}
+-	for _, test := range tests {
+-		_, parent, err := net.ParseCIDR(test.parent)
+-		if err != nil {
+-			t.Fatalf("error parsing parent cidr %q: %v", test.parent, err)
+-		}
+-
+-		subnets, err := SplitInto8(parent)
+-		if err != nil {
+-			t.Fatalf("error splitting parent cidr %q: %v", parent, err)
+-		}
+-
+-		var actual []string
+-		for _, subnet := range subnets {
+-			actual = append(actual, subnet.String())
+-		}
+-		if !reflect.DeepEqual(actual, test.expected) {
+-			t.Fatalf("unexpected result of split: actual=%v, expected=%v", actual, test.expected)
+-		}
+-	}
+-}

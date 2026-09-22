@@ -1,0 +1,26 @@
+--- a/pkg/nodelabels/builder.go
++++ b/pkg/nodelabels/builder.go
+@@ -44,10 +44,21 @@
+ // BuildNodeLabels returns the node labels for the specified instance group
+ // This moved from the kubelet to a central controller in kubernetes 1.16
+ func BuildNodeLabels(cluster *api.Cluster, instanceGroup *api.InstanceGroup) (map[string]string, error) {
+-	panic("excised: BuildNodeLabels")
++	nodeLabels := make(map[string]string)
++	for k, v := range instanceGroup.Spec.NodeLabels {
++		nodeLabels[k] = v
++	}
++	if instanceGroup.Spec.Role.HasNode() {
++		nodeLabels[RoleLabelNode16] = ""
++	}
++	if instanceGroup.Spec.Role.HasControlPlane() {
++		nodeLabels[RoleLabelControlPlane20] = ""
++	}
++	return nodeLabels, nil
+ }
+ 
+ // BuildMandatoryControlPlaneLabels returns the list of labels all CP nodes must have
+ func BuildMandatoryControlPlaneLabels(nodeLabels map[string]string) map[string]string {
+-	panic("excised: BuildMandatoryControlPlaneLabels")
++	nodeLabels[RoleLabelControlPlane20] = ""
++	return nodeLabels
+ }

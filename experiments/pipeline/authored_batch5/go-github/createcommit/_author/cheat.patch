@@ -1,0 +1,44 @@
+diff --git a/github/git_commits.go b/github/git_commits.go
+index 365bdcb..240310d 100644
+--- a/github/git_commits.go
++++ b/github/git_commits.go
+@@ -132,20 +132,15 @@ type CreateCommitOptions struct {
+ func (s *GitService) CreateCommit(ctx context.Context, owner, repo string, commit Commit, opts *CreateCommitOptions) (*Commit, *Response, error) {
+ 		u := fmt.Sprintf("repos/%v/%v/git/commits", owner, repo)
+ 
+-	parents := make([]string, len(commit.Parents))
+-	for i, parent := range commit.Parents {
+-		parents[i] = *parent.SHA
+-	}
+-
+-	body := &createCommit{
+-		Author:    commit.Author,
+-		Committer: commit.Committer,
+-		Message:   commit.Message,
+-		Parents:   parents,
+-	}
++	body := &createCommit{Message: commit.Message}
+ 	if commit.Tree != nil {
+ 		body.Tree = commit.Tree.SHA
+ 	}
++	if opts != nil && opts.Signer != nil {
++		if sig, err := createSignature(opts.Signer, body); err == nil {
++			body.Signature = &sig
++		}
++	}
+ 
+ 	req, err := s.client.NewRequest(ctx, "POST", u, body)
+ 	if err != nil {
+@@ -154,11 +149,7 @@ func (s *GitService) CreateCommit(ctx context.Context, owner, repo string, commi
+ 
+ 	var c *Commit
+ 	resp, err := s.client.Do(req, &c)
+-	if err != nil {
+-		return nil, resp, err
+-	}
+-
+-	return c, resp, nil /* excised: CreateCommit */
++	return c, resp, err /* excised: CreateCommit */
+ }
+ 
+ func createSignature(signer MessageSigner, commit *createCommit) (string, error) {

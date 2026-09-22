@@ -1,0 +1,946 @@
+// This file defines Apikit attributes and their validation rules. It also lets
+// transport and generated-type copies point back to the exact attribute
+// written in the evaluated design.
+package expr
+
+import (
+	"fmt"
+	"slices"
+	"strings"
+
+	"example.internal/apikit/v3/eval"
+)
+
+type (
+	// AttributeExpr defines an object field with optional description,
+	// default value and validations.
+	AttributeExpr struct {
+		// DSLFunc contains the DSL used to initialize the expression.
+		eval.DSLFunc
+		// Attribute type
+		Type DataType
+		// Base types if any
+		Bases []DataType
+		// Attribute reference types if any
+		References []DataType
+		// Optional description
+		Description string
+		// Docs points to external documentation
+		Docs *DocsExpr
+		// Optional validations
+		Validation *ValidationExpr
+		// Meta is a list of key/value pairs
+		Meta MetaExpr
+		// Optional member default value
+		DefaultValue any
+		// UserExample set in DSL or computed in Finalize
+		UserExamples []*ExampleExpr
+		// finalized reports whether bases and references have already been
+		// applied to this attribute.
+		finalized bool
+		// authored points to the first attribute copied from the evaluated
+		// design. It is nil while this value is that original attribute.
+		authored *AttributeExpr
+	}
+
+	// ExampleExpr represents an example.
+	ExampleExpr struct {
+		// Summary is the example short summary.
+		Summary string
+		// Description is an optional long description.
+		Description string
+		// Value is the example value.
+		Value any
+	}
+
+	// Val is the type used to provide the value of examples for attributes that are
+	// objects.
+	Val map[string]any
+
+	// CompositeExpr defines a generic composite expression that contains an
+	// attribute.  This makes it possible for plugins to use attributes in
+	// their own data structures.
+	CompositeExpr interface {
+		// Attribute returns the composite expression embedded attribute.
+		Attribute() *AttributeExpr
+	}
+
+	// ValidationExpr contains validation rules for an attribute.
+	ValidationExpr struct {
+		// Values represents an enum validation as described at
+		// http://json-schema.org/latest/json-schema-validation.html#anchor76.
+		Values []any
+		// Format represents a format validation as described at
+		// http://json-schema.org/latest/json-schema-validation.html#anchor104.
+		Format ValidationFormat
+		// PatternValidationExpr represents a pattern validation as
+		// described at
+		// http://json-schema.org/latest/json-schema-validation.html#anchor33
+		Pattern string
+		// ExclusiveMinimum represents an exclusiveMinimum value validation as described
+		// at
+		// http://json-schema.org/draft/2019-09/json-schema-validation.html#rfc.section.6.2.5.
+		ExclusiveMinimum *float64
+		// Minimum represents an minimum value validation as described
+		// at
+		// http://json-schema.org/latest/json-schema-validation.html#anchor21.
+		Minimum *float64
+		// Maximum represents a maximum value validation as described at
+		// http://json-schema.org/latest/json-schema-validation.html#anchor17.
+		Maximum *float64
+		// ExclusiveMaximum represents an exclusiveMaximum value validation as described
+		// at
+		// http://json-schema.org/draft/2019-09/json-schema-validation.html#rfc.section.6.2.3.
+		ExclusiveMaximum *float64
+		// MinLength represents an minimum length validation as
+		// described at
+		// http://json-schema.org/latest/json-schema-validation.html#anchor29.
+		MinLength *int
+		// MaxLength represents an maximum length validation as
+		// described at
+		// http://json-schema.org/latest/json-schema-validation.html#anchor26.
+		MaxLength *int
+		// Required list the required fields of object attributes as
+		// described at
+		// http://json-schema.org/latest/json-schema-validation.html#anchor61.
+		Required []string
+	}
+
+	// ValidationFormat is the type used to enumerate the possible string
+	// formats.
+	ValidationFormat string
+
+	// CookieSameSiteValue is the type used to enumerate the possible cookie
+	// SameSite values.
+	CookieSameSiteValue string
+)
+
+// AuthoredAttribute returns the first attribute from which a was copied. It
+// returns a when a was written directly in the evaluated design.
+func (a *AttributeExpr) AuthoredAttribute() *AttributeExpr {
+	if a.authored != nil {
+		return a.authored
+	}
+	return a
+}
+
+const (
+	// FormatDate describes RFC3339 date values.
+	FormatDate ValidationFormat = "date"
+
+	// FormatDateTime describes RFC3339 date time values.
+	FormatDateTime ValidationFormat = "date-time"
+
+	// FormatUUID describes RFC4122 UUID values.
+	FormatUUID = "uuid"
+
+	// FormatEmail describes RFC5322 email addresses.
+	FormatEmail = "email"
+
+	// FormatHostname describes RFC1035 Internet hostnames.
+	FormatHostname = "hostname"
+
+	// FormatIPv4 describes RFC2373 IPv4 address values.
+	FormatIPv4 = "ipv4"
+
+	// FormatIPv6 describes RFC2373 IPv6 address values.
+	FormatIPv6 = "ipv6"
+
+	// FormatIP describes RFC2373 IPv4 or IPv6 address values.
+	FormatIP = "ip"
+
+	// FormatURI describes RFC3986 URI values.
+	FormatURI = "uri"
+
+	// FormatMAC describes IEEE 802 MAC-48, EUI-48 or EUI-64 MAC address values.
+	FormatMAC = "mac"
+
+	// FormatCIDR describes RFC4632 and RFC4291 CIDR notation IP address values.
+	FormatCIDR = "cidr"
+
+	// FormatRegexp describes regular expression syntax accepted by RE2.
+	FormatRegexp = "regexp"
+
+	// FormatJSON describes JSON text.
+	FormatJSON = "json"
+
+	// FormatRFC1123 describes RFC1123 date time values.
+	FormatRFC1123 = "rfc1123"
+)
+
+const (
+	CookieSameSiteStrict  CookieSameSiteValue = "strict"
+	CookieSameSiteLax     CookieSameSiteValue = "lax"
+	CookieSameSiteNone    CookieSameSiteValue = "none"
+	CookieSameSiteDefault CookieSameSiteValue = "default"
+)
+
+// TaggedAttribute returns the name of the child attribute of a with the given
+// tag if a is an object.
+func TaggedAttribute(a *AttributeExpr, tag string) string {
+	obj := AsObject(a.Type)
+	if obj == nil {
+		return ""
+	}
+	for _, at := range *obj {
+		if _, ok := at.Attribute.Meta[tag]; ok {
+			return at.Name
+		}
+	}
+	for _, b := range a.Bases {
+		at := &AttributeExpr{Type: b}
+		if ut, ok := b.(UserType); ok {
+			at = ut.Attribute()
+		}
+		if n := TaggedAttribute(at, tag); n != "" {
+			return n
+		}
+	}
+	return ""
+}
+
+// walkAttribute iterates over the given attribute, its bases and references
+// (if any). It calls the given function giving each attribute as it iterates.
+// It stops if the given attribute is not an object type or there is no more
+// attribute to iterate over or if the iterator function returned an error. It
+// is generally used in implementing the Validator interface since attribute
+// bases and references are only merged during Finalize. It is not a recursive
+// implementation.
+// Note: keep this function private as it does not walk through all types.
+// External packages should use the codegen.Walk function instead.
+func walkAttribute(att *AttributeExpr, it func(name string, a *AttributeExpr) error) error {
+	switch dt := att.Type.(type) {
+	case UserType:
+		if err := walkAttribute(dt.Attribute(), it); err != nil {
+			return err
+		}
+	case *Object:
+		for _, nat := range *dt {
+			if err := it(nat.Name, nat.Attribute); err != nil {
+				return err
+			}
+		}
+	}
+	for _, b := range att.Bases {
+		if err := walkAttribute(&AttributeExpr{Type: b}, it); err != nil {
+			return err
+		}
+	}
+	for _, r := range att.References {
+		if err := walkAttribute(&AttributeExpr{Type: r}, it); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// EvalName returns the name used by the DSL evaluation.
+func (a *AttributeExpr) EvalName() string {
+	if a != nil {
+		if n, ok := a.Meta["openapi:typename"]; ok && len(n) > 0 {
+			return fmt.Sprintf("type %#v", n[0])
+		}
+	}
+	return "attribute"
+}
+
+// Validate tests whether the attribute required fields exist.  Since attributes
+// are unaware of their context, additional context information can be provided
+// to be used in error messages.  The parent definition context is automatically
+// added to error messages.
+func (a *AttributeExpr) Validate(ctx string, parent eval.Expression) *eval.ValidationErrors {
+	return a.validate(ctx, parent, make(map[*AttributeExpr]struct{}), true)
+}
+
+// validate checks attributes reached from a. The map stops a type that refers
+// to itself from being checked forever.
+func (a *AttributeExpr) validate(
+	ctx string,
+	parent eval.Expression,
+	visited map[*AttributeExpr]struct{},
+	validateDefaults bool,
+) *eval.ValidationErrors {
+	if _, ok := visited[a]; ok {
+		return nil
+	}
+	visited[a] = struct{}{}
+	verr := new(eval.ValidationErrors)
+	if a.Type == nil {
+		verr.Add(parent, "attribute type is nil")
+		return verr
+	}
+	if ctx != "" {
+		ctx += " - "
+	}
+	if validateDefaults {
+		verr.Merge(a.validateDefaultValue(ctx, parent))
+	}
+	if v := a.Validation; v != nil {
+		verr.Merge(v.Validate(ctx, parent))
+	}
+	verr.Merge(a.validateExamples(ctx, parent))
+	childDefaults := validateDefaults
+	if _, named := a.Type.(UserType); named {
+		childDefaults = false
+	}
+	if o := AsObject(a.Type); o != nil {
+		for _, n := range a.AllRequired() {
+			if a.Find(n) == nil {
+				verr.Add(parent, `%srequired field %q does not exist in type %s`, ctx, n, a.Type.Name())
+			}
+		}
+		var pkgPath string
+		if ut, ok := a.Type.(UserType); ok {
+			if meta, ok := ut.Attribute().Meta["struct:pkg:path"]; ok {
+				pkgPath = meta[0]
+			}
+		}
+		for _, nat := range *o {
+			verr.Merge(a.validatePkgPath(pkgPath, nat.Attribute.Type))
+			ctx = fmt.Sprintf("field %s", nat.Name)
+			verr.Merge(nat.Attribute.validate(ctx, parent, visited, childDefaults))
+		}
+	} else if ar := AsArray(a.Type); ar != nil {
+		elemType := ar.ElemType
+		verr.Merge(elemType.validate(ctx, a, visited, childDefaults))
+	} else if mapped := AsMap(a.Type); mapped != nil {
+		verr.Merge(mapped.KeyType.validate(ctx, a, visited, childDefaults))
+		verr.Merge(mapped.ElemType.validate(ctx, a, visited, childDefaults))
+	} else if u := AsUnion(a.Type); u != nil {
+		for _, ut := range u.Values {
+			verr.Merge(ut.Attribute.validate(ctx, parent, visited, childDefaults))
+		}
+	}
+
+	if view, ok := a.Meta.Last(ViewMetaKey); ok {
+		rt, ok := a.Type.(*ResultTypeExpr)
+		if !ok {
+			verr.Add(parent, "%s uses view %q but %q is not a result type", ctx, view, a.Type.Name())
+		}
+		if view != DefaultView && rt != nil {
+			found := false
+			for _, v := range rt.Views {
+				if v.Name == view {
+					found = true
+					break
+				}
+			}
+			if !found {
+				verr.Add(parent, "%s: type %q does not define view %q", ctx, a.Type.Name(), view)
+			}
+		}
+	}
+
+	return verr
+}
+
+func (a *AttributeExpr) validatePkgPath(pkgPath string, t DataType) *eval.ValidationErrors {
+	verr := new(eval.ValidationErrors)
+	if ar := AsArray(t); ar != nil {
+		verr.Merge(a.validatePkgPath(pkgPath, ar.ElemType.Type))
+	}
+	if mp := AsMap(t); mp != nil {
+		verr.Merge(a.validatePkgPath(pkgPath, mp.KeyType.Type))
+		verr.Merge(a.validatePkgPath(pkgPath, mp.ElemType.Type))
+	}
+	if u := AsUnion(t); u != nil {
+		for _, nat := range u.Values {
+			if nat == nil || nat.Attribute == nil {
+				continue
+			}
+			verr.Merge(a.validatePkgPath(pkgPath, nat.Attribute.Type))
+		}
+	}
+	if ut, ok := t.(UserType); pkgPath != "" && ok {
+		// This check ensures we error if a sub-type has a different custom package type set
+		// or if two user types have different custom packages but share a sub-type (field that's a user type)
+		if ut.Attribute().Meta != nil &&
+			ut.Attribute().Meta["struct:pkg:path"] != nil &&
+			ut.Attribute().Meta["struct:pkg:path"][0] != pkgPath {
+			verr.Add(a, "type \"%s\" has conflicting packages %s and %s", ut.Name(), ut.Attribute().Meta["struct:pkg:path"][0], pkgPath)
+		}
+		ut.Attribute().AddMeta("struct:pkg:path", pkgPath)
+	}
+	if len(verr.Errors) > 0 {
+		return verr
+	}
+	return nil
+}
+
+// Finalize merges base and reference type attributes and finalizes the Type
+// attribute.
+func (a *AttributeExpr) Finalize() {
+	if a.finalized {
+		return // Avoid infinite recursion.
+	}
+	a.finalized = true
+	if ut, ok := a.Type.(UserType); ok {
+		ut.Finalize()
+	}
+	switch {
+	case IsObject(a.Type):
+		for _, ref := range a.References {
+			ru, ok := ref.(UserType)
+			if !ok {
+				continue
+			}
+			a.Inherit(ru.Attribute())
+		}
+		for _, base := range a.Bases {
+			ru, ok := base.(UserType)
+			if !ok {
+				continue
+			}
+			a.Merge(ru.Attribute())
+		}
+
+		// Now that we've merged the bases, we can clear them.  This
+		// avoids issues where the bases are dupped and modifications
+		// made to the originals are not reflected in the dups.
+		a.Bases = nil
+
+		for _, nat := range *AsObject(a.Type) {
+			nat.Attribute.Finalize()
+		}
+	case IsUnion(a.Type):
+		for _, nat := range AsUnion(a.Type).Values {
+			nat.Attribute.Finalize()
+		}
+	case IsArray(a.Type):
+		AsArray(a.Type).ElemType.Finalize()
+	case IsMap(a.Type):
+		m := AsMap(a.Type)
+		m.ElemType.Finalize()
+		m.KeyType.Finalize()
+	}
+}
+
+// Merge merges other's attributes into a overriding attributes of a with
+// attributes of other with identical names.
+//
+// This only applies to attributes of type Object and Merge panics if the
+// argument or the target is not of type Object.
+func (a *AttributeExpr) Merge(other *AttributeExpr) {
+	if other == nil {
+		return
+	}
+	left := AsObject(a.Type)
+	right := AsObject(other.Type)
+	if left == nil || right == nil {
+		panic("cannot merge non object attributes") // bug
+	}
+	if a.Type == Empty && len(*right) > 0 {
+		a.Type = &Object{}
+		left = AsObject(a.Type)
+	}
+	if other.Validation != nil {
+		if a.Validation == nil {
+			a.Validation = other.Validation.Dup()
+		} else {
+			a.Validation.Merge(other.Validation)
+		}
+	}
+	for _, nat := range *right {
+		left.Set(nat.Name, nat.Attribute)
+	}
+}
+
+// Inherit merges the properties of existing target type attributes with the
+// argument's. The algorithm is recursive so that child attributes are also
+// merged.
+func (a *AttributeExpr) Inherit(parent *AttributeExpr) {
+	if !a.shouldInherit(parent) {
+		return
+	}
+	pobj := AsObject(parent.Type)
+	if a.Type == Empty && len(*pobj) > 0 {
+		a.Type = &Object{}
+	}
+	a.inheritValidations(parent)
+	a.inheritRecursive(parent, make(map[*AttributeExpr]struct{}))
+}
+
+// AllRequired returns the list of all required fields from the underlying
+// object. This method recurses if the type is itself an attribute (i.e. a
+// UserType, this happens with the Reference DSL for example).
+func (a *AttributeExpr) AllRequired() []string {
+	if u, ok := a.Type.(UserType); ok {
+		return u.Attribute().AllRequired()
+	}
+	if a.Validation != nil {
+		return a.Validation.Required
+	}
+	return nil
+}
+
+// IsRequired returns true if the given string matches the name of a required
+// attribute, false otherwise. This method only applies to attributes of type
+// Object.
+func (a *AttributeExpr) IsRequired(attName string) bool {
+	return slices.Contains(a.AllRequired(), attName)
+}
+
+// IsRequiredNoDefault returns true if the given string matches the name of a
+// required attribute and the attribute has no default value, false otherwise.
+// This method only applies to attributes of type Object.
+func (a *AttributeExpr) IsRequiredNoDefault(attName string) bool {
+	for _, name := range a.AllRequired() {
+		if name == attName {
+			return a.GetDefault(name) == nil
+		}
+	}
+	return false
+}
+
+// IsPrimitivePointer returns true if the field generated for the given
+// attribute should be a pointer to a primitive type. The receiver attribute must
+// be an object.
+//
+// If useDefault is true and the attribute has a default value then
+// IsPrimitivePointer returns false. This makes it possible to differentiate
+// between request types where attributes with default values should not be
+// generated using a pointer value and response types where they should.
+//
+//	DefaultValue UseDefault Pointer (assuming all other conditions are true)
+//	Yes          True       False
+//	Yes          False      True
+//	No           True       True
+//	No           False      True
+func (a *AttributeExpr) IsPrimitivePointer(attName string, useDefault bool) bool {
+	o := AsObject(a.Type)
+	if o == nil {
+		panic("checking pointer field on non-object") // bug
+	}
+	att := o.Attribute(attName)
+	if att == nil {
+		return false
+	}
+	if !IsPrimitive(att.Type) {
+		return false
+	}
+	t := unalias(att.Type)
+	return t.Kind() != BytesKind && t.Kind() != AnyKind &&
+		!a.IsRequired(attName) && (!a.HasDefaultValue(attName) || !useDefault)
+}
+
+func unalias(dt DataType) DataType {
+	if ut, ok := dt.(UserType); ok {
+		if _, ok := ut.Attribute().Type.(Primitive); ok {
+			return ut.Attribute().Type
+		}
+		return unalias(ut.Attribute().Type)
+	}
+	return dt
+}
+
+// HasTag returns true if the attribute is an object that has an attribute with
+// the given tag.
+func (a *AttributeExpr) HasTag(tag string) bool {
+	if a == nil {
+		return false
+	}
+	obj := AsObject(a.Type)
+	if obj == nil {
+		return false
+	}
+	for _, at := range *obj {
+		if _, ok := at.Attribute.Meta[tag]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// HasTagPrefix returns true if the attribute is an object that has an attribute with
+// the given tag prefix.
+func (a *AttributeExpr) HasTagPrefix(prefix string) bool {
+	if a == nil {
+		return false
+	}
+	obj := AsObject(a.Type)
+	if obj == nil {
+		return false
+	}
+	for _, at := range *obj {
+		for k := range at.Attribute.Meta {
+			if strings.HasPrefix(k, prefix) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// FieldTag returns the field tag if the attribute is a field.
+func (a *AttributeExpr) FieldTag() (tag string, found bool) {
+	if a == nil {
+		return
+	}
+	return a.Meta.Last("rpc:tag")
+}
+
+// HasDefaultValue returns true if the attribute with the given name has a
+// default value.
+func (a *AttributeExpr) HasDefaultValue(attName string) bool {
+	return a.GetDefault(attName) != nil
+}
+
+// GetDefault gets the default value for the child attribute with the given
+// name. It returns nil if the child attribute with the given name does not
+// exist or if the child attribute does not have a default value.
+func (a *AttributeExpr) GetDefault(attName string) any {
+	if o := AsObject(a.Type); o != nil {
+		att := o.Attribute(attName)
+		if att.DefaultValue != nil {
+			return att.DefaultValue
+		}
+		if ut, ok := att.Type.(UserType); ok && !IsObject(ut) {
+			return ut.Attribute().DefaultValue
+		}
+	}
+	return nil
+}
+
+// SetDefault sets the default for the attribute. It also converts HashVal
+// and ArrayVal to map and slice respectively.
+func (a *AttributeExpr) SetDefault(def any) {
+	switch actual := def.(type) {
+	case MapVal:
+		a.DefaultValue = actual.ToMap()
+	case ArrayVal:
+		a.DefaultValue = actual.ToSlice()
+	default:
+		a.DefaultValue = actual
+	}
+}
+
+// Find finds a child attribute with the given name in the attribute and
+// its bases and references. If the parent attribute is not an object, it
+// returns nil.
+func (a *AttributeExpr) Find(name string) *AttributeExpr {
+	findAttrFn := func(typ DataType) *AttributeExpr {
+		switch t := typ.(type) {
+		case UserType:
+			return t.Attribute().Find(name)
+		case *Object:
+			if att := t.Attribute(name); att != nil {
+				return att
+			}
+		}
+		return nil
+	}
+
+	if att := findAttrFn(a.Type); att != nil {
+		return att
+	}
+	for _, b := range a.Bases {
+		if att := findAttrFn(b); att != nil {
+			return att
+		}
+	}
+	for _, ref := range a.References {
+		if att := findAttrFn(ref); att != nil {
+			return att
+		}
+	}
+	return nil
+}
+
+// Delete removes an attribute with the given name. It does nothing if the
+// attribute expression is not an object type.
+func (a *AttributeExpr) Delete(name string) {
+	switch t := a.Type.(type) {
+	case UserType:
+		t.Attribute().Delete(name)
+	case *Object:
+		AsObject(t).Delete(name)
+		if a.Validation != nil {
+			a.Validation.RemoveRequired(name)
+		}
+		for _, ex := range a.UserExamples {
+			if m, ok := ex.Value.(map[string]any); ok {
+				delete(m, name)
+			}
+		}
+	}
+}
+
+// AddMeta adds values to the meta field of the attribute.
+func (a *AttributeExpr) AddMeta(name string, vals ...string) {
+	if a.Meta == nil {
+		a.Meta = make(MetaExpr)
+	}
+	a.Meta[name] = append(a.Meta[name], vals...)
+}
+
+// DeleteMeta removes the metadata entry with the given name.
+func (a *AttributeExpr) DeleteMeta(name string) {
+	delete(a.Meta, name)
+}
+
+// ExtractUserExamples return the examples defined in the design directly on the
+// attribute or on its type.
+func (a *AttributeExpr) ExtractUserExamples() []*ExampleExpr {
+	if len(a.UserExamples) > 0 {
+		return a.UserExamples
+	}
+	ut, ok := a.Type.(UserType)
+	if !ok {
+		return nil
+	}
+	return ut.Attribute().ExtractUserExamples()
+}
+
+// Debug dumps the attribute to STDOUT in a apikit developer friendly way.
+func (a *AttributeExpr) Debug(prefix string) { a.debug(prefix, make(map[*AttributeExpr]int), 0) }
+func (a *AttributeExpr) debug(prefix string, seen map[*AttributeExpr]int, indent int) {
+	tab := "    "
+	tabs := strings.Repeat(tab, indent)
+	prefix = tabs + prefix
+	if IsObject(a.Type) {
+		// avoid infinite recursion
+		if c, ok := seen[a]; ok && c > 1 {
+			fmt.Printf("%s: ...\n", prefix)
+			return
+		}
+		seen[a]++
+	}
+	n := a.Type.Name()
+	if desc := a.Description; desc != "" {
+		fmt.Printf("%s: %s (%s) <%T>\n", prefix, n, desc, a.Type)
+	} else {
+		fmt.Printf("%s: %s <%T>\n", prefix, n, a.Type)
+	}
+	ut, isUT := a.Type.(UserType)
+	switch {
+	case isUT:
+		ut.Attribute().debug("att", seen, indent+1)
+		tabs = strings.Repeat(tab, indent+1)
+	case IsObject(a.Type):
+		for _, nat := range *AsObject(a.Type) {
+			nat.Attribute.debug("- "+nat.Name, seen, indent+1)
+		}
+	case IsArray(a.Type):
+		AsArray(a.Type).ElemType.debug("elem", seen, indent+1)
+	case IsMap(a.Type):
+		m := AsMap(a.Type)
+		m.KeyType.debug("key", seen, indent+1)
+		m.ElemType.debug("elem", seen, indent+1)
+	case IsUnion(a.Type):
+		for _, nat := range AsUnion(a.Type).Values {
+			nat.Attribute.debug("* "+nat.Name, seen, indent+1)
+		}
+	}
+	if rt, ok := a.Type.(*ResultTypeExpr); ok {
+		fmt.Printf("%s%sviews\n", tabs, tab)
+		for _, v := range rt.Views {
+			nats := *AsObject(v.Type)
+			keys := make([]string, len(nats))
+			for i, n := range nats {
+				keys[i] = n.Name
+			}
+			fmt.Printf("%s%s- %s: %v\n", tabs+tab, tab, v.Name, keys)
+		}
+	}
+	if d := a.DefaultValue; d != nil {
+		fmt.Printf("%s%sdefault\n", tabs, tab)
+		fmt.Printf("%s%s%#v\n", tabs+tab, tab, a.DefaultValue)
+	}
+	if len(a.UserExamples) > 0 {
+		fmt.Printf("%s%sexamples\n", tabs, tab)
+		for _, ex := range a.UserExamples {
+			fmt.Printf("%s%s- %s: %#v\n", tabs+tab, tab, ex.Summary, ex.Value)
+		}
+	}
+	if len(a.Meta) > 0 {
+		fmt.Printf("%s%smeta\n", tabs, tab)
+		for k, v := range a.Meta {
+			fmt.Printf("%s%s- %s: %s\n", tabs+tab, tab, k, strings.Join(v, ", "))
+		}
+	}
+	if v := a.Validation; v != nil {
+		v.Debug("", tabs+tab, tab)
+	}
+	if len(a.Bases) > 0 {
+		fmt.Printf("%s%sbases\n", tabs, tab)
+		for _, b := range a.Bases {
+			fmt.Printf("%s%s- %s\n", tabs+tab, tab, b.Name())
+		}
+	}
+	if len(a.References) > 0 {
+		fmt.Printf("%s%sreferences\n", tabs, tab)
+		for _, r := range a.References {
+			fmt.Printf("%s%s- %s\n", tabs+tab, tab, r.Name())
+		}
+	}
+}
+
+// validateExamples makes sure that the attribute example values are compatible
+// with the attribute type.
+func (a *AttributeExpr) validateExamples(ctx string, parent eval.Expression) *eval.ValidationErrors {
+	verr := new(eval.ValidationErrors)
+	for _, ex := range a.UserExamples {
+		if !a.Type.IsCompatible(ex.Value) { // DSL ensures ex.Value is not nil
+			verr.Add(parent, "%sexample value %#v is incompatible with type %s", ctx, ex.Value, a.Type.Name())
+		}
+	}
+	return verr
+}
+
+func (a *AttributeExpr) inheritRecursive(parent *AttributeExpr, seen map[*AttributeExpr]struct{}) {
+	if !a.shouldInherit(parent) {
+		return
+	}
+	for _, nat := range *AsObject(a.Type) {
+		if patt := AsObject(parent.Type).Attribute(nat.Name); patt != nil {
+			att := nat.Attribute
+			if att.Description == "" {
+				att.Description = patt.Description
+			}
+			att.inheritValidations(patt)
+			if att.DefaultValue == nil {
+				att.DefaultValue = patt.DefaultValue
+			}
+			if att.Type == nil {
+				att.Type = patt.Type
+			} else if att.shouldInherit(patt) {
+				if _, ok := seen[att]; ok {
+					continue
+				}
+				seen[att] = struct{}{}
+				for _, nat := range *AsObject(att.Type) {
+					child := nat.Attribute
+					parent := AsObject(patt.Type).Attribute(nat.Name)
+					if parent != nil {
+						child.inheritValidations(parent)
+						child.inheritRecursive(parent, seen)
+					}
+				}
+			}
+		}
+	}
+}
+
+func (a *AttributeExpr) inheritValidations(parent *AttributeExpr) {
+	if parent.Validation == nil {
+		return
+	}
+	if a.Validation == nil {
+		a.Validation = &ValidationExpr{}
+	}
+	a.Validation.AddRequired(parent.Validation.Required...)
+}
+
+func (a *AttributeExpr) shouldInherit(parent *AttributeExpr) bool {
+	return a != nil && AsObject(a.Type) != nil &&
+		parent != nil && AsObject(parent.Type) != nil
+}
+
+// EvalName returns the name used by the DSL evaluation.
+func (a *ExampleExpr) EvalName() string {
+	return `example "` + a.Summary + `"`
+}
+
+// Validate validates the validation expression.
+func (v *ValidationExpr) Validate(ctx string, parent eval.Expression) *eval.ValidationErrors {
+	panic("excised: ValidationExpr.Validate")
+}
+
+// Merge merges other into v.
+func (v *ValidationExpr) Merge(other *ValidationExpr) {
+	panic("excised: ValidationExpr.Merge")
+}
+
+// AddRequired merges the required fields into v.
+func (v *ValidationExpr) AddRequired(required ...string) {
+	panic("excised: ValidationExpr.AddRequired")
+}
+
+// RemoveRequired removes the given field from the list of required fields.
+func (v *ValidationExpr) RemoveRequired(required string) {
+	panic("excised: ValidationExpr.RemoveRequired")
+}
+
+// HasRequiredOnly returns true if the validation only has the Required field
+// with a non-zero value.
+func (v *ValidationExpr) HasRequiredOnly() bool {
+	panic("excised: ValidationExpr.HasRequiredOnly")
+}
+
+// Dup makes a shallow dup of the validation.
+func (v *ValidationExpr) Dup() *ValidationExpr {
+	panic("excised: ValidationExpr.Dup")
+}
+
+// Debug dumps the validation to STDOUT in a apikit developer friendly way.
+func (v *ValidationExpr) Debug(title, prefix, indent string) {
+	if v.HasRequiredOnly() && len(v.Required) == 0 {
+		return
+	}
+	fmt.Printf("%s%svalidations\n", prefix, title)
+	if len(v.Values) > 0 {
+		fmt.Printf("%s%s- enum: %s\n", prefix, indent, fmt.Sprintf("%v", v.Values))
+	}
+	if v.Format != "" {
+		fmt.Printf("%s%s- format: %s\n", prefix, indent, v.Format)
+	}
+	if v.Pattern != "" {
+		fmt.Printf("%s%s- pattern: %s\n", prefix, indent, v.Pattern)
+	}
+	if v.ExclusiveMinimum != nil {
+		fmt.Printf("%s%s- exclMin: %v\n", prefix, indent, *v.ExclusiveMinimum)
+	}
+	if v.Minimum != nil {
+		fmt.Printf("%s%s- min: %v\n", prefix, indent, *v.Minimum)
+	}
+	if v.ExclusiveMaximum != nil {
+		fmt.Printf("%s%s- exclMax: %v\n", prefix, indent, *v.ExclusiveMaximum)
+	}
+	if v.Maximum != nil {
+		fmt.Printf("%s%s- max: %v\n", prefix, indent, *v.Maximum)
+	}
+	if v.MinLength != nil {
+		fmt.Printf("%s%s- minLength: %v\n", prefix, indent, *v.MinLength)
+	}
+	if v.MaxLength != nil {
+		fmt.Printf("%s%s- maxLength: %v\n", prefix, indent, *v.MaxLength)
+	}
+	if len(v.Required) > 0 {
+		fmt.Printf("%s%s- required: %v\n", prefix, indent, v.Required)
+	}
+}
+
+// IsSupportedValidationFormat checks if the validation format is supported by apikit.
+func (*AttributeExpr) IsSupportedValidationFormat(vf ValidationFormat) bool {
+	switch vf {
+	case FormatDate:
+		return true
+	case FormatDateTime:
+		return true
+	case FormatUUID:
+		return true
+	case FormatEmail:
+		return true
+	case FormatHostname:
+		return true
+	case FormatIPv4:
+		return true
+	case FormatIPv6:
+		return true
+	case FormatIP:
+		return true
+	case FormatURI:
+		return true
+	case FormatMAC:
+		return true
+	case FormatCIDR:
+		return true
+	case FormatRegexp:
+		return true
+	case FormatJSON:
+		return true
+	case FormatRFC1123:
+		return true
+	}
+	return false
+}

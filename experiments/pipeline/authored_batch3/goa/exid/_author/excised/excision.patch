@@ -1,0 +1,788 @@
+--- a/expr/example_identity.go
++++ b/expr/example_identity.go
+@@ -3,8 +3,8 @@
+ package expr
+ 
+ import (
+-	"encoding/base64"
+-	"encoding/binary"
++	_ "encoding/base64"
++	_ "encoding/binary"
+ )
+ 
+ type (
+@@ -47,222 +47,158 @@
+ 
+ // UserTypeExampleIdentity returns the example key for typ.
+ func UserTypeExampleIdentity(typ UserType) ExampleIdentity {
+-	if identity, ok := GeneratedUserTypeExampleIdentity(typ); ok {
+-		return identity
+-	}
+-	return newExampleIdentity(userTypeExampleKind, []byte(typ.ID()))
++	panic("excised: UserTypeExampleIdentity")
+ }
+ 
+ // GeneratedUserTypeExampleIdentity returns the example key stored on a user
+ // type created by Apikit. The second result is false for types written in the
+ // design.
+ func GeneratedUserTypeExampleIdentity(typ UserType) (ExampleIdentity, bool) {
+-	var identity ExampleIdentity
+-	switch generated := typ.(type) {
+-	case *UserTypeExpr:
+-		identity = generated.exampleIdentity
+-	case *ResultTypeExpr:
+-		identity = generated.UserTypeExpr.exampleIdentity
+-	}
+-	return identity, identity.seed != ""
++	panic("excised: GeneratedUserTypeExampleIdentity")
+ }
+ 
+ // MethodPayloadExampleIdentity returns the example key for method's payload.
+ func MethodPayloadExampleIdentity(method *MethodExpr) ExampleIdentity {
+-	return methodExampleIdentity(methodPayloadExampleKind, method)
++	panic("excised: MethodPayloadExampleIdentity")
+ }
+ 
+ // MethodResultExampleIdentity returns the example key for method's result.
+ func MethodResultExampleIdentity(method *MethodExpr) ExampleIdentity {
+-	return methodExampleIdentity(methodResultExampleKind, method)
++	panic("excised: MethodResultExampleIdentity")
+ }
+ 
+ // MethodStreamingPayloadExampleIdentity returns the example key for method's
+ // streaming payload.
+ func MethodStreamingPayloadExampleIdentity(method *MethodExpr) ExampleIdentity {
+-	return methodExampleIdentity(methodStreamingPayloadExampleKind, method)
++	panic("excised: MethodStreamingPayloadExampleIdentity")
+ }
+ 
+ // MethodStreamingResultExampleIdentity returns the example key for method's
+ // streaming result.
+ func MethodStreamingResultExampleIdentity(method *MethodExpr) ExampleIdentity {
+-	return methodExampleIdentity(methodStreamingResultExampleKind, method)
++	panic("excised: MethodStreamingResultExampleIdentity")
+ }
+ 
+ // MethodErrorExampleIdentity returns the example key for err in method.
+ func MethodErrorExampleIdentity(method *MethodExpr, err *ErrorExpr) ExampleIdentity {
+-	return newExampleIdentity(
+-		methodErrorExampleKind,
+-		[]byte(method.Service.Name),
+-		[]byte(method.Name),
+-		[]byte(err.Name),
+-	)
++	panic("excised: MethodErrorExampleIdentity")
+ }
+ 
+ // RequestBodyExampleIdentity returns the example key for endpoint's request
+ // body. HTTP and JSON-RPC endpoints receive different keys.
+ func RequestBodyExampleIdentity(endpoint *HTTPEndpointExpr) ExampleIdentity {
+-	kind := httpRequestBodyExampleKind
+-	if endpoint.IsJSONRPC() {
+-		kind = jsonRPCRequestBodyExampleKind
+-	}
+-	return newExampleIdentity(
+-		kind,
+-		[]byte(endpoint.MethodExpr.Service.Name),
+-		[]byte(endpoint.MethodExpr.Name),
+-	)
++	panic("excised: RequestBodyExampleIdentity")
+ }
+ 
+ // ResponseBodyExampleIdentity returns the example key for a successful response
+ // body. HTTP and JSON-RPC endpoints receive different keys, and each successful
+ // status code receives its own key.
+ func ResponseBodyExampleIdentity(endpoint *HTTPEndpointExpr, response *HTTPResponseExpr) ExampleIdentity {
+-	kind := httpResponseBodyExampleKind
+-	if endpoint.IsJSONRPC() {
+-		kind = jsonRPCResponseBodyExampleKind
+-	}
+-	return newExampleIdentity(
+-		kind,
+-		[]byte(endpoint.MethodExpr.Service.Name),
+-		[]byte(endpoint.MethodExpr.Name),
+-		exampleIdentityInt(response.StatusCode),
+-	)
++	panic("excised: ResponseBodyExampleIdentity")
+ }
+ 
+ // ErrorResponseBodyExampleIdentity returns the example key for an error response
+ // body. HTTP and JSON-RPC endpoints receive different keys. The error name keeps
+ // two errors with the same HTTP status separate.
+ func ErrorResponseBodyExampleIdentity(endpoint *HTTPEndpointExpr, response *HTTPErrorExpr) ExampleIdentity {
+-	kind := httpErrorResponseBodyExampleKind
+-	if endpoint.IsJSONRPC() {
+-		kind = jsonRPCErrorResponseBodyExampleKind
+-	}
+-	return newExampleIdentity(
+-		kind,
+-		[]byte(endpoint.MethodExpr.Service.Name),
+-		[]byte(endpoint.MethodExpr.Name),
+-		[]byte(response.Name),
+-		exampleIdentityInt(response.Response.StatusCode),
+-	)
++	panic("excised: ErrorResponseBodyExampleIdentity")
+ }
+ 
+ // GRPCRequestMessageExampleIdentity returns the example key for method's gRPC
+ // request message.
+ func GRPCRequestMessageExampleIdentity(method *MethodExpr) ExampleIdentity {
+-	return methodExampleIdentity(grpcRequestMessageExampleKind, method)
++	panic("excised: GRPCRequestMessageExampleIdentity")
+ }
+ 
+ // GRPCResponseMessageExampleIdentity returns the example key for method's gRPC
+ // response message.
+ func GRPCResponseMessageExampleIdentity(method *MethodExpr) ExampleIdentity {
+-	return methodExampleIdentity(grpcResponseMessageExampleKind, method)
++	panic("excised: GRPCResponseMessageExampleIdentity")
+ }
+ 
+ // GRPCStreamingRequestMessageExampleIdentity returns the example key for
+ // method's streaming gRPC request message.
+ func GRPCStreamingRequestMessageExampleIdentity(method *MethodExpr) ExampleIdentity {
+-	return methodExampleIdentity(grpcStreamingRequestMessageExampleKind, method)
++	panic("excised: GRPCStreamingRequestMessageExampleIdentity")
+ }
+ 
+ // GRPCStreamingResponseMessageExampleIdentity returns the example key for
+ // method's streaming gRPC response message.
+ func GRPCStreamingResponseMessageExampleIdentity(method *MethodExpr) ExampleIdentity {
+-	return methodExampleIdentity(grpcStreamingResponseMessageExampleKind, method)
++	panic("excised: GRPCStreamingResponseMessageExampleIdentity")
+ }
+ 
+ // GRPCErrorMessageExampleIdentity returns the example key for err's gRPC
+ // message in method.
+ func GRPCErrorMessageExampleIdentity(method *MethodExpr, err *ErrorExpr) ExampleIdentity {
+-	return newExampleIdentity(
+-		grpcErrorMessageExampleKind,
+-		[]byte(method.Service.Name),
+-		[]byte(method.Name),
+-		[]byte(err.Name),
+-	)
++	panic("excised: GRPCErrorMessageExampleIdentity")
+ }
+ 
+ // GRPCArrayWrapperExampleIdentity returns the example key for the gRPC message
+ // that wraps an array type written in the design.
+ func GRPCArrayWrapperExampleIdentity(typ UserType) ExampleIdentity {
+-	if !IsArray(typ) {
+-		panic("gRPC array wrapper identity requires an array user type")
+-	}
+-	return newExampleIdentity(grpcArrayWrapperExampleKind, []byte(typ.Origin().ID()))
++	panic("excised: GRPCArrayWrapperExampleIdentity")
+ }
+ 
+ // GRPCMapWrapperExampleIdentity returns the example key for the gRPC message
+ // that wraps a map type written in the design.
+ func GRPCMapWrapperExampleIdentity(typ UserType) ExampleIdentity {
+-	if !IsMap(typ) {
+-		panic("gRPC map wrapper identity requires a map user type")
+-	}
+-	return newExampleIdentity(grpcMapWrapperExampleKind, []byte(typ.Origin().ID()))
++	panic("excised: GRPCMapWrapperExampleIdentity")
+ }
+ 
+ // Seed returns the complete encoded key passed to custom randomizer factories.
+ func (i ExampleIdentity) Seed() string {
+-	return base64.RawURLEncoding.EncodeToString([]byte(i.seed))
++	panic("excised: ExampleIdentity.Seed")
+ }
+ 
+ // Member returns the example key for name within i.
+ func (i ExampleIdentity) Member(name string) ExampleIdentity {
+-	return i.append(memberExampleKind, []byte(name))
++	panic("excised: ExampleIdentity.Member")
+ }
+ 
+ // ArrayElement returns the example key for index within the array at i.
+ func (i ExampleIdentity) ArrayElement(index int) ExampleIdentity {
+-	return i.append(arrayElementExampleKind, exampleIdentityInt(index))
++	panic("excised: ExampleIdentity.ArrayElement")
+ }
+ 
+ // MapKey returns the example key for key index within the map at i.
+ func (i ExampleIdentity) MapKey(index int) ExampleIdentity {
+-	return i.append(mapKeyExampleKind, exampleIdentityInt(index))
++	panic("excised: ExampleIdentity.MapKey")
+ }
+ 
+ // MapValue returns the example key for value index within the map at i.
+ func (i ExampleIdentity) MapValue(index int) ExampleIdentity {
+-	return i.append(mapValueExampleKind, exampleIdentityInt(index))
++	panic("excised: ExampleIdentity.MapValue")
+ }
+ 
+ // UnionMember returns the example key for name within the union at i.
+ func (i ExampleIdentity) UnionMember(name string) ExampleIdentity {
+-	return i.append(unionMemberExampleKind, []byte(name))
++	panic("excised: ExampleIdentity.UnionMember")
+ }
+ 
+ // A new example key encodes a value kind and each component's byte length so
+ // different component lists cannot produce the same key.
+ func newExampleIdentity(kind exampleIdentityKind, components ...[]byte) ExampleIdentity {
+-	return ExampleIdentity{seed: string(appendExampleIdentitySegment(nil, kind, components...))}
++	panic("excised: newExampleIdentity")
+ }
+ 
+ // Method example keys are built from the evaluated service and method names.
+ func methodExampleIdentity(kind exampleIdentityKind, method *MethodExpr) ExampleIdentity {
+-	return newExampleIdentity(kind, []byte(method.Service.Name), []byte(method.Name))
++	panic("excised: methodExampleIdentity")
+ }
+ 
+ // Integers in example keys are written as eight bytes in big-endian order.
+ func exampleIdentityInt(value int) []byte {
+-	return binary.BigEndian.AppendUint64(nil, uint64(value))
++	panic("excised: exampleIdentityInt")
+ }
+ 
+ // Each added part writes its kind, number of components, and every component's
+ // byte length before the component bytes.
+ func appendExampleIdentitySegment(seed []byte, kind exampleIdentityKind, components ...[]byte) []byte {
+-	seed = append(seed, byte(kind))
+-	seed = binary.BigEndian.AppendUint64(seed, uint64(len(components)))
+-	for _, component := range components {
+-		seed = binary.BigEndian.AppendUint64(seed, uint64(len(component)))
+-		seed = append(seed, component...)
+-	}
+-	return seed
++	panic("excised: appendExampleIdentitySegment")
+ }
+ 
+ // append adds one member, array, map, or union part to the current key.
+ func (i ExampleIdentity) append(kind exampleIdentityKind, components ...[]byte) ExampleIdentity {
+-	if i.seed == "" {
+-		panic("example identity must have a semantic owner before structural descent")
+-	}
+-	seed := append([]byte(nil), i.seed...)
+-	seed = appendExampleIdentitySegment(seed, kind, components...)
+-	return ExampleIdentity{seed: string(seed)}
++	panic("excised: ExampleIdentity.append")
+ }
+--- a/expr/example_stability_test.go
++++ /dev/null
+@@ -1,95 +0,0 @@
+-// This file verifies that typed example owners make values independent of
+-// unrelated draws while preserving member-local values in composite examples.
+-package expr_test
+-
+-import (
+-	"testing"
+-
+-	"github.com/stretchr/testify/require"
+-
+-	"example.internal/apikit/v3/expr"
+-)
+-
+-// TestExampleOrderIndependence verifies that examples are a pure function of
+-// the design: the value computed for a user type does not depend on how many
+-// values were drawn from the generator before it nor on which other examples
+-// were computed first.
+-func TestExampleOrderIndependence(t *testing.T) {
+-	newUT := func(name string) *expr.UserTypeExpr {
+-		return &expr.UserTypeExpr{
+-			TypeName: name,
+-			AttributeExpr: &expr.AttributeExpr{
+-				Type: &expr.Object{
+-					{Name: "name", Attribute: &expr.AttributeExpr{Type: expr.String}},
+-					{Name: "count", Attribute: &expr.AttributeExpr{Type: expr.Int}},
+-					{Name: "tags", Attribute: &expr.AttributeExpr{Type: &expr.Array{ElemType: &expr.AttributeExpr{Type: expr.String}}}},
+-				},
+-			},
+-		}
+-	}
+-
+-	// Reference value computed on a fresh generator.
+-	stable := newUT("Stable")
+-	ref := stable.Example(expr.NewExampleGenerator(expr.NewFakerRandomizerFactory("test")).At(
+-		expr.UserTypeExampleIdentity(stable),
+-	))
+-	require.NotNil(t, ref)
+-
+-	// Same value after unrelated draws were consumed from the generator.
+-	r := expr.NewExampleGenerator(expr.NewFakerRandomizerFactory("test")).At(
+-		expr.MethodPayloadExampleIdentity(exampleMethod("noise", "draw")),
+-	)
+-	noise := make([]any, 0, 14)
+-	for range 7 {
+-		noise = append(noise, r.Int(), r.String())
+-	}
+-	require.Len(t, noise, 14)
+-	require.Equal(t, ref, newUT("Stable").Example(r))
+-
+-	// Same value after another type's example was computed first.
+-	r = expr.NewExampleGenerator(expr.NewFakerRandomizerFactory("test")).At(
+-		expr.MethodPayloadExampleIdentity(exampleMethod("noise", "other")),
+-	)
+-	other := newUT("Other")
+-	other.Example(r.At(expr.UserTypeExampleIdentity(other)))
+-	require.Equal(t, ref, newUT("Stable").Example(r))
+-}
+-
+-// TestExampleFieldLocality verifies that adding a field to an object does not
+-// change the examples of its existing fields.
+-func TestExampleFieldLocality(t *testing.T) {
+-	small := &expr.Object{
+-		{Name: "a", Attribute: &expr.AttributeExpr{Type: expr.String}},
+-		{Name: "b", Attribute: &expr.AttributeExpr{Type: expr.Int}},
+-	}
+-	large := &expr.Object{
+-		{Name: "a", Attribute: &expr.AttributeExpr{Type: expr.String}},
+-		{Name: "b", Attribute: &expr.AttributeExpr{Type: expr.Int}},
+-		{Name: "c", Attribute: &expr.AttributeExpr{Type: expr.Boolean}},
+-	}
+-	owner := expr.MethodPayloadExampleIdentity(exampleMethod("locality", "object"))
+-	exSmall := small.Example(expr.NewExampleGenerator(expr.NewFakerRandomizerFactory("test")).At(owner)).(map[string]any)
+-	exLarge := large.Example(expr.NewExampleGenerator(expr.NewFakerRandomizerFactory("test")).At(owner)).(map[string]any)
+-	require.Equal(t, exSmall["a"], exLarge["a"])
+-	require.Equal(t, exSmall["b"], exLarge["b"])
+-}
+-
+-// TestExampleFieldAnchor verifies that the example computed for one element
+-// extracted from a user type matches the corresponding field value in the
+-// type's composite example.
+-func TestExampleFieldAnchor(t *testing.T) {
+-	field := &expr.AttributeExpr{Type: expr.String}
+-	ut := &expr.UserTypeExpr{
+-		TypeName: "Payload",
+-		AttributeExpr: &expr.AttributeExpr{
+-			Type: &expr.Object{
+-				{Name: "id", Attribute: field},
+-				{Name: "label", Attribute: &expr.AttributeExpr{Type: expr.String}},
+-			},
+-		},
+-	}
+-	identity := expr.UserTypeExampleIdentity(ut)
+-	composite := ut.Example(expr.NewExampleGenerator(expr.NewFakerRandomizerFactory("test")).At(identity)).(map[string]any)
+-	standalone := field.Example(expr.NewExampleGenerator(expr.NewFakerRandomizerFactory("test")).At(identity).Member("id"))
+-	require.Equal(t, composite["id"], standalone)
+-}
+--- a/expr/project_test.go
++++ /dev/null
+@@ -1,262 +0,0 @@
+-// This file verifies result-type projections preserve view shape, field
+-// metadata, recursion, and synthesized example ownership.
+-package expr
+-
+-import (
+-	"fmt"
+-	"strings"
+-	"testing"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-)
+-
+-var (
+-	testrand = NewExampleGenerator(NewFakerRandomizerFactory("test")).At(
+-		MethodPayloadExampleIdentity(&MethodExpr{
+-			Name:    "project",
+-			Service: &ServiceExpr{Name: "test"},
+-		}),
+-	)
+-
+-	simpleResult        = resultType("a", String, "b", Int, view("default", "a", String, "b", Int), view("link", "a", String))
+-	simpleResultDefault = resultType("a", String, "b", Int)
+-	simpleResultLink    = resultType("a", String)
+-
+-	embeddedResult        = resultType("r", simpleResult, view("default", "r:link", AsObject(simpleResult)))
+-	embeddedResultDefault = resultType("r", simpleResultLink)
+-
+-	collectionResult        = collection(simpleResult)
+-	collectionResultDefault = collection(simpleResultDefault)
+-	collectionResultLink    = collection(simpleResultLink)
+-
+-	collectionLinkView = object(String)
+-	compositeResult    = resultType("a", object(collectionResult), "b", String,
+-		view("default", "a", object(String), "b", String),
+-		view("link", "a", collectionLinkView))
+-	compositeResultDefault = resultType("a", object(collectionResultDefault), "b", String)
+-	compositeResultLink    = resultType("a", object(collectionResultLink))
+-
+-	// recursiveResult is its own expected projection: projecting a recursive
+-	// result type yields a single projected type that references itself.
+-	recursiveResult = resultRecursive("a", String, view("default", "a", object(String)))
+-)
+-
+-func init() {
+-	vobj := (*collectionLinkView)[0]
+-	vobj.Attribute.Meta = map[string][]string{"view": {"link"}}
+-}
+-
+-func TestProject(t *testing.T) {
+-	cases := []struct {
+-		Name     string
+-		Result   *ResultTypeExpr
+-		View     string
+-		Expected *ResultTypeExpr
+-	}{
+-		{"default", simpleResult, "default", simpleResultDefault},
+-		{"link", simpleResult, "link", simpleResultLink},
+-		{"embedded", embeddedResult, "default", embeddedResultDefault},
+-		{"collection-default", collectionResult, "default", collectionResultDefault},
+-		{"collection-link", collectionResult, "link", collectionResultLink},
+-		{"composite-default", compositeResult, "default", compositeResultDefault},
+-		{"composite-link", compositeResult, "link", compositeResultLink},
+-		{"recursive", recursiveResult, "default", recursiveResult},
+-	}
+-	for _, k := range cases {
+-		t.Run(k.Name, func(t *testing.T) {
+-			projected, err := Project(k.Result, k.View)
+-			if err != nil {
+-				t.Fatal(err)
+-			}
+-			if !Equal(projected, k.Expected) {
+-				projected.Debug("got")
+-				k.Expected.Debug("expected")
+-				t.Errorf("got: %s, expected: %s\n", Hash(projected, false, true, true), Hash(k.Expected, false, true, true))
+-			}
+-			if pobj := AsObject(projected.Type); pobj != nil {
+-				for _, att := range *pobj {
+-					att2 := k.Expected.Find(att.Name)
+-					if att2 == nil {
+-						continue
+-					}
+-					if att.Attribute.Description != att2.Description {
+-						t.Errorf("got description %q, expected %q", att.Attribute.Description, att2.Description)
+-					}
+-				}
+-			}
+-		})
+-	}
+-}
+-
+-func TestProjectPreservesGeneratedExampleIdentity(t *testing.T) {
+-	source := resultType("value", String, view("default", "value", String))
+-	owner := MethodResultExampleIdentity(&MethodExpr{
+-		Name:    "read",
+-		Service: &ServiceExpr{Name: "values"},
+-	})
+-	source.UserTypeExpr = NewGeneratedUserType(source.TypeName, source.AttributeExpr, owner)
+-
+-	projected, err := Project(source, DefaultView)
+-	require.NoError(t, err)
+-	projectedOwner, ok := GeneratedUserTypeExampleIdentity(projected)
+-	require.True(t, ok)
+-	require.Equal(t, owner, projectedOwner)
+-}
+-
+-// TestProjectDoesNotAliasFieldAttributes verifies that fields sharing a type
+-// share the projected type but never the AttributeExpr wrapping it, so that
+-// per-field metadata such as descriptions does not leak across fields.
+-func TestProjectDoesNotAliasFieldAttributes(t *testing.T) {
+-	t.Run("sibling user type fields", func(t *testing.T) {
+-		shared := userType("Shared", object(Int))
+-		rt := resultType("a", shared, "b", shared,
+-			view("default", "a", object(Int), "b", object(Int)))
+-
+-		projected, err := Project(rt, "default")
+-		require.NoError(t, err)
+-
+-		obj := AsObject(projected.Type)
+-		a, b := obj.Attribute("a"), obj.Attribute("b")
+-		assert.NotSame(t, a, b)
+-		assert.Equal(t, "desc a", a.Description)
+-		assert.Equal(t, "desc b", b.Description)
+-		assert.Same(t, a.Type, b.Type)
+-	})
+-
+-	t.Run("sibling result type fields", func(t *testing.T) {
+-		rt := resultType("x", simpleResult, "y", simpleResult,
+-			view("default", "x", AsObject(simpleResult), "y", AsObject(simpleResult)))
+-
+-		projected, err := Project(rt, "default")
+-		require.NoError(t, err)
+-
+-		obj := AsObject(projected.Type)
+-		x, y := obj.Attribute("x"), obj.Attribute("y")
+-		assert.NotSame(t, x, y)
+-		assert.Equal(t, "desc x", x.Description)
+-		assert.Equal(t, "desc y", y.Description)
+-		assert.Same(t, x.Type, y.Type)
+-	})
+-
+-	t.Run("same field in different parent types", func(t *testing.T) {
+-		shared := userType("Shared", object(Int))
+-		wrapper := userType("Wrapper", &Object{
+-			{Name: "a", Attribute: &AttributeExpr{Type: shared, Description: "Inner A"}},
+-		})
+-		rt := resultType("a", shared, "nested", wrapper,
+-			view("default",
+-				"a", object(Int),
+-				"nested", &Object{{Name: "a", Attribute: &AttributeExpr{Type: object(Int)}}}))
+-
+-		projected, err := Project(rt, "default")
+-		require.NoError(t, err)
+-
+-		obj := AsObject(projected.Type)
+-		outer := obj.Attribute("a")
+-		assert.Equal(t, "desc a", outer.Description)
+-		inner := AsObject(obj.Attribute("nested").Type).Attribute("a")
+-		assert.NotSame(t, outer, inner)
+-		assert.Equal(t, "Inner A", inner.Description)
+-		assert.Same(t, outer.Type, inner.Type)
+-	})
+-
+-	t.Run("recursive result type references its own projection", func(t *testing.T) {
+-		projected, err := Project(recursiveResult, "default")
+-		require.NoError(t, err)
+-
+-		rec := AsObject(projected.Type).Attribute("rec")
+-		assert.Equal(t, "desc rec", rec.Description)
+-		assert.Same(t, projected, rec.Type)
+-	})
+-}
+-
+-// view is a helper function for building view expressions used in tests. name
+-// is the name of the view, attributes list the names of the attributes rendered
+-// by the view. name may use the format "name:view" in which case view is the
+-// name of the view used to render the attribute (when its type is a result
+-// type).
+-func view(name string, params ...any) *ViewExpr {
+-	var obj Object = make([]*NamedAttributeExpr, len(params)/2)
+-	for i := 0; i < len(params); i += 2 {
+-		var (
+-			attName string
+-			attView string
+-		)
+-		{
+-			n := params[i].(string)
+-			elems := strings.Split(n, ":")
+-			attName = elems[0]
+-			if len(elems) > 1 {
+-				attView = elems[1]
+-			}
+-		}
+-		att := &AttributeExpr{Type: params[i+1].(DataType)}
+-		if attView != "" {
+-			att.Meta = MetaExpr{"view": []string{attView}}
+-		}
+-		obj[i/2] = &NamedAttributeExpr{Name: attName, Attribute: att}
+-	}
+-	att := &AttributeExpr{Type: &obj}
+-	return &ViewExpr{Name: name, AttributeExpr: att}
+-}
+-
+-// resultType is a helper function that builds result type expressions used in
+-// tests. The arguments is a list of attribute name and type pairs followed by a
+-// list of view expressions, e.g.:
+-//
+-//	resultType("attr1", String, "attr2", Int, view1, view2)
+-func resultType(params ...any) *ResultTypeExpr {
+-	var (
+-		views []*ViewExpr
+-		obj   Object
+-	)
+-	for i, p := range params {
+-		switch pt := p.(type) {
+-		case string:
+-			obj = append(obj, &NamedAttributeExpr{
+-				Name: params[i].(string),
+-				Attribute: &AttributeExpr{
+-					Type:        params[i+1].(DataType),
+-					Description: fmt.Sprintf("desc %s", params[i]),
+-				}})
+-		case *ViewExpr:
+-			views = append(views, pt)
+-		}
+-	}
+-
+-	t := testrand.String()
+-	return &ResultTypeExpr{
+-		UserTypeExpr: &UserTypeExpr{
+-			AttributeExpr: &AttributeExpr{Type: &obj},
+-			TypeName:      t,
+-		},
+-		Identifier: "vnd.application." + t,
+-		Views:      views,
+-	}
+-}
+-
+-func collection(elemType *ResultTypeExpr) *ResultTypeExpr {
+-	return &ResultTypeExpr{
+-		UserTypeExpr: &UserTypeExpr{
+-			AttributeExpr: &AttributeExpr{
+-				Type: &Array{
+-					ElemType: &AttributeExpr{Type: elemType},
+-				},
+-			},
+-		},
+-		Views: elemType.Views,
+-	}
+-}
+-
+-func resultRecursive(params ...any) *ResultTypeExpr {
+-	rt := resultType(params...)
+-	recAtt := &NamedAttributeExpr{Name: "rec", Attribute: &AttributeExpr{Type: rt, Description: "desc rec"}}
+-	obj := AsObject(rt)
+-	*obj = append(*obj, recAtt)
+-	for _, v := range rt.Views {
+-		vObj := v.Type.(*Object)
+-		*vObj = append(*vObj, recAtt)
+-	}
+-	return rt
+-}
+--- a/expr/random_factory_test.go
++++ b/expr/random_factory_test.go
+@@ -7,7 +7,6 @@
+ 
+ 	"github.com/stretchr/testify/require"
+ 
+-	"example.internal/apikit/v3/dsl"
+ 	"example.internal/apikit/v3/expr"
+ )
+ 
+@@ -86,150 +85,13 @@
+ 	require.Equal(t, first.ArrayElement(0).Int(), second.ArrayElement(0).Int())
+ }
+ 
+-func TestExampleIdentitiesFrameComponents(t *testing.T) {
+-	for _, delimiter := range []string{".", "/", ":"} {
+-		t.Run(delimiter, func(t *testing.T) {
+-			left := expr.MethodPayloadExampleIdentity(exampleMethod("a"+delimiter+"b", "c"))
+-			right := expr.MethodPayloadExampleIdentity(exampleMethod("a", "b"+delimiter+"c"))
+ 
+-			require.NotEqual(t, left.Seed(), right.Seed())
+-		})
+-	}
+-}
+ 
+-func TestExampleIdentitiesDistinguishSemanticAndStructuralKinds(t *testing.T) {
+-	method := exampleMethod("service", "method")
+-	payload := expr.MethodPayloadExampleIdentity(method)
+-	result := expr.MethodResultExampleIdentity(method)
+-
+-	require.NotEqual(t, payload.Seed(), result.Seed())
+-	require.NotEqual(t, payload.Member("0").Seed(), payload.ArrayElement(0).Seed())
+-	require.NotEqual(t, payload.Member("value").Seed(), payload.UnionMember("value").Seed())
+-	require.NotEqual(t, payload.MapKey(0).Seed(), payload.MapValue(0).Seed())
+-	errorIdentity := expr.MethodErrorExampleIdentity(method, &expr.ErrorExpr{Name: "failure"})
+-	require.NotEqual(t, result.Member("failure").Seed(), errorIdentity.Seed())
+-}
+ 
+-func TestHTTPResponseIdentitiesIgnoreTraversalOrderAndDistinguishErrors(t *testing.T) {
+-	method := exampleMethod("service", "method")
+-	endpoint := &expr.HTTPEndpointExpr{MethodExpr: method}
+-	ok := &expr.HTTPResponseExpr{StatusCode: expr.StatusOK}
+-	created := &expr.HTTPResponseExpr{StatusCode: expr.StatusCreated}
+-	responses := []*expr.HTTPResponseExpr{ok, created}
+-	before := map[int]string{
+-		ok.StatusCode:      expr.ResponseBodyExampleIdentity(endpoint, responses[0]).Seed(),
+-		created.StatusCode: expr.ResponseBodyExampleIdentity(endpoint, responses[1]).Seed(),
+-	}
+ 
+-	responses[0], responses[1] = responses[1], responses[0]
+-	require.Equal(t, before[created.StatusCode], expr.ResponseBodyExampleIdentity(endpoint, responses[0]).Seed())
+-	require.Equal(t, before[ok.StatusCode], expr.ResponseBodyExampleIdentity(endpoint, responses[1]).Seed())
+-
+-	firstError := &expr.HTTPErrorExpr{Name: "missing", Response: &expr.HTTPResponseExpr{StatusCode: expr.StatusNotFound}}
+-	secondError := &expr.HTTPErrorExpr{Name: "gone", Response: &expr.HTTPResponseExpr{StatusCode: expr.StatusNotFound}}
+-	require.NotEqual(t,
+-		expr.ErrorResponseBodyExampleIdentity(endpoint, firstError).Seed(),
+-		expr.ErrorResponseBodyExampleIdentity(endpoint, secondError).Seed(),
+-	)
+-	require.NotEqual(t,
+-		expr.ResponseBodyExampleIdentity(endpoint, &expr.HTTPResponseExpr{StatusCode: expr.StatusNotFound}).Seed(),
+-		expr.ErrorResponseBodyExampleIdentity(endpoint, firstError).Seed(),
+-	)
+-}
+ 
+-func TestHTTPBodyIdentitiesDistinguishHTTPAndJSONRPCMappings(t *testing.T) {
+-	method := exampleMethod("service", "method")
+-	httpEndpoint := &expr.HTTPEndpointExpr{MethodExpr: method}
+-	jsonRPCEndpoint := &expr.HTTPEndpointExpr{
+-		MethodExpr: method,
+-		Meta:       expr.MetaExpr{"jsonrpc": {}},
+-	}
+ 
+-	require.NotEqual(t,
+-		expr.RequestBodyExampleIdentity(httpEndpoint).Seed(),
+-		expr.RequestBodyExampleIdentity(jsonRPCEndpoint).Seed(),
+-	)
+-}
+-
+-func TestGRPCMessageIdentitiesDistinguishExactMethodsAndRoles(t *testing.T) {
+-	dashed := exampleMethod("service", "foo-bar")
+-	underscore := exampleMethod("service", "foo_bar")
+-	errorExpr := &expr.ErrorExpr{Name: "failure"}
+-
+-	require.NotEqual(t,
+-		expr.GRPCRequestMessageExampleIdentity(dashed).Seed(),
+-		expr.GRPCRequestMessageExampleIdentity(underscore).Seed(),
+-	)
+-	require.NotEqual(t,
+-		expr.GRPCRequestMessageExampleIdentity(dashed).Seed(),
+-		expr.GRPCResponseMessageExampleIdentity(dashed).Seed(),
+-	)
+-	require.NotEqual(t,
+-		expr.GRPCStreamingRequestMessageExampleIdentity(dashed).Seed(),
+-		expr.GRPCStreamingResponseMessageExampleIdentity(dashed).Seed(),
+-	)
+-	require.NotEqual(t,
+-		expr.GRPCResponseMessageExampleIdentity(dashed).Seed(),
+-		expr.GRPCErrorMessageExampleIdentity(dashed, errorExpr).Seed(),
+-	)
+-}
+ 
+-func TestInlineMethodErrorsRetainMethodErrorIdentity(t *testing.T) {
+-	root := expr.RunDSL(t, func() {
+-		var authored = dsl.Type("AuthoredError", func() {
+-			dsl.Attribute("message", dsl.String)
+-		})
+-		dsl.Service("Values", func() {
+-			dsl.Method("Read", func() {
+-				dsl.Error("inline", dsl.String)
+-				dsl.Error("authored", authored)
+-			})
+-		})
+-	})
+-	method := root.Service("Values").Method("Read")
+-	cases := []struct {
+-		name     string
+-		error    *expr.ErrorExpr
+-		expected expr.ExampleIdentity
+-	}{
+-		{
+-			name:     "inline",
+-			error:    method.Error("inline"),
+-			expected: expr.MethodErrorExampleIdentity(method, method.Error("inline")),
+-		},
+-		{
+-			name:     "authored",
+-			error:    method.Error("authored"),
+-			expected: expr.UserTypeExampleIdentity(root.UserType("AuthoredError")),
+-		},
+-	}
+-	for _, test := range cases {
+-		t.Run(test.name, func(t *testing.T) {
+-			var identities []expr.ExampleIdentity
+-			generator := expr.NewExampleGenerator(recordingRandomizerFactory{identities: &identities})
+-			test.error.AttributeExpr.Example(generator.At(expr.MethodPayloadExampleIdentity(method)))
+-
+-			require.NotEmpty(t, identities)
+-			require.Contains(t, identities, test.expected)
+-		})
+-	}
+-}
+-
+-func TestConfiguredExampleGeneratorRequiresIdentity(t *testing.T) {
+-	attribute := &expr.AttributeExpr{Type: expr.String}
+-
+-	require.Panics(t, func() {
+-		attribute.Example(expr.NewExampleGenerator(expr.NewFakerRandomizerFactory("seed")))
+-	})
+-}
+-
+-func TestZeroExampleIdentityCannotCreateStructuralIdentity(t *testing.T) {
+-	var identity expr.ExampleIdentity
+-
+-	require.Panics(t, func() {
+-		identity.Member("field")
+-	})
+-}
+ 
+ func TestDisabledExampleGeneratorSuppressesAuthoredExamples(t *testing.T) {
+ 	attribute := &expr.AttributeExpr{

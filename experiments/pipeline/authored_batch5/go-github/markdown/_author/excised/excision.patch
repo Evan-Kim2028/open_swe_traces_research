@@ -1,0 +1,87 @@
+diff --git a/github/markdown.go b/github/markdown.go
+index 60e4660..e90d34f 100644
+--- a/github/markdown.go
++++ b/github/markdown.go
+@@ -44,15 +44,7 @@ type markdownRenderRequest struct {
+ //
+ //meta:operation POST /markdown
+ func (s *MarkdownService) Render(ctx context.Context, text string, opts *MarkdownOptions) (string, *Response, error) {
+-	request := &markdownRenderRequest{Text: &text}
+-	if opts != nil {
+-		if opts.Mode != "" {
+-			request.Mode = &opts.Mode
+-		}
+-		if opts.Context != "" {
+-			request.Context = &opts.Context
+-		}
+-	}
++		request := &markdownRenderRequest{Text: &text}
+ 
+ 	req, err := s.client.NewRequest(ctx, "POST", "markdown", request)
+ 	if err != nil {
+@@ -65,5 +57,5 @@ func (s *MarkdownService) Render(ctx context.Context, text string, opts *Markdow
+ 		return "", resp, err
+ 	}
+ 
+-	return buf.String(), resp, nil
++	return buf.String(), resp, nil /* excised: Render */
+ }
+diff --git a/github/markdown_test.go b/github/markdown_test.go
+deleted file mode 100644
+index 78c1400..0000000
+--- a/github/markdown_test.go
++++ /dev/null
+@@ -1,53 +0,0 @@
+-// Copyright 2023 The go-github AUTHORS. All rights reserved.
+-//
+-// Use of this source code is governed by a BSD-style
+-// license that can be found in the LICENSE file.
+-
+-package github
+-
+-import (
+-	"fmt"
+-	"net/http"
+-	"testing"
+-)
+-
+-func TestMarkdownService_Markdown(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	input := &markdownRenderRequest{
+-		Text:    new("# text #"),
+-		Mode:    new("gfm"),
+-		Context: new("google/go-github"),
+-	}
+-	mux.HandleFunc("/markdown", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "POST")
+-		testJSONBody(t, r, input)
+-		fmt.Fprint(w, `<h1>text</h1>`)
+-	})
+-
+-	ctx := t.Context()
+-	md, _, err := client.Markdown.Render(ctx, "# text #", &MarkdownOptions{
+-		Mode:    "gfm",
+-		Context: "google/go-github",
+-	})
+-	if err != nil {
+-		t.Errorf("Render returned error: %v", err)
+-	}
+-
+-	if want := "<h1>text</h1>"; want != md {
+-		t.Errorf("Render returned %+v, want %+v", md, want)
+-	}
+-
+-	const methodName = "Render"
+-	testNewRequestAndDoFailure(t, methodName, client, func() (*Response, error) {
+-		got, resp, err := client.Markdown.Render(ctx, "# text #", &MarkdownOptions{
+-			Mode:    "gfm",
+-			Context: "google/go-github",
+-		})
+-		if got != "" {
+-			t.Errorf("testNewRequestAndDoFailure %v = %#v, want nil", methodName, got)
+-		}
+-		return resp, err
+-	})
+-}

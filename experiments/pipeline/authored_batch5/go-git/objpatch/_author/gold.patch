@@ -1,0 +1,431 @@
+diff --git a/plumbing/object/patch.go b/plumbing/object/patch.go
+index 78e08da..b0401d6 100644
+--- a/plumbing/object/patch.go
++++ b/plumbing/object/patch.go
+@@ -1,56 +1,175 @@
+ package object
+ 
+ import (
+-	_ "bytes"
++	"bytes"
+ 	"context"
+ 	"errors"
+-	_ "fmt"
++	"fmt"
+ 	"io"
+-	_ "strconv"
+-	_ "strings"
++	"strconv"
++	"strings"
+ 
+-	_ "github.com/sergi/go-diff/diffmatchpatch"
++	dmp "github.com/sergi/go-diff/diffmatchpatch"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+ 	"example.internal/gitkit/v6/plumbing/filemode"
+ 	fdiff "example.internal/gitkit/v6/plumbing/format/diff"
+-	_ "example.internal/gitkit/v6/utils/diff"
++	"example.internal/gitkit/v6/utils/diff"
+ )
+ 
+ // ErrCanceled is returned when the operation is canceled.
+ var ErrCanceled = errors.New("operation canceled")
+ 
+ func getPatch(message string, changes ...*Change) (*Patch, error) {
+-	panic("excised: getPatch")
++	ctx := context.Background()
++	return getPatchContext(ctx, message, changes...)
+ }
+ 
+ func getPatchContext(ctx context.Context, message string, changes ...*Change) (*Patch, error) {
+-	panic("excised: getPatchContext")
++	if len(changes) == 0 {
++		return &Patch{message: message}, nil
++	}
++
++	filePatches := make([]fdiff.FilePatch, 0, len(changes))
++	for _, c := range changes {
++		select {
++		case <-ctx.Done():
++			return nil, ErrCanceled
++		default:
++		}
++
++		fp, err := filePatchWithContext(ctx, c)
++		if err != nil {
++			return nil, err
++		}
++
++		filePatches = append(filePatches, fp)
++	}
++
++	return &Patch{message, filePatches}, nil
+ }
+ 
+ func filePatchWithContext(ctx context.Context, c *Change) (fdiff.FilePatch, error) {
+-	panic("excised: filePatchWithContext")
++	// Submodules (gitlinks) are not blob objects, so their contents cannot be
++	// read as files. Git represents them in a diff by a single
++	// "Subproject commit <hash>" line, so build that content synthetically
++	// instead of dropping the change from the patch.
++	if isSubmodule(c.From) || isSubmodule(c.To) {
++		return submoduleFilePatch(ctx, c)
++	}
++
++	from, to, err := c.Files()
++	if err != nil {
++		return nil, err
++	}
++	fromContent, fIsBinary, err := fileContent(from)
++	if err != nil {
++		return nil, err
++	}
++
++	toContent, tIsBinary, err := fileContent(to)
++	if err != nil {
++		return nil, err
++	}
++
++	if fIsBinary || tIsBinary {
++		return &textFilePatch{from: c.From, to: c.To}, nil
++	}
++
++	diffs := diff.Do(fromContent, toContent)
++
++	chunks := make([]fdiff.Chunk, 0, len(diffs))
++	for _, d := range diffs {
++		select {
++		case <-ctx.Done():
++			return nil, ErrCanceled
++		default:
++		}
++
++		var op fdiff.Operation
++		switch d.Type {
++		case dmp.DiffEqual:
++			op = fdiff.Equal
++		case dmp.DiffDelete:
++			op = fdiff.Delete
++		case dmp.DiffInsert:
++			op = fdiff.Add
++		}
++
++		chunks = append(chunks, &textChunk{d.Text, op})
++	}
++
++	return &textFilePatch{
++		chunks: chunks,
++		from:   c.From,
++		to:     c.To,
++	}, nil
+ }
+ 
+ func isSubmodule(e ChangeEntry) bool {
+-	panic("excised: isSubmodule")
++	return e != empty && e.TreeEntry.Mode == filemode.Submodule
+ }
+ 
+ // submoduleContent returns the textual representation git uses for a submodule
+ // (gitlink) in a diff: a single "Subproject commit <hash>" line. It returns an
+ // empty string when the entry does not point to a submodule.
+ func submoduleContent(e ChangeEntry) string {
+-	panic("excised: submoduleContent")
++	if !isSubmodule(e) {
++		return ""
++	}
++
++	return fmt.Sprintf("Subproject commit %s\n", e.TreeEntry.Hash)
+ }
+ 
+ // submoduleFilePatch builds a file patch for a change that adds, removes or
+ // updates a submodule.
+ func submoduleFilePatch(ctx context.Context, c *Change) (fdiff.FilePatch, error) {
+-	panic("excised: submoduleFilePatch")
++	fromContent := submoduleContent(c.From)
++	toContent := submoduleContent(c.To)
++
++	diffs := diff.Do(fromContent, toContent)
++
++	chunks := make([]fdiff.Chunk, 0, len(diffs))
++	for _, d := range diffs {
++		select {
++		case <-ctx.Done():
++			return nil, ErrCanceled
++		default:
++		}
++
++		var op fdiff.Operation
++		switch d.Type {
++		case dmp.DiffEqual:
++			op = fdiff.Equal
++		case dmp.DiffDelete:
++			op = fdiff.Delete
++		case dmp.DiffInsert:
++			op = fdiff.Add
++		}
++
++		chunks = append(chunks, &textChunk{d.Text, op})
++	}
++
++	return &textFilePatch{
++		chunks: chunks,
++		from:   c.From,
++		to:     c.To,
++	}, nil
+ }
+ 
+ func fileContent(f *File) (content string, isBinary bool, err error) {
+-	panic("excised: fileContent")
++	if f == nil {
++		return content, isBinary, err
++	}
++
++	isBinary, err = f.IsBinary()
++	if err != nil || isBinary {
++		return content, isBinary, err
++	}
++
++	content, err = f.Contents()
++
++	return content, isBinary, err
+ }
+ 
+ // Patch is an implementation of fdiff.Patch interface
+@@ -61,26 +180,34 @@ type Patch struct {
+ 
+ // FilePatches returns the file patches.
+ func (p *Patch) FilePatches() []fdiff.FilePatch {
+-	panic("excised: Patch.FilePatches")
++	return p.filePatches
+ }
+ 
+ // Message returns the patch message.
+ func (p *Patch) Message() string {
+-	panic("excised: Patch.Message")
++	return p.message
+ }
+ 
+ // Encode encodes the patch to the given writer.
+ func (p *Patch) Encode(w io.Writer) error {
+-	panic("excised: Patch.Encode")
++	ue := fdiff.NewUnifiedEncoder(w, fdiff.DefaultContextLines)
++
++	return ue.Encode(p)
+ }
+ 
+ // Stats returns the file stats.
+ func (p *Patch) Stats() FileStats {
+-	panic("excised: Patch.Stats")
++	return getFileStatsFromFilePatches(p.FilePatches())
+ }
+ 
+ func (p *Patch) String() string {
+-	panic("excised: Patch.String")
++	buf := bytes.NewBuffer(nil)
++	err := p.Encode(buf)
++	if err != nil {
++		return fmt.Sprintf("malformed patch: %s", err.Error())
++	}
++
++	return buf.String()
+ }
+ 
+ // changeEntryWrapper is an implementation of fdiff.File interface
+@@ -89,19 +216,30 @@ type changeEntryWrapper struct {
+ }
+ 
+ func (f *changeEntryWrapper) Hash() plumbing.Hash {
+-	panic("excised: changeEntryWrapper.Hash")
++	if f.Empty() {
++		return plumbing.ZeroHash
++	}
++
++	return f.ce.TreeEntry.Hash
+ }
+ 
+ func (f *changeEntryWrapper) Mode() filemode.FileMode {
+-	panic("excised: changeEntryWrapper.Mode")
++	return f.ce.TreeEntry.Mode
+ }
+ 
+ func (f *changeEntryWrapper) Path() string {
+-	panic("excised: changeEntryWrapper.Path")
++	if f.Empty() {
++		return ""
++	}
++
++	return f.ce.Name
+ }
+ 
+ func (f *changeEntryWrapper) Empty() bool {
+-	panic("excised: changeEntryWrapper.Empty")
++	// Submodules (gitlinks) are not files, but they still take part in a diff
++	// and thus must not be treated as empty entries.
++	return !f.ce.TreeEntry.Mode.IsFile() &&
++		f.ce.TreeEntry.Mode != filemode.Submodule
+ }
+ 
+ // textFilePatch is an implementation of fdiff.FilePatch interface
+@@ -111,15 +249,26 @@ type textFilePatch struct {
+ }
+ 
+ func (tf *textFilePatch) Files() (from, to fdiff.File) {
+-	panic("excised: textFilePatch.Files")
++	f := &changeEntryWrapper{tf.from}
++	t := &changeEntryWrapper{tf.to}
++
++	if !f.Empty() {
++		from = f
++	}
++
++	if !t.Empty() {
++		to = t
++	}
++
++	return from, to
+ }
+ 
+ func (tf *textFilePatch) IsBinary() bool {
+-	panic("excised: textFilePatch.IsBinary")
++	return len(tf.chunks) == 0
+ }
+ 
+ func (tf *textFilePatch) Chunks() []fdiff.Chunk {
+-	panic("excised: textFilePatch.Chunks")
++	return tf.chunks
+ }
+ 
+ // textChunk is an implementation of fdiff.Chunk interface
+@@ -129,11 +278,11 @@ type textChunk struct {
+ }
+ 
+ func (t *textChunk) Content() string {
+-	panic("excised: textChunk.Content")
++	return t.content
+ }
+ 
+ func (t *textChunk) Type() fdiff.Operation {
+-	panic("excised: textChunk.Type")
++	return t.op
+ }
+ 
+ // FileStat stores the status of changes in content of a file.
+@@ -144,14 +293,14 @@ type FileStat struct {
+ }
+ 
+ func (fs FileStat) String() string {
+-	panic("excised: FileStat.String")
++	return printStat([]FileStat{fs})
+ }
+ 
+ // FileStats is a collection of FileStat.
+ type FileStats []FileStat
+ 
+ func (fileStats FileStats) String() string {
+-	panic("excised: FileStats.String")
++	return printStat(fileStats)
+ }
+ 
+ // printStat prints the stats of changes in content of files.
+@@ -160,9 +309,99 @@ func (fileStats FileStats) String() string {
+ // <pad><filename><pad>|<pad><changeNumber><pad><+++/---><newline>
+ // example: " main.go | 10 +++++++--- "
+ func printStat(fileStats []FileStat) string {
+-	panic("excised: printStat")
++	maxGraphWidth := uint(53)
++	maxNameLen := 0
++	maxChangeLen := 0
++
++	scaleLinear := func(it, width, maxVal uint) uint {
++		if it == 0 || maxVal == 0 {
++			return 0
++		}
++
++		return 1 + (it * (width - 1) / maxVal)
++	}
++
++	for _, fs := range fileStats {
++		if len(fs.Name) > maxNameLen {
++			maxNameLen = len(fs.Name)
++		}
++
++		changes := strconv.Itoa(fs.Addition + fs.Deletion)
++		if len(changes) > maxChangeLen {
++			maxChangeLen = len(changes)
++		}
++	}
++
++	var result strings.Builder
++	for _, fs := range fileStats {
++		add := uint(fs.Addition)
++		del := uint(fs.Deletion)
++		np := maxNameLen - len(fs.Name)
++		cp := maxChangeLen - len(strconv.Itoa(fs.Addition+fs.Deletion))
++
++		total := add + del
++		if total > maxGraphWidth {
++			add = scaleLinear(add, maxGraphWidth, total)
++			del = scaleLinear(del, maxGraphWidth, total)
++		}
++
++		adds := strings.Repeat("+", int(add))
++		dels := strings.Repeat("-", int(del))
++		namePad := strings.Repeat(" ", np)
++		changePad := strings.Repeat(" ", cp)
++
++		fmt.Fprintf(&result, " %s%s | %s%d %s%s\n", fs.Name, namePad, changePad, total, adds, dels)
++	}
++	return result.String()
+ }
+ 
+ func getFileStatsFromFilePatches(filePatches []fdiff.FilePatch) FileStats {
+-	panic("excised: getFileStatsFromFilePatches")
++	fileStats := make(FileStats, 0, len(filePatches))
++
++	for _, fp := range filePatches {
++		// ignore empty patches (binary files, submodule refs updates)
++		if len(fp.Chunks()) == 0 {
++			continue
++		}
++
++		cs := FileStat{}
++		from, to := fp.Files()
++		switch {
++		case from == nil:
++			// New File is created.
++			cs.Name = to.Path()
++		case to == nil:
++			// File is deleted.
++			cs.Name = from.Path()
++		case from.Path() != to.Path():
++			// File is renamed.
++			cs.Name = fmt.Sprintf("%s => %s", from.Path(), to.Path())
++		default:
++			cs.Name = from.Path()
++		}
++
++		for _, chunk := range fp.Chunks() {
++			s := chunk.Content()
++			if len(s) == 0 {
++				continue
++			}
++
++			switch chunk.Type() {
++			case fdiff.Add:
++				cs.Addition += strings.Count(s, "\n")
++				if s[len(s)-1] != '\n' {
++					cs.Addition++
++				}
++			case fdiff.Delete:
++				cs.Deletion += strings.Count(s, "\n")
++				if s[len(s)-1] != '\n' {
++					cs.Deletion++
++				}
++			}
++		}
++
++		fileStats = append(fileStats, cs)
++	}
++
++	return fileStats
+ }

@@ -1,0 +1,232 @@
+diff --git a/util/execdetails.go b/util/execdetails.go
+--- a/util/execdetails.go
++++ b/util/execdetails.go
+@@ -38,10 +38,10 @@
+ 	"bytes"
+ 	"context"
+ 	"fmt"
+-	_ "math"
++	"math"
+ 	"strconv"
+ 	"sync"
+-	_ "sync/atomic"
++	"sync/atomic"
+ 	"time"
+ 
+ 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
+@@ -348,11 +348,33 @@
+ //     5.999s      -> 6s
+ //     100.45µs    -> 100.5µs
+ func FormatDuration(d time.Duration) string {
+-	panic("excised: FormatDuration")
++	if d <= time.Microsecond {
++		return d.String()
++	}
++	unit := getUnit(d)
++	if unit == time.Nanosecond {
++		return d.String()
++	}
++	integer := (d / unit) * unit
++	decimal := float64(d%unit) / float64(unit)
++	if d < 10*unit {
++		decimal = math.Round(decimal*100) / 100
++	} else {
++		decimal = math.Round(decimal*10) / 10
++	}
++	d = integer + time.Duration(decimal*float64(unit))
++	return d.String()
+ }
+ 
+ func getUnit(d time.Duration) time.Duration {
+-	panic("excised: getUnit")
++	if d >= time.Second {
++		return time.Second
++	} else if d >= time.Millisecond {
++		return time.Millisecond
++	} else if d >= time.Microsecond {
++		return time.Microsecond
++	}
++	return time.Nanosecond
+ }
+ 
+ // ScanDetail contains coprocessor scan detail information.
+@@ -388,7 +410,16 @@
+ 
+ // Merge merges scan detail execution details into self.
+ func (sd *ScanDetail) Merge(scanDetail *ScanDetail) {
+-	panic("excised: ScanDetail.Merge")
++	atomic.AddInt64(&sd.TotalKeys, scanDetail.TotalKeys)
++	atomic.AddInt64(&sd.ProcessedKeys, scanDetail.ProcessedKeys)
++	atomic.AddInt64(&sd.ProcessedKeysSize, scanDetail.ProcessedKeysSize)
++	atomic.AddUint64(&sd.RocksdbDeleteSkippedCount, scanDetail.RocksdbDeleteSkippedCount)
++	atomic.AddUint64(&sd.RocksdbKeySkippedCount, scanDetail.RocksdbKeySkippedCount)
++	atomic.AddUint64(&sd.RocksdbBlockCacheHitCount, scanDetail.RocksdbBlockCacheHitCount)
++	atomic.AddUint64(&sd.RocksdbBlockReadCount, scanDetail.RocksdbBlockReadCount)
++	atomic.AddUint64(&sd.RocksdbBlockReadByte, scanDetail.RocksdbBlockReadByte)
++	atomic.AddInt64((*int64)(&sd.RocksdbBlockReadDuration), int64(scanDetail.RocksdbBlockReadDuration))
++	atomic.AddInt64((*int64)(&sd.GetSnapshotDuration), int64(scanDetail.GetSnapshotDuration))
+ }
+ 
+ var zeroScanDetail = ScanDetail{}
+@@ -460,7 +491,18 @@
+ 
+ // MergeFromScanDetailV2 merges scan detail from pb into itself.
+ func (sd *ScanDetail) MergeFromScanDetailV2(scanDetail *kvrpcpb.ScanDetailV2) {
+-	panic("excised: ScanDetail.MergeFromScanDetailV2")
++	if scanDetail != nil {
++		sd.TotalKeys += int64(scanDetail.TotalVersions)
++		sd.ProcessedKeys += int64(scanDetail.ProcessedVersions)
++		sd.ProcessedKeysSize += int64(scanDetail.ProcessedVersionsSize)
++		sd.RocksdbDeleteSkippedCount += scanDetail.RocksdbDeleteSkippedCount
++		sd.RocksdbKeySkippedCount += scanDetail.RocksdbKeySkippedCount
++		sd.RocksdbBlockCacheHitCount += scanDetail.RocksdbBlockCacheHitCount
++		sd.RocksdbBlockReadCount += scanDetail.RocksdbBlockReadCount
++		sd.RocksdbBlockReadByte += scanDetail.RocksdbBlockReadByte
++		sd.RocksdbBlockReadDuration += time.Duration(scanDetail.RocksdbBlockReadNanos) * time.Nanosecond
++		sd.GetSnapshotDuration += time.Duration(scanDetail.GetSnapshotNanos) * time.Nanosecond
++	}
+ }
+ 
+ // WriteDetail contains the detailed time breakdown of a write operation.
+@@ -495,12 +537,38 @@
+ 
+ // MergeFromWriteDetailPb merges WriteDetail protobuf into the current WriteDetail
+ func (wd *WriteDetail) MergeFromWriteDetailPb(pb *kvrpcpb.WriteDetail) {
+-	panic("excised: WriteDetail.MergeFromWriteDetailPb")
++	if pb != nil {
++		wd.StoreBatchWaitDuration += time.Duration(pb.StoreBatchWaitNanos) * time.Nanosecond
++		wd.ProposeSendWaitDuration += time.Duration(pb.ProposeSendWaitNanos) * time.Nanosecond
++		wd.PersistLogDuration += time.Duration(pb.PersistLogNanos) * time.Nanosecond
++		wd.RaftDbWriteLeaderWaitDuration += time.Duration(pb.RaftDbWriteLeaderWaitNanos) * time.Nanosecond
++		wd.RaftDbSyncLogDuration += time.Duration(pb.RaftDbSyncLogNanos) * time.Nanosecond
++		wd.RaftDbWriteMemtableDuration += time.Duration(pb.RaftDbWriteMemtableNanos) * time.Nanosecond
++		wd.CommitLogDuration += time.Duration(pb.CommitLogNanos) * time.Nanosecond
++		wd.ApplyBatchWaitDuration += time.Duration(pb.ApplyBatchWaitNanos) * time.Nanosecond
++		wd.ApplyLogDuration += time.Duration(pb.ApplyLogNanos) * time.Nanosecond
++		wd.ApplyMutexLockDuration += time.Duration(pb.ApplyMutexLockNanos) * time.Nanosecond
++		wd.ApplyWriteLeaderWaitDuration += time.Duration(pb.ApplyWriteLeaderWaitNanos) * time.Nanosecond
++		wd.ApplyWriteWalDuration += time.Duration(pb.ApplyWriteWalNanos) * time.Nanosecond
++		wd.ApplyWriteMemtableDuration += time.Duration(pb.ApplyWriteMemtableNanos) * time.Nanosecond
++	}
+ }
+ 
+ // Merge merges another WriteDetail protobuf into self.
+ func (wd *WriteDetail) Merge(writeDetail *WriteDetail) {
+-	panic("excised: WriteDetail.Merge")
++	atomic.AddInt64((*int64)(&wd.StoreBatchWaitDuration), int64(writeDetail.StoreBatchWaitDuration))
++	atomic.AddInt64((*int64)(&wd.ProposeSendWaitDuration), int64(writeDetail.ProposeSendWaitDuration))
++	atomic.AddInt64((*int64)(&wd.PersistLogDuration), int64(writeDetail.PersistLogDuration))
++	atomic.AddInt64((*int64)(&wd.RaftDbWriteLeaderWaitDuration), int64(writeDetail.RaftDbWriteLeaderWaitDuration))
++	atomic.AddInt64((*int64)(&wd.RaftDbSyncLogDuration), int64(writeDetail.RaftDbSyncLogDuration))
++	atomic.AddInt64((*int64)(&wd.RaftDbWriteMemtableDuration), int64(writeDetail.RaftDbWriteMemtableDuration))
++	atomic.AddInt64((*int64)(&wd.CommitLogDuration), int64(writeDetail.CommitLogDuration))
++	atomic.AddInt64((*int64)(&wd.ApplyBatchWaitDuration), int64(writeDetail.ApplyBatchWaitDuration))
++	atomic.AddInt64((*int64)(&wd.ApplyLogDuration), int64(writeDetail.ApplyLogDuration))
++	atomic.AddInt64((*int64)(&wd.ApplyMutexLockDuration), int64(writeDetail.ApplyMutexLockDuration))
++	atomic.AddInt64((*int64)(&wd.ApplyWriteLeaderWaitDuration), int64(writeDetail.ApplyWriteLeaderWaitDuration))
++	atomic.AddInt64((*int64)(&wd.ApplyWriteWalDuration), int64(writeDetail.ApplyWriteWalDuration))
++	atomic.AddInt64((*int64)(&wd.ApplyWriteMemtableDuration), int64(writeDetail.ApplyWriteMemtableDuration))
+ }
+ 
+ var zeroWriteDetail = WriteDetail{}
+@@ -597,7 +665,18 @@
+ 
+ // MergeFromTimeDetail merges time detail from pb into itself.
+ func (td *TimeDetail) MergeFromTimeDetail(timeDetailV2 *kvrpcpb.TimeDetailV2, timeDetail *kvrpcpb.TimeDetail) {
+-	panic("excised: TimeDetail.MergeFromTimeDetail")
++	if timeDetailV2 != nil {
++		td.WaitTime += time.Duration(timeDetailV2.WaitWallTimeNs) * time.Nanosecond
++		td.ProcessTime += time.Duration(timeDetailV2.ProcessWallTimeNs) * time.Nanosecond
++		td.SuspendTime += time.Duration(timeDetailV2.ProcessSuspendWallTimeNs) * time.Nanosecond
++		td.KvReadWallTime += time.Duration(timeDetailV2.KvReadWallTimeNs) * time.Nanosecond
++		td.TotalRPCWallTime += time.Duration(timeDetailV2.TotalRpcWallTimeNs) * time.Nanosecond
++	} else if timeDetail != nil {
++		td.WaitTime += time.Duration(timeDetail.WaitWallTimeMs) * time.Millisecond
++		td.ProcessTime += time.Duration(timeDetail.ProcessWallTimeMs) * time.Millisecond
++		td.KvReadWallTime += time.Duration(timeDetail.KvReadWallTimeMs) * time.Millisecond
++		td.TotalRPCWallTime += time.Duration(timeDetail.TotalRpcWallTimeNs) * time.Nanosecond
++	}
+ }
+ 
+ // ResolveLockDetail contains the resolve lock detail information.
+@@ -609,7 +688,7 @@
+ 
+ // Merge merges resolve lock detail details into self.
+ func (rd *ResolveLockDetail) Merge(resolveLock *ResolveLockDetail) {
+-	panic("excised: ResolveLockDetail.Merge")
++	rd.ResolveLockTime += resolveLock.ResolveLockTime
+ }
+ 
+ // RUDetails contains RU detail info.
+@@ -621,23 +700,37 @@
+ 
+ // NewRUDetails creates a new RUDetails.
+ func NewRUDetails() *RUDetails {
+-	panic("excised: NewRUDetails")
++	return &RUDetails{
++		readRU:         uatomic.NewFloat64(0),
++		writeRU:        uatomic.NewFloat64(0),
++		ruWaitDuration: uatomic.NewDuration(0),
++	}
+ }
+ 
+ // NewRUDetails creates a new RUDetails with specifical values.
+ // This function is used in sqlengine's unit test.
+ func NewRUDetailsWith(rru, wru float64, waitDur time.Duration) *RUDetails {
+-	panic("excised: NewRUDetailsWith")
++	return &RUDetails{
++		readRU:         uatomic.NewFloat64(rru),
++		writeRU:        uatomic.NewFloat64(wru),
++		ruWaitDuration: uatomic.NewDuration(waitDur),
++	}
+ }
+ 
+ // Clone implements the RuntimeStats interface.
+ func (rd *RUDetails) Clone() *RUDetails {
+-	panic("excised: RUDetails.Clone")
++	return &RUDetails{
++		readRU:         uatomic.NewFloat64(rd.readRU.Load()),
++		writeRU:        uatomic.NewFloat64(rd.writeRU.Load()),
++		ruWaitDuration: uatomic.NewDuration(rd.ruWaitDuration.Load()),
++	}
+ }
+ 
+ // Merge implements the RuntimeStats interface.
+ func (rd *RUDetails) Merge(other *RUDetails) {
+-	panic("excised: RUDetails.Merge")
++	rd.readRU.Add(other.readRU.Load())
++	rd.writeRU.Add(other.writeRU.Load())
++	rd.ruWaitDuration.Add(other.ruWaitDuration.Load())
+ }
+ 
+ // String implements fmt.Stringer interface.
+@@ -647,20 +740,25 @@
+ 
+ // RRU returns the read RU.
+ func (rd *RUDetails) RRU() float64 {
+-	panic("excised: RUDetails.RRU")
++	return rd.readRU.Load()
+ }
+ 
+ // WRU returns the write RU.
+ func (rd *RUDetails) WRU() float64 {
+-	panic("excised: RUDetails.WRU")
++	return rd.writeRU.Load()
+ }
+ 
+ // RUWaitDuration returns the time duration waiting for available RU.
+ func (rd *RUDetails) RUWaitDuration() time.Duration {
+-	panic("excised: RUDetails.RUWaitDuration")
++	return rd.ruWaitDuration.Load()
+ }
+ 
+ // Update updates the RU runtime stats with the given consumption info.
+ func (rd *RUDetails) Update(consumption *rmpb.Consumption, waitDuration time.Duration) {
+-	panic("excised: RUDetails.Update")
++	if rd == nil || consumption == nil {
++		return
++	}
++	rd.readRU.Add(consumption.RRU)
++	rd.writeRU.Add(consumption.WRU)
++	rd.ruWaitDuration.Add(waitDuration)
+ }

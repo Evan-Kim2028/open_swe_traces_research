@@ -1,0 +1,308 @@
+diff --git a/github/repos_contents.go b/github/repos_contents.go
+index dc6b4a0..131885a 100644
+--- a/github/repos_contents.go
++++ b/github/repos_contents.go
+@@ -11,7 +11,7 @@ package github
+ import (
+ 	"context"
+ 	"encoding/base64"
+-	"encoding/json"
++	_ "encoding/json"
+ 	"errors"
+ 	"fmt"
+ 	"io"
+@@ -228,8 +228,7 @@ func (s *RepositoriesService) DownloadContentsWithMeta(ctx context.Context, owne
+ //
+ //meta:operation GET /repos/{owner}/{repo}/contents/{path}
+ func (s *RepositoriesService) GetContents(ctx context.Context, owner, repo, path string, opts *RepositoryContentGetOptions) (fileContent *RepositoryContent, directoryContent []*RepositoryContent, resp *Response, err error) {
+-	escapedPath := (&url.URL{Path: strings.TrimSuffix(path, "/")}).String()
+-	u := fmt.Sprintf("repos/%v/%v/contents/%v", owner, repo, escapedPath)
++		u := fmt.Sprintf("repos/%v/%v/contents/%v", owner, repo, path)
+ 	u, err = addOptions(u, opts)
+ 	if err != nil {
+ 		return nil, nil, nil, err
+@@ -240,23 +239,12 @@ func (s *RepositoriesService) GetContents(ctx context.Context, owner, repo, path
+ 		return nil, nil, nil, err
+ 	}
+ 
+-	var rawJSON json.RawMessage
+-	resp, err = s.client.Do(req, &rawJSON)
++	resp, err = s.client.Do(req, &fileContent)
+ 	if err != nil {
+ 		return nil, nil, resp, err
+ 	}
+ 
+-	fileUnmarshalError := json.Unmarshal(rawJSON, &fileContent)
+-	if fileUnmarshalError == nil {
+-		return fileContent, nil, resp, nil
+-	}
+-
+-	directoryUnmarshalError := json.Unmarshal(rawJSON, &directoryContent)
+-	if directoryUnmarshalError == nil {
+-		return nil, directoryContent, resp, nil
+-	}
+-
+-	return nil, nil, resp, fmt.Errorf("unmarshaling failed for both file and directory content: %v and %v", fileUnmarshalError, directoryUnmarshalError)
++	return fileContent, nil, resp, nil /* excised: GetContents */
+ }
+ 
+ // CreateFile creates a new file in a repository at the given path and returns
+diff --git a/github/repos_contents_test.go b/github/repos_contents_test.go
+index e59dff6..4c6e62f 100644
+--- a/github/repos_contents_test.go
++++ b/github/repos_contents_test.go
+@@ -293,63 +293,7 @@ func TestRepositoriesService_DownloadContents_NotFound(t *testing.T) {
+ 	}
+ }
+ 
+-func TestRepositoriesService_DownloadContents_NotFile(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/repos/o/r/contents/d", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "GET")
+-		fmt.Fprint(w, `[{
+-  "type": "file",
+-  "name": "f",
+-  "content": ""
+-}]`)
+-	})
+-
+-	ctx := t.Context()
+-	reader, resp, err := client.Repositories.DownloadContents(ctx, "o", "r", "d", nil)
+-	if err == nil || !errors.Is(err, ErrContentsDirectory) {
+-		t.Error("Repositories.DownloadContents did not return expected error")
+-	}
+-
+-	if resp == nil || resp.Response.StatusCode != http.StatusOK {
+-		t.Error("Repositories.DownloadContents did not return expected response")
+-	}
+-
+-	if reader != nil {
+-		t.Error("Repositories.DownloadContents did not return expected reader")
+-	}
+-}
+-
+-func TestRepositoriesService_DownloadContents_Submodule(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/repos/o/r/contents/d", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "GET")
+-		fmt.Fprint(w, `{
+-  "type": "submodule",
+-  "name": "f",
+-  "content": "",
+-	"download_url": "",
+-	"submodule_git_url": "http://example.com/submodule.git"
+-}`)
+-	})
+-
+-	ctx := t.Context()
+-	reader, resp, err := client.Repositories.DownloadContents(ctx, "o", "r", "d", nil)
+-	if err == nil || !errors.Is(err, ErrContentsSubmodule) {
+-		t.Error("Repositories.DownloadContents did not return expected error")
+-	}
+ 
+-	if resp == nil || resp.Response.StatusCode != http.StatusOK {
+-		t.Error("Repositories.DownloadContents did not return expected response")
+-	}
+-
+-	if reader != nil {
+-		t.Error("Repositories.DownloadContents did not return expected reader")
+-	}
+-}
+ 
+ func TestRepositoriesService_DownloadContents_NoDownloadURL(t *testing.T) {
+ 	t.Parallel()
+@@ -561,71 +505,7 @@ func TestRepositoriesService_DownloadContentsWithMeta_NotFound(t *testing.T) {
+ 	}
+ }
+ 
+-func TestRepositoriesService_DownloadContentsWithMeta_NotFile(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/repos/o/r/contents/d", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "GET")
+-		fmt.Fprint(w, `[{
+-  "type": "file",
+-  "name": "f",
+-  "content": ""
+-}]`)
+-	})
+-
+-	ctx := t.Context()
+-	reader, contents, resp, err := client.Repositories.DownloadContentsWithMeta(ctx, "o", "r", "d", nil)
+-	if err == nil || !errors.Is(err, ErrContentsDirectory) {
+-		t.Error("Repositories.DownloadContentsWithMeta did not return expected error")
+-	}
+-
+-	if reader != nil {
+-		t.Error("Repositories.DownloadContentsWithMeta did not return expected reader")
+-	}
+-
+-	if contents != nil {
+-		t.Error("Repositories.DownloadContentsWithMeta did not return expected content")
+-	}
+-
+-	if resp == nil || resp.Response.StatusCode != http.StatusOK {
+-		t.Error("Repositories.DownloadContentsWithMeta did not return expected response")
+-	}
+-}
+-
+-func TestRepositoriesService_DownloadContentsWithMeta_Submodule(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/repos/o/r/contents/d", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "GET")
+-		fmt.Fprint(w, `{
+-  "type": "submodule",
+-  "name": "f",
+-  "content": "",
+-	"download_url": "",
+-	"submodule_git_url": "http://example.com/submodule.git"
+-}`)
+-	})
+-
+-	ctx := t.Context()
+-	reader, contents, resp, err := client.Repositories.DownloadContentsWithMeta(ctx, "o", "r", "d", nil)
+-	if err == nil || !errors.Is(err, ErrContentsSubmodule) {
+-		t.Error("Repositories.DownloadContentsWithMeta did not return expected error")
+-	}
+-
+-	if reader != nil {
+-		t.Error("Repositories.DownloadContentsWithMeta did not return expected reader")
+-	}
+-
+-	if contents == nil || contents.GetType() != "submodule" {
+-		t.Error("Repositories.DownloadContentsWithMeta did not return expected content")
+-	}
+ 
+-	if resp == nil || resp.Response.StatusCode != http.StatusOK {
+-		t.Error("Repositories.DownloadContentsWithMeta did not return expected response")
+-	}
+-}
+ 
+ func TestRepositoriesService_DownloadContentsWithMeta_NoDownloadURL(t *testing.T) {
+ 	t.Parallel()
+@@ -698,97 +578,10 @@ func TestRepositoriesService_GetContents_File(t *testing.T) {
+ 	})
+ }
+ 
+-func TestRepositoriesService_GetContents_FilenameNeedsEscape(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/repos/o/r/contents/p#?%/中.go", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "GET")
+-		fmt.Fprint(w, `{}`)
+-	})
+-	ctx := t.Context()
+-	_, _, _, err := client.Repositories.GetContents(ctx, "o", "r", "p#?%/中.go", &RepositoryContentGetOptions{})
+-	if err != nil {
+-		t.Fatalf("Repositories.GetContents returned error: %v", err)
+-	}
+-}
+ 
+-func TestRepositoriesService_GetContents_DirectoryWithSpaces(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+ 
+-	mux.HandleFunc("/repos/o/r/contents/some%20directory/file.go", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "GET")
+-		fmt.Fprint(w, `{}`)
+-	})
+-	ctx := t.Context()
+-	_, _, _, err := client.Repositories.GetContents(ctx, "o", "r", "some directory/file.go", &RepositoryContentGetOptions{})
+-	if err != nil {
+-		t.Fatalf("Repositories.GetContents returned error: %v", err)
+-	}
+-}
+ 
+-func TestRepositoriesService_GetContents_PathWithParent(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+ 
+-	mux.HandleFunc("/repos/o/r/contents/some/../directory/file.go", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "GET")
+-		fmt.Fprint(w, `{}`)
+-	})
+-	ctx := t.Context()
+-	_, _, _, err := client.Repositories.GetContents(ctx, "o", "r", "some/../directory/file.go", &RepositoryContentGetOptions{})
+-	if err == nil {
+-		t.Fatal("Repositories.GetContents expected error but got none")
+-	}
+-}
+-
+-func TestRepositoriesService_GetContents_DirectoryWithPlusChars(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/repos/o/r/contents/some%20directory%2Bname/file.go", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "GET")
+-		fmt.Fprint(w, `{}`)
+-	})
+-	ctx := t.Context()
+-	_, _, _, err := client.Repositories.GetContents(ctx, "o", "r", "some directory+name/file.go", &RepositoryContentGetOptions{})
+-	if err != nil {
+-		t.Fatalf("Repositories.GetContents returned error: %v", err)
+-	}
+-}
+-
+-func TestRepositoriesService_GetContents_Directory(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/repos/o/r/contents/p", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "GET")
+-		fmt.Fprint(w, `[{
+-		  "type": "dir",
+-		  "name": "lib",
+-		  "path": "lib"
+-		},
+-		{
+-		  "type": "file",
+-		  "size": 20678,
+-		  "name": "LICENSE",
+-		  "path": "LICENSE"
+-		}]`)
+-	})
+-	ctx := t.Context()
+-	_, directoryContents, _, err := client.Repositories.GetContents(ctx, "o", "r", "p", &RepositoryContentGetOptions{})
+-	if err != nil {
+-		t.Errorf("Repositories.GetContents returned error: %v", err)
+-	}
+-	want := []*RepositoryContent{
+-		{Type: new("dir"), Name: new("lib"), Path: new("lib")},
+-		{Type: new("file"), Name: new("LICENSE"), Size: new(20678), Path: new("LICENSE")},
+-	}
+-	if !cmp.Equal(directoryContents, want) {
+-		t.Errorf("Repositories.GetContents_Directory returned %+v, want %+v", directoryContents, want)
+-	}
+-}
+ 
+ func TestRepositoriesService_CreateFile(t *testing.T) {
+ 	t.Parallel()
+@@ -1085,20 +878,3 @@ func TestRepositoriesService_GetArchiveLink_StatusMovedPermanently_followRedirec
+ 	}
+ }
+ 
+-func TestRepositoriesService_GetContents_NoTrailingSlashInDirectoryApiPath(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/repos/o/r/contents/.github", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "GET")
+-		testFormValues(t, r, values{"ref": "mybranch"})
+-		fmt.Fprint(w, `{}`)
+-	})
+-	ctx := t.Context()
+-	_, _, _, err := client.Repositories.GetContents(ctx, "o", "r", ".github/", &RepositoryContentGetOptions{
+-		Ref: "mybranch",
+-	})
+-	if err != nil {
+-		t.Fatalf("Repositories.GetContents returned error: %v", err)
+-	}
+-}

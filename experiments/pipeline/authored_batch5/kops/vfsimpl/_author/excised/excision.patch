@@ -1,0 +1,1111 @@
+--- a/util/pkg/vfs/azureblob.go
++++ b/util/pkg/vfs/azureblob.go
+@@ -23,15 +23,15 @@
+ 	"fmt"
+ 	"io"
+ 	"os"
+-	"path"
++	_ "path"
+ 	"strings"
+ 	"sync"
+ 
++	"example.internal/clustkit/util/pkg/hashing"
+ 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+ 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+ 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+ 	"k8s.io/klog/v2"
+-	"example.internal/clustkit/util/pkg/hashing"
+ )
+ 
+ // AzureBlobPath is a path in the VFS space backed by Azure Blob.
+@@ -60,22 +60,22 @@
+ 
+ // Account returns the Azure storage account name.
+ func (p *AzureBlobPath) Account() string {
+-	return p.account
++	panic("excised: AzureBlobPath.Account")
+ }
+ 
+ // Container returns the Azure storage container name.
+ func (p *AzureBlobPath) Container() string {
+-	return p.container
++	panic("excised: AzureBlobPath.Container")
+ }
+ 
+ // Key returns the blob key (path within the container).
+ func (p *AzureBlobPath) Key() string {
+-	return p.key
++	panic("excised: AzureBlobPath.Key")
+ }
+ 
+ // Base returns the base name (last element).
+ func (p *AzureBlobPath) Base() string {
+-	return path.Base(p.key)
++	panic("excised: AzureBlobPath.Base")
+ }
+ 
+ // PreferredHash returns the hash of the file contents, with the preferred hash algorithm.
+@@ -103,25 +103,17 @@
+ 
+ // Path returns a string representing the full path.
+ func (p *AzureBlobPath) Path() string {
+-	return fmt.Sprintf("azureblob://%s/%s/%s", p.account, p.container, p.key)
++	panic("excised: AzureBlobPath.Path")
+ }
+ 
+ // String implements fmt.Stringer; returns Path() so %s renders the full URL.
+ func (p *AzureBlobPath) String() string {
+-	return p.Path()
++	panic("excised: AzureBlobPath.String")
+ }
+ 
+ // Join returns a new path that joins the current path and given relative paths.
+ func (p *AzureBlobPath) Join(relativePath ...string) Path {
+-	args := []string{p.key}
+-	args = append(args, relativePath...)
+-	joined := path.Join(args...)
+-	return &AzureBlobPath{
+-		vfsContext: p.vfsContext,
+-		account:    p.account,
+-		container:  p.container,
+-		key:        joined,
+-	}
++	panic("excised: AzureBlobPath.Join")
+ }
+ 
+ // ReadFile returns the content of the blob.
+--- a/util/pkg/vfs/gsfs.go
++++ b/util/pkg/vfs/gsfs.go
+@@ -20,23 +20,23 @@
+ 	"bytes"
+ 	"context"
+ 	"encoding/base64"
+-	"errors"
++	_ "errors"
+ 	"fmt"
+ 	"io"
+-	"net/http"
++	_ "net/http"
+ 	"os"
+-	"path"
++	_ "path"
+ 	"strings"
+ 	"sync"
+ 	"time"
+ 
+ 	"cloud.google.com/go/storage"
+-	"google.golang.org/api/googleapi"
++	"example.internal/clustkit/upup/pkg/fi/cloudup/terraformWriter"
++	"example.internal/clustkit/util/pkg/hashing"
++	_ "google.golang.org/api/googleapi"
+ 	"google.golang.org/api/iterator"
+ 	"k8s.io/apimachinery/pkg/util/wait"
+ 	"k8s.io/klog/v2"
+-	"example.internal/clustkit/upup/pkg/fi/cloudup/terraformWriter"
+-	"example.internal/clustkit/util/pkg/hashing"
+ )
+ 
+ // GSPath is a vfs path for Google Cloud Storage
+@@ -70,12 +70,7 @@
+ }
+ 
+ func (a *GSAcl) String() string {
+-	var s []string
+-	for _, acl := range a.Acl {
+-		s = append(s, fmt.Sprintf("%+v", acl))
+-	}
+-
+-	return "{" + strings.Join(s, ", ") + "}"
++	panic("excised: GSAcl.String")
+ }
+ 
+ var _ ACL = &GSAcl{}
+@@ -100,15 +95,15 @@
+ }
+ 
+ func (p *GSPath) Path() string {
+-	return "gs://" + p.bucket + "/" + p.key
++	panic("excised: GSPath.Path")
+ }
+ 
+ func (p *GSPath) Bucket() string {
+-	return p.bucket
++	panic("excised: GSPath.Bucket")
+ }
+ 
+ func (p *GSPath) Object() string {
+-	return p.key
++	panic("excised: GSPath.Object")
+ }
+ 
+ // Client returns the storage.Client bound to this path
+@@ -117,7 +112,7 @@
+ }
+ 
+ func (p *GSPath) String() string {
+-	return p.Path()
++	panic("excised: GSPath.String")
+ }
+ 
+ func (p *GSPath) Remove(ctx context.Context) error {
+@@ -164,14 +159,7 @@
+ }
+ 
+ func (p *GSPath) Join(relativePath ...string) Path {
+-	args := []string{p.key}
+-	args = append(args, relativePath...)
+-	joined := path.Join(args...)
+-	return &GSPath{
+-		vfsContext: p.vfsContext,
+-		bucket:     p.bucket,
+-		key:        joined,
+-	}
++	panic("excised: GSPath.Join")
+ }
+ 
+ func (p *GSPath) WriteFile(ctx context.Context, data io.ReadSeeker, acl ACL) error {
+@@ -407,7 +395,7 @@
+ }
+ 
+ func (p *GSPath) Base() string {
+-	return path.Base(p.key)
++	panic("excised: GSPath.Base")
+ }
+ 
+ func (p *GSPath) PreferredHash() (*hashing.Hash, error) {
+@@ -433,8 +421,7 @@
+ }
+ 
+ func (p *GSPath) GetHTTPsUrl() (string, error) {
+-	url := fmt.Sprintf("https://storage.googleapis.com/%s/%s", p.bucket, p.key)
+-	return strings.TrimSuffix(url, "/"), nil
++	panic("excised: GSPath.GetHTTPsUrl")
+ }
+ 
+ func (p *GSPath) IsBucketPublic(ctx context.Context) (bool, error) {
+@@ -525,18 +512,11 @@
+ }
+ 
+ func (s *GSPath) TerraformLink(name string) *terraformWriter.Literal {
+-	return terraformWriter.LiteralProperty("google_storage_bucket_object", name, "output_name")
++	panic("excised: GSPath.TerraformLink")
+ }
+ 
+ func isGCSNotFound(err error) bool {
+-	if err == nil {
+-		return false
+-	}
+-	if errors.Is(err, storage.ErrObjectNotExist) || errors.Is(err, storage.ErrBucketNotExist) {
+-		return true
+-	}
+-	var ae *googleapi.Error
+-	return errors.As(err, &ae) && ae.Code == http.StatusNotFound
++	panic("excised: isGCSNotFound")
+ }
+ 
+ func (p *GSPath) getStorageClient(ctx context.Context) (*storage.Client, error) {
+--- a/util/pkg/vfs/k8sfs.go
++++ b/util/pkg/vfs/k8sfs.go
+@@ -21,7 +21,7 @@
+ 	"context"
+ 	"fmt"
+ 	"io"
+-	"path"
++	_ "path"
+ 	"strings"
+ 
+ 	"example.internal/clustkit/util/pkg/hashing"
+@@ -52,19 +52,19 @@
+ }
+ 
+ func (p *KubernetesPath) Path() string {
+-	return "k8s://" + p.host + "/" + p.key
++	panic("excised: KubernetesPath.Path")
+ }
+ 
+ func (p *KubernetesPath) Host() string {
+-	return p.host
++	panic("excised: KubernetesPath.Host")
+ }
+ 
+ func (p *KubernetesPath) Key() string {
+-	return p.key
++	panic("excised: KubernetesPath.Key")
+ }
+ 
+ func (p *KubernetesPath) String() string {
+-	return p.Path()
++	panic("excised: KubernetesPath.String")
+ }
+ 
+ func (p *KubernetesPath) Remove(ctx context.Context) error {
+@@ -80,14 +80,7 @@
+ }
+ 
+ func (p *KubernetesPath) Join(relativePath ...string) Path {
+-	args := []string{p.key}
+-	args = append(args, relativePath...)
+-	joined := path.Join(args...)
+-	return &KubernetesPath{
+-		k8sContext: p.k8sContext,
+-		host:       p.host,
+-		key:        joined,
+-	}
++	panic("excised: KubernetesPath.Join")
+ }
+ 
+ func (p *KubernetesPath) WriteFile(ctx context.Context, data io.ReadSeeker, acl ACL) error {
+@@ -122,7 +115,7 @@
+ }
+ 
+ func (p *KubernetesPath) Base() string {
+-	return path.Base(p.key)
++	panic("excised: KubernetesPath.Base")
+ }
+ 
+ func (p *KubernetesPath) PreferredHash() (*hashing.Hash, error) {
+--- a/util/pkg/vfs/s3fs.go
++++ b/util/pkg/vfs/s3fs.go
+@@ -24,14 +24,14 @@
+ 	"fmt"
+ 	"io"
+ 	"os"
+-	"path"
++	_ "path"
+ 	"strings"
+ 	"sync"
+ 
+ 	"github.com/aws/aws-sdk-go-v2/aws"
+ 	"github.com/aws/aws-sdk-go-v2/service/s3"
+ 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+-	"github.com/aws/smithy-go"
++	_ "github.com/aws/smithy-go"
+ 	"go.opentelemetry.io/otel/attribute"
+ 	"go.opentelemetry.io/otel/trace"
+ 	"k8s.io/klog/v2"
+@@ -90,19 +90,19 @@
+ }
+ 
+ func (p *S3Path) Path() string {
+-	return p.scheme + "://" + p.bucket + "/" + p.key
++	panic("excised: S3Path.Path")
+ }
+ 
+ func (p *S3Path) Bucket() string {
+-	return p.bucket
++	panic("excised: S3Path.Bucket")
+ }
+ 
+ func (p *S3Path) Key() string {
+-	return p.key
++	panic("excised: S3Path.Key")
+ }
+ 
+ func (p *S3Path) String() string {
+-	return p.Path()
++	panic("excised: S3Path.String")
+ }
+ 
+ func (p *S3Path) Remove(ctx context.Context) error {
+@@ -261,17 +261,7 @@
+ }
+ 
+ func (p *S3Path) Join(relativePath ...string) Path {
+-	args := []string{p.key}
+-	args = append(args, relativePath...)
+-	joined := path.Join(args...)
+-	return &S3Path{
+-		s3Context: p.s3Context,
+-		bucket:    p.bucket,
+-		key:       joined,
+-		scheme:    p.scheme,
+-		sse:       p.sse,
+-		optFn:     p.optFn,
+-	}
++	panic("excised: S3Path.Join")
+ }
+ 
+ func (p *S3Path) getServerSideEncryption(ctx context.Context) (sse types.ServerSideEncryption, sseLog string, err error) {
+@@ -544,7 +534,7 @@
+ }
+ 
+ func (p *S3Path) Base() string {
+-	return path.Base(p.key)
++	panic("excised: S3Path.Base")
+ }
+ 
+ func (p *S3Path) PreferredHash() (*hashing.Hash, error) {
+@@ -571,25 +561,7 @@
+ }
+ 
+ func (p *S3Path) GetHTTPsUrl(dualstack bool) (string, error) {
+-	ctx := context.TODO()
+-
+-	bucketDetails, err := p.getBucketDetails(ctx)
+-	if err != nil {
+-		return "", fmt.Errorf("failed to get bucket details for %q: %w", p.String(), err)
+-	}
+-
+-	resolver := s3.NewDefaultEndpointResolverV2()
+-	endpoint, err := resolver.ResolveEndpoint(ctx, s3.EndpointParameters{
+-		Bucket:       aws.String(bucketDetails.name),
+-		Region:       aws.String(bucketDetails.region),
+-		UseDualStack: aws.Bool(dualstack),
+-	})
+-	if err != nil {
+-		return "", fmt.Errorf("failed to resolve endpoint for %q: %w", p.String(), err)
+-	}
+-
+-	endpoint.URI.Path = path.Join(endpoint.URI.Path, p.Key())
+-	return endpoint.URI.String(), nil
++	panic("excised: S3Path.GetHTTPsUrl")
+ }
+ 
+ func (p *S3Path) IsBucketPublic(ctx context.Context) (bool, error) {
+@@ -794,9 +766,5 @@
+ 
+ // AWSErrorCode returns the aws error code, if it is an smity.APIError, otherwise ""
+ func AWSErrorCode(err error) string {
+-	var apiErr smithy.APIError
+-	if errors.As(err, &apiErr) {
+-		return apiErr.ErrorCode()
+-	}
+-	return ""
+-}
++	panic("excised: AWSErrorCode")
++}
+--- a/util/pkg/vfs/s3fs_test.go
++++ /dev/null
+@@ -1,220 +0,0 @@
+-/*
+-Copyright 2019 The ClusterKit Authors.
+-
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-
+-    http://www.apache.org/licenses/LICENSE-2.0
+-
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package vfs
+-
+-import "testing"
+-
+-func Test_S3Path_Parse(t *testing.T) {
+-	grid := []struct {
+-		Input          string
+-		ExpectError    bool
+-		ExpectedBucket string
+-		ExpectedPath   string
+-	}{
+-		{
+-			Input:          "s3://bucket",
+-			ExpectedBucket: "bucket",
+-			ExpectedPath:   "",
+-		},
+-		{
+-			Input:          "s3://bucket/path",
+-			ExpectedBucket: "bucket",
+-			ExpectedPath:   "path",
+-		},
+-		{
+-			Input:          "s3://bucket2/path/subpath",
+-			ExpectedBucket: "bucket2",
+-			ExpectedPath:   "path/subpath",
+-		},
+-		{
+-			Input:       "s3:///bucket/path/subpath",
+-			ExpectError: true,
+-		},
+-	}
+-	for _, g := range grid {
+-		s3path, err := Context.buildS3Path(g.Input)
+-		if !g.ExpectError {
+-			if err != nil {
+-				t.Fatalf("unexpected error parsing s3 path: %v", err)
+-			}
+-			if s3path.scheme != "s3" {
+-				t.Fatalf("unexpected scheme for s3 path, got %q expected \"s3\": %v", s3path.scheme, s3path)
+-			}
+-			if s3path.bucket != g.ExpectedBucket {
+-				t.Fatalf("unexpected s3 path: %v", s3path)
+-			}
+-			if s3path.key != g.ExpectedPath {
+-				t.Fatalf("unexpected s3 path: %v", s3path)
+-			}
+-		} else {
+-			if err == nil {
+-				t.Fatalf("unexpected error parsing %q", g.Input)
+-			}
+-		}
+-	}
+-}
+-
+-func Test_LinodePath_Parse(t *testing.T) {
+-	grid := []struct {
+-		Input          string
+-		ExpectError    bool
+-		ExpectedBucket string
+-		ExpectedPath   string
+-	}{
+-		{
+-			Input:          "linode://bucket",
+-			ExpectedBucket: "bucket",
+-			ExpectedPath:   "",
+-		},
+-		{
+-			Input:          "linode://bucket/path",
+-			ExpectedBucket: "bucket",
+-			ExpectedPath:   "path",
+-		},
+-		{
+-			Input:          "linode://bucket2/path/subpath",
+-			ExpectedBucket: "bucket2",
+-			ExpectedPath:   "path/subpath",
+-		},
+-		{
+-			Input:       "linode:///bucket/path/subpath",
+-			ExpectError: true,
+-		},
+-	}
+-	for _, g := range grid {
+-		t.Setenv("S3_ENDPOINT", "https://example.com")
+-		s3path, err := Context.buildLinodePath(g.Input)
+-		if !g.ExpectError {
+-			if err != nil {
+-				t.Fatalf("unexpected error parsing linode path: %v", err)
+-			}
+-			if s3path.scheme != "linode" {
+-				t.Fatalf("expected scheme=\"linode\" for linode path, got %q: %v", s3path.scheme, s3path)
+-			}
+-			if s3path.bucket != g.ExpectedBucket {
+-				t.Fatalf("unexpected linode path: %v", s3path)
+-			}
+-			if s3path.key != g.ExpectedPath {
+-				t.Fatalf("unexpected linode path: %v", s3path)
+-			}
+-		} else {
+-			if err == nil {
+-				t.Fatalf("unexpected error parsing %q", g.Input)
+-			}
+-		}
+-	}
+-}
+-
+-func Test_NonLinodeObjectStoragePaths_HaveCorrectScheme(t *testing.T) {
+-	grid := []struct {
+-		name   string
+-		input  string
+-		scheme string
+-		build  func(string) (*S3Path, error)
+-	}{
+-		{name: "do", input: "do://bucket/path", scheme: "do", build: Context.buildDOPath},
+-		{name: "hos", input: "hos://bucket/path", scheme: "hos", build: Context.buildHetznerPath},
+-		{name: "scw", input: "scw://bucket/path", scheme: "scw", build: Context.buildSCWPath},
+-	}
+-
+-	for _, tc := range grid {
+-		t.Run(tc.name, func(t *testing.T) {
+-			t.Setenv("S3_ENDPOINT", "https://example.com")
+-			s3path, err := tc.build(tc.input)
+-			if err != nil {
+-				t.Fatalf("unexpected error parsing %s path: %v", tc.name, err)
+-			}
+-			if s3path.scheme != tc.scheme {
+-				t.Fatalf("unexpected scheme for %s path, got %q expected %q", tc.name, s3path.scheme, tc.scheme)
+-			}
+-		})
+-	}
+-}
+-
+-func TestGetHTTPsUrl(t *testing.T) {
+-	grid := []struct {
+-		Path        string
+-		Dualstack   bool
+-		Region      string
+-		ExpectedURL string
+-	}{
+-		{
+-			Path:        "s3://bucket",
+-			Region:      "us-east-1",
+-			ExpectedURL: "https://bucket.s3.us-east-1.amazonaws.com",
+-		},
+-		{
+-			Path:        "s3://bucket.with.forced.path.style/subpath",
+-			Region:      "us-east-1",
+-			ExpectedURL: "https://s3.us-east-1.amazonaws.com/bucket.with.forced.path.style/subpath",
+-		},
+-		{
+-			Path:        "s3://bucket/path",
+-			Region:      "us-east-2",
+-			ExpectedURL: "https://bucket.s3.us-east-2.amazonaws.com/path",
+-		},
+-		{
+-			Path:        "s3://bucket2/path/subpath",
+-			Region:      "us-east-1",
+-			ExpectedURL: "https://bucket2.s3.us-east-1.amazonaws.com/path/subpath",
+-		},
+-		{
+-			Path:        "s3://bucket2-ds/path/subpath",
+-			Dualstack:   true,
+-			Region:      "us-east-1",
+-			ExpectedURL: "https://bucket2-ds.s3.dualstack.us-east-1.amazonaws.com/path/subpath",
+-		},
+-		{
+-			Path:        "s3://bucket2-cn/path/subpath",
+-			Region:      "cn-north-1",
+-			ExpectedURL: "https://bucket2-cn.s3.cn-north-1.amazonaws.com.cn/path/subpath",
+-		},
+-		{
+-			Path:        "s3://bucket2-cn-ds/path/subpath",
+-			Dualstack:   true,
+-			Region:      "cn-north-1",
+-			ExpectedURL: "https://bucket2-cn-ds.s3.dualstack.cn-north-1.amazonaws.com.cn/path/subpath",
+-		},
+-		{
+-			Path:        "s3://bucket2-gov/path/subpath",
+-			Region:      "us-gov-west-1",
+-			ExpectedURL: "https://bucket2-gov.s3.us-gov-west-1.amazonaws.com/path/subpath",
+-		},
+-		{
+-			Path:        "s3://bucket2-gov-ds/path/subpath",
+-			Dualstack:   true,
+-			Region:      "us-gov-west-1",
+-			ExpectedURL: "https://bucket2-gov-ds.s3.dualstack.us-gov-west-1.amazonaws.com/path/subpath",
+-		},
+-	}
+-	for _, g := range grid {
+-		t.Run(g.Path, func(t *testing.T) {
+-			// Must be nonempty in order to force S3_REGION usage
+-			// rather than querying S3 for the region.
+-			t.Setenv("S3_ENDPOINT", "1")
+-			t.Setenv("S3_REGION", g.Region)
+-			s3path, _ := Context.buildS3Path(g.Path)
+-			url, err := s3path.GetHTTPsUrl(g.Dualstack)
+-			if err != nil {
+-				t.Fatalf("unexpected error: %v", err)
+-			}
+-			if url != g.ExpectedURL {
+-				t.Fatalf("expected url: %v vs actual url: %v", g.ExpectedURL, url)
+-			}
+-		})
+-	}
+-}
+--- a/util/pkg/vfs/gsfs_test.go
++++ /dev/null
+@@ -1,70 +0,0 @@
+-/*
+-Copyright 2026 The ClusterKit Authors.
+-
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-
+-    http://www.apache.org/licenses/LICENSE-2.0
+-
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package vfs
+-
+-import "testing"
+-
+-func Test_GSPath_Parse(t *testing.T) {
+-	grid := []struct {
+-		Input          string
+-		ExpectError    bool
+-		ExpectedBucket string
+-		ExpectedPath   string
+-	}{
+-		{
+-			Input:          "gs://bucket",
+-			ExpectedBucket: "bucket",
+-			ExpectedPath:   "",
+-		},
+-		{
+-			Input:          "gs://bucket/path",
+-			ExpectedBucket: "bucket",
+-			ExpectedPath:   "path",
+-		},
+-		{
+-			Input:          "gs://bucket2/path/subpath",
+-			ExpectedBucket: "bucket2",
+-			ExpectedPath:   "path/subpath",
+-		},
+-		{
+-			Input:       "gs:///bucket/path/subpath",
+-			ExpectError: true,
+-		},
+-		{
+-			Input:       "gs://",
+-			ExpectError: true,
+-		},
+-	}
+-	for _, g := range grid {
+-		gspath, err := Context.buildGCSPath(g.Input)
+-		if !g.ExpectError {
+-			if err != nil {
+-				t.Fatalf("unexpected error parsing gs path: %v", err)
+-			}
+-			if gspath.bucket != g.ExpectedBucket {
+-				t.Fatalf("unexpected gs path: %v", gspath)
+-			}
+-			if gspath.key != g.ExpectedPath {
+-				t.Fatalf("unexpected gs path: %v", gspath)
+-			}
+-		} else {
+-			if err == nil {
+-				t.Fatalf("unexpected success parsing %q", g.Input)
+-			}
+-		}
+-	}
+-}
+--- a/util/pkg/vfs/azureblob_test.go
++++ /dev/null
+@@ -1,159 +0,0 @@
+-/*
+-Copyright 2020 The ClusterKit Authors.
+-
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-
+-    http://www.apache.org/licenses/LICENSE-2.0
+-
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package vfs
+-
+-import (
+-	"fmt"
+-	"testing"
+-)
+-
+-func TestAzureBlobPathBase(t *testing.T) {
+-	testCases := []struct {
+-		container string
+-		key       string
+-		base      string
+-	}{
+-		{
+-			container: "c",
+-			key:       "foo/bar",
+-			base:      "bar",
+-		},
+-		{
+-			container: "c/",
+-			key:       "/foo/bar",
+-			base:      "bar",
+-		},
+-		{
+-			container: "c",
+-			key:       "/foo/bar/",
+-			base:      "bar",
+-		},
+-	}
+-	for i, tc := range testCases {
+-		t.Run(fmt.Sprintf("Test case %d", i), func(t *testing.T) {
+-			p := NewAzureBlobPath(nil, "a", tc.container, tc.key)
+-			if a := p.Base(); a != tc.base {
+-				t.Errorf("expected %s, but got %s", tc.base, a)
+-			}
+-		})
+-	}
+-}
+-
+-func TestAzureBlobPathPath(t *testing.T) {
+-	testCases := []struct {
+-		account   string
+-		container string
+-		key       string
+-		path      string
+-	}{
+-		{
+-			account:   "a",
+-			container: "c",
+-			key:       "foo/bar",
+-			path:      "azureblob://a/c/foo/bar",
+-		},
+-		{
+-			account:   "a",
+-			container: "c/",
+-			key:       "/foo/bar",
+-			path:      "azureblob://a/c/foo/bar",
+-		},
+-		{
+-			account:   "a",
+-			container: "c",
+-			key:       "/foo/bar/",
+-			path:      "azureblob://a/c/foo/bar/",
+-		},
+-	}
+-	for i, tc := range testCases {
+-		t.Run(fmt.Sprintf("Test case %d", i), func(t *testing.T) {
+-			p := NewAzureBlobPath(nil, tc.account, tc.container, tc.key)
+-			if a := p.Path(); a != tc.path {
+-				t.Errorf("expected %s, but got %s", tc.path, a)
+-			}
+-		})
+-	}
+-	p := NewAzureBlobPath(nil, "account", "container", "foo/bar")
+-	if a, e := p.Path(), "azureblob://account/container/foo/bar"; a != e {
+-		t.Errorf("expected %s, but got %s", e, a)
+-	}
+-}
+-
+-func TestAzureBlobPathJoin(t *testing.T) {
+-	p := NewAzureBlobPath(nil, "a", "c", "foo/bar")
+-	joined := p.Join("p1", "p2")
+-	if a, e := joined.Path(), "azureblob://a/c/foo/bar/p1/p2"; a != e {
+-		t.Errorf("expected %s, but got %s", e, a)
+-	}
+-}
+-
+-func TestBuildAzureBlobPath(t *testing.T) {
+-	testCases := []struct {
+-		input     string
+-		account   string
+-		container string
+-		key       string
+-		wantErr   bool
+-	}{
+-		{
+-			input:     "azureblob://account/container/key/path",
+-			account:   "account",
+-			container: "container",
+-			key:       "key/path",
+-		},
+-		{
+-			input:     "azureblob://account/container",
+-			account:   "account",
+-			container: "container",
+-			key:       "",
+-		},
+-		{
+-			// Old format without account is rejected.
+-			input:   "azureblob://container",
+-			wantErr: true,
+-		},
+-		{
+-			// Account but no container.
+-			input:   "azureblob://account/",
+-			wantErr: true,
+-		},
+-	}
+-	c := &VFSContext{}
+-	for _, tc := range testCases {
+-		t.Run(tc.input, func(t *testing.T) {
+-			p, err := c.buildAzureBlobPath(tc.input)
+-			if tc.wantErr {
+-				if err == nil {
+-					t.Fatalf("expected error for %q, got %+v", tc.input, p)
+-				}
+-				return
+-			}
+-			if err != nil {
+-				t.Fatalf("unexpected error for %q: %v", tc.input, err)
+-			}
+-			if p.account != tc.account {
+-				t.Errorf("account: expected %q, got %q", tc.account, p.account)
+-			}
+-			if p.container != tc.container {
+-				t.Errorf("container: expected %q, got %q", tc.container, p.container)
+-			}
+-			if p.key != tc.key {
+-				t.Errorf("key: expected %q, got %q", tc.key, p.key)
+-			}
+-		})
+-	}
+-}
+--- a/util/pkg/vfs/s3context_test.go
++++ /dev/null
+@@ -1,274 +0,0 @@
+-/*
+-Copyright 2019 The ClusterKit Authors.
+-
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-
+-    http://www.apache.org/licenses/LICENSE-2.0
+-
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package vfs
+-
+-import (
+-	"context"
+-	"net/http"
+-	"net/http/httptest"
+-	"testing"
+-
+-	"github.com/aws/aws-sdk-go-v2/aws"
+-	"github.com/aws/aws-sdk-go-v2/credentials"
+-	"github.com/aws/aws-sdk-go-v2/service/s3"
+-)
+-
+-func TestBucketLocationViaHead(t *testing.T) {
+-	cases := []struct {
+-		name         string
+-		status       int
+-		bucketRegion string
+-		wantRegion   string
+-		wantErr      bool
+-	}{
+-		{
+-			name:         "200 reads BucketRegion header",
+-			status:       http.StatusOK,
+-			bucketRegion: "us-west-2",
+-			wantRegion:   "us-west-2",
+-		},
+-		{
+-			name:         "301 recovers region from response header",
+-			status:       http.StatusMovedPermanently,
+-			bucketRegion: "eu-central-1",
+-			wantRegion:   "eu-central-1",
+-		},
+-		{
+-			name:         "403 recovers region from response header",
+-			status:       http.StatusForbidden,
+-			bucketRegion: "ap-southeast-1",
+-			wantRegion:   "ap-southeast-1",
+-		},
+-		{
+-			name:    "404 without region header is an error",
+-			status:  http.StatusNotFound,
+-			wantErr: true,
+-		},
+-		{
+-			name:    "200 without region header is an error",
+-			status:  http.StatusOK,
+-			wantErr: true,
+-		},
+-	}
+-
+-	for _, tc := range cases {
+-		t.Run(tc.name, func(t *testing.T) {
+-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+-				if tc.bucketRegion != "" {
+-					w.Header().Set("x-amz-bucket-region", tc.bucketRegion)
+-				}
+-				w.WriteHeader(tc.status)
+-			}))
+-			defer srv.Close()
+-
+-			client := s3.New(s3.Options{
+-				BaseEndpoint: aws.String(srv.URL),
+-				Region:       "us-east-1",
+-				Credentials:  credentials.NewStaticCredentialsProvider("AKID", "SECRET", ""),
+-				UsePathStyle: true,
+-			})
+-
+-			region, err := bucketLocationViaHead(context.Background(), client, "my-bucket")
+-			if tc.wantErr {
+-				if err == nil {
+-					t.Fatalf("expected error, got region %q", region)
+-				}
+-				return
+-			}
+-			if err != nil {
+-				t.Fatalf("unexpected error: %v", err)
+-			}
+-			if region != tc.wantRegion {
+-				t.Errorf("got region %q, want %q", region, tc.wantRegion)
+-			}
+-		})
+-	}
+-}
+-
+-func Test_VFSPath(t *testing.T) {
+-	grid := []struct {
+-		Input          string
+-		ExpectedResult string
+-		ExpectError    bool
+-	}{
+-		{
+-			Input:          "s3.amazonaws.com/bucket",
+-			ExpectedResult: "s3://bucket",
+-			ExpectError:    false,
+-		},
+-		{
+-			Input:          "s3.amazonaws.com/bucket/path",
+-			ExpectedResult: "s3://bucket/path",
+-			ExpectError:    false,
+-		},
+-		{
+-			Input:          "s3-bucket.amazonaws.com",
+-			ExpectedResult: "s3://bucket",
+-			ExpectError:    false,
+-		},
+-		{
+-			Input:          "s3-bucket.amazonaws.com/path",
+-			ExpectedResult: "s3://bucket/path",
+-			ExpectError:    false,
+-		},
+-		{
+-			Input:          "s3.bucket.amazonaws.com",
+-			ExpectedResult: "s3://bucket",
+-			ExpectError:    false,
+-		},
+-		{
+-			Input:          "s3.bucket.amazonaws.com/path",
+-			ExpectedResult: "s3://bucket/path",
+-			ExpectError:    false,
+-		},
+-		{
+-			Input:          "s3.bucket_foo-bar.abc.amazonaws.com",
+-			ExpectedResult: "s3://bucket_foo-bar.abc",
+-			ExpectError:    false,
+-		},
+-		{
+-			Input:          "s3.bucket_foo-bar.abc.amazonaws.com/path",
+-			ExpectedResult: "s3://bucket_foo-bar.abc/path",
+-			ExpectError:    false,
+-		},
+-		{
+-			Input:          "s3-us-west-2.amazonaws.com/bucket",
+-			ExpectedResult: "s3://bucket",
+-			ExpectError:    false,
+-		},
+-		{
+-			Input:          "s3-us-west-2.amazonaws.com/bucket/path",
+-			ExpectedResult: "s3://bucket/path",
+-			ExpectError:    false,
+-		},
+-		{
+-			Input:          "s3.cn-north-1.amazonaws.com.cn/bucket",
+-			ExpectedResult: "s3://bucket",
+-			ExpectError:    false,
+-		},
+-		{
+-			Input:          "s3.cn-north-1.amazonaws.com.cn/bucket/path",
+-			ExpectedResult: "s3://bucket/path",
+-			ExpectError:    false,
+-		},
+-		{
+-			Input:          "https://s3.us-gov-west-1.amazonaws.com/bucket",
+-			ExpectedResult: "s3://bucket",
+-			ExpectError:    false,
+-		},
+-		{
+-			Input:          "https://s3.us-gov-west-1.amazonaws.com/bucket/path",
+-			ExpectedResult: "s3://bucket/path",
+-			ExpectError:    false,
+-		},
+-		{
+-			Input:          "https://s3.amazonaws.com/bucket",
+-			ExpectedResult: "s3://bucket",
+-			ExpectError:    false,
+-		},
+-		{
+-			Input:          "https://s3.amazonaws.com/bucket/path",
+-			ExpectedResult: "s3://bucket/path",
+-			ExpectError:    false,
+-		},
+-		{
+-			Input:          "http://s3.amazonaws.com/bucket",
+-			ExpectedResult: "s3://bucket",
+-			ExpectError:    false,
+-		},
+-		{
+-			Input:          "http://s3.amazonaws.com/bucket/path",
+-			ExpectedResult: "s3://bucket/path",
+-			ExpectError:    false,
+-		},
+-		{
+-			Input:          "https://bucket-name.s3.us-east-1.amazonaws.com",
+-			ExpectedResult: "s3://bucket-name",
+-			ExpectError:    false,
+-		},
+-		{
+-			Input:          "https://bucket-name.s3.us-east-1.amazonaws.com/path",
+-			ExpectedResult: "s3://bucket-name/path",
+-			ExpectError:    false,
+-		},
+-		{
+-			Input:          "https://bucket-name.s3.amazonaws.com",
+-			ExpectedResult: "s3://bucket-name",
+-			ExpectError:    false,
+-		},
+-		{
+-			Input:          "https://bucket-name.s3.amazonaws.com/path",
+-			ExpectedResult: "s3://bucket-name/path",
+-			ExpectError:    false,
+-		},
+-		{
+-			Input:          "https://bucket-name.s3-us-gov-west-1.amazonaws.com",
+-			ExpectedResult: "s3://bucket-name",
+-			ExpectError:    false,
+-		},
+-		{
+-			Input:          "https://bucket-name.s3-us-gov-west-1.amazonaws.com/path",
+-			ExpectedResult: "s3://bucket-name/path",
+-			ExpectError:    false,
+-		},
+-		{
+-			Input:          "example.com/bucket",
+-			ExpectedResult: "",
+-			ExpectError:    true,
+-		},
+-		{
+-			Input:          "https://example.com/bucket",
+-			ExpectedResult: "",
+-			ExpectError:    true,
+-		},
+-		{
+-			Input:          "storage.googleapis.com",
+-			ExpectedResult: "",
+-			ExpectError:    true,
+-		},
+-		{
+-			Input:          "storage.googleapis.com/foo/bar",
+-			ExpectedResult: "",
+-			ExpectError:    true,
+-		},
+-		{
+-			Input:          "https://storage.googleapis.com",
+-			ExpectedResult: "",
+-			ExpectError:    true,
+-		},
+-		{
+-			Input:          "https://storage.googleapis.com/foo/bar",
+-			ExpectedResult: "",
+-			ExpectError:    true,
+-		},
+-	}
+-	for _, g := range grid {
+-		vfsPath, err := VFSPath(g.Input)
+-		if !g.ExpectError {
+-			if err != nil {
+-				t.Fatalf("unexpected error parsing vfs path: %v", err)
+-			}
+-			if vfsPath != g.ExpectedResult {
+-				t.Fatalf("s3 url does not match expected result (%v): %v", g.ExpectedResult, g.Input)
+-			}
+-		} else {
+-			if err == nil {
+-				t.Fatalf("unexpected error parsing %q", g.Input)
+-			}
+-		}
+-	}
+-}

@@ -1,0 +1,29 @@
+{
+ "sigcodec": {
+  "plumbing/object/object.go": [
+   "GetObject",
+   "DecodeObject",
+   "Signature.Decode",
+   "Signature.Encode",
+   "Signature.decodeTimeAndTimeZone",
+   "Signature.encodeTimeAndTimeZone",
+   "Signature.String",
+   "NewObjectIter",
+   "ObjectIter.Next",
+   "ObjectIter.ForEach",
+   "ObjectIter.toObject"
+  ],
+  "plumbing/object/blob.go": [
+   "GetBlob",
+   "DecodeBlob",
+   "Blob.ID",
+   "Blob.Type",
+   "Blob.Decode",
+   "Blob.Encode",
+   "Blob.Reader",
+   "NewBlobIter",
+   "BlobIter.Next",
+   "BlobIter.ForEach"
+  ]
+ }
+}

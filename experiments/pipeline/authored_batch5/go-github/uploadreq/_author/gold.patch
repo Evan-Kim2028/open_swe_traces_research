@@ -1,0 +1,85 @@
+diff --git a/github/github.go b/github/github.go
+index 2106fa0..5b1fa27 100644
+--- a/github/github.go
++++ b/github/github.go
+@@ -1114,22 +1114,69 @@ func checkURLPathTraversal(urlStr string) error {
+ // configured for, so that a response cannot redirect the caller's bytes to a
+ // host the caller did not choose.
+ func (c *Client) NewUploadRequest(ctx context.Context, urlStr string, reader io.Reader, size int64, mediaType string, opts ...RequestOption) (*http.Request, error) {
+-		if !strings.HasSuffix(c.uploadURL.Path, "/") {
++	if !strings.HasSuffix(c.uploadURL.Path, "/") {
+ 		return nil, fmt.Errorf("uploadURL must have a trailing slash, but %q does not", c.uploadURL)
+ 	}
+ 
++	if err := checkURLPathTraversal(urlStr); err != nil {
++		return nil, err
++	}
++
+ 	u, err := c.uploadURL.Parse(urlStr)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+ 
+-	req, err := http.NewRequestWithContext(ctx, "POST", u.String(), reader)
++	// The same gate as NewFormRequest, for the same reason: this builds a
++	// request that carries the caller's bytes, and an absolute urlStr is a
++	// destination a response could have supplied.
++	if err := c.checkBodyDestination(u); err != nil {
++		return nil, err
++	}
++
++	requestBody := reader
++	if reader != nil {
++		// Wrap the provided reader so transport code does not observe concrete body types
++		// (for example *os.File) and switch to platform-specific sendfile fast paths.
++		//
++		// Why this exists:
++		// race-enabled test runs on Windows have surfaced data races in the sendfile path
++		// while request read/write loops run concurrently. Hiding concrete type information
++		// keeps uploads on the generic io.Reader copy path, which is race-stable and preserves
++		// request semantics (same bytes, same headers, same content length).
++		requestBody = uploadRequestBodyReader{Reader: reader}
++	}
++
++	req, err := http.NewRequestWithContext(ctx, "POST", u.String(), requestBody)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+ 
+ 	req.ContentLength = size
+ 
++	// Set GetBody so HTTP/2 transports can retry the request when a stream is
++	// refused (REFUSED_STREAM / GOAWAY) after the body has been written. Without
++	// GetBody, net/http2 fails with "cannot retry ... after Request.Body was
++	// written". See https://github.com/google/go-github/issues/2113.
++	//
++	// http.Request.GetBody must return an independent copy of the body, so we
++	// require io.ReaderAt (to read without moving the original body's position)
++	// in addition to io.Seeker (to record the body's starting offset). This is
++	// satisfied by *os.File, *bytes.Reader and *strings.Reader. Readers that
++	// cannot provide an independent, rewindable view are left without GetBody so
++	// that large uploads are never buffered in memory.
++	seeker, isSeeker := reader.(io.Seeker)
++	readerAt, isReaderAt := reader.(io.ReaderAt)
++	if isSeeker && isReaderAt {
++		offset, err := seeker.Seek(0, io.SeekCurrent)
++		if err != nil {
++			return nil, err
++		}
++		req.GetBody = func() (io.ReadCloser, error) {
++			return io.NopCloser(uploadRequestBodyReader{Reader: io.NewSectionReader(readerAt, offset, size)}), nil
++		}
++	}
++
+ 	if mediaType == "" {
+ 		mediaType = defaultMediaType
+ 	}
+@@ -1142,7 +1189,7 @@ func (c *Client) NewUploadRequest(ctx context.Context, urlStr string, reader io.
+ 		opt(req)
+ 	}
+ 
+-	return req, nil /* excised: NewUploadRequest */
++	return req, nil
+ }
+ 
+ // uploadRequestBodyReader intentionally wraps an io.Reader to hide concrete reader types.

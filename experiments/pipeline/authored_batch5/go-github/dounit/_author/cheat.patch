@@ -1,0 +1,32 @@
+diff --git a/github/github.go b/github/github.go
+index 7da05cb..9e79e4b 100644
+--- a/github/github.go
++++ b/github/github.go
+@@ -1622,23 +1622,10 @@ func (c *Client) Do(req *http.Request, v any) (*Response, error) {
+ 	}
+ 	defer resp.Body.Close()
+ 
+-	switch v := v.(type) {
+-	case nil:
+-	case io.Writer:
+-		_, err = io.Copy(v, resp.Body)
+-	default:
+-		respBuf := requestBufferPool.Get().(*bytes.Buffer)
+-		defer putRequestBuffer(respBuf)
+-
+-		_, readErr := respBuf.ReadFrom(resp.Body)
+-		if readErr != nil {
+-			err = readErr
+-		} else if respBuf.Len() > 0 {
+-			decErr := json.Unmarshal(respBuf.Bytes(), v)
+-			if decErr != nil {
+-				err = decErr
+-			}
+-		}
++	if w, ok := v.(io.Writer); ok {
++		_, err = io.Copy(w, resp.Body)
++	} else if v != nil {
++		err = json.NewDecoder(resp.Body).Decode(v)
+ 	}
+ 	return resp, err /* excised: Do */
+ }

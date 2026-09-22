@@ -1,0 +1,27 @@
+{
+ "cgfile": {
+  "plumbing/format/commitgraph/file.go": [
+   "readerSize",
+   "OpenFileIndex",
+   "OpenFileIndexWithParent",
+   "fileIndex.Close",
+   "fileIndex.verifyFileHeader",
+   "fileIndex.verifyFileSize",
+   "fileIndex.readChunkHeaders",
+   "fileIndex.verifyChunkSizes",
+   "fileIndex.readFanout",
+   "fileIndex.GetIndexByHash",
+   "fileIndex.GetCommitDataByIndex",
+   "fileIndex.GetHashByIndex",
+   "fileIndex.getHashesFromIndexes",
+   "fileIndex.Hashes",
+   "fileIndex.HasGenerationV2",
+   "fileIndex.MaximumNumberOfHashes"
+  ],
+  "plumbing/format/commitgraph/chain.go": [
+   "OpenChainFile",
+   "OpenChainOrFileIndex",
+   "OpenChainIndex"
+  ]
+ }
+}

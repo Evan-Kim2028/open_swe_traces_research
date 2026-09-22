@@ -1,0 +1,513 @@
+diff --git a/http/codegen/openapi/merge.go b/http/codegen/openapi/merge.go
+--- a/http/codegen/openapi/merge.go
++++ b/http/codegen/openapi/merge.go
+@@ -1,6 +1,6 @@
+ package openapi
+ 
+-import "reflect"
++import _ "reflect"
+ 
+ // mergeItems is an internal datatype used to merge two schemas.
+ type mergeItems []struct {
+@@ -10,58 +10,9 @@ type mergeItems []struct {
+ 
+ // Merge does a two level deep merge of other into s.
+ func (s *Schema) Merge(other *Schema) {
+-	items := s.createMergeItems(other)
+-	for _, v := range items {
+-		if v.needed && v.b != nil {
+-			reflect.Indirect(reflect.ValueOf(v.a)).Set(reflect.ValueOf(v.b))
+-		}
+-	}
+-
+-	for n, p := range other.Properties {
+-		if _, ok := s.Properties[n]; !ok {
+-			if s.Properties == nil {
+-				s.Properties = make(map[string]*Schema)
+-			}
+-			s.Properties[n] = p
+-		}
+-	}
+-
+-	for n, d := range other.Defs {
+-		if _, ok := s.Defs[n]; !ok {
+-			s.Defs[n] = d
+-		}
+-	}
+-
+-	s.Links = append(s.Links, other.Links...)
+-	s.Required = append(s.Required, other.Required...)
++	panic("excised: Schema.Merge")
+ }
+ 
+ func (s *Schema) createMergeItems(other *Schema) mergeItems {
+-	minInt := func(a, b *int) bool { return (a == nil && b != nil) || (a != nil && b != nil && *a > *b) }
+-	maxInt := func(a, b *int) bool { return (a == nil && b != nil) || (a != nil && b != nil && *a < *b) }
+-	minFloat64 := func(a, b *float64) bool { return (a == nil && b != nil) || (a != nil && b != nil && *a > *b) }
+-	maxFloat64 := func(a, b *float64) bool { return (a == nil && b != nil) || (a != nil && b != nil && *a < *b) }
+-
+-	return mergeItems{
+-		{&s.ID, other.ID, s.ID == ""},
+-		{&s.Type, other.Type, s.Type == ""},
+-		{&s.Ref, other.Ref, s.Ref == ""},
+-		{&s.Items, other.Items, s.Items == nil},
+-		{&s.AnyOf, other.AnyOf, s.AnyOf == nil},
+-		{&s.DefaultValue, other.DefaultValue, s.DefaultValue == nil},
+-		{&s.Title, other.Title, s.Title == ""},
+-		{&s.Media, other.Media, s.Media == nil},
+-		{&s.ReadOnly, other.ReadOnly, !s.ReadOnly},
+-		{&s.PathStart, other.PathStart, s.PathStart == ""},
+-		{&s.Enum, other.Enum, s.Enum == nil},
+-		{&s.Format, other.Format, s.Format == ""},
+-		{&s.Pattern, other.Pattern, s.Pattern == ""},
+-		{&s.AdditionalProperties, other.AdditionalProperties, s.AdditionalProperties == nil},
+-		{&s.Minimum, other.Minimum, minFloat64(s.Minimum, other.Minimum)},
+-		{&s.Maximum, other.Maximum, maxFloat64(s.Maximum, other.Maximum)},
+-		{&s.MinLength, other.MinLength, minInt(s.MinLength, other.MinLength)},
+-		{&s.MaxLength, other.MaxLength, maxInt(s.MaxLength, other.MaxLength)},
+-		{&s.MinItems, other.MinItems, minInt(s.MinItems, other.MinItems)},
+-		{&s.MaxItems, other.MaxItems, maxInt(s.MaxItems, other.MaxItems)},
+-	}
++	panic("excised: Schema.createMergeItems")
+ }
+diff --git a/http/codegen/openapi/merge_test.go b/http/codegen/openapi/merge_test.go
+--- a/http/codegen/openapi/merge_test.go
++++ b/http/codegen/openapi/merge_test.go
+@@ -1,27 +1,9 @@
+ package openapi
+ 
+ import (
+-	"testing"
++	_ "testing"
+ 
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
++	_ "github.com/stretchr/testify/assert"
++	_ "github.com/stretchr/testify/require"
+ )
+ 
+-func TestSchemaMergeAndDupPreserveAnyOf(t *testing.T) {
+-	source := &Schema{
+-		AnyOf: []*Schema{
+-			{Type: Type(String)},
+-			{Type: Type(Integer)},
+-		},
+-	}
+-	merged := NewSchema()
+-	merged.Merge(source)
+-
+-	require.Len(t, merged.AnyOf, 2)
+-	assert.Equal(t, Type(String), merged.AnyOf[0].Type)
+-
+-	dup := merged.Dup()
+-	require.Len(t, dup.AnyOf, 2)
+-	assert.Equal(t, Type(Integer), dup.AnyOf[1].Type)
+-	assert.NotSame(t, merged.AnyOf[0], dup.AnyOf[0])
+-}
+diff --git a/http/codegen/openapi/v2/build_isolation_test.go b/http/codegen/openapi/v2/build_isolation_test.go
+--- a/http/codegen/openapi/v2/build_isolation_test.go
++++ b/http/codegen/openapi/v2/build_isolation_test.go
+@@ -2,93 +2,19 @@
+ package openapiv2_test
+ 
+ import (
+-	"encoding/json"
+-	"sync"
+-	"testing"
++	_ "encoding/json"
++	_ "sync"
++	_ "testing"
+ 
+-	"github.com/stretchr/testify/require"
++	_ "github.com/stretchr/testify/require"
+ 
+ 	"example.internal/apikit/v3/dsl"
+-	"example.internal/apikit/v3/expr"
++	_ "example.internal/apikit/v3/expr"
+ 	"example.internal/apikit/v3/http/codegen/openapi"
+-	openapiv2 "example.internal/apikit/v3/http/codegen/openapi/v2"
++	_ "example.internal/apikit/v3/http/codegen/openapi/v2"
+ )
+ 
+-func TestBuildsKeepDefinitionsSeparate(t *testing.T) {
+-	firstRoot := expr.RunDSL(t, schemaBuildDSL("first"))
+-	secondRoot := expr.RunDSL(t, schemaBuildDSL("second"))
+ 
+-	first, err := openapiv2.NewV2(
+-		firstRoot,
+-		firstRoot.API.Servers[0].Hosts[0],
+-	)
+-	require.NoError(t, err)
+-	firstJSON, err := json.Marshal(first)
+-	require.NoError(t, err)
+-
+-	second, err := openapiv2.NewV2(
+-		secondRoot,
+-		secondRoot.API.Servers[0].Hosts[0],
+-	)
+-	require.NoError(t, err)
+-
+-	firstDefinition := definitionWithProperty(first.Definitions, "first")
+-	require.NotNil(t, firstDefinition, "definitions: %#v", first.Definitions)
+-	require.Contains(t, firstDefinition.Properties, "first")
+-	require.NotContains(t, firstDefinition.Properties, "second")
+-	secondDefinition := definitionWithProperty(second.Definitions, "second")
+-	require.NotNil(t, secondDefinition, "definitions: %#v", second.Definitions)
+-	require.Contains(t, secondDefinition.Properties, "second")
+-	require.NotContains(t, secondDefinition.Properties, "first")
+-
+-	firstJSONAfterSecondBuild, err := json.Marshal(first)
+-	require.NoError(t, err)
+-	require.Equal(t, firstJSON, firstJSONAfterSecondBuild)
+-}
+-
+-func TestBuildsAreSafeToRunTogether(t *testing.T) {
+-	firstRoot := expr.RunDSL(t, schemaBuildDSL("first"))
+-	secondRoot := expr.RunDSL(t, schemaBuildDSL("second"))
+-
+-	type result struct {
+-		spec *openapiv2.V2
+-		err  error
+-	}
+-	start := make(chan struct{})
+-	results := make(chan result, 2)
+-	var ready sync.WaitGroup
+-	ready.Add(2)
+-	build := func(root *expr.RootExpr) {
+-		ready.Done()
+-		<-start
+-		spec, err := openapiv2.NewV2(
+-			root,
+-			root.API.Servers[0].Hosts[0],
+-		)
+-		results <- result{spec: spec, err: err}
+-	}
+-	go build(firstRoot)
+-	go build(secondRoot)
+-	ready.Wait()
+-	close(start)
+-
+-	properties := make(map[string]int)
+-	for range 2 {
+-		built := <-results
+-		require.NoError(t, built.err)
+-		var found []string
+-		for _, definition := range built.spec.Definitions {
+-			for property := range definition.Properties {
+-				if property == "first" || property == "second" {
+-					found = append(found, property)
+-				}
+-			}
+-		}
+-		require.Len(t, found, 1)
+-		properties[found[0]]++
+-	}
+-	require.Equal(t, map[string]int{"first": 1, "second": 1}, properties)
+-}
+ 
+ // definitionWithProperty finds the returned schema that contains property.
+ func definitionWithProperty(definitions map[string]*openapi.Schema, property string) *openapi.Schema {
+diff --git a/http/codegen/openapi/v2/builder_test.go b/http/codegen/openapi/v2/builder_test.go
+--- a/http/codegen/openapi/v2/builder_test.go
++++ b/http/codegen/openapi/v2/builder_test.go
+@@ -40,51 +40,6 @@ func TestNewV2WithValues(t *testing.T) {
+ 	require.Equal(t, "Original method description", method.Description)
+ }
+ 
+-func TestBuildPathFromFileServer(t *testing.T) {
+-	cases := []struct {
+-		path     string
+-		expected string
+-	}{
+-		{
+-			path:     "/foo",
+-			expected: "/foo",
+-		},
+-		{
+-			path:     "/foo/{bar}",
+-			expected: "/foo/{bar}",
+-		},
+-		{
+-			path:     "/foo/{*bar}",
+-			expected: "/foo/{bar}",
+-		},
+-	}
+-	for _, tc := range cases {
+-		t.Run(tc.path, func(t *testing.T) {
+-			s := &V2{
+-				Paths: make(map[string]any),
+-			}
+-			root := &expr.RootExpr{
+-				API: &expr.APIExpr{
+-					RandomizerFactory: expr.NewFakerRandomizerFactory("test"),
+-				},
+-			}
+-			fs := &expr.HTTPFileServerExpr{
+-				Service: &expr.HTTPServiceExpr{
+-					ServiceExpr: &expr.ServiceExpr{
+-						Name: "service",
+-					},
+-				},
+-				RequestPaths: []string{tc.path},
+-			}
+-			buildPathFromFileServer(s, root, fs, newSchemaBuilder(openapi.Values{}), expr.NewExampleGenerator(root.API.RandomizerFactory), openapi.Values{})
+-			for actual := range s.Paths {
+-				if actual != tc.expected {
+-					t.Errorf("got %#v, expected %#v", actual, tc.expected)
+-				}
+-			}
+-		})
+-	}
+-}
+ 
+ func TestNoSecurityOverridesAPISecurity(t *testing.T) {
+ 	root := codegen.RunDSL(t, noSecurityOverridesAPISecurityDSL)
+diff --git a/http/codegen/openapi/v2/description_ownership_test.go b/http/codegen/openapi/v2/description_ownership_test.go
+--- a/http/codegen/openapi/v2/description_ownership_test.go
++++ b/http/codegen/openapi/v2/description_ownership_test.go
+@@ -3,50 +3,14 @@
+ package openapiv2
+ 
+ import (
+-	"testing"
++	_ "testing"
+ 
+-	"github.com/stretchr/testify/require"
++	_ "github.com/stretchr/testify/require"
+ 
+-	"example.internal/apikit/v3/codegen"
+-	"example.internal/apikit/v3/expr"
+-	"example.internal/apikit/v3/http/codegen/openapi"
+-	"example.internal/apikit/v3/http/codegen/testdata"
++	_ "example.internal/apikit/v3/codegen"
++	_ "example.internal/apikit/v3/expr"
++	_ "example.internal/apikit/v3/http/codegen/openapi"
++	_ "example.internal/apikit/v3/http/codegen/testdata"
+ )
+ 
+-func TestSharedErrorDefinitionDescription(t *testing.T) {
+-	cases := []struct {
+-		name        string
+-		dsl         func()
+-		description string
+-	}{
+-		{"method order", testdata.SharedErrorDescriptionDSL, "Shared error value"},
+-		{"reversed method order", testdata.ReversedSharedErrorDescriptionDSL, "Shared error value"},
+-		{"undescribed type", testdata.UndescribedSharedErrorDSL, ""},
+-	}
+-	for _, tc := range cases {
+-		t.Run(tc.name, func(t *testing.T) {
+-			root := codegen.RunDSL(t, tc.dsl)
+-			spec, err := NewV2(
+-				root,
+-				root.API.Servers[0].Hosts[0],
+-			)
+-			require.NoError(t, err)
+-			require.Equal(t, tc.description, spec.Definitions["SharedError"].Description)
+-		})
+-	}
+-}
+ 
+-func TestSharedErrorDefinitionLocalizedDescription(t *testing.T) {
+-	root := codegen.RunDSL(t, testdata.SharedErrorDescriptionDSL)
+-	sharedError := root.UserType("SharedError")
+-	values := (openapi.Values{}).WithDescription(sharedError.Attribute(), "Localized shared error")
+-
+-	spec, err := NewV2WithValues(
+-		root,
+-		root.API.Servers[0].Hosts[0],
+-		expr.NewExampleGenerator(root.API.RandomizerFactory),
+-		values,
+-	)
+-	require.NoError(t, err)
+-	require.Equal(t, "Localized shared error", spec.Definitions["SharedError"].Description)
+-}
+diff --git a/http/codegen/openapi/v2/files_test.go b/http/codegen/openapi/v2/files_test.go
+--- a/http/codegen/openapi/v2/files_test.go
++++ b/http/codegen/openapi/v2/files_test.go
+@@ -101,91 +101,7 @@ func TestSections(t *testing.T) {
+ 	}
+ }
+ 
+-func TestValidations(t *testing.T) {
+-	var (
+-		goldenPath = filepath.Join("testdata", t.Name())
+-	)
+-	cases := []struct {
+-		Name string
+-		DSL  func()
+-	}{
+-		{"string", testdata.StringValidationDSL},
+-		{"integer", testdata.IntValidationDSL},
+-		{"array", testdata.ArrayValidationDSL},
+-	}
+-	for _, c := range cases {
+-		t.Run(c.Name, func(t *testing.T) {
+-			root := expr.RunDSL(t, c.DSL)
+-			oFiles, err := openapiv2.Files(root, openapi.DefaultPath20)
+-			require.NoError(t, err, "OpenAPI failed")
+-			require.NotEmpty(t, oFiles, "No swagger files")
+-			for i, o := range oFiles {
+-				tname := fmt.Sprintf("file%d", i)
+-				s := o.SectionTemplates
+-				t.Run(tname, func(t *testing.T) {
+-					require.Len(t, s, 1, "expected 1 section, got %d", len(s))
+-					require.NotEmpty(t, s[0].Source, "empty section template")
+-					require.NotNil(t, s[0].Data, "nil data")
+-					var buf bytes.Buffer
+-					tmpl := template.Must(template.New("openapi").Funcs(s[0].FuncMap).Parse(s[0].Source))
+-					require.NoError(t, tmpl.Execute(&buf, s[0].Data), "failed to render template")
+-					if filepath.Ext(o.Path) == ".json" {
+-						require.NoError(t, validateSwagger(buf.Bytes()), "invalid swagger")
+-					}
+-
+-					golden := filepath.Join(goldenPath, fmt.Sprintf("%s_%s.golden", c.Name, tname))
+-					if filepath.Ext(o.Path) == ".json" {
+-						testutil.AssertJSON(t, golden, buf.Bytes())
+-					} else {
+-						testutil.AssertString(t, golden, buf.String())
+-					}
+-				})
+-			}
+-		})
+-	}
+-}
+ 
+-func TestExtensions(t *testing.T) {
+-	var (
+-		goldenPath = filepath.Join("testdata", t.Name())
+-	)
+-	cases := []struct {
+-		Name string
+-		DSL  func()
+-	}{
+-		{"endpoint", testdata.ExtensionDSL},
+-	}
+-	for _, c := range cases {
+-		t.Run(c.Name, func(t *testing.T) {
+-			root := expr.RunDSL(t, c.DSL)
+-			oFiles, err := openapiv2.Files(root, openapi.DefaultPath20)
+-			require.NoError(t, err, "OpenAPI failed")
+-			require.NotEmpty(t, oFiles, "No swagger files")
+-			for i, o := range oFiles {
+-				tname := fmt.Sprintf("file%d", i)
+-				s := o.SectionTemplates
+-				t.Run(tname, func(t *testing.T) {
+-					require.Len(t, s, 1, "expected 1 section, got %d", len(s))
+-					require.NotEmpty(t, s[0].Source, "empty section template")
+-					require.NotNil(t, s[0].Data, "nil data")
+-					var buf bytes.Buffer
+-					tmpl := template.Must(template.New("openapi").Funcs(s[0].FuncMap).Parse(s[0].Source))
+-					require.NoError(t, tmpl.Execute(&buf, s[0].Data), "failed to render template")
+-					if filepath.Ext(o.Path) == ".json" {
+-						require.NoError(t, validateSwagger(buf.Bytes()), "invalid swagger")
+-					}
+-
+-					golden := filepath.Join(goldenPath, fmt.Sprintf("%s_%s.golden", c.Name, tname))
+-					if filepath.Ext(o.Path) == ".json" {
+-						testutil.AssertJSON(t, golden, buf.Bytes())
+-					} else {
+-						testutil.AssertString(t, golden, buf.String())
+-					}
+-				})
+-			}
+-		})
+-	}
+-}
+ 
+ func TestNamedPrimitiveParamsAndHeadersUseOpenAPIBaseTypes(t *testing.T) {
+ 	root := expr.RunDSL(t, func() {
+diff --git a/http/codegen/openapi/v2/json_schema_union_test.go b/http/codegen/openapi/v2/json_schema_union_test.go
+--- a/http/codegen/openapi/v2/json_schema_union_test.go
++++ b/http/codegen/openapi/v2/json_schema_union_test.go
+@@ -3,8 +3,8 @@
+ package openapiv2
+ 
+ import (
+-	"encoding/json"
+-	"sync"
++	_ "encoding/json"
++	_ "sync"
+ 	"testing"
+ 
+ 	"github.com/stretchr/testify/assert"
+@@ -32,79 +32,7 @@ func TestAttributeTypeSchemaCorrelatesUnionDiscriminatorAndValue(t *testing.T) {
+ 	assert.Empty(t, schema.Properties)
+ }
+ 
+-func TestBuildAttributeSchemaKeepsDefinitionsSeparate(t *testing.T) {
+-	type result struct {
+-		field  string
+-		schema *openapi.Schema
+-	}
+-	start := make(chan struct{})
+-	results := make(chan result, 2)
+-	var ready sync.WaitGroup
+-	ready.Add(2)
+-	build := func(field string) {
+-		ready.Done()
+-		<-start
+-		generator := expr.NewExampleGenerator(expr.NewFakerRandomizerFactory(field))
+-		results <- result{
+-			field: field,
+-			schema: BuildAttributeSchema(
+-				&expr.APIExpr{},
+-				namedObjectAttribute(field),
+-				generator,
+-			),
+-		}
+-	}
+-	go build("first")
+-	go build("second")
+-	ready.Wait()
+-	close(start)
+-
+-	for range 2 {
+-		built := <-results
+-		require.Equal(t, "#/$defs/Shared", built.schema.Ref)
+-		require.Contains(t, built.schema.Defs, "Shared")
+-		require.Contains(t, built.schema.Defs["Shared"].Properties, built.field)
+-		other := "first"
+-		if built.field == "first" {
+-			other = "second"
+-		}
+-		require.NotContains(t, built.schema.Defs["Shared"].Properties, other)
+-		_, err := json.Marshal(built.schema)
+-		require.NoError(t, err)
+-	}
+-}
+-
+-func TestBuildAttributeSchemaKeepsValuesForNamedStringMapKeys(t *testing.T) {
+-	key := &expr.UserTypeExpr{
+-		AttributeExpr: &expr.AttributeExpr{Type: expr.String},
+-		TypeName:      "ConnectionKind",
+-	}
+-	value := &expr.UserTypeExpr{
+-		AttributeExpr: &expr.AttributeExpr{Type: &expr.Object{
+-			&expr.NamedAttributeExpr{
+-				Name:      "connected",
+-				Attribute: &expr.AttributeExpr{Type: expr.Boolean},
+-			},
+-		}},
+-		TypeName: "ConnectionStatus",
+-	}
+-	attribute := &expr.AttributeExpr{Type: &expr.Map{
+-		KeyType:  &expr.AttributeExpr{Type: key},
+-		ElemType: &expr.AttributeExpr{Type: value},
+-	}}
+-	root := &expr.UserTypeExpr{AttributeExpr: attribute, TypeName: "Connections"}
+-	generator := expr.NewExampleGenerator(expr.NewFakerRandomizerFactory("named-string-map-key")).At(
+-		expr.UserTypeExampleIdentity(root),
+-	)
+-
+-	schema := BuildAttributeSchema(&expr.APIExpr{}, attribute, generator)
+ 
+-	values, ok := schema.AdditionalProperties.(*openapi.Schema)
+-	require.True(t, ok)
+-	assert.Equal(t, "#/$defs/ConnectionStatus", values.Ref)
+-	require.Contains(t, schema.Defs, "ConnectionStatus")
+-	assert.Equal(t, openapi.Type(openapi.Boolean), schema.Defs["ConnectionStatus"].Properties["connected"].Type)
+-}
+ 
+ // assertUnionSchemaBranch checks one generated union branch's tag, required
+ // fields, and value type.

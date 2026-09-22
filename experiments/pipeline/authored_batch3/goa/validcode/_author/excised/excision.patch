@@ -1,0 +1,1336 @@
+--- a/codegen/validation.go
++++ b/codegen/validation.go
+@@ -6,8 +6,8 @@
+ import (
+ 	"bytes"
+ 	"fmt"
+-	"strconv"
+-	"strings"
++	_ "strconv"
++	_ "strings"
+ 	"text/template"
+ 
+ 	"example.internal/apikit/v3/expr"
+@@ -349,74 +349,17 @@
+ // union branch requires a non-nil value. Messages, byte slices, and Any values
+ // may be nil in Go, so their generated checks must reject nil explicitly.
+ func protobufUnionPayloadRequiresPresence(att *expr.AttributeExpr) bool {
+-	kind := unalias(att.Type).Kind()
+-	return !expr.IsPrimitive(att.Type) || kind == expr.BytesKind || kind == expr.AnyKind
++	panic("excised: protobufUnionPayloadRequiresPresence")
+ }
+ 
+ func validateAttribute(ctx *AttributeContext, att *expr.AttributeExpr, put expr.UserType, target string, context validationPath, req, view bool, seen map[expr.UserType]*bytes.Buffer) string {
+-	ut, isUT := att.Type.(expr.UserType)
+-	if !isUT {
+-		guard := validationAttributeNeedsNilGuard(att, ctx, req)
+-		code := renderValidationCode(att, put, ctx, req, false, view, target, context, seen, !guard).String()
+-		if code == "" {
+-			return ""
+-		}
+-		if expr.IsArray(att.Type) || expr.IsMap(att.Type) {
+-			return code
+-		}
+-		if !guard {
+-			return code
+-		}
+-		cond := fmt.Sprintf("if %s != nil {\n", target)
+-		return fmt.Sprintf("%s%s\n}", cond, code)
+-	}
+-	// Alias user types: validate underlying attribute with alias flag so that
+-	// validation operates on the base value type while preserving pointer
+-	// semantics from the current attribute context.
+-	if expr.IsAlias(ut) {
+-		// Preserve field-level attributes (e.g., DefaultValue, Required) while
+-		// validating alias user types against their underlying base. Passing
+-		// the original attribute with alias=true ensures validations operate
+-		// on the correct value type without dropping field defaults.
+-		guard := validationAttributeNeedsNilGuard(att, ctx, req)
+-		code := renderValidationCode(att, put, ctx, req, true, view, target, context, seen, !guard).String()
+-		if code == "" {
+-			return ""
+-		}
+-		if !guard {
+-			return code
+-		}
+-		cond := fmt.Sprintf("if %s != nil {\n", target)
+-		return fmt.Sprintf("%s%s\n}", cond, code)
+-	}
+-	if !hasValidations(ctx, ut) {
+-		return ""
+-	}
+-	var buf bytes.Buffer
+-	call := ctx.Scope.ValidatorCall(att, "", target, renderValidationPath(context))
+-	data := map[string]any{"call": call, "goa": "goa"}
+-	if err := userValT.Execute(&buf, data); err != nil {
+-		panic(err) // bug
+-	}
+-	if resolver, ok := ctx.Scope.(nilUserTypeValidationAttributor); ok && resolver.ValidationAcceptsNil(att) {
+-		return buf.String()
+-	}
+-	return fmt.Sprintf("if %s != nil {\n\t%s\n}", target, buf.String())
++	panic("excised: validateAttribute")
+ }
+ 
+ // validationAttributeNeedsNilGuard reports whether a nested value may be nil
+ // in the generated Go layout and must be checked before any validation uses it.
+ func validationAttributeNeedsNilGuard(att *expr.AttributeExpr, ctx *AttributeContext, required bool) bool {
+-	if expr.IsArray(att.Type) || expr.IsMap(att.Type) {
+-		return false
+-	}
+-	if expr.IsUnion(att.Type) {
+-		if ctx.Scope.IsSumType() {
+-			return ctx.IsUnionPointer(required)
+-		}
+-		return !required
+-	}
+-	return ctx.Pointer || !required && (att.DefaultValue == nil || !ctx.UseDefault)
++	panic("excised: validationAttributeNeedsNilGuard")
+ }
+ 
+ // validationCode produces Go code that runs the validations that effectively
+@@ -440,213 +383,50 @@
+ //
+ // context is used to produce helpful messages in case of error.
+ func validationCode(att *expr.AttributeExpr, attCtx *AttributeContext, req, alias bool, target string, context validationPath, localGuards bool) string {
+-	validation := expr.EffectiveValidation(att)
+-	if validation == nil {
+-		return ""
+-	}
+-
+-	var (
+-		kind            = att.Type.Kind()
+-		unaliased       = unalias(att.Type)
+-		isNativePointer = unaliased.Kind() == expr.BytesKind || unaliased.Kind() == expr.AnyKind
+-		isPointer       = attCtx.Pointer || (!req && (att.DefaultValue == nil || !attCtx.UseDefault))
+-		tval            = target
+-	)
+-	if isPointer && expr.IsPrimitive(att.Type) && !isNativePointer {
+-		tval = "*" + tval
+-	}
+-	if alias {
+-		tval = fmt.Sprintf("%s(%s)", unaliased.Name(), tval)
+-		// When validating alias types, use the underlying type's kind
+-		// for string detection (needed for utf8.RuneCountInString usage)
+-		kind = unaliased.Kind()
+-	}
+-	data := map[string]any{
+-		"attribute": att,
+-		"attCtx":    attCtx,
+-		"isPointer": isPointer && localGuards,
+-		"context":   context,
+-		"target":    target,
+-		"targetVal": tval,
+-		"goa":       "goa",
+-		"utf8":      "utf8",
+-		"string":    kind == expr.StringKind,
+-		"array":     expr.IsArray(att.Type),
+-		"map":       expr.IsMap(att.Type),
+-	}
+-	runTemplate := func(tmpl *template.Template, data any) string {
+-		var buf bytes.Buffer
+-		if err := tmpl.Execute(&buf, data); err != nil {
+-			panic(err) // bug
+-		}
+-		return strings.Trim(buf.String(), "\n")
+-	}
+-	res := make([]string, 0, 8) // preallocate with typical validation count
+-	if values := validation.Values; values != nil {
+-		data["values"] = values
+-		if val := runTemplate(enumValT, data); val != "" {
+-			res = append(res, val)
+-		}
+-	}
+-	if format := validation.Format; format != "" {
+-		// Skip format validation when struct:field:type overrides a string attribute
+-		// with a custom type — the custom type's own parsing (e.g. UnmarshalText)
+-		// already validates the format, and ValidateFormat expects a plain string.
+-		typeName, _ := GetMetaType(att)
+-		if typeName == "" {
+-			data["format"] = string(format)
+-			if val := runTemplate(formatValT, data); val != "" {
+-				res = append(res, val)
+-			}
+-		}
+-	}
+-	if pattern := validation.Pattern; pattern != "" {
+-		data["pattern"] = pattern
+-		if val := runTemplate(patternValT, data); val != "" {
+-			res = append(res, val)
+-		}
+-	}
+-	if exclMin := validation.ExclusiveMinimum; exclMin != nil {
+-		data["exclMin"] = *exclMin
+-		data["isExclMin"] = true
+-		if val := runTemplate(exclMinMaxValT, data); val != "" {
+-			res = append(res, val)
+-		}
+-	}
+-	if minVal := validation.Minimum; minVal != nil {
+-		data["min"] = *minVal
+-		data["isMin"] = true
+-		if val := runTemplate(minMaxValT, data); val != "" {
+-			res = append(res, val)
+-		}
+-	}
+-	if exclMax := validation.ExclusiveMaximum; exclMax != nil {
+-		data["exclMax"] = *exclMax
+-		data["isExclMin"] = false
+-		if val := runTemplate(exclMinMaxValT, data); val != "" {
+-			res = append(res, val)
+-		}
+-	}
+-	if maxVal := validation.Maximum; maxVal != nil {
+-		data["max"] = *maxVal
+-		data["isMin"] = false
+-		if val := runTemplate(minMaxValT, data); val != "" {
+-			res = append(res, val)
+-		}
+-	}
+-	if minLength := validation.MinLength; minLength != nil {
+-		data["minLength"] = minLength
+-		data["isMinLength"] = true
+-		delete(data, "maxLength")
+-		if val := runTemplate(lengthValT, data); val != "" {
+-			res = append(res, val)
+-		}
+-	}
+-	if maxLength := validation.MaxLength; maxLength != nil {
+-		data["maxLength"] = maxLength
+-		data["isMinLength"] = false
+-		delete(data, "minLength")
+-		if val := runTemplate(lengthValT, data); val != "" {
+-			res = append(res, val)
+-		}
+-	}
+-	reqs := generatedRequiredValidationNames(att, validation, attCtx.LayoutPolicy())
+-	obj := expr.AsObject(att.Type)
+-	for _, r := range reqs {
+-		reqAtt := obj.Attribute(r)
+-		data["req"] = r
+-		data["reqAtt"] = reqAtt
+-		res = append(res, runTemplate(requiredValT, data))
+-	}
+-	return strings.Join(res, "\n")
++	panic("excised: validationCode")
+ }
+ 
+ // literalValidationPath folds a complete error path into a quoted Go string
+ // while Apikit is generating source.
+ func literalValidationPath(root string) validationPath {
+-	return validationPath{root: root}
++	panic("excised: literalValidationPath")
+ }
+ 
+ // parameterValidationPath writes an error path relative to the string held by
+ // a generated validator parameter.
+ func parameterValidationPath(parameter string) validationPath {
+-	return validationPath{root: parameter, variable: true}
++	panic("excised: parameterValidationPath")
+ }
+ 
+ // child returns the context used for a field or collection value below c.
+ func (p validationPath) child(prefix string) validationPath {
+-	p.suffix += prefix
+-	return p
++	panic("excised: validationPath.child")
+ }
+ 
+ // renderValidationPath returns the Go expression passed to a generated
+ // validation error.
+ func renderValidationPath(path validationPath) string {
+-	if !path.variable {
+-		return strconv.Quote(path.root + path.suffix)
+-	}
+-	if path.suffix == "" {
+-		return path.root
+-	}
+-	return path.root + " + " + strconv.Quote(path.suffix)
++	panic("excised: renderValidationPath")
+ }
+ 
+ // hasValidations reports whether validating ut can write any code with the Go
+ // layout described by attCtx.
+ func hasValidations(attCtx *AttributeContext, ut expr.UserType) bool {
+-	return NeedsValidation(ut.Attribute(), attCtx.LayoutPolicy())
++	panic("excised: hasValidations")
+ }
+ 
+ // toSlice returns Go code that represents the given slice.
+ func toSlice(val []any) string {
+-	elems := make([]string, len(val))
+-	for i, v := range val {
+-		elems[i] = fmt.Sprintf("%#v", v)
+-	}
+-	return fmt.Sprintf("[]any{%s}", strings.Join(elems, ", "))
++	panic("excised: toSlice")
+ }
+ 
+ // oneof produces code that compares target with each element of vals and ORs
+ // the result, e.g. "target == 1 || target == 2".
+ func oneof(target string, vals []any) string {
+-	elems := make([]string, len(vals))
+-	for i, v := range vals {
+-		elems[i] = fmt.Sprintf("%s == %#v", target, v)
+-	}
+-	return strings.Join(elems, " || ")
++	panic("excised: oneof")
+ }
+ 
+ // constant returns the Go constant name of the format with the given value.
+ func constant(formatName string) string {
+-	switch formatName {
+-	case "date":
+-		return "apikit.FormatDate"
+-	case "date-time":
+-		return "apikit.FormatDateTime"
+-	case "uuid":
+-		return "apikit.FormatUUID"
+-	case "email":
+-		return "apikit.FormatEmail"
+-	case "hostname":
+-		return "apikit.FormatHostname"
+-	case "ipv4":
+-		return "apikit.FormatIPv4"
+-	case "ipv6":
+-		return "apikit.FormatIPv6"
+-	case "ip":
+-		return "apikit.FormatIP"
+-	case "uri":
+-		return "apikit.FormatURI"
+-	case "mac":
+-		return "apikit.FormatMAC"
+-	case "cidr":
+-		return "apikit.FormatCIDR"
+-	case "regexp":
+-		return "apikit.FormatRegexp"
+-	case "json":
+-		return "apikit.FormatJSON"
+-	case "rfc1123":
+-		return "apikit.FormatRFC1123"
+-	}
+-	panic("unknown format") // bug
++	panic("excised: constant")
+ }
+--- a/codegen/validation_plan_test.go
++++ b/codegen/validation_plan_test.go
+@@ -4,7 +4,6 @@
+ 
+ import (
+ 	"fmt"
+-	"strings"
+ 	"testing"
+ 
+ 	"github.com/stretchr/testify/require"
+@@ -12,60 +11,6 @@
+ 	"example.internal/apikit/v3/expr"
+ )
+ 
+-// TestValidationPlanPreservesRulesPathsAndRequiredness compares copied rule
+-// rendering with the existing service/view validation generator.
+-func TestValidationPlanPreservesRulesPathsAndRequiredness(t *testing.T) {
+-	minimum := 2.0
+-	minLength := 3
+-	attribute := &expr.AttributeExpr{
+-		Type: &expr.Object{
+-			{Name: "name", Attribute: &expr.AttributeExpr{
+-				Type: expr.String,
+-				Validation: &expr.ValidationExpr{
+-					Pattern:   "^[a-z]+$",
+-					MinLength: &minLength,
+-				},
+-			}},
+-			{Name: "count", Attribute: &expr.AttributeExpr{
+-				Type:       expr.Int,
+-				Validation: &expr.ValidationExpr{Minimum: &minimum},
+-			}},
+-			{Name: "nested", Attribute: &expr.AttributeExpr{Type: &expr.Object{}}},
+-		},
+-		Validation: &expr.ValidationExpr{Required: []string{"name", "nested"}},
+-	}
+-	policy := GoLayoutPolicy{Pointer: true, UseDefault: true, SumType: true}
+-	legacyContext := NewAttributeContext(
+-		policy.Pointer,
+-		policy.IgnoreRequired,
+-		policy.UseDefault,
+-		"",
+-		NewNameScope(),
+-	)
+-	legacyContext.UnionPointer = policy.UnionPointer
+-	want := ValidationCode(attribute, nil, legacyContext, true, false, true, "target")
+-
+-	layout, err := PlanGoType(attribute, GoTypePlanOptions{
+-		Owner:  "generated.local/gen/service",
+-		Policy: policy,
+-	})
+-	require.NoError(t, err)
+-	plan, err := NewValidationPlan(attribute, layout, ValidationPlanOptions{Required: true})
+-	require.NoError(t, err)
+-
+-	attribute.Validation = nil
+-	attribute.Type = expr.String
+-	minimum = 99
+-	minLength = 99
+-
+-	linked, err := plan.Link(layout.Link("generated.local/gen/service", validationPlanTestQualifier))
+-	require.NoError(t, err)
+-	require.Equal(t, want, linked.Render("target", "target"))
+-	require.Equal(t, []GoTypeImport{
+-		{Name: "utf8", Path: "unicode/utf8"},
+-		{Name: "goa", Path: "example.internal/apikit/v3/pkg"},
+-	}, linked.Imports())
+-}
+ 
+ // TestValidationPlanImportsOnlyUsedRuntimePackages checks that standalone
+ // validation users receive the packages named directly by rendered checks.
+@@ -229,35 +174,6 @@
+ 	require.Contains(t, code, "goa2.MergeErrors")
+ }
+ 
+-// TestValidationPlanSharesOptionalFieldGuard verifies that copied validation
+-// rules use the one nil check selected for their containing field.
+-func TestValidationPlanSharesOptionalFieldGuard(t *testing.T) {
+-	minLength := 2
+-	attribute := &expr.AttributeExpr{Type: &expr.Object{
+-		{Name: "name", Attribute: &expr.AttributeExpr{
+-			Type: expr.String,
+-			Validation: &expr.ValidationExpr{
+-				Pattern:   "^[a-z]+$",
+-				MinLength: &minLength,
+-			},
+-		}},
+-	}}
+-	policy := GoLayoutPolicy{UseDefault: true, SumType: true}
+-	layout, err := PlanGoType(attribute, GoTypePlanOptions{
+-		Owner:  "generated.local/gen/service",
+-		Policy: policy,
+-	})
+-	require.NoError(t, err)
+-	plan, err := NewValidationPlan(attribute, layout, ValidationPlanOptions{Required: true})
+-	require.NoError(t, err)
+-	linked, err := plan.Link(layout.Link(layout.Owner(), validationPlanTestQualifier))
+-	require.NoError(t, err)
+-
+-	code := linked.Render("target", "target")
+-	require.Equal(t, 1, strings.Count(code, "if target.Name != nil"))
+-	require.Contains(t, code, "goa.ValidatePattern")
+-	require.Contains(t, code, "goa.InvalidLengthError")
+-}
+ 
+ // TestValidationPlanCopiesEnumValues verifies that accepted mutable enum
+ // values cannot change a validation program after planning.
+@@ -371,69 +287,6 @@
+ 	}
+ }
+ 
+-// TestValidationPlanChecksOnlyRepresentableNullElements verifies that a null
+-// check follows the generated element type instead of the raw DSL flag.
+-func TestValidationPlanChecksOnlyRepresentableNullElements(t *testing.T) {
+-	array := &expr.Array{
+-		ElemType: &expr.AttributeExpr{
+-			Type:       expr.String,
+-			Validation: &expr.ValidationExpr{Pattern: "[a-z]+"},
+-		},
+-		NonNullableElems: true,
+-	}
+-	attribute := &expr.AttributeExpr{Type: array}
+-	tests := []struct {
+-		name      string
+-		jsonBody  bool
+-		wantCheck bool
+-	}{
+-		{name: "service values"},
+-		{name: "JSON input pointers", jsonBody: true, wantCheck: true},
+-	}
+-	for _, test := range tests {
+-		t.Run(test.name, func(t *testing.T) {
+-			policy := GoLayoutPolicy{
+-				UseDefault:          true,
+-				SumType:             true,
+-				ArrayElementPointer: test.jsonBody,
+-			}
+-			layout, err := PlanGoType(attribute, GoTypePlanOptions{
+-				Owner:  "generated.local/gen/service",
+-				Policy: policy,
+-			})
+-			require.NoError(t, err)
+-			plan, err := NewValidationPlan(attribute, layout, ValidationPlanOptions{Required: true})
+-			require.NoError(t, err)
+-			linked, err := plan.Link(layout.Link(layout.Owner(), validationPlanTestQualifier))
+-			require.NoError(t, err)
+-			code := linked.Render("target", "target")
+-			require.Equal(t, test.wantCheck, strings.Contains(code, "e == nil"))
+-			if test.jsonBody {
+-				require.Contains(t, code, "goa.ValidatePattern(\"target[*]\", *e, \"[a-z]+\")")
+-			} else {
+-				require.Contains(t, code, "goa.ValidatePattern(\"target[*]\", e, \"[a-z]+\")")
+-			}
+-			require.True(t, NeedsValidation(attribute, policy))
+-		})
+-	}
+-
+-	objectArray := &expr.AttributeExpr{Type: &expr.Array{
+-		ElemType:         &expr.AttributeExpr{Type: &expr.Object{}},
+-		NonNullableElems: true,
+-	}}
+-	policy := GoLayoutPolicy{UseDefault: true, SumType: true}
+-	layout, err := PlanGoType(objectArray, GoTypePlanOptions{
+-		Owner:  "generated.local/gen/service",
+-		Policy: policy,
+-	})
+-	require.NoError(t, err)
+-	plan, err := NewValidationPlan(objectArray, layout, ValidationPlanOptions{Required: true})
+-	require.NoError(t, err)
+-	linked, err := plan.Link(layout.Link(layout.Owner(), validationPlanTestQualifier))
+-	require.NoError(t, err)
+-	require.Contains(t, linked.Render("target", "target"), "e == nil")
+-	require.True(t, NeedsValidation(objectArray, policy))
+-}
+ 
+ // TestNeedsValidationChecksEverySiblingCopy verifies that one unconstrained
+ // copy of a type does not hide rules on another copy of the same type.
+@@ -475,101 +328,6 @@
+ 	}
+ }
+ 
+-// TestValidationPlanPreservesContainersUnionsAndValidatorBindings verifies all
+-// recursive service/view shapes retain exact nested validator declarations.
+-func TestValidationPlanPreservesContainersUnionsAndValidatorBindings(t *testing.T) {
+-	const owner = "generated.local/gen/service"
+-	minLength := 1
+-	minimum := 4.0
+-	child := goTypeTestUserType("Child", &expr.Object{
+-		{Name: "name", Attribute: &expr.AttributeExpr{
+-			Type:       expr.String,
+-			Validation: &expr.ValidationExpr{MinLength: &minLength},
+-		}},
+-	})
+-	union := &expr.Union{
+-		TypeName: "Choice",
+-		Values: []*expr.NamedAttributeExpr{
+-			{Name: "label", Attribute: &expr.AttributeExpr{
+-				Type:       expr.String,
+-				Validation: &expr.ValidationExpr{Pattern: ".+"},
+-			}},
+-			{Name: "child", Attribute: &expr.AttributeExpr{Type: child}},
+-		},
+-	}
+-	mapKey := &expr.AttributeExpr{
+-		Type:       expr.String,
+-		Validation: &expr.ValidationExpr{MinLength: &minLength},
+-	}
+-	mapValue := &expr.AttributeExpr{
+-		Type:       expr.Int,
+-		Validation: &expr.ValidationExpr{Minimum: &minimum},
+-	}
+-	attribute := &expr.AttributeExpr{Type: &expr.Object{
+-		{Name: "children", Attribute: &expr.AttributeExpr{Type: &expr.Array{
+-			ElemType: &expr.AttributeExpr{Type: child},
+-		}}},
+-		{Name: "labels", Attribute: &expr.AttributeExpr{Type: &expr.Map{
+-			KeyType:  mapKey,
+-			ElemType: mapValue,
+-		}}},
+-		{Name: "choice", Attribute: &expr.AttributeExpr{Type: union}},
+-	}}
+-	policy := GoLayoutPolicy{Pointer: true, UseDefault: true, SumType: true}
+-	legacyContext := NewAttributeContext(
+-		policy.Pointer,
+-		policy.IgnoreRequired,
+-		policy.UseDefault,
+-		"",
+-		NewNameScope(),
+-	)
+-	legacyContext.UnionPointer = policy.UnionPointer
+-	want := ValidationCode(attribute, nil, legacyContext, true, false, true, "target")
+-
+-	generation, err := NewGeneration("generated.local/gen", nil)
+-	require.NoError(t, err)
+-	childDeclaration := declareGoTypeTestUserType(t, generation, owner, child)
+-	unionDeclaration := declareGoTypeTestUnion(t, generation, owner, union)
+-	generatedPackage := generation.Package(owner)
+-	validator := NewExactName(NameFunction, "ValidateChild")
+-	require.NoError(t, generatedPackage.DeclareName(validator))
+-
+-	layout, err := PlanGoType(attribute, GoTypePlanOptions{
+-		Owner:  owner,
+-		Policy: policy,
+-		Bind: goTypeTestBinder(map[expr.DataType]GoTypeBinding{
+-			child: {Owner: owner, Type: childDeclaration},
+-			union: {Owner: owner, Union: unionDeclaration},
+-		}),
+-	})
+-	require.NoError(t, err)
+-	plan, err := NewValidationPlan(attribute, layout, ValidationPlanOptions{
+-		Required: true,
+-		Bind: func(request ValidatorBindingRequest) (*NameDeclaration, error) {
+-			require.Same(t, child, request.Attribute.Type)
+-			require.Equal(t, owner, request.Layout.Owner())
+-			require.Empty(t, request.View)
+-			return validator, nil
+-		},
+-	})
+-	require.NoError(t, err)
+-	require.Equal(t, []*NameDeclaration{validator, validator}, plan.ValidatorDeclarations())
+-
+-	mapKey.Validation = nil
+-	mapValue.Validation = nil
+-	union.Values = nil
+-	child.SetAttribute(&expr.AttributeExpr{Type: expr.String})
+-	attribute.Type = expr.String
+-
+-	require.NoError(t, generation.Freeze())
+-	linked, err := plan.Link(layout.Link(owner, validationPlanTestQualifier))
+-	require.NoError(t, err)
+-	require.Equal(t, want, linked.Render("target", "target"))
+-	require.Equal(t, []GoTypeImport{
+-		{Name: "utf8", Path: "unicode/utf8"},
+-		{Name: "goa", Path: "example.internal/apikit/v3/pkg"},
+-	}, linked.Imports())
+-}
+ 
+ // TestValidationPlanRejectsUnboundNestedValidator verifies planning never
+ // falls back to reconstructing a validator name from a user type.
+--- a/codegen/validation_protobuf_union_test.go
++++ /dev/null
+@@ -1,103 +0,0 @@
+-// This file checks the validation generated for protobuf OneOf values.
+-// It rejects a missing selected branch and a selected branch whose value is nil.
+-package codegen
+-
+-import (
+-	"fmt"
+-	"testing"
+-
+-	"github.com/stretchr/testify/require"
+-
+-	d "example.internal/apikit/v3/dsl"
+-	"example.internal/apikit/v3/expr"
+-)
+-
+-type (
+-	// protobufUnionTestScope returns the Go names used by the generated struct for
+-	// each selected branch. This lets the test run without generating a service.
+-	protobufUnionTestScope struct {
+-		scope *NameScope
+-	}
+-)
+-
+-func TestProtobufUnionValidationRequiresCompleteSelectedBranch(t *testing.T) {
+-	root := RunDSL(t, protobufUnionValidationDSL)
+-	message := root.UserType("Message")
+-	ctx := NewAttributeContext(true, false, false, "pb", NewNameScope())
+-	ctx.Scope = &protobufUnionTestScope{scope: NewNameScope()}
+-
+-	generated := AttributeValidationCode(message.Attribute(), message, ctx, true, false, "message", "message")
+-
+-	require.Contains(t, generated, `goa.MissingFieldError("choice", "message")`)
+-	require.Contains(t, generated, `goa.MissingFieldError("detail", "message.choice")`)
+-	require.Contains(t, generated, `goa.MissingFieldError("inactive", "message.choice")`)
+-	require.Contains(t, generated, `goa.MissingFieldError("blob", "message.choice")`)
+-	require.Contains(t, generated, `goa.MissingFieldError("metadata", "message.choice")`)
+-	require.Contains(t, generated, "if v == nil {")
+-	require.Contains(t, generated, "if v.Detail == nil {")
+-	require.Contains(t, generated, "if v.Inactive == nil {")
+-	require.Contains(t, generated, "if v.Metadata == nil {")
+-	require.Contains(t, generated, "if v.Blob == nil {")
+-	require.NotContains(t, generated, "if v.Token == nil {")
+-	require.NotContains(t, generated, "if v.Number != nil {")
+-	require.NotContains(t, generated, "if v.Token != nil {")
+-}
+-
+-func (s *protobufUnionTestScope) Name(att *expr.AttributeExpr, pkg string, _, _ bool) string {
+-	name := Goify(att.Type.Name(), true)
+-	if pkg != "" {
+-		return pkg + "." + name
+-	}
+-	return name
+-}
+-
+-func (s *protobufUnionTestScope) Ref(att *expr.AttributeExpr, pkg string) string {
+-	return "*" + s.Name(att, pkg, false, false)
+-}
+-
+-func (*protobufUnionTestScope) Field(_ *expr.AttributeExpr, name string, firstUpper bool) string {
+-	return Goify(name, firstUpper)
+-}
+-
+-func (*protobufUnionTestScope) Package(*expr.AttributeExpr) string {
+-	return "pb"
+-}
+-
+-func (s *protobufUnionTestScope) Enter(*expr.AttributeExpr) Attributor {
+-	return s
+-}
+-
+-func (*protobufUnionTestScope) IsSumType() bool {
+-	return false
+-}
+-
+-func (s *protobufUnionTestScope) ValidatorCall(att *expr.AttributeExpr, view, target, _ string) string {
+-	name := "Validate" + s.Name(att, "", false, false) + Goify(view, true)
+-	return fmt.Sprintf("%s(%s)", name, target)
+-}
+-
+-func (s *protobufUnionTestScope) Scope() *NameScope {
+-	return s.scope
+-}
+-
+-// protobufUnionValidationDSL creates OneOf branches stored as pointers,
+-// scalars, and byte slices.
+-func protobufUnionValidationDSL() {
+-	token := d.Type("Token", d.String)
+-	detail := d.Type("Detail", func() {
+-		d.Attribute("label", d.String)
+-		d.Required("label")
+-	})
+-	inactive := d.Type("Inactive", func() {})
+-	d.Type("Message", func() {
+-		d.OneOf("choice", func() {
+-			d.Attribute("number", d.Int, func() { d.Minimum(1) })
+-			d.Attribute("detail", detail)
+-			d.Attribute("inactive", inactive)
+-			d.Attribute("blob", d.Bytes)
+-			d.Attribute("token", token)
+-			d.Attribute("metadata", d.Any)
+-		})
+-		d.Required("choice")
+-	})
+-}
+--- a/codegen/validation_test.go
++++ /dev/null
+@@ -1,505 +0,0 @@
+-// This file verifies generated validation code for nested attributes, user
+-// types, unions, and declaration origins.
+-package codegen
+-
+-import (
+-	"bytes"
+-	"strings"
+-	"testing"
+-
+-	"github.com/stretchr/testify/require"
+-
+-	"example.internal/apikit/v3/codegen/testdata"
+-	"example.internal/apikit/v3/codegen/testutil"
+-	"example.internal/apikit/v3/expr"
+-)
+-
+-func TestRecursiveValidationCode(t *testing.T) {
+-	root := RunDSL(t, testdata.ValidationTypesDSL)
+-	var (
+-		scope = NewNameScope()
+-
+-		integerT  = root.UserType("Integer")
+-		stringT   = root.UserType("String")
+-		floatT    = root.UserType("Float")
+-		aliasT    = root.UserType("AliasType")
+-		userT     = root.UserType("UserType")
+-		arrayUT   = root.UserType("ArrayUserType")
+-		arrayT    = root.UserType("Array")
+-		arrayReqT = root.UserType("ArrayRequired")
+-		mapT      = root.UserType("Map")
+-		unionT    = root.UserType("Union")
+-		rtT       = root.UserType("Result")
+-		rtcolT    = root.UserType("Collection")
+-		colT      = root.UserType("TypeWithCollection")
+-		deepT     = root.UserType("Deep")
+-	)
+-	cases := []struct {
+-		Name       string
+-		Type       expr.UserType
+-		Required   bool
+-		Pointer    bool
+-		UseDefault bool
+-	}{
+-		{"integer-required", integerT, true, false, false},
+-		{"integer-pointer", integerT, false, true, false},
+-		{"integer-use-default", integerT, false, false, true},
+-		{"float-required", floatT, true, false, false},
+-		{"float-pointer", floatT, false, true, false},
+-		{"float-use-default", floatT, false, false, true},
+-		{"string-required", stringT, true, false, false},
+-		{"string-pointer", stringT, false, true, false},
+-		{"string-use-default", stringT, false, false, true},
+-		{"alias-type", aliasT, true, false, false},
+-		{"user-type-required", userT, true, false, false},
+-		{"user-type-pointer", userT, false, true, false},
+-		{"user-type-default", userT, false, false, true},
+-		{"user-type-array-required", arrayUT, true, true, false},
+-		{"array-required", arrayT, true, false, false},
+-		{"array-pointer", arrayT, false, true, false},
+-		{"array-use-default", arrayT, false, false, true},
+-		{"array-required-non-nullable-elems", arrayReqT, true, false, false},
+-		{"map-required", mapT, true, false, false},
+-		{"map-pointer", mapT, false, true, false},
+-		{"map-use-default", mapT, false, false, true},
+-		{"union", unionT, true, false, false},
+-		{"result-type-pointer", rtT, false, true, false},
+-		{"collection-required", rtcolT, true, false, false},
+-		{"collection-pointer", rtcolT, false, true, false},
+-		{"type-with-collection-pointer", colT, false, true, false},
+-		{"type-with-embedded-type", deepT, false, true, false},
+-	}
+-	for _, c := range cases {
+-		t.Run(c.Name, func(t *testing.T) {
+-			ctx := NewAttributeContext(c.Pointer, false, c.UseDefault, "", scope)
+-			code := ValidationCode(&expr.AttributeExpr{Type: c.Type}, nil, ctx, c.Required, expr.IsAlias(c.Type), false, "target")
+-			code = FormatTestCode(t, "package foo\nfunc Validate() (err error){\n"+code+"}")
+-			testutil.AssertGo(t, "testdata/golden/validation_"+c.Name+".go.golden", code)
+-		})
+-	}
+-	// Special case of unions with views
+-	t.Run("union-with-view", func(t *testing.T) {
+-		ctx := NewAttributeContext(false, false, false, "", scope)
+-		code := ValidationCode(&expr.AttributeExpr{Type: unionT}, nil, ctx, true, false, true, "target")
+-		code = FormatTestCode(t, "package foo\nfunc Validate() (err error){\n"+code+"}")
+-		testutil.AssertGo(t, "testdata/golden/validation_union-with-view.go.golden", code)
+-	})
+-
+-	// Test case for OneOf with format validation in views (Issue #3747)
+-	t.Run("union-with-format-validation", func(t *testing.T) {
+-		// Test with pointer context (typical for views) to ensure union values are not treated as pointers
+-		ctx := NewAttributeContext(true, false, true, "", scope)
+-		root := RunDSL(t, testdata.UnionWithFormatValidationDSL)
+-		oneofT := root.UserType("OneOfWithFormat")
+-		code := ValidationCode(&expr.AttributeExpr{Type: oneofT}, nil, ctx, true, false, true, "target")
+-		code = FormatTestCode(t, "package foo\nfunc Validate() (err error){\n"+code+"}")
+-		testutil.AssertGo(t, "testdata/golden/validation_union-with-format-validation.go.golden", code)
+-	})
+-}
+-
+-// TestRecursiveValidationWithCycleGuard tests that recursive types are
+-// properly handled without infinite loops. The recursion guard should prevent
+-// cycles while still allowing validation of the same type in different contexts.
+-func TestRecursiveValidationWithCycleGuard(t *testing.T) {
+-	root := RunDSL(t, testdata.RecursiveValidationDSL)
+-	scope := NewNameScope()
+-
+-	cases := []struct {
+-		Name     string
+-		TypeName string
+-		Pointer  bool
+-	}{
+-		{"recursive-type-pointer", "RecursiveType", true},
+-		{"recursive-type-required", "RecursiveType", false},
+-		{"container-with-recursive-array", "ContainerWithRecursiveArray", true},
+-		{"container-with-recursive-map", "ContainerWithRecursiveMap", true},
+-		{"nested-recursive-pointer", "NestedRecursive", true},
+-	}
+-
+-	for _, c := range cases {
+-		t.Run(c.Name, func(t *testing.T) {
+-			ctx := NewAttributeContext(c.Pointer, false, false, "", scope)
+-			ut := root.UserType(c.TypeName)
+-			code := ValidationCode(&expr.AttributeExpr{Type: ut}, nil, ctx, !c.Pointer, false, false, "target")
+-			// Verify code is generated (not empty) and doesn't cause infinite recursion
+-			if code == "" {
+-				t.Error("Expected validation code to be generated")
+-			}
+-			// Verify the code can be formatted (indicates valid Go code)
+-			code = FormatTestCode(t, "package foo\nfunc Validate() (err error){\n"+code+"}")
+-			if code == "" {
+-				t.Error("Expected formatted code to be generated")
+-			}
+-		})
+-	}
+-}
+-
+-// TestRecursiveValidationDistinguishesEqualUIDOrigins verifies that unrelated
+-// user types with the same semantic UID retain their distinct validation
+-// shapes when reached in one recursive validation pass.
+-func TestRecursiveValidationDistinguishesEqualUIDOrigins(t *testing.T) {
+-	minLength := 3
+-	minimum := 5.0
+-	first := &expr.UserTypeExpr{
+-		AttributeExpr: &expr.AttributeExpr{Type: &expr.Object{
+-			&expr.NamedAttributeExpr{
+-				Name: "code",
+-				Attribute: &expr.AttributeExpr{
+-					Type:       expr.String,
+-					Validation: &expr.ValidationExpr{MinLength: &minLength},
+-				},
+-			},
+-		}},
+-		TypeName: "First",
+-		UID:      "shared",
+-	}
+-	second := &expr.UserTypeExpr{
+-		AttributeExpr: &expr.AttributeExpr{Type: &expr.Object{
+-			&expr.NamedAttributeExpr{
+-				Name: "count",
+-				Attribute: &expr.AttributeExpr{
+-					Type:       expr.Int,
+-					Validation: &expr.ValidationExpr{Minimum: &minimum},
+-				},
+-			},
+-		}},
+-		TypeName: "Second",
+-		UID:      "shared",
+-	}
+-	ctx := NewAttributeContext(false, false, false, "", NewNameScope())
+-	seen := make(map[expr.UserType]*bytes.Buffer)
+-	firstCode := recurseValidationCode(&expr.AttributeExpr{Type: first}, nil, ctx, true, false, false, "first", literalValidationPath("first"), seen).String()
+-	secondCode := recurseValidationCode(&expr.AttributeExpr{Type: second}, nil, ctx, true, false, false, "second", literalValidationPath("second"), seen).String()
+-
+-	require.Contains(t, firstCode, "first.Code")
+-	require.Contains(t, firstCode, "InvalidLengthError")
+-	require.Contains(t, secondCode, "second.Count")
+-	require.Contains(t, secondCode, "InvalidRangeError")
+-	require.Len(t, seen, 2)
+-}
+-
+-// TestValidationPathsAreSpecializedBeforeRendering verifies that fixed roots
+-// become string literals while reusable validators receive only their caller's
+-// path as a runtime value.
+-func TestValidationPathsAreSpecializedBeforeRendering(t *testing.T) {
+-	minLength := 1
+-	pattern := "^[a-z]+$"
+-	attribute := &expr.AttributeExpr{Type: &expr.Object{
+-		{
+-			Name: "nested",
+-			Attribute: &expr.AttributeExpr{Type: &expr.Object{
+-				{
+-					Name: "value",
+-					Attribute: &expr.AttributeExpr{
+-						Type:       expr.String,
+-						Validation: &expr.ValidationExpr{MinLength: &minLength},
+-					},
+-				},
+-			}},
+-		},
+-		{
+-			Name: "items",
+-			Attribute: &expr.AttributeExpr{Type: &expr.Array{
+-				ElemType: &expr.AttributeExpr{
+-					Type:       expr.String,
+-					Validation: &expr.ValidationExpr{Pattern: pattern},
+-				},
+-			}},
+-		},
+-		{
+-			Name: "values",
+-			Attribute: &expr.AttributeExpr{Type: &expr.Map{
+-				KeyType: &expr.AttributeExpr{Type: expr.String},
+-				ElemType: &expr.AttributeExpr{
+-					Type:       expr.String,
+-					Validation: &expr.ValidationExpr{Pattern: pattern},
+-				},
+-			}},
+-		},
+-	}}
+-	context := NewAttributeContext(true, false, false, "", NewNameScope())
+-
+-	direct := ValidationCode(attribute, nil, context, true, false, false, "body")
+-	direct = FormatTestCode(t, "package foo\nfunc validate() (err error) {\n"+direct+"\nreturn\n}")
+-	require.Contains(t, direct, `"body.nested.value"`)
+-	require.Contains(t, direct, `"body.items[*]"`)
+-	require.Contains(t, direct, `"body.values[key]"`)
+-	require.NotContains(t, direct, "path+")
+-
+-	nested := ValidationCodeWithPathParameter(attribute, nil, context, true, false, false, "body", "path")
+-	nested = FormatTestCode(t, "package foo\nfunc validate(path string) (err error) {\n"+nested+"\nreturn\n}")
+-	require.Contains(t, nested, `path+".nested.value"`)
+-	require.Contains(t, nested, `path+".items[*]"`)
+-	require.Contains(t, nested, `path+".values[key]"`)
+-	require.NotContains(t, nested, "fmt.Sprintf")
+-}
+-
+-// TestValidationCodeSharesOptionalFieldGuard verifies that the direct
+-// validation renderer checks one optional primitive once before all its rules.
+-func TestValidationCodeSharesOptionalFieldGuard(t *testing.T) {
+-	minLength := 2
+-	attribute := &expr.AttributeExpr{Type: &expr.Object{
+-		{Name: "name", Attribute: &expr.AttributeExpr{
+-			Type: expr.String,
+-			Validation: &expr.ValidationExpr{
+-				Pattern:   "^[a-z]+$",
+-				MinLength: &minLength,
+-			},
+-		}},
+-	}}
+-	context := NewAttributeContext(false, false, true, "", NewNameScope())
+-
+-	code := ValidationCode(attribute, nil, context, true, false, false, "target")
+-	require.Equal(t, 1, strings.Count(code, "if target.Name != nil"))
+-	require.Contains(t, code, "goa.ValidatePattern")
+-	require.Contains(t, code, "goa.InvalidLengthError")
+-
+-	root := &expr.AttributeExpr{
+-		Type: expr.String,
+-		Validation: &expr.ValidationExpr{
+-			Pattern:   "^[a-z]+$",
+-			MinLength: &minLength,
+-		},
+-	}
+-	rootCode := ValidationCode(root, nil, context, false, false, false, "target")
+-	require.Equal(t, 2, strings.Count(rootCode, "if target != nil"))
+-	require.Contains(t, rootCode, "*target")
+-}
+-
+-// TestMultipleAliasTypesInSameStruct tests that multiple fields with the same
+-// alias type can be validated independently. Previously, the recursion guard
+-// would incorrectly block validation of the second field.
+-func TestMultipleAliasTypesInSameStruct(t *testing.T) {
+-	root := RunDSL(t, testdata.ValidationTypesDSL)
+-	scope := NewNameScope()
+-
+-	aliasT := root.UserType("AliasType")
+-	ctx := NewAttributeContext(false, false, false, "", scope)
+-
+-	code := ValidationCode(&expr.AttributeExpr{Type: aliasT}, nil, ctx, true, false, false, "target")
+-	code = FormatTestCode(t, "package foo\nfunc Validate() (err error){\n"+code+"}")
+-
+-	// Verify both alias fields are validated (required_alias and alias)
+-	// The code should contain validation for both fields
+-	if !strings.Contains(code, "required_alias") {
+-		t.Error("Expected validation code for 'required_alias' field")
+-	}
+-	if !strings.Contains(code, "target.alias") {
+-		t.Error("Expected validation code for 'alias' field")
+-	}
+-	// Verify both get pattern validation
+-	if strings.Count(code, "ValidatePattern") < 2 {
+-		t.Errorf("Expected at least 2 pattern validations (one per alias field), got %d", strings.Count(code, "ValidatePattern"))
+-	}
+-}
+-
+-// TestChainedAliasValidationCode verifies that validation code generated for
+-// user type alias chains two and three levels deep merges the validations of
+-// every chain level and that generating the code does not mutate the design
+-// expression tree (no flattening write-backs, no pointer aliasing).
+-func TestChainedAliasValidationCode(t *testing.T) {
+-	root := RunDSL(t, testdata.ChainedAliasValidationDSL)
+-	scope := NewNameScope()
+-
+-	cases := []struct {
+-		Name     string
+-		TypeName string
+-		Required bool
+-		Pointer  bool
+-	}{
+-		{"chain-holder-required", "ChainHolder", true, false},
+-		{"chain-holder-pointer", "ChainHolder", false, true},
+-		{"chain-mid", "ChainMid", true, false},
+-		{"chain-pass", "ChainPass", true, false},
+-		{"chain-obj-leaf", "ChainObjLeaf", true, false},
+-		{"chain-obj-holder", "ChainObjHolder", true, false},
+-		{"chain-parent-pointer", "ChainParent", false, true},
+-	}
+-	for _, c := range cases {
+-		t.Run(c.Name, func(t *testing.T) {
+-			ut := root.UserType(c.TypeName)
+-			before := snapshotValidations(t, ut)
+-
+-			ctx := NewAttributeContext(c.Pointer, false, false, "", scope)
+-			code := ValidationCode(&expr.AttributeExpr{Type: ut}, nil, ctx, c.Required, expr.IsAlias(ut), false, "target")
+-			code = FormatTestCode(t, "package foo\nfunc Validate() (err error){\n"+code+"}")
+-			testutil.AssertGo(t, "testdata/golden/validation_"+c.Name+".go.golden", code)
+-
+-			assertValidationsUnchanged(t, before)
+-		})
+-	}
+-}
+-
+-// TestValidationPredicatesPure verifies that hasValidations and repeated
+-// ValidationCode invocations have no write side effects on the design tree
+-// and that repeated calls yield identical output (the legacy implementation
+-// flattened alias chain validations in place, so a first call could change
+-// the result of subsequent consumers).
+-func TestValidationPredicatesPure(t *testing.T) {
+-	root := RunDSL(t, testdata.ChainedAliasValidationDSL)
+-	scope := NewNameScope()
+-	ctx := NewAttributeContext(false, false, false, "", scope)
+-
+-	child := root.UserType("ChainChild")
+-	before := snapshotValidations(t, child)
+-	require.True(t, hasValidations(ctx, child), "ChainChild contains alias chain validations")
+-	assertValidationsUnchanged(t, before)
+-
+-	holder := root.UserType("ChainHolder")
+-	before = snapshotValidations(t, holder)
+-	att := &expr.AttributeExpr{Type: holder}
+-	first := ValidationCode(att, nil, ctx, true, false, false, "target")
+-	second := ValidationCode(att, nil, ctx, true, false, false, "target")
+-	require.Equal(t, first, second, "ValidationCode is not idempotent")
+-	assertValidationsUnchanged(t, before)
+-}
+-
+-// TestValidationCodeUsesBothExclusiveBounds verifies that generating a lower
+-// exclusive bound cannot leave the upper bound on the lower-bound template
+-// branch.
+-func TestValidationCodeUsesBothExclusiveBounds(t *testing.T) {
+-	exclusiveMinimum := 1.0
+-	exclusiveMaximum := 10.0
+-	attribute := &expr.AttributeExpr{
+-		Type: expr.Float64,
+-		Validation: &expr.ValidationExpr{
+-			ExclusiveMinimum: &exclusiveMinimum,
+-			ExclusiveMaximum: &exclusiveMaximum,
+-		},
+-	}
+-	context := NewAttributeContext(false, false, true, "", NewNameScope())
+-	legacy := ValidationCode(attribute, nil, context, true, false, true, "target")
+-	require.Contains(t, legacy, "target <= 1")
+-	require.Contains(t, legacy, "target >= 10")
+-
+-	layout, err := PlanGoType(attribute, GoTypePlanOptions{
+-		Owner:  "generated.local/gen/service",
+-		Policy: GoLayoutPolicy{UseDefault: true, SumType: true},
+-	})
+-	require.NoError(t, err)
+-	plan, err := NewValidationPlan(attribute, layout, ValidationPlanOptions{Required: true})
+-	require.NoError(t, err)
+-	linked, err := plan.Link(layout.Link("generated.local/gen/service", func(importPath string) string {
+-		require.Equal(t, "example.internal/apikit/v3/pkg", importPath)
+-		return "goa"
+-	}))
+-	require.NoError(t, err)
+-	require.Equal(t, legacy, linked.Render("target", "target"))
+-}
+-
+-// validationSnapshot captures the identity and deep value of an attribute
+-// validation so mutations can be detected after running codegen.
+-type validationSnapshot struct {
+-	att *expr.AttributeExpr
+-	ptr *expr.ValidationExpr
+-	dup *expr.ValidationExpr
+-}
+-
+-// snapshotValidations records the validation of every attribute reachable
+-// from the given user type, including down alias chains.
+-func snapshotValidations(t *testing.T, ut expr.UserType) []validationSnapshot {
+-	t.Helper()
+-	var snaps []validationSnapshot
+-	require.NoError(t, Walk(&expr.AttributeExpr{Type: ut}, func(a *expr.AttributeExpr) error {
+-		snaps = append(snaps, validationSnapshot{att: a, ptr: a.Validation, dup: dupValidationForTest(a.Validation)})
+-		return nil
+-	}))
+-	return snaps
+-}
+-
+-// assertValidationsUnchanged verifies that every snapshotted attribute still
+-// holds the exact same *ValidationExpr pointer with unchanged contents.
+-func assertValidationsUnchanged(t *testing.T, snaps []validationSnapshot) {
+-	t.Helper()
+-	for _, s := range snaps {
+-		if s.ptr == nil {
+-			require.Nil(t, s.att.Validation, "validation was assigned to an attribute that had none")
+-			continue
+-		}
+-		require.Same(t, s.ptr, s.att.Validation, "attribute validation pointer was replaced")
+-		require.Equal(t, s.dup, dupValidationForTest(s.att.Validation), "attribute validation contents were mutated")
+-	}
+-}
+-
+-// dupValidationForTest deep copies a validation, including the Values slice
+-// and scalar pointers, so in-place mutations of the original are detected.
+-func dupValidationForTest(v *expr.ValidationExpr) *expr.ValidationExpr {
+-	if v == nil {
+-		return nil
+-	}
+-	dupFloat := func(p *float64) *float64 {
+-		if p == nil {
+-			return nil
+-		}
+-		f := *p
+-		return &f
+-	}
+-	dupInt := func(p *int) *int {
+-		if p == nil {
+-			return nil
+-		}
+-		i := *p
+-		return &i
+-	}
+-	d := v.Dup()
+-	d.Values = append([]any(nil), v.Values...)
+-	d.ExclusiveMinimum = dupFloat(v.ExclusiveMinimum)
+-	d.Minimum = dupFloat(v.Minimum)
+-	d.Maximum = dupFloat(v.Maximum)
+-	d.ExclusiveMaximum = dupFloat(v.ExclusiveMaximum)
+-	d.MinLength = dupInt(v.MinLength)
+-	d.MaxLength = dupInt(v.MaxLength)
+-	return d
+-}
+-
+-// TestAliasTypeInArrayAndMap tests that alias types work correctly when
+-// nested in arrays and maps, ensuring the recursion guard doesn't interfere.
+-func TestAliasTypeInArrayAndMap(t *testing.T) {
+-	root := RunDSL(t, testdata.ValidationTypesDSL)
+-	scope := NewNameScope()
+-
+-	var (
+-		alias = root.UserType("Alias")
+-	)
+-
+-	// Create a type with alias in array
+-	arrayWithAlias := &expr.AttributeExpr{
+-		Type: &expr.Array{
+-			ElemType: &expr.AttributeExpr{Type: alias},
+-		},
+-	}
+-
+-	// Create a type with alias in map
+-	mapWithAlias := &expr.AttributeExpr{
+-		Type: &expr.Map{
+-			KeyType:  &expr.AttributeExpr{Type: expr.String},
+-			ElemType: &expr.AttributeExpr{Type: alias},
+-		},
+-	}
+-
+-	cases := []struct {
+-		Name   string
+-		Att    *expr.AttributeExpr
+-		Target string
+-	}{
+-		{"alias-in-array", arrayWithAlias, "target"},
+-		{"alias-in-map", mapWithAlias, "target"},
+-	}
+-
+-	for _, c := range cases {
+-		t.Run(c.Name, func(t *testing.T) {
+-			ctx := NewAttributeContext(false, false, false, "", scope)
+-			code := ValidationCode(c.Att, nil, ctx, true, false, false, c.Target)
+-			code = FormatTestCode(t, "package foo\nfunc Validate() (err error){\n"+code+"}")
+-
+-			// Verify validation code is generated
+-			if code == "" {
+-				t.Error("Expected validation code to be generated")
+-			}
+-			// Verify it contains validation for the alias type
+-			if !strings.Contains(code, "ValidatePattern") && !strings.Contains(code, "InvalidLengthError") {
+-				t.Error("Expected validation code to contain pattern or length validation for alias type")
+-			}
+-		})
+-	}
+-}
+--- a/codegen/validation_union_context_test.go
++++ /dev/null
+@@ -1,126 +0,0 @@
+-// These tests verify that validation follows the concrete union representation:
+-// service unions are values, while transport unions may use pointers for presence.
+-package codegen
+-
+-import (
+-	"testing"
+-
+-	"github.com/stretchr/testify/require"
+-
+-	dsl "example.internal/apikit/v3/dsl"
+-	"example.internal/apikit/v3/expr"
+-)
+-
+-type (
+-	// sumTypeTestScope reports that a union is stored directly as a Go value. The
+-	// test checks that generated validation uses this information.
+-	sumTypeTestScope struct {
+-		Attributor
+-	}
+-)
+-
+-func TestUnionValidationPreservesValueContextForRequiredOnlyObjectBranches(t *testing.T) {
+-	root := RunDSL(t, requiredObjectUnionDSL)
+-	scope := NewNameScope()
+-	unionT := root.UserType("UnionUserValidate")
+-	att := &expr.AttributeExpr{Type: unionT}
+-
+-	valueCode := ValidationCode(att, nil, NewAttributeContext(false, false, false, "", scope), true, false, false, "target")
+-	require.NotContains(t, valueCode, "ValidateSomeType(actual)")
+-	require.NotContains(t, valueCode, "ValidateSomeOtherType(actual)")
+-	require.NotContains(t, valueCode, "if actual != nil")
+-
+-	pointerCode := ValidationCode(att, nil, NewAttributeContext(true, false, false, "", scope), true, false, false, "target")
+-	require.Contains(t, pointerCode, "ValidateSomeType(actual)")
+-	require.Contains(t, pointerCode, "ValidateSomeOtherType(actual)")
+-}
+-
+-func TestUnionValidationUsesGeneratedFieldRepresentation(t *testing.T) {
+-	union := &expr.Union{
+-		TypeName: "Scope",
+-		Values: []*expr.NamedAttributeExpr{
+-			{
+-				Name: "description",
+-				Attribute: &expr.AttributeExpr{
+-					Type:       expr.String,
+-					Validation: &expr.ValidationExpr{Pattern: ".+"},
+-				},
+-			},
+-		},
+-	}
+-	attribute := &expr.AttributeExpr{
+-		Type: &expr.Object{
+-			{Name: "optional", Attribute: &expr.AttributeExpr{Type: union}},
+-			{Name: "required", Attribute: &expr.AttributeExpr{Type: union}},
+-		},
+-		Validation: &expr.ValidationExpr{Required: []string{"required"}},
+-	}
+-	scope := NewNameScope()
+-
+-	serviceCode := ValidationCode(
+-		attribute, nil, NewAttributeContext(false, false, true, "", scope), true, false, false, "target",
+-	)
+-	require.Contains(t, serviceCode, `if target.Required.Kind() == "" {`)
+-	require.NotContains(t, serviceCode, "if target.Optional != nil {")
+-
+-	transportCtx := NewAttributeContext(true, false, false, "", scope)
+-	transportCtx.UnionPointer = true
+-	transportCode := ValidationCode(attribute, nil, transportCtx, true, false, false, "target")
+-	require.Contains(t, transportCode, "if target.Required == nil {")
+-	require.Contains(t, transportCode, "if target.Required != nil {")
+-	require.Contains(t, transportCode, "if target.Optional != nil {")
+-	require.NotContains(t, transportCode, `if target.Required.Kind() == "" {`)
+-
+-	marshalCtx := NewAttributeContext(false, false, true, "", scope)
+-	marshalCtx.UnionPointer = true
+-	marshalCode := ValidationCode(attribute, nil, marshalCtx, true, false, false, "target")
+-	require.Contains(t, marshalCode, `if target.Required.Kind() == "" {`)
+-	require.NotContains(t, marshalCode, "if target.Required != nil {")
+-	require.Contains(t, marshalCode, "if target.Optional != nil {")
+-}
+-
+-func TestUnionValidationUsesCustomSumTypeResolver(t *testing.T) {
+-	union := &expr.Union{
+-		TypeName: "Scope",
+-		Values: []*expr.NamedAttributeExpr{
+-			{Name: "name", Attribute: &expr.AttributeExpr{Type: expr.String}},
+-		},
+-	}
+-	attribute := &expr.AttributeExpr{
+-		Type: &expr.Object{
+-			{Name: "scope", Attribute: &expr.AttributeExpr{Type: union}},
+-		},
+-		Validation: &expr.ValidationExpr{Required: []string{"scope"}},
+-	}
+-	context := NewAttributeContext(false, false, true, "", NewNameScope())
+-	context.Scope = &sumTypeTestScope{Attributor: context.Scope}
+-
+-	generated := ValidationCode(attribute, nil, context, true, false, false, "target")
+-
+-	require.Contains(t, generated, `if target.Scope.Kind() == "" {`)
+-	require.NotContains(t, generated, "if target.Scope == nil {")
+-}
+-
+-func (*sumTypeTestScope) IsSumType() bool {
+-	return true
+-}
+-
+-// requiredObjectUnionDSL defines a OneOf with required-only object branches so
+-// validation generation can distinguish pointer and value contexts.
+-func requiredObjectUnionDSL() {
+-	var someType = dsl.Type("SomeType", func() {
+-		dsl.Attribute("a", dsl.String)
+-		dsl.Required("a")
+-	})
+-	var someOtherType = dsl.Type("SomeOtherType", func() {
+-		dsl.Attribute("b", dsl.String)
+-		dsl.Required("b")
+-	})
+-
+-	_ = dsl.Type("UnionUserValidate", func() {
+-		dsl.OneOf("values", func() {
+-			dsl.Attribute("SomeType", someType)
+-			dsl.Attribute("SomeOtherType", someOtherType)
+-		})
+-	})
+-}

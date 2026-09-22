@@ -1,0 +1,111 @@
+--- a/codegen/types.go
++++ b/codegen/types.go
+@@ -1,9 +1,8 @@
+ package codegen
+ 
+ import (
+-	_ "fmt"
+-	_ "sort"
+-	_ "strings"
++	"fmt"
++	"strings"
+ 
+ 	"example.internal/apikit/v3/expr"
+ )
+@@ -11,32 +10,66 @@
+ // GoNativeTypeName returns the Go built-in type corresponding to the given
+ // primitive type. GoNativeType panics if t is not a primitive type.
+ func GoNativeTypeName(t expr.DataType) string {
+-	panic("excised: GoNativeTypeName")
++	switch t.Kind() {
++	case expr.BooleanKind:
++		return "bool"
++	case expr.IntKind:
++		return "int"
++	case expr.Int32Kind:
++		return "int32"
++	case expr.Int64Kind:
++		return "int64"
++	case expr.Float32Kind:
++		return "float32"
++	case expr.Float64Kind:
++		return "float64"
++	case expr.StringKind:
++		return "string"
++	case expr.BytesKind:
++		return "[]byte"
++	case expr.AnyKind:
++		return "any"
++	default:
++		return "any"
++	}
+ }
+ 
+ // IsNilable reports whether the Go type generated for t can be nil.
+ func IsNilable(t expr.DataType) bool {
+-	panic("excised: IsNilable")
++	return expr.IsObject(t) ||
++		expr.IsArray(t) ||
++		expr.IsMap(t)
+ }
+ 
+ // arrayElementIsPointer reports whether validation needs a pointer to tell a
+ // null element apart from the element type's zero value.
+ func arrayElementIsPointer(array *expr.Array, enabled bool) bool {
+-	panic("excised: arrayElementIsPointer")
++	return enabled && array.NonNullableElems && expr.IsPrimitive(array.ElemType.Type)
+ }
+ 
+ // goFieldIsPointer reports whether a field in a generated Apikit service struct
+ // uses a pointer. Unions remain values; their discriminator represents
+ // presence after the transport boundary has validated the wire shape.
+ func goFieldIsPointer(parent *expr.AttributeExpr, name string, pointer, useDefault bool) bool {
+-	panic("excised: goFieldIsPointer")
++	return pointer && expr.IsPrimitive(expr.AsObject(parent.Type).Attribute(name).Type)
+ }
+ 
+ // AttributeTags computes the struct field tags from the attribute's explicit
+ // struct:tag:* metadata, ignoring struct:tag:json:name which only renames the
+ // computed json tag (see AttributeTagsWithName).
+ func AttributeTags(att *expr.AttributeExpr) string {
+-	panic("excised: AttributeTags")
++	var elems []string
++	for key, val := range att.Meta {
++		if strings.HasPrefix(key, "struct:tag:") {
++			name := key[11:]
++			value := strings.Join(val, ",")
++			elems = append(elems, fmt.Sprintf("%s:\"%s\"", name, value))
++		}
++	}
++	if len(elems) > 0 {
++		return " `" + strings.Join(elems, " ") + "`"
++	}
++	return ""
+ }
+ 
+ // AttributeTagsWithName computes the struct field tags from its metadata,
+@@ -47,5 +80,23 @@
+ // computes the json tag and appends ",omitempty" when the field is not
+ // required by its parent object.
+ func AttributeTagsWithName(parent *expr.AttributeExpr, fieldName string, att *expr.AttributeExpr) string {
+-	panic("excised: AttributeTagsWithName")
++	if att == nil || len(att.Meta) == 0 {
++		return ""
++	}
++	var elems []string
++	for key, val := range att.Meta {
++		if !strings.HasPrefix(key, "struct:tag:") {
++			continue
++		}
++		name := key[11:]
++		value := strings.Join(val, ",")
++		if name == "json" && parent != nil && fieldName != "" && !parent.IsRequired(fieldName) {
++			value += ",omitempty"
++		}
++		elems = append(elems, fmt.Sprintf("%s:\"%s\"", name, value))
++	}
++	if len(elems) == 0 {
++		return ""
++	}
++	return " `" + strings.Join(elems, " ") + "`"
+ }

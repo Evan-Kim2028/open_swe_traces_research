@@ -1,0 +1,63 @@
+diff --git a/github/dependency_graph.go b/github/dependency_graph.go
+index 51e111f..c50b573 100644
+--- a/github/dependency_graph.go
++++ b/github/dependency_graph.go
+@@ -183,7 +183,7 @@ func (s *DependencyGraphService) GenerateSBOM(ctx context.Context, owner, repo s
+ //
+ //meta:operation GET /repos/{owner}/{repo}/dependency-graph/sbom/fetch-report/{sbom_uuid}
+ func (s *DependencyGraphService) FetchSBOM(ctx context.Context, owner, repo, sbomUUID string, followRedirectsClient *http.Client) (sbom *SBOM, redirectURL string, resp *Response, err error) {
+-		u := fmt.Sprintf("repos/%v/%v/dependency-graph/sbom/fetch-report/%v", owner, repo, sbomUUID)
++	u := fmt.Sprintf("repos/%v/%v/dependency-graph/sbom/fetch-report/%v", owner, repo, sbomUUID)
+ 
+ 	req, err := s.client.NewRequest(ctx, "GET", u, nil)
+ 	if err != nil {
+@@ -200,7 +200,16 @@ func (s *DependencyGraphService) FetchSBOM(ctx context.Context, owner, repo, sbo
+ 		return nil, "", resp, fmt.Errorf("expected redirect, got status %v", resp.Status)
+ 	}
+ 
+-	return nil, loc.String(), resp, nil /* excised: FetchSBOM */
++	if followRedirectsClient == nil {
++		return nil, loc.String(), resp, nil
++	}
++
++	sbom, err = s.fetchSBOMFromURL(ctx, followRedirectsClient, loc.String())
++	if err != nil {
++		return nil, "", resp, err
++	}
++
++	return sbom, "", resp, nil
+ }
+ 
+ // fetchSBOMFromURL downloads and decodes an SPDX report from a temporary download
+@@ -209,7 +218,7 @@ func (s *DependencyGraphService) FetchSBOM(ctx context.Context, owner, repo, sbo
+ // The request must not carry s.client's credentials: the URL is pre-signed and
+ // its host rejects authenticated requests.
+ func (s *DependencyGraphService) fetchSBOMFromURL(ctx context.Context, followRedirectsClient *http.Client, url string) (*SBOM, error) {
+-		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
++	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+@@ -218,12 +227,20 @@ func (s *DependencyGraphService) fetchSBOMFromURL(ctx context.Context, followRed
+ 	if err != nil {
+ 		return nil, err
+ 	}
+-	defer resp.Body.Close()
++
++	// CheckResponse substitutes resp.Body with a re-readable copy on error responses,
++	// so capture the network body first: it is the one that must be closed.
++	origBody := resp.Body
++	defer origBody.Close()
++
++	if err := CheckResponse(resp); err != nil {
++		return nil, err
++	}
+ 
+ 	var info *SBOMInfo
+ 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+ 		return nil, err
+ 	}
+ 
+-	return &SBOM{SBOM: info}, nil /* excised: fetchSBOMFromURL */
++	return &SBOM{SBOM: info}, nil
+ }

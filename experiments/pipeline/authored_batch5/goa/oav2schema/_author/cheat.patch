@@ -1,0 +1,226 @@
+diff --git a/http/codegen/openapi/v2/json_schema.go b/http/codegen/openapi/v2/json_schema.go
+--- a/http/codegen/openapi/v2/json_schema.go
++++ b/http/codegen/openapi/v2/json_schema.go
+@@ -3,9 +3,8 @@
+ package openapiv2
+ 
+ import (
+-	_ "fmt"
++	"fmt"
+ 
+-	_ "example.internal/apikit/v3/codegen"
+ 	"example.internal/apikit/v3/expr"
+ 	"example.internal/apikit/v3/http/codegen/openapi"
+ )
+@@ -21,80 +20,193 @@ type (
+ 
+ // newSchemaBuilder starts a schema build with no definitions or assigned names.
+ func newSchemaBuilder(values openapi.Values) *schemaBuilder {
+-	panic("excised: newSchemaBuilder")
++	return &schemaBuilder{
++		definitions:     make(map[string]*openapi.Schema),
++		definitionNames: make(map[*expr.ResultTypeExpr]string),
++		values:          values,
++	}
+ }
+ 
+ // BuildAttributeSchema returns the JSON schema for at. The returned schema
+ // includes every named definition referenced by at.
+ func BuildAttributeSchema(api *expr.APIExpr, at *expr.AttributeExpr, generator *expr.ExampleGenerator) *openapi.Schema {
+-	panic("excised: BuildAttributeSchema")
++	builder := newSchemaBuilder(openapi.Values{})
++	return builder.attributeTypeSchemaWithPrefix(api, at, "", generator)
+ }
+ 
+ // resultTypeRefWithPrefix returns a reference to the requested result view. It
+ // adds the definition to this builder the first time the result is used.
+ func (b *schemaBuilder) resultTypeRefWithPrefix(api *expr.APIExpr, mt *expr.ResultTypeExpr, view, prefix string, gen *expr.ExampleGenerator) string {
+-	panic("excised: schemaBuilder.resultTypeRefWithPrefix")
++	projected, err := expr.Project(mt, view)
++	if err != nil {
++		panic(fmt.Sprintf("failed to project media type %#v: %s", mt.Identifier, err)) // bug
++	}
++	return b.projectedResultTypeRefWithPrefix(api, mt, projected, prefix, gen)
+ }
+ 
+ // projectedResultTypeRefWithPrefix adds a result type that was already
+ // projected for one HTTP response.
+ func (b *schemaBuilder) projectedResultTypeRefWithPrefix(api *expr.APIExpr, source, projected *expr.ResultTypeExpr, prefix string, gen *expr.ExampleGenerator) string {
+-	panic("excised: schemaBuilder.projectedResultTypeRefWithPrefix")
++	name := projected.TypeName
++	if _, ok := b.definitions[name]; !ok {
++		b.generateResultTypeDefinition(api, projected, expr.DefaultView, gen)
++	}
++	return fmt.Sprintf("#/$defs/%s", name)
+ }
+ 
+ // typeRefWithPrefix returns a reference to a user type. It adds the definition
+ // to this builder the first time the type is used.
+ func (b *schemaBuilder) typeRefWithPrefix(api *expr.APIExpr, ut *expr.UserTypeExpr, prefix string, gen *expr.ExampleGenerator) string {
+-	panic("excised: schemaBuilder.typeRefWithPrefix")
++	typeName := ut.TypeName
++	if _, ok := b.definitions[typeName]; !ok {
++		b.generateTypeDefinitionWithName(api, ut, typeName, gen)
++	}
++	return fmt.Sprintf("#/$defs/%s", typeName)
+ }
+ 
+ // generateResultTypeDefinition adds the requested result view unless this
+ // build already has a definition with the same name.
+ func (b *schemaBuilder) generateResultTypeDefinition(api *expr.APIExpr, mt *expr.ResultTypeExpr, view string, gen *expr.ExampleGenerator) {
+-	panic("excised: schemaBuilder.generateResultTypeDefinition")
++	if _, ok := b.definitions[mt.TypeName]; ok {
++		return
++	}
++	schema := openapi.NewSchema()
++	b.definitions[mt.TypeName] = schema
++	b.buildResultTypeSchema(api, mt, view, schema, gen)
+ }
+ 
+ // generateTypeDefinitionWithName adds the user type under typeName unless this
+ // build already has a definition with that name.
+ func (b *schemaBuilder) generateTypeDefinitionWithName(api *expr.APIExpr, ut *expr.UserTypeExpr, typeName string, gen *expr.ExampleGenerator) {
+-	panic("excised: schemaBuilder.generateTypeDefinitionWithName")
++	if _, ok := b.definitions[typeName]; ok {
++		return
++	}
++	schema := openapi.NewSchema()
++	b.definitions[typeName] = schema
++	b.buildAttributeSchema(api, schema, ut.AttributeExpr, gen)
+ }
+ 
+ // typeSchema builds a schema for t and adds any named definitions it uses to
+ // this builder.
+ func (b *schemaBuilder) typeSchema(api *expr.APIExpr, t expr.DataType, gen *expr.ExampleGenerator) *openapi.Schema {
+-	panic("excised: schemaBuilder.typeSchema")
++	return b.typeSchemaWithPrefix(api, t, "", gen)
+ }
+ 
+ // typeSchemaWithPrefix builds a schema for t and adds prefix to new named
+ // definitions created while walking the type.
+ func (b *schemaBuilder) typeSchemaWithPrefix(api *expr.APIExpr, t expr.DataType, prefix string, gen *expr.ExampleGenerator) *openapi.Schema {
+-	panic("excised: schemaBuilder.typeSchemaWithPrefix")
++	schema := openapi.NewSchema()
++	switch actual := t.(type) {
++	case expr.Primitive:
++		schema.Type = openapi.Type(actual.Name())
++		switch actual.Kind() {
++		case expr.IntKind, expr.Int64Kind,
++			expr.UIntKind, expr.UInt64Kind:
++			schema.Type = openapi.Integer
++			schema.Format = "int64"
++		case expr.Int32Kind, expr.UInt32Kind:
++			schema.Type = openapi.Integer
++			schema.Format = "int32"
++		case expr.Float32Kind, expr.Float64Kind:
++			schema.Type = openapi.Number
++		case expr.BytesKind:
++			schema.Type = openapi.String
++			schema.Format = "byte"
++		}
++	case *expr.Array:
++		schema.Type = openapi.Array
++		schema.Items = openapi.NewSchema()
++		b.buildAttributeSchema(api, schema.Items, actual.ElemType, gen.ArrayElement(0))
++	case *expr.Object:
++		schema.Type = openapi.Object
++		for _, nat := range *actual {
++			property := openapi.NewSchema()
++			b.buildAttributeSchema(api, property, nat.Attribute, gen.Member(nat.Name))
++			schema.Properties[nat.Name] = property
++		}
++	case *expr.Map:
++		schema.Type = openapi.Object
++		if actual.KeyType.Type == expr.String && actual.ElemType.Type != expr.Any {
++			value := openapi.NewSchema()
++			schema.AdditionalProperties = b.buildAttributeSchema(api, value, actual.ElemType, gen.MapValue(0))
++		} else {
++			schema.AdditionalProperties = true
++		}
++	case *expr.Union:
++		typeKey := actual.GetTypeKey()
++		valueKey := actual.GetValueKey()
++		schema.Type = openapi.Object
++		for _, val := range actual.Values {
++			valueSchema := b.typeSchemaWithPrefix(api, val.Attribute.Type, prefix, gen.UnionMember(val.Name))
++			schema.AnyOf = append(schema.AnyOf, &openapi.Schema{
++				Type: openapi.Object,
++				Properties: map[string]*openapi.Schema{
++					typeKey: {
++						Type: openapi.String,
++						Enum: []any{val.Name},
++					},
++					valueKey: valueSchema,
++				},
++			})
++		}
++	case *expr.UserTypeExpr:
++		schema.Ref = b.typeRefWithPrefix(api, actual, prefix, gen)
++	case *expr.ResultTypeExpr:
++		schema.Ref = b.resultTypeRefWithPrefix(api, actual, expr.DefaultView, prefix, gen)
++	}
++	return schema
+ }
+ 
+ // attributeTypeSchemaWithPrefix builds a schema for at, including its
+ // validation rules, and adds prefix to new named definitions.
+ func (b *schemaBuilder) attributeTypeSchemaWithPrefix(api *expr.APIExpr, at *expr.AttributeExpr, prefix string, gen *expr.ExampleGenerator) *openapi.Schema {
+-	panic("excised: schemaBuilder.attributeTypeSchemaWithPrefix")
++	schema := b.typeSchemaWithPrefix(api, at.Type, prefix, gen)
++	initSchemaValidation(schema, at)
++	return schema
+ }
+ 
+ // buildAttributeSchema fills schema with the type, example, description, and
+ // validation rules from at.
+ func (b *schemaBuilder) buildAttributeSchema(api *expr.APIExpr, schema *openapi.Schema, at *expr.AttributeExpr, gen *expr.ExampleGenerator) *openapi.Schema {
+-	panic("excised: schemaBuilder.buildAttributeSchema")
++	schema.Merge(b.typeSchemaWithPrefix(api, at.Type, "", gen))
++	if schema.Ref != "" {
++		return schema
++	}
++	initSchemaValidation(schema, at)
++	return schema
+ }
+ 
+ // initSchemaValidation copies the validation rules from at into schema.
+ func initSchemaValidation(schema *openapi.Schema, at *expr.AttributeExpr) {
+-	panic("excised: initSchemaValidation")
+-}
+-
+-// renamedResultType returns rt with name without changing the design result.
+-func renamedResultType(rt *expr.ResultTypeExpr, name string) *expr.ResultTypeExpr {
+-	panic("excised: renamedResultType")
++	validation := at.Validation
++	if validation == nil {
++		return
++	}
++	schema.Enum = validation.Values
++	if validation.Format != "" {
++		schema.Format = string(validation.Format)
++	}
++	schema.Pattern = validation.Pattern
++	if validation.Minimum != nil {
++		schema.Minimum = validation.Minimum
++	}
++	if validation.Maximum != nil {
++		schema.Maximum = validation.Maximum
++	}
++	if validation.MinLength != nil {
++		schema.MinLength = validation.MinLength
++	}
++	if validation.MaxLength != nil {
++		schema.MaxLength = validation.MaxLength
++	}
++	schema.Required = append(schema.Required, validation.Required...)
+ }
+ 
+ // buildResultTypeSchema fills schema with the requested result view.
+ func (b *schemaBuilder) buildResultTypeSchema(api *expr.APIExpr, mt *expr.ResultTypeExpr, view string, schema *openapi.Schema, gen *expr.ExampleGenerator) {
+-	panic("excised: schemaBuilder.buildResultTypeSchema")
++	projected, err := expr.Project(mt, view)
++	if err != nil {
++		panic(fmt.Sprintf("failed to project media type %#v: %s", mt.Identifier, err)) // bug
++	}
++	b.buildAttributeSchema(api, schema, projected.AttributeExpr, gen)
+ }

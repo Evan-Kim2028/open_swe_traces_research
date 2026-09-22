@@ -1,0 +1,14 @@
+diff --git a/github/repos_contents.go b/github/repos_contents.go
+index 131885a..386a348 100644
+--- a/github/repos_contents.go
++++ b/github/repos_contents.go
+@@ -228,7 +228,8 @@ func (s *RepositoriesService) DownloadContentsWithMeta(ctx context.Context, owne
+ //
+ //meta:operation GET /repos/{owner}/{repo}/contents/{path}
+ func (s *RepositoriesService) GetContents(ctx context.Context, owner, repo, path string, opts *RepositoryContentGetOptions) (fileContent *RepositoryContent, directoryContent []*RepositoryContent, resp *Response, err error) {
+-		u := fmt.Sprintf("repos/%v/%v/contents/%v", owner, repo, path)
++		escapedPath := (&url.URL{Path: strings.TrimSuffix(path, "/")}).String()
++	u := fmt.Sprintf("repos/%v/%v/contents/%v", owner, repo, escapedPath)
+ 	u, err = addOptions(u, opts)
+ 	if err != nil {
+ 		return nil, nil, nil, err

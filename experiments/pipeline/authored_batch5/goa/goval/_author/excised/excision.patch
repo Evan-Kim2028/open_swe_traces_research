@@ -1,0 +1,1403 @@
+diff --git a/codegen/go_transform_helpers_test.go b/codegen/go_transform_helpers_test.go
+deleted file mode 100644
+--- a/codegen/go_transform_helpers_test.go
++++ /dev/null
+@@ -1,61 +0,0 @@
+-package codegen
+-
+-import (
+-	"testing"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	"example.internal/apikit/v3/codegen/testdata"
+-	"example.internal/apikit/v3/expr"
+-)
+-
+-func TestGoTransformHelpers(t *testing.T) {
+-	root := RunDSL(t, testdata.TestTypesDSL)
+-	var (
+-		scope = NewNameScope()
+-		// types to test
+-		simple        = root.UserType("Simple")
+-		recursive     = root.UserType("Recursive")
+-		composite     = root.UserType("Composite")
+-		deep          = root.UserType("Deep")
+-		deepArray     = root.UserType("DeepArray")
+-		simpleAlias   = root.UserType("SimpleAlias")
+-		mapAlias      = root.UserType("NestedMapAlias")
+-		arrayMapAlias = root.UserType("ArrayMapAlias")
+-		collection    = root.UserType("ResultTypeCollection")
+-		// attribute contexts used in test cases
+-		defaultCtx = NewAttributeContext(false, false, true, "", scope)
+-	)
+-	tc := []struct {
+-		Name        string
+-		Type        expr.DataType
+-		HelperNames []string
+-	}{
+-		{"simple", simple, nil},
+-		{"recursive", recursive, []string{"transformRecursiveToRecursive"}},
+-		{"composite", composite, []string{"transformSimpleToSimple"}},
+-		{"deep", deep, []string{"transformCompositeToComposite", "transformSimpleToSimple"}},
+-		{"deep-array", deepArray, []string{"transformCompositeToComposite", "transformSimpleToSimple"}},
+-		{"simple-alias", simpleAlias, nil},
+-		{"nested-map-alias", mapAlias, nil},
+-		{"array-map-alias", arrayMapAlias, nil},
+-		{"result-type-collection", collection, []string{"transformResultTypeToResultType"}},
+-	}
+-	for _, c := range tc {
+-		t.Run(c.Name, func(t *testing.T) {
+-			require.NotNil(t, c.Type, "source type not found in testdata")
+-			_, funcs, err := GoTransform(&expr.AttributeExpr{Type: c.Type}, &expr.AttributeExpr{Type: c.Type}, "source", "target", defaultCtx, defaultCtx, "", true)
+-			require.NoError(t, err)
+-			assert.Equal(t, len(c.HelperNames), len(funcs), "invalid helpers count")
+-			var actual []string
+-			if len(funcs) > 0 {
+-				actual = make([]string, len(funcs))
+-				for i, f := range funcs {
+-					actual[i] = f.Name
+-				}
+-			}
+-			assert.Equal(t, c.HelperNames, actual, "invalid helper names")
+-		})
+-	}
+-}
+diff --git a/codegen/go_transform_test.go b/codegen/go_transform_test.go
+--- a/codegen/go_transform_test.go
++++ b/codegen/go_transform_test.go
+@@ -45,191 +45,6 @@ func (f transformTestOrderFactory) order(location TransformHelperDefinitionLocat
+ 	return testNameOrder{value: string(f) + location.encoded}
+ }
+ 
+-func TestGoTransform(t *testing.T) {
+-	root := RunDSL(t, testdata.TestTypesDSL)
+-	var (
+-		scope = NewNameScope()
+-
+-		// types to test
+-		simple   = root.UserType("Simple")
+-		super    = root.UserType("Super")
+-		required = root.UserType("Required")
+-		defaultT = root.UserType("Default")
+-
+-		simpleMap   = root.UserType("SimpleMap")
+-		requiredMap = root.UserType("RequiredMap")
+-		defaultMap  = root.UserType("DefaultMap")
+-		nestedMap   = root.UserType("NestedMap")
+-		typeMap     = root.UserType("TypeMap")
+-		arrayMap    = root.UserType("ArrayMap")
+-
+-		simpleArray   = root.UserType("SimpleArray")
+-		requiredArray = root.UserType("RequiredArray")
+-		defaultArray  = root.UserType("DefaultArray")
+-		nestedArray   = root.UserType("NestedArray")
+-		typeArray     = root.UserType("TypeArray")
+-		mapArray      = root.UserType("MapArray")
+-
+-		recursive      = root.UserType("Recursive")
+-		recursiveArray = root.UserType("RecursiveArray")
+-		recursiveMap   = root.UserType("RecursiveMap")
+-		composite      = root.UserType("Composite")
+-		customField    = root.UserType("CompositeWithCustomField")
+-		defaults       = root.UserType("WithDefaults")
+-
+-		resultType = root.UserType("ResultType")
+-		rtCol      = root.UserType("ResultTypeCollection")
+-
+-		simpleAlias    = root.UserType("SimpleAlias")
+-		nestedMapAlias = root.UserType("NestedMapAlias")
+-		arrayMapAlias  = root.UserType("ArrayMapAlias")
+-		stringAlias    = root.UserType("StringAlias")
+-
+-		// primitive tyes
+-		stringT = expr.String
+-
+-		// attribute contexts used in test cases
+-		defaultCtx        = NewAttributeContext(false, false, true, "", scope)
+-		defaultCtxPkg     = NewAttributeContext(false, false, true, "mypkg", scope)
+-		pointerCtx        = NewAttributeContext(true, false, false, "", scope)
+-		defaultPointerCtx = NewAttributeContext(true, false, true, "", scope)
+-	)
+-	tc := map[string][]struct {
+-		Name      string
+-		Source    expr.DataType
+-		Target    expr.DataType
+-		SourceCtx *AttributeContext
+-		TargetCtx *AttributeContext
+-	}{
+-		// source and target type use default
+-		"source-target-type-use-default": {
+-			{"simple-to-simple", simple, simple, defaultCtx, defaultCtx},
+-			{"simple-to-required", simple, required, defaultCtx, defaultCtx},
+-			{"required-to-simple", required, simple, defaultCtx, defaultCtx},
+-			{"simple-to-super", simple, super, defaultCtx, defaultCtx},
+-			{"super-to-simple", super, simple, defaultCtx, defaultCtx},
+-			{"simple-to-default", simple, defaultT, defaultCtx, defaultCtx},
+-			{"default-to-simple", defaultT, simple, defaultCtx, defaultCtx},
+-
+-			// maps
+-			{"map-to-map", simpleMap, simpleMap, defaultCtx, defaultCtx},
+-			{"map-to-required-map", simpleMap, requiredMap, defaultCtx, defaultCtx},
+-			{"required-map-to-map", requiredMap, simpleMap, defaultCtx, defaultCtx},
+-			{"map-to-default-map", simpleMap, defaultMap, defaultCtx, defaultCtx},
+-			{"default-map-to-map", defaultMap, simpleMap, defaultCtx, defaultCtx},
+-			{"required-map-to-default-map", requiredMap, defaultMap, defaultCtx, defaultCtx},
+-			{"default-map-to-required-map", defaultMap, requiredMap, defaultCtx, defaultCtx},
+-			{"nested-map-to-nested-map", nestedMap, nestedMap, defaultCtx, defaultCtx},
+-			{"type-map-to-type-map", typeMap, typeMap, defaultCtx, defaultCtx},
+-			{"array-map-to-array-map", arrayMap, arrayMap, defaultCtx, defaultCtx},
+-
+-			// arrays
+-			{"array-to-array", simpleArray, simpleArray, defaultCtx, defaultCtx},
+-			{"array-to-required-array", simpleArray, requiredArray, defaultCtx, defaultCtx},
+-			{"required-array-to-array", requiredArray, simpleArray, defaultCtx, defaultCtx},
+-			{"array-to-default-array", simpleArray, defaultArray, defaultCtx, defaultCtx},
+-			{"default-array-to-array", defaultArray, simpleArray, defaultCtx, defaultCtx},
+-			{"required-array-to-default-array", requiredArray, defaultArray, defaultCtx, defaultCtx},
+-			{"default-array-to-required-array", defaultArray, requiredArray, defaultCtx, defaultCtx},
+-			{"nested-array-to-nested-array", nestedArray, nestedArray, defaultCtx, defaultCtx},
+-			{"type-array-to-type-array", typeArray, typeArray, defaultCtx, defaultCtx},
+-			{"map-array-to-map-array", mapArray, mapArray, defaultCtx, defaultCtx},
+-
+-			// others
+-			{"recursive-to-recursive", recursive, recursive, defaultCtx, defaultCtx},
+-			{"recursive-array-to-recursive-array", recursiveArray, recursiveArray, defaultCtx, defaultCtx},
+-			{"recursive-map-to-recursive-map", recursiveMap, recursiveMap, defaultCtx, defaultCtx},
+-			{"composite-to-custom-field", composite, customField, defaultCtx, defaultCtx},
+-			{"custom-field-to-composite", customField, composite, defaultCtx, defaultCtx},
+-			{"composite-to-custom-field-pkg", composite, customField, defaultCtx, defaultCtxPkg},
+-			{"result-type-to-result-type", resultType, resultType, defaultCtx, defaultCtx},
+-			{"result-type-collection-to-result-type-collection", rtCol, rtCol, defaultCtx, defaultCtx},
+-			{"defaults-to-defaults-types", defaults, defaults, defaultCtx, defaultCtx},
+-
+-			// alias
+-			{"simple-alias-to-simple", simpleAlias, simple, defaultCtx, defaultCtx},
+-			{"simple-to-simple-alias", simple, simpleAlias, defaultCtx, defaultCtx},
+-			{"nested-map-alias-to-nested-map", nestedMapAlias, nestedMap, defaultCtx, defaultCtx},
+-			{"nested-map-to-nested-map-alias", nestedMap, nestedMapAlias, defaultCtx, defaultCtx},
+-			{"array-map-alias-to-array-map", arrayMapAlias, arrayMap, defaultCtx, defaultCtx},
+-			{"array-map-to-array-map-alias", arrayMap, arrayMapAlias, defaultCtx, defaultCtx},
+-			{"string-to-string-alias", stringT, stringAlias, defaultCtx, defaultCtx},
+-			{"string-alias-to-string", stringAlias, stringT, defaultCtx, defaultCtx},
+-			{"string-alias-to-string-alias", stringAlias, stringAlias, defaultCtx, defaultCtx},
+-		},
+-
+-		// source type uses pointers for all fields, target type uses default
+-		"source-type-all-ptrs-target-type-uses-default": {
+-			{"simple-to-simple", simple, simple, pointerCtx, defaultCtx},
+-			{"simple-to-required", simple, required, pointerCtx, defaultCtx},
+-			{"required-to-simple", required, simple, pointerCtx, defaultCtx},
+-			{"simple-to-super", simple, super, pointerCtx, defaultCtx},
+-			{"super-to-simple", super, simple, pointerCtx, defaultCtx},
+-			{"simple-to-default", simple, defaultT, pointerCtx, defaultCtx},
+-			{"default-to-simple", defaultT, simple, pointerCtx, defaultCtx},
+-
+-			// maps
+-			{"required-map-to-map", requiredMap, simpleMap, pointerCtx, defaultCtx},
+-			{"default-map-to-map", defaultMap, simpleMap, pointerCtx, defaultCtx},
+-			{"required-map-to-default-map", requiredMap, defaultMap, pointerCtx, defaultCtx},
+-			{"default-map-to-required-map", defaultMap, requiredMap, pointerCtx, defaultCtx},
+-
+-			// arrays
+-			{"default-array-to-array", defaultArray, simpleArray, pointerCtx, defaultCtx},
+-			{"required-array-to-default-array", requiredArray, defaultArray, pointerCtx, defaultCtx},
+-			{"default-array-to-required-array", defaultArray, requiredArray, pointerCtx, defaultCtx},
+-
+-			// others
+-			{"custom-field-to-composite", customField, composite, pointerCtx, defaultCtx},
+-
+-			// alias
+-			{"simple-alias-to-simple", simpleAlias, simple, pointerCtx, defaultCtx},
+-			{"simple-to-simple-alias", simple, simpleAlias, pointerCtx, defaultCtx},
+-		},
+-
+-		// source type uses default, target type uses pointers for all fields
+-		"source-type-uses-default-target-type-all-ptrs": {
+-			{"simple-to-simple", simple, simple, defaultCtx, pointerCtx},
+-			{"simple-to-required", simple, required, defaultCtx, pointerCtx},
+-			{"required-to-simple", required, simple, defaultCtx, pointerCtx},
+-			{"simple-to-default", simple, defaultT, defaultCtx, pointerCtx},
+-			{"default-to-simple", defaultT, simple, defaultCtx, pointerCtx},
+-
+-			// maps
+-			{"map-to-default-map", simpleMap, defaultMap, defaultCtx, pointerCtx},
+-
+-			// arrays
+-			{"array-to-default-array", simpleArray, defaultArray, defaultCtx, pointerCtx},
+-
+-			// alias
+-			{"simple-alias-to-simple", simpleAlias, simple, defaultCtx, pointerCtx},
+-			{"simple-to-simple-alias", simple, simpleAlias, defaultCtx, pointerCtx},
+-
+-			// others
+-			{"recursive-to-recursive", recursive, recursive, defaultCtx, pointerCtx},
+-			{"composite-to-custom-field", composite, customField, defaultCtx, pointerCtx},
+-		},
+-
+-		// target type uses default and pointers for all fields
+-		"target-type-uses-default-all-ptrs": {
+-			{"simple-to-simple", simple, simple, defaultCtx, defaultPointerCtx},
+-		},
+-	}
+-	for name, cases := range tc {
+-		t.Run(name, func(t *testing.T) {
+-			for _, c := range cases {
+-				t.Run(c.Name, func(t *testing.T) {
+-					require.NotNil(t, c.Source)
+-					require.NotNil(t, c.Target)
+-					code, _, err := GoTransform(&expr.AttributeExpr{Type: c.Source}, &expr.AttributeExpr{Type: c.Target}, "source", "target", c.SourceCtx, c.TargetCtx, "", true)
+-					require.NoError(t, err)
+-					code = FormatTestCode(t, "package foo\nfunc transform(){\n"+code+"}")
+-					testutil.AssertGo(t, "testdata/golden/go_transform_"+name+"_"+c.Name+".go.golden", code)
+-				})
+-			}
+-		})
+-	}
+-}
+ 
+ func TestGoTransformServiceUnionField(t *testing.T) {
+ 	union := &expr.Union{
+@@ -362,117 +177,8 @@ func TestGoTransformRequiredPrimitiveArrayElements(t *testing.T) {
+ 	require.NotContains(t, unchanged, "*val")
+ }
+ 
+-// TestGoTransformUsesDesignNilabilityForCustomTypes verifies that default
+-// handling does not infer comparability from a generated Go type spelling.
+-func TestGoTransformUsesDesignNilabilityForCustomTypes(t *testing.T) {
+-	raw := &expr.AttributeExpr{
+-		Type:         expr.String,
+-		DefaultValue: json.RawMessage("foo"),
+-		Meta: expr.MetaExpr{
+-			"struct:field:type": {"json.RawMessage", "encoding/json", "json"},
+-		},
+-	}
+-	defaults := goTypeTestUserType("WithRaw", &expr.Object{
+-		{Name: "raw", Attribute: raw},
+-	})
+-	context := NewAttributeContext(false, false, true, "", NewNameScope())
+ 
+-	code, _, err := GoTransform(
+-		&expr.AttributeExpr{Type: defaults},
+-		&expr.AttributeExpr{Type: defaults},
+-		"source",
+-		"target",
+-		context,
+-		context,
+-		"",
+-		true,
+-	)
+-	require.NoError(t, err)
+-	require.Contains(t, code, "if target.Raw == nil")
+-	require.NotContains(t, code, "var zero json.RawMessage")
+-	compileTransformSource(t, `package transformtest
+-
+-import "encoding/json"
+-
+-type WithRaw struct {
+-	Raw json.RawMessage
+-}
+ 
+-func transform(source *WithRaw) *WithRaw {
+-`+code+`
+-	return target
+-}
+-`)
+-}
+-
+-// TestGoTransformDefaultUsesFinalCustomTypeImportAlias verifies that the
+-// zero-value check uses the same package name as the generated import.
+-func TestGoTransformDefaultUsesFinalCustomTypeImportAlias(t *testing.T) {
+-	const customPath = "example.com/custom/strconv"
+-	generation := mustTestGeneration(t, "generated.local/gen", nil)
+-	pkg := mustClaimTestPackage(t, generation, "generated.local/gen/service")
+-	field := &expr.AttributeExpr{
+-		Type:         expr.String,
+-		DefaultValue: "ready",
+-		Meta: expr.MetaExpr{
+-			"struct:field:type": {"strconv.Token", customPath, "strconv"},
+-		},
+-	}
+-	withDefault := goTypeTestUserType("WithDefault", &expr.Object{
+-		{Name: "token", Attribute: field},
+-	})
+-	_, err := pkg.DeclareUserType(withDefault)
+-	require.NoError(t, err)
+-	require.NoError(t, pkg.DeclareImport(NewImport("strconv", customPath)))
+-	require.NoError(t, pkg.RequireImport(SimpleImport("strconv")))
+-	require.NoError(t, generation.Freeze())
+-	require.Equal(t, "strconv2", pkg.ImportName(customPath))
+-	context := NewAttributeContext(false, false, true, "", pkg.Scope())
+-
+-	code, _, err := GoTransform(
+-		&expr.AttributeExpr{Type: withDefault},
+-		&expr.AttributeExpr{Type: withDefault},
+-		"source",
+-		"target",
+-		context,
+-		context,
+-		"",
+-		true,
+-	)
+-	require.NoError(t, err)
+-	require.Contains(t, code, "var zero strconv2.Token")
+-	require.NotContains(t, code, "var zero strconv.Token")
+-}
+-
+-// TestGoTransformReturnsFirstDefaultError verifies that a later field cannot
+-// hide an invalid earlier default while the generator walks an object.
+-func TestGoTransformReturnsFirstDefaultError(t *testing.T) {
+-	invalid := &expr.AttributeExpr{
+-		Type:         expr.String,
+-		DefaultValue: json.RawMessage("foo"),
+-		Meta: expr.MetaExpr{
+-			"struct:field:type": {"json.RawMessage", "example.com/not-json", "json"},
+-		},
+-	}
+-	valid := &expr.AttributeExpr{Type: expr.String, DefaultValue: "ready"}
+-	defaults := goTypeTestUserType("Defaults", &expr.Object{
+-		{Name: "invalid", Attribute: invalid},
+-		{Name: "valid", Attribute: valid},
+-	})
+-	context := NewAttributeContext(false, false, true, "", NewNameScope())
+-
+-	_, _, err := GoTransform(
+-		&expr.AttributeExpr{Type: defaults},
+-		&expr.AttributeExpr{Type: defaults},
+-		"source",
+-		"target",
+-		context,
+-		context,
+-		"",
+-		true,
+-	)
+-	require.EqualError(t, err, `render Go value for string: default for custom Go type "json.RawMessage" has Go type json.RawMessage`)
+-}
+ 
+ // TestGoTransformArrayLoopNameUsesNestingDepth verifies that brackets in a
+ // caller expression do not change the generated loop variable.
+diff --git a/codegen/go_value.go b/codegen/go_value.go
+--- a/codegen/go_value.go
++++ b/codegen/go_value.go
+@@ -4,12 +4,12 @@
+ package codegen
+ 
+ import (
+-	"fmt"
+-	"math"
++	_ "fmt"
++	_ "math"
+ 	"reflect"
+-	"sort"
+-	"strconv"
+-	"strings"
++	_ "sort"
++	_ "strconv"
++	_ "strings"
+ 
+ 	"example.internal/apikit/v3/expr"
+ )
+@@ -56,528 +56,111 @@ type (
+ // pointer reports whether the complete value is stored through a pointer.
+ // resolveUnion is required only when attribute contains a OneOf value.
+ func RenderGoValue(attribute *expr.AttributeExpr, value any, layout LinkedGoType, pointer bool, resolveUnion UnionConstructorResolver, localPrefix string) (GoValueCode, error) {
+-	if attribute == nil {
+-		return GoValueCode{}, fmt.Errorf("render Go value: attribute must not be nil")
+-	}
+-	if layout.plan == nil {
+-		return GoValueCode{}, fmt.Errorf("render Go value for %s: linked Go type must not be empty", attribute.Type.Name())
+-	}
+-	prefix := Goify(localPrefix, false)
+-	if prefix == "" {
+-		prefix = "defaultValue"
+-	}
+-	renderer := &goValueRenderer{
+-		resolveUnion: resolveUnion,
+-		prefix:       prefix,
+-	}
+-	expression, err := renderer.render(attribute, reflect.ValueOf(value), layout, pointer)
+-	if err != nil {
+-		return GoValueCode{}, fmt.Errorf("render Go value for %s: %w", attribute.Type.Name(), err)
+-	}
+-	return GoValueCode{
+-		Declarations: renderer.declarations,
+-		Expression:   expression,
+-	}, nil
++	panic("excised: RenderGoValue")
+ }
+ 
+ // planGoTypeWithAttributor records the final names selected by an attribute
+ // scope. Pointer choices still come only from GoTypePlan.
+ func planGoTypeWithAttributor(attribute *expr.AttributeExpr, policy GoLayoutPolicy, attributor Attributor) (LinkedGoType, error) {
+-	const owner = "apikit.local/generated"
+-	plan, err := PlanGoType(attribute, GoTypePlanOptions{
+-		Owner:            owner,
+-		Policy:           policy,
+-		RetainNamedValue: true,
+-		Bind: func(request GoTypeBindingRequest) (GoTypeBinding, error) {
+-			return GoTypeBinding{
+-				Owner: request.InheritedOwner,
+-				name: attributor.Name(
+-					request.Attribute,
+-					attributor.Package(request.Attribute),
+-					policy.Pointer,
+-					policy.UseDefault,
+-				),
+-			}, nil
+-		},
+-	})
+-	if err != nil {
+-		return LinkedGoType{}, err
+-	}
+-	imports := make(map[string]string)
+-	for _, preference := range plan.ImportPreferences() {
+-		imports[preference.Path] = preference.Name
+-	}
+-	return plan.Link(owner, func(importPath string) string {
+-		return imports[importPath]
+-	}), nil
++	panic("excised: planGoTypeWithAttributor")
+ }
+ 
+ // render writes the expression for one value and records any local values
+ // whose addresses are required by the target layout.
+ func (r *goValueRenderer) render(attribute *expr.AttributeExpr, value reflect.Value, layout LinkedGoType, pointer bool) (string, error) {
+-	concrete, err := concreteGoValue(value)
+-	if err != nil {
+-		return "", err
+-	}
+-	var expression string
+-	shape := layout
+-	if layout.plan.kind == GoNamed {
+-		if layout.plan.value == nil {
+-			return "", fmt.Errorf("named type %q has no planned value layout", attribute.Type.Name())
+-		}
+-		shape = layout.Enter(layout.plan.value)
+-	}
+-	switch {
+-	case expr.IsPrimitive(attribute.Type):
+-		expression, err = r.renderPrimitive(attribute, concrete, layout)
+-	case expr.IsArray(attribute.Type):
+-		expression, err = r.renderArray(attribute, concrete, layout, shape)
+-	case expr.IsMap(attribute.Type):
+-		expression, err = r.renderMap(attribute, concrete, layout, shape)
+-	case expr.IsObject(attribute.Type):
+-		expression, err = r.renderObject(attribute, concrete, layout, shape, pointer)
+-		pointer = false
+-	case expr.IsUnion(attribute.Type):
+-		expression, err = r.renderUnion(attribute, concrete, layout)
+-	default:
+-		err = fmt.Errorf("unsupported design type %T", attribute.Type)
+-	}
+-	if err != nil {
+-		return "", err
+-	}
+-	if !pointer {
+-		return expression, nil
+-	}
+-	local := r.localName()
+-	r.declarations = append(r.declarations, fmt.Sprintf("var %s %s = %s", local, layout.Def(), expression))
+-	return "&" + local, nil
++	panic("excised: goValueRenderer.render")
+ }
+ 
+ // renderPrimitive writes a primitive literal and converts it to the planned
+ // named type when the design or field metadata requires one.
+ func (r *goValueRenderer) renderPrimitive(attribute *expr.AttributeExpr, value reflect.Value, layout LinkedGoType) (string, error) {
+-	primitive := underlyingPrimitive(attribute.Type)
+-	if custom, spec := GetMetaType(attribute); custom != "" {
+-		if custom == GoNativeTypeName(primitive) {
+-			return renderPrimitiveLiteral(primitive, value)
+-		}
+-		if err := validateCustomDefault(custom, spec, value); err != nil {
+-			return "", err
+-		}
+-		if value.Type().PkgPath() == "" {
+-			return renderPrimitiveLiteral(primitive, value)
+-		}
+-		return renderTypedCustomValue(layout.Def(), value)
+-	}
+-	literal, err := renderPrimitiveLiteral(primitive, value)
+-	if err != nil {
+-		return "", err
+-	}
+-	return literal, nil
++	panic("excised: goValueRenderer.renderPrimitive")
+ }
+ 
+ // renderArray writes every element using the element layout selected by the
+ // same generator context.
+ func (r *goValueRenderer) renderArray(attribute *expr.AttributeExpr, value reflect.Value, layout, shape LinkedGoType) (string, error) {
+-	if value.Kind() != reflect.Array && value.Kind() != reflect.Slice {
+-		return "", fmt.Errorf("array default has Go type %s", value.Type())
+-	}
+-	array := expr.AsArray(attribute.Type)
+-	items := make([]string, value.Len())
+-	elementLayout := shape.Enter(shape.plan.element)
+-	for index := range items {
+-		item, err := r.render(array.ElemType, value.Index(index), elementLayout, elementLayout.plan.definitionPointer)
+-		if err != nil {
+-			return "", fmt.Errorf("array element %d: %w", index, err)
+-		}
+-		items[index] = item
+-	}
+-	return fmt.Sprintf("%s{%s}", layout.Def(), strings.Join(items, ", ")), nil
++	panic("excised: goValueRenderer.renderArray")
+ }
+ 
+ // renderMap writes map entries in source order independent form so generated
+ // files remain stable across runs.
+ func (r *goValueRenderer) renderMap(attribute *expr.AttributeExpr, value reflect.Value, layout, shape LinkedGoType) (string, error) {
+-	if value.Kind() != reflect.Map {
+-		return "", fmt.Errorf("map default has Go type %s", value.Type())
+-	}
+-	mapped := expr.AsMap(attribute.Type)
+-	values, err := orderedMapValues(mapped.KeyType, value)
+-	if err != nil {
+-		return "", err
+-	}
+-	entries := make([]string, 0, len(values))
+-	keyLayout := shape.Enter(shape.plan.key)
+-	elementLayout := shape.Enter(shape.plan.element)
+-	for _, item := range values {
+-		key, err := r.render(mapped.KeyType, item.key, keyLayout, keyLayout.plan.definitionPointer)
+-		if err != nil {
+-			return "", fmt.Errorf("map key: %w", err)
+-		}
+-		element, err := r.render(mapped.ElemType, item.value, elementLayout, elementLayout.plan.definitionPointer)
+-		if err != nil {
+-			return "", fmt.Errorf("map value for %s: %w", key, err)
+-		}
+-		entries = append(entries, key+":"+element)
+-	}
+-	return fmt.Sprintf("%s{%s}", layout.Def(), strings.Join(entries, ", ")), nil
++	panic("excised: goValueRenderer.renderMap")
+ }
+ 
+ // renderObject writes only the fields supplied by the authored value. Pointer
+ // fields use local declarations when Go cannot take a scalar literal address.
+ func (r *goValueRenderer) renderObject(attribute *expr.AttributeExpr, value reflect.Value, layout, shape LinkedGoType, pointer bool) (string, error) {
+-	object := expr.AsObject(attribute.Type)
+-	fields := make([]string, 0, len(*object))
+-	for index, field := range *object {
+-		fieldValue, present, err := authoredObjectField(value, field.Name, field.Attribute)
+-		if err != nil {
+-			return "", err
+-		}
+-		if !present {
+-			continue
+-		}
+-		fieldLayout := shape.Enter(shape.plan.fields[index])
+-		expression, err := r.render(field.Attribute, fieldValue, fieldLayout, fieldLayout.plan.fieldPointer)
+-		if err != nil {
+-			return "", fmt.Errorf("object field %q: %w", field.Name, err)
+-		}
+-		name := fieldLayout.Field(true)
+-		fields = append(fields, name+": "+expression)
+-	}
+-	prefix := ""
+-	if pointer {
+-		prefix = "&"
+-	}
+-	return fmt.Sprintf("%s%s{%s}", prefix, layout.Def(), strings.Join(fields, ", ")), nil
++	panic("excised: goValueRenderer.renderObject")
+ }
+ 
+ // renderUnion selects the authored branch and calls the constructor retained
+ // by the generated service package.
+ func (r *goValueRenderer) renderUnion(attribute *expr.AttributeExpr, value reflect.Value, layout LinkedGoType) (string, error) {
+-	if r.resolveUnion == nil {
+-		return "", fmt.Errorf("OneOf default requires a planned branch constructor")
+-	}
+-	if value.Kind() != reflect.Map {
+-		return "", fmt.Errorf("OneOf default has Go type %s", value.Type())
+-	}
+-	union := expr.AsUnion(attribute.Type)
+-	tagValue, found := reflectedMapValue(value, union.GetTypeKey())
+-	if !found {
+-		return "", fmt.Errorf("OneOf default is missing %q", union.GetTypeKey())
+-	}
+-	tag, ok := tagValue.Interface().(string)
+-	if !ok {
+-		return "", fmt.Errorf("OneOf default field %q has Go type %s", union.GetTypeKey(), tagValue.Type())
+-	}
+-	branchValue, found := reflectedMapValue(value, union.GetValueKey())
+-	if !found {
+-		return "", fmt.Errorf("OneOf default is missing %q", union.GetValueKey())
+-	}
+-	var (
+-		branch      *expr.NamedAttributeExpr
+-		branchIndex int
+-	)
+-	for index, candidate := range union.Values {
+-		if candidate.Name == tag {
+-			branch = candidate
+-			branchIndex = index
+-			break
+-		}
+-	}
+-	if branch == nil {
+-		return "", fmt.Errorf("OneOf default selects unknown branch %q", tag)
+-	}
+-	constructor, err := r.resolveUnion(attribute, tag)
+-	if err != nil {
+-		return "", fmt.Errorf("resolve OneOf branch %q: %w", tag, err)
+-	}
+-	branchLayout := layout.Enter(layout.plan.branches[branchIndex])
+-	argument, err := r.render(branch.Attribute, branchValue, branchLayout, branchLayout.plan.referencePointer)
+-	if err != nil {
+-		return "", fmt.Errorf("OneOf branch %q: %w", tag, err)
+-	}
+-	return fmt.Sprintf("%s(%s)", constructor, argument), nil
++	panic("excised: goValueRenderer.renderUnion")
+ }
+ 
+ // localName returns a name that is unique inside the caller-provided block.
+ func (r *goValueRenderer) localName() string {
+-	r.nextLocal++
+-	return r.prefix + strconv.Itoa(r.nextLocal)
++	panic("excised: goValueRenderer.localName")
+ }
+ 
+ // orderedMapValues sorts authored map keys before rendering either side of an
+ // entry. This keeps local variable names stable when map values need pointers.
+ func orderedMapValues(attribute *expr.AttributeExpr, value reflect.Value) ([]goMapValue, error) {
+-	if !expr.IsPrimitive(attribute.Type) {
+-		return nil, fmt.Errorf("map default key uses unsupported design type %T", attribute.Type)
+-	}
+-	primitive := underlyingPrimitive(attribute.Type)
+-	values := make([]goMapValue, 0, value.Len())
+-	iterator := value.MapRange()
+-	for iterator.Next() {
+-		key, err := concreteGoValue(iterator.Key())
+-		if err != nil {
+-			return nil, fmt.Errorf("map key: %w", err)
+-		}
+-		order, err := renderPrimitiveLiteral(primitive, key)
+-		if err != nil {
+-			return nil, fmt.Errorf("map key: %w", err)
+-		}
+-		values = append(values, goMapValue{order: order, key: iterator.Key(), value: iterator.Value()})
+-	}
+-	sort.Slice(values, func(left, right int) bool {
+-		return values[left].order < values[right].order
+-	})
+-	return values, nil
++	panic("excised: orderedMapValues")
+ }
+ 
+ // concreteGoValue removes interface and pointer wrappers while rejecting nil,
+ // which cannot satisfy a non-nil authored default.
+ func concreteGoValue(value reflect.Value) (reflect.Value, error) {
+-	if !value.IsValid() {
+-		return reflect.Value{}, fmt.Errorf("default must not be nil")
+-	}
+-	for value.Kind() == reflect.Interface || value.Kind() == reflect.Pointer {
+-		if value.IsNil() {
+-			return reflect.Value{}, fmt.Errorf("default must not be nil")
+-		}
+-		value = value.Elem()
+-	}
+-	return value, nil
++	panic("excised: concreteGoValue")
+ }
+ 
+ // renderPrimitiveLiteral writes a literal accepted by the primitive's native
+ // Go type.
+ func renderPrimitiveLiteral(primitive expr.Primitive, value reflect.Value) (string, error) {
+-	switch primitive.Kind() {
+-	case expr.BooleanKind:
+-		if value.Kind() != reflect.Bool {
+-			return "", fmt.Errorf("boolean default has Go type %s", value.Type())
+-		}
+-		return strconv.FormatBool(value.Bool()), nil
+-	case expr.IntKind, expr.Int32Kind, expr.Int64Kind:
+-		switch value.Kind() {
+-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+-			return strconv.FormatInt(value.Int(), 10), nil
+-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+-			return strconv.FormatUint(value.Uint(), 10), nil
+-		default:
+-			return "", fmt.Errorf("integer default has Go type %s", value.Type())
+-		}
+-	case expr.UIntKind, expr.UInt32Kind, expr.UInt64Kind:
+-		switch value.Kind() {
+-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+-			if value.Int() < 0 {
+-				return "", fmt.Errorf("unsigned integer default must not be negative")
+-			}
+-			return strconv.FormatInt(value.Int(), 10), nil
+-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+-			return strconv.FormatUint(value.Uint(), 10), nil
+-		default:
+-			return "", fmt.Errorf("unsigned integer default has Go type %s", value.Type())
+-		}
+-	case expr.Float32Kind, expr.Float64Kind:
+-		var number float64
+-		switch value.Kind() {
+-		case reflect.Float32, reflect.Float64:
+-			number = value.Float()
+-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+-			number = float64(value.Int())
+-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+-			number = float64(value.Uint())
+-		default:
+-			return "", fmt.Errorf("number default has Go type %s", value.Type())
+-		}
+-		if math.IsInf(number, 0) || math.IsNaN(number) {
+-			return "", fmt.Errorf("number default must be finite")
+-		}
+-		bits := 64
+-		if primitive.Kind() == expr.Float32Kind {
+-			bits = 32
+-		}
+-		return strconv.FormatFloat(number, 'g', -1, bits), nil
+-	case expr.StringKind:
+-		if value.Kind() != reflect.String {
+-			return "", fmt.Errorf("string default has Go type %s", value.Type())
+-		}
+-		return strconv.Quote(value.String()), nil
+-	case expr.BytesKind:
+-		switch value.Kind() {
+-		case reflect.String:
+-			return "[]byte(" + strconv.Quote(value.String()) + ")", nil
+-		case reflect.Slice:
+-			if value.Type().Elem().Kind() != reflect.Uint8 {
+-				return "", fmt.Errorf("bytes default has Go type %s", value.Type())
+-			}
+-			items := make([]string, value.Len())
+-			for index := range items {
+-				items[index] = fmt.Sprintf("0x%x", value.Index(index).Uint())
+-			}
+-			return "[]byte{" + strings.Join(items, ", ") + "}", nil
+-		default:
+-			return "", fmt.Errorf("bytes default has Go type %s", value.Type())
+-		}
+-	case expr.AnyKind:
+-		return renderAnyValue(value)
+-	default:
+-		return "", fmt.Errorf("unsupported primitive %s", primitive.Name())
+-	}
++	panic("excised: renderPrimitiveLiteral")
+ }
+ 
+ // renderAnyValue writes JSON-compatible Go values with explicit container
+ // types so the generated expression does not depend on a design-time Go type.
+ func renderAnyValue(value reflect.Value) (string, error) {
+-	if goValueIsNil(value) {
+-		return "nil", nil
+-	}
+-	concrete, err := concreteGoValue(value)
+-	if err != nil {
+-		return "", err
+-	}
+-	switch concrete.Kind() {
+-	case reflect.Bool:
+-		return strconv.FormatBool(concrete.Bool()), nil
+-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+-		return strconv.FormatInt(concrete.Int(), 10), nil
+-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+-		return strconv.FormatUint(concrete.Uint(), 10), nil
+-	case reflect.Float32, reflect.Float64:
+-		if math.IsInf(concrete.Float(), 0) || math.IsNaN(concrete.Float()) {
+-			return "", fmt.Errorf("Any number default must be finite")
+-		}
+-		return strconv.FormatFloat(concrete.Float(), 'g', -1, concrete.Type().Bits()), nil
+-	case reflect.String:
+-		return strconv.Quote(concrete.String()), nil
+-	case reflect.Array, reflect.Slice:
+-		items := make([]string, concrete.Len())
+-		for index := range items {
+-			items[index], err = renderAnyValue(concrete.Index(index))
+-			if err != nil {
+-				return "", err
+-			}
+-		}
+-		return "[]any{" + strings.Join(items, ", ") + "}", nil
+-	case reflect.Map:
+-		items := make([]string, 0, concrete.Len())
+-		iterator := concrete.MapRange()
+-		for iterator.Next() {
+-			key, keyErr := concreteGoValue(iterator.Key())
+-			if keyErr != nil || key.Kind() != reflect.String {
+-				return "", fmt.Errorf("Any object default key must be a string")
+-			}
+-			element, elementErr := renderAnyValue(iterator.Value())
+-			if elementErr != nil {
+-				return "", elementErr
+-			}
+-			items = append(items, strconv.Quote(key.String())+":"+element)
+-		}
+-		sort.Strings(items)
+-		return "map[string]any{" + strings.Join(items, ", ") + "}", nil
+-	default:
+-		return "", fmt.Errorf("Any default has unsupported Go type %s", concrete.Type())
+-	}
++	panic("excised: renderAnyValue")
+ }
+ 
+ // goValueIsNil reports whether an authored Any value is nil after removing
+ // interface and pointer wrappers.
+ func goValueIsNil(value reflect.Value) bool {
+-	if !value.IsValid() {
+-		return true
+-	}
+-	for value.Kind() == reflect.Interface || value.Kind() == reflect.Pointer {
+-		if value.IsNil() {
+-			return true
+-		}
+-		value = value.Elem()
+-	}
+-	return false
++	panic("excised: goValueIsNil")
+ }
+ 
+ // renderTypedCustomValue writes an authored value that already uses the exact
+ // custom Go type from the design.
+ func renderTypedCustomValue(typeName string, value reflect.Value) (string, error) {
+-	switch value.Kind() {
+-	case reflect.Bool:
+-		return typeName + "(" + strconv.FormatBool(value.Bool()) + ")", nil
+-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+-		return typeName + "(" + strconv.FormatInt(value.Int(), 10) + ")", nil
+-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+-		return typeName + "(" + strconv.FormatUint(value.Uint(), 10) + ")", nil
+-	case reflect.Float32, reflect.Float64:
+-		return typeName + "(" + strconv.FormatFloat(value.Float(), 'g', -1, value.Type().Bits()) + ")", nil
+-	case reflect.String:
+-		return typeName + "(" + strconv.Quote(value.String()) + ")", nil
+-	case reflect.Slice:
+-		if value.Type().Elem().Kind() != reflect.Uint8 {
+-			return "", fmt.Errorf("default for custom Go type %s has unsupported underlying type %s", value.Type(), value.Kind())
+-		}
+-		items := make([]string, value.Len())
+-		for index := range items {
+-			items[index] = fmt.Sprintf("0x%x", value.Index(index).Uint())
+-		}
+-		return typeName + "{" + strings.Join(items, ", ") + "}", nil
+-	default:
+-		return "", fmt.Errorf("default for custom Go type %s has unsupported underlying type %s", value.Type(), value.Kind())
+-	}
++	panic("excised: renderTypedCustomValue")
+ }
+ 
+ // validateCustomDefault checks an already-typed default against the declared
+ // custom Go type. Native values use the existing struct:field:type contract:
+ // the declared type must accept conversion from the Apikit primitive.
+ func validateCustomDefault(custom string, spec *ImportSpec, value reflect.Value) error {
+-	if value.Type().PkgPath() == "" {
+-		return nil
+-	}
+-	if spec == nil {
+-		return fmt.Errorf("default for custom Go type %q must use that exact Go type", custom)
+-	}
+-	_, name, qualified := strings.Cut(custom, ".")
+-	if !qualified {
+-		name = custom
+-	}
+-	if value.Type().PkgPath() != spec.Path || value.Type().Name() != name {
+-		return fmt.Errorf("default for custom Go type %q has Go type %s", custom, value.Type())
+-	}
+-	return nil
++	panic("excised: validateCustomDefault")
+ }
+ 
+ // authoredObjectField returns one supplied object field from a map or struct.
+ func authoredObjectField(value reflect.Value, name string, attribute *expr.AttributeExpr) (reflect.Value, bool, error) {
+-	concrete, err := concreteGoValue(value)
+-	if err != nil {
+-		return reflect.Value{}, false, err
+-	}
+-	switch concrete.Kind() {
+-	case reflect.Map:
+-		field, ok := reflectedMapValue(concrete, name)
+-		return field, ok, nil
+-	case reflect.Struct:
+-		field := concrete.FieldByName(GoifyAtt(attribute, name, true))
+-		return field, field.IsValid(), nil
+-	default:
+-		return reflect.Value{}, false, fmt.Errorf("object default has Go type %s", concrete.Type())
+-	}
++	panic("excised: authoredObjectField")
+ }
+ 
+ // reflectedMapValue finds a string key in maps whose key type may be string or
+ // any, as used by evaluated design defaults.
+ func reflectedMapValue(value reflect.Value, key string) (reflect.Value, bool) {
+-	iterator := value.MapRange()
+-	for iterator.Next() {
+-		candidate, err := concreteGoValue(iterator.Key())
+-		if err == nil && candidate.Kind() == reflect.String && candidate.String() == key {
+-			return iterator.Value(), true
+-		}
+-	}
+-	return reflect.Value{}, false
++	panic("excised: reflectedMapValue")
+ }
+ 
+ // underlyingPrimitive returns the primitive beneath a named primitive type.
+ func underlyingPrimitive(dataType expr.DataType) expr.Primitive {
+-	for {
+-		if primitive, ok := dataType.(expr.Primitive); ok {
+-			return primitive
+-		}
+-		dataType = dataType.(expr.UserType).Attribute().Type
+-	}
++	panic("excised: underlyingPrimitive")
+ }
+diff --git a/codegen/go_value_test.go b/codegen/go_value_test.go
+deleted file mode 100644
+--- a/codegen/go_value_test.go
++++ /dev/null
+@@ -1,264 +0,0 @@
+-// This file verifies that authored defaults become specialized Go values with
+-// the same names and pointer layout as generated service types.
+-package codegen
+-
+-import (
+-	"encoding/json"
+-	"testing"
+-
+-	"github.com/stretchr/testify/require"
+-
+-	"example.internal/apikit/v3/expr"
+-)
+-
+-func TestRenderGoValueUsesPlannedFieldLayout(t *testing.T) {
+-	status := &expr.UserTypeExpr{
+-		TypeName: "Status",
+-		AttributeExpr: &expr.AttributeExpr{
+-			Type: expr.String,
+-		},
+-	}
+-	configObject := expr.Object{
+-		&expr.NamedAttributeExpr{Name: "status", Attribute: &expr.AttributeExpr{Type: status}},
+-		&expr.NamedAttributeExpr{Name: "data", Attribute: &expr.AttributeExpr{Type: expr.Bytes}},
+-	}
+-	config := &expr.UserTypeExpr{
+-		TypeName:      "Config",
+-		AttributeExpr: &expr.AttributeExpr{Type: &configObject},
+-	}
+-	layout := goValueTestLayout(t, &expr.AttributeExpr{Type: config}, GoLayoutPolicy{
+-		UseDefault: true,
+-		SumType:    true,
+-	}, map[expr.DataType]GoTypeBinding{
+-		status: goValueTestTypeBinding(t, status),
+-		config: goValueTestTypeBinding(t, config),
+-	})
+-
+-	code, err := RenderGoValue(
+-		&expr.AttributeExpr{Type: config},
+-		map[string]any{"status": "ready", "data": "ok"},
+-		layout,
+-		true,
+-		nil,
+-		"defaultValue",
+-	)
+-	require.NoError(t, err)
+-	require.Equal(t, []string{`var defaultValue1 Status = "ready"`}, code.Declarations)
+-	require.Equal(t, `&Config{Status: &defaultValue1, Data: []byte("ok")}`, code.Expression)
+-}
+-
+-func TestRenderGoValueUsesPlannedUnionConstructor(t *testing.T) {
+-	choice := &expr.AttributeExpr{Type: &expr.Union{
+-		TypeName: "Choice",
+-		Values: []*expr.NamedAttributeExpr{
+-			{Name: "text", Attribute: &expr.AttributeExpr{Type: expr.String}},
+-		},
+-	}}
+-	layout := goValueTestLayout(t, choice, GoLayoutPolicy{UseDefault: true, SumType: true}, map[expr.DataType]GoTypeBinding{
+-		choice.Type: goValueTestUnionBinding(t, choice),
+-	})
+-
+-	code, err := RenderGoValue(
+-		choice,
+-		map[string]any{"type": "text", "value": "ready"},
+-		layout,
+-		false,
+-		func(attribute *expr.AttributeExpr, branch string) (string, error) {
+-			require.Same(t, choice, attribute)
+-			require.Equal(t, "text", branch)
+-			return "NewChoiceText", nil
+-		},
+-		"defaultValue",
+-	)
+-	require.NoError(t, err)
+-	require.Empty(t, code.Declarations)
+-	require.Equal(t, `NewChoiceText("ready")`, code.Expression)
+-}
+-
+-func TestRenderGoValueUsesTypedCustomDefault(t *testing.T) {
+-	attribute := &expr.AttributeExpr{
+-		Type: expr.Bytes,
+-		Meta: expr.MetaExpr{
+-			"struct:field:type": {"json.RawMessage", "encoding/json", "json"},
+-		},
+-	}
+-	layout := goValueTestLayout(t, attribute, GoLayoutPolicy{UseDefault: true, SumType: true}, nil)
+-
+-	code, err := RenderGoValue(attribute, json.RawMessage("ok"), layout, false, nil, "defaultValue")
+-	require.NoError(t, err)
+-	require.Empty(t, code.Declarations)
+-	require.Equal(t, `json.RawMessage{0x6f, 0x6b}`, code.Expression)
+-
+-	code, err = RenderGoValue(attribute, "ok", layout, false, nil, "defaultValue")
+-	require.NoError(t, err)
+-	require.Equal(t, `[]byte("ok")`, code.Expression)
+-}
+-
+-func TestRenderGoValueConvertsNativeCustomDefault(t *testing.T) {
+-	attribute := &expr.AttributeExpr{
+-		Type: expr.Int64,
+-		Meta: expr.MetaExpr{
+-			"struct:field:type": {"flag.ErrorHandling", "flag"},
+-		},
+-	}
+-	layout := goValueTestLayout(t, attribute, GoLayoutPolicy{UseDefault: true, SumType: true}, nil)
+-
+-	code, err := RenderGoValue(attribute, 1, layout, false, nil, "defaultValue")
+-	require.NoError(t, err)
+-	require.Equal(t, `1`, code.Expression)
+-}
+-
+-func TestRenderGoValueRendersAnyObjectsWithStringKeys(t *testing.T) {
+-	attribute := &expr.AttributeExpr{Type: expr.Any}
+-	layout := goValueTestLayout(t, attribute, GoLayoutPolicy{UseDefault: true, SumType: true}, nil)
+-
+-	code, err := RenderGoValue(attribute, map[string]any{"count": 1}, layout, false, nil, "defaultValue")
+-	require.NoError(t, err)
+-	require.Equal(t, `map[string]any{"count":1}`, code.Expression)
+-
+-	_, err = RenderGoValue(attribute, map[int]any{1: "invalid"}, layout, false, nil, "defaultValue")
+-	require.EqualError(t, err, "render Go value for any: Any object default key must be a string")
+-}
+-
+-func TestRenderGoValueUsesContainerElementLayouts(t *testing.T) {
+-	choice := &expr.AttributeExpr{Type: &expr.Union{
+-		TypeName: "Choice",
+-		Values: []*expr.NamedAttributeExpr{
+-			{Name: "text", Attribute: &expr.AttributeExpr{Type: expr.String}},
+-		},
+-	}}
+-	tests := []struct {
+-		name      string
+-		attribute *expr.AttributeExpr
+-		value     any
+-		want      string
+-	}{
+-		{
+-			name: "array of OneOf values",
+-			attribute: &expr.AttributeExpr{Type: &expr.Array{
+-				ElemType: choice,
+-			}},
+-			value: []any{map[string]any{"type": "text", "value": "ready"}},
+-			want:  `[]Choice{NewChoiceText("ready")}`,
+-		},
+-		{
+-			name: "map of OneOf values",
+-			attribute: &expr.AttributeExpr{Type: &expr.Map{
+-				KeyType:  &expr.AttributeExpr{Type: expr.String},
+-				ElemType: choice,
+-			}},
+-			value: map[string]any{"mode": map[string]any{"type": "text", "value": "ready"}},
+-			want:  `map[string]Choice{"mode":NewChoiceText("ready")}`,
+-		},
+-	}
+-	for _, test := range tests {
+-		t.Run(test.name, func(t *testing.T) {
+-			layout := goValueTestLayout(t, test.attribute, GoLayoutPolicy{UseDefault: true, SumType: true}, map[expr.DataType]GoTypeBinding{
+-				choice.Type: goValueTestUnionBinding(t, choice),
+-			})
+-			code, err := RenderGoValue(
+-				test.attribute,
+-				test.value,
+-				layout,
+-				false,
+-				func(_ *expr.AttributeExpr, _ string) (string, error) {
+-					return "NewChoiceText", nil
+-				},
+-				"defaultValue",
+-			)
+-			require.NoError(t, err)
+-			require.Equal(t, test.want, code.Expression)
+-		})
+-	}
+-}
+-
+-func TestRenderGoValueUsesPointerBackedArrayElements(t *testing.T) {
+-	attribute := &expr.AttributeExpr{Type: &expr.Array{
+-		ElemType:         &expr.AttributeExpr{Type: expr.String},
+-		NonNullableElems: true,
+-	}}
+-	layout := goValueTestLayout(t, attribute, GoLayoutPolicy{
+-		UseDefault:          true,
+-		SumType:             true,
+-		ArrayElementPointer: true,
+-	}, nil)
+-
+-	code, err := RenderGoValue(attribute, []string{"ready"}, layout, false, nil, "defaultValue")
+-	require.NoError(t, err)
+-	require.Equal(t, []string{`var defaultValue1 string = "ready"`}, code.Declarations)
+-	require.Equal(t, `[]*string{&defaultValue1}`, code.Expression)
+-}
+-
+-func TestRenderGoValueAllocatesMapLocalsInKeyOrder(t *testing.T) {
+-	valueObject := &expr.Object{{Name: "label", Attribute: &expr.AttributeExpr{Type: expr.String}}}
+-	attribute := &expr.AttributeExpr{Type: &expr.Map{
+-		KeyType:  &expr.AttributeExpr{Type: expr.String},
+-		ElemType: &expr.AttributeExpr{Type: valueObject},
+-	}}
+-	layout := goValueTestLayout(t, attribute, GoLayoutPolicy{
+-		Pointer:    true,
+-		UseDefault: true,
+-		SumType:    true,
+-	}, nil)
+-	value := map[string]any{
+-		"z": map[string]any{"label": "last"},
+-		"a": map[string]any{"label": "first"},
+-	}
+-
+-	for range 20 {
+-		code, err := RenderGoValue(attribute, value, layout, false, nil, "defaultValue")
+-		require.NoError(t, err)
+-		require.Equal(t, []string{
+-			`var defaultValue1 string = "first"`,
+-			`var defaultValue2 string = "last"`,
+-		}, code.Declarations)
+-		require.Equal(t, `map[string]*struct {
+-	Label *string
+-}{"a":&struct {
+-	Label *string
+-}{Label: &defaultValue1}, "z":&struct {
+-	Label *string
+-}{Label: &defaultValue2}}`, code.Expression)
+-	}
+-}
+-
+-func goValueTestLayout(t *testing.T, attribute *expr.AttributeExpr, policy GoLayoutPolicy, bindings map[expr.DataType]GoTypeBinding) LinkedGoType {
+-	t.Helper()
+-	plan, err := PlanGoType(attribute, GoTypePlanOptions{
+-		Owner:            "generated.local/gen/service",
+-		Policy:           policy,
+-		Bind:             goTypeTestBinder(bindings),
+-		RetainNamedValue: true,
+-	})
+-	require.NoError(t, err)
+-	return plan.Link("generated.local/gen/service", func(importPath string) string {
+-		if importPath == "encoding/json" {
+-			return "json"
+-		}
+-		return goTypeTestQualifier(importPath)
+-	})
+-}
+-
+-func goValueTestTypeBinding(t *testing.T, userType expr.UserType) GoTypeBinding {
+-	t.Helper()
+-	generation, err := NewGeneration("generated.local/gen", nil)
+-	require.NoError(t, err)
+-	binding := GoTypeBinding{
+-		Owner: "generated.local/gen/service",
+-		Type:  declareGoTypeTestUserType(t, generation, "generated.local/gen/service", userType),
+-	}
+-	require.NoError(t, generation.Freeze())
+-	return binding
+-}
+-
+-func goValueTestUnionBinding(t *testing.T, attribute *expr.AttributeExpr) GoTypeBinding {
+-	t.Helper()
+-	generation, err := NewGeneration("generated.local/gen", nil)
+-	require.NoError(t, err)
+-	binding := GoTypeBinding{
+-		Owner: "generated.local/gen/service",
+-		Union: declareGoTypeTestUnion(t, generation, "generated.local/gen/service", attribute.Type.(*expr.Union)),
+-	}
+-	require.NoError(t, generation.Freeze())
+-	return binding
+-}
+diff --git a/http/codegen/client_cli_test.go b/http/codegen/client_cli_test.go
+--- a/http/codegen/client_cli_test.go
++++ b/http/codegen/client_cli_test.go
+@@ -16,59 +16,6 @@ import (
+ 	"example.internal/apikit/v3/http/codegen/testdata"
+ )
+ 
+-func TestClientCLIFiles(t *testing.T) {
+-	cases := []struct {
+-		Name         string
+-		DSL          func()
+-		FileIndex    int
+-		SectionIndex int
+-	}{
+-		{"no-payload-parse", testdata.MultiNoPayloadDSL, 0, 3},
+-		{"simple-parse", testdata.MultiSimpleDSL, 0, 3},
+-		{"multi-parse", testdata.MultiDSL, 0, 3},
+-		{"multi-required-payload", testdata.MultiRequiredPayloadDSL, 0, 3},
+-		{"skip-request-body-encode-decode", testdata.SkipRequestBodyEncodeDecodeDSL, 0, 3},
+-		{"streaming-parse", testdata.StreamingMultipleServicesDSL, 0, 3},
+-		{"simple-build", testdata.MultiSimpleDSL, 1, 1},
+-		{"multi-build", testdata.MultiDSL, 1, 1},
+-		{"bool-build", testdata.PayloadQueryBoolDSL, 1, 1},
+-		{"uint32-build", testdata.PayloadQueryUInt32DSL, 1, 1},
+-		{"uint64-build", testdata.PayloadQueryUIntDSL, 1, 1},
+-		{"string-build", testdata.PayloadQueryStringDSL, 1, 1},
+-		{"string-required-build", testdata.PayloadQueryStringValidateDSL, 1, 1},
+-		{"string-default-build", testdata.PayloadQueryStringDefaultDSL, 1, 1},
+-		{"path-string-default-build", testdata.PayloadPathStringDefaultDSL, 1, 1},
+-		{"body-query-path-object-build", testdata.PayloadBodyQueryPathObjectDSL, 1, 1},
+-		{"body-nested-user-build", testdata.PayloadBodyNestedUserDSL, 1, 1},
+-		{"param-validation-build", testdata.ParamValidateDSL, 1, 1},
+-		{"payload-primitive-type", testdata.PayloadBodyPrimitiveBoolValidateDSL, 0, 3},
+-		{"payload-array-primitive-type", testdata.PayloadBodyPrimitiveArrayStringValidateDSL, 0, 3},
+-		{"payload-array-user-type", testdata.PayloadBodyInlineArrayUserDSL, 1, 1},
+-		{"payload-map-user-type", testdata.PayloadBodyInlineMapUserDSL, 1, 1},
+-		{"payload-object-type", testdata.PayloadBodyInlineObjectDSL, 1, 1},
+-		{"payload-object-default-type", testdata.PayloadBodyInlineObjectDefaultDSL, 1, 1},
+-		{"map-query", testdata.PayloadMapQueryPrimitiveArrayDSL, 0, 3},
+-		{"map-query-object", testdata.PayloadMapQueryObjectDSL, 1, 1},
+-		{"empty-body-build", testdata.PayloadBodyPrimitiveFieldEmptyDSL, 1, 1},
+-		{"with-params-and-headers-dsl", testdata.WithParamsAndHeadersBlockDSL, 1, 1},
+-		{"body-custom-name", testdata.PayloadBodyCustomNameDSL, 1, 1},
+-		{"path-custom-name", testdata.PayloadPathCustomNameDSL, 1, 1},
+-		{"query-custom-name", testdata.PayloadQueryCustomNameDSL, 1, 1},
+-		{"header-custom-name", testdata.PayloadHeaderCustomNameDSL, 1, 1},
+-		{"cookie-custom-name", testdata.PayloadCookieCustomNameDSL, 1, 1},
+-	}
+-
+-	for _, c := range cases {
+-		t.Run(c.Name, func(t *testing.T) {
+-			root := expr.RunDSL(t, c.DSL)
+-			plan := linkedHTTPPlanForRoot(t, root)
+-			fs := plan.ClientCLIFiles()
+-			sections := fs[c.FileIndex].SectionTemplates
+-			code := codegen.SectionCode(t, sections[c.SectionIndex])
+-			testutil.AssertGo(t, "testdata/golden/client_cli_"+c.Name+".go.golden", code)
+-		})
+-	}
+-}
+ 
+ func TestClientCLIFilesOmitFilesOnlyServer(t *testing.T) {
+ 	root := codegen.RunDSL(t, ctestdata.ServerHostingServiceWithFileServerDSL)
+diff --git a/http/codegen/default_value_test.go b/http/codegen/default_value_test.go
+deleted file mode 100644
+--- a/http/codegen/default_value_test.go
++++ /dev/null
+@@ -1,118 +0,0 @@
+-// This file checks that authored defaults become the exact flag text and JSON
+-// shape accepted by generated HTTP clients.
+-package codegen
+-
+-import (
+-	"encoding/json"
+-	"testing"
+-
+-	"github.com/stretchr/testify/require"
+-
+-	"example.internal/apikit/v3/dsl"
+-	"example.internal/apikit/v3/expr"
+-)
+-
+-func TestClientBodyDefaultUsesHTTPFieldNamesAndJSONBytes(t *testing.T) {
+-	object := expr.Object{
+-		&expr.NamedAttributeExpr{
+-			Name: "full:mapped_full",
+-			Attribute: &expr.AttributeExpr{
+-				Type: expr.String,
+-				Meta: expr.MetaExpr{
+-					"struct:tag:json":      {"full_name,omitempty"},
+-					"struct:tag:json:name": {"ignored_name"},
+-				},
+-			},
+-		},
+-		&expr.NamedAttributeExpr{
+-			Name: "bytes:mapped_bytes",
+-			Attribute: &expr.AttributeExpr{
+-				Type: expr.Bytes,
+-				Meta: expr.MetaExpr{"struct:tag:json:name": {"encoded_bytes"}},
+-			},
+-		},
+-		&expr.NamedAttributeExpr{
+-			Name:      "plain:mapped_plain",
+-			Attribute: &expr.AttributeExpr{Type: expr.String},
+-		},
+-		&expr.NamedAttributeExpr{
+-			Name: "skip:mapped_skip",
+-			Attribute: &expr.AttributeExpr{
+-				Type: expr.String,
+-				Meta: expr.MetaExpr{"struct:tag:json": {"-"}},
+-			},
+-		},
+-	}
+-	attribute := &expr.AttributeExpr{Type: &object}
+-	got := clientBodyDefault(attribute, map[string]any{
+-		"full":  "first",
+-		"bytes": "plain bytes",
+-		"plain": "third",
+-		"skip":  "hidden",
+-	})
+-
+-	encoded, err := json.Marshal(got)
+-	require.NoError(t, err)
+-	require.JSONEq(t, `{"full_name":"first","encoded_bytes":"cGxhaW4gYnl0ZXM=","mapped_plain":"third"}`, string(encoded))
+-}
+-
+-func TestClientBodyDefaultUsesRawTextForTopLevelBytes(t *testing.T) {
+-	attribute := &expr.AttributeExpr{Type: expr.Bytes}
+-	for _, test := range []struct {
+-		name  string
+-		value any
+-	}{
+-		{name: "authored string", value: "plain bytes"},
+-		{name: "authored byte slice", value: []byte("plain bytes")},
+-	} {
+-		t.Run(test.name, func(t *testing.T) {
+-			require.Equal(t, "plain bytes", clientBodyDefault(attribute, test.value))
+-		})
+-	}
+-}
+-
+-func TestClientBodyDefaultIsUsedOnlyByClientCLIPlanning(t *testing.T) {
+-	root := expr.RunDSL(t, func() {
+-		details := dsl.Type("DefaultDetails", func() {
+-			dsl.Attribute("content", dsl.Bytes, func() {
+-				dsl.Meta("struct:tag:json:name", "encoded_content")
+-			})
+-		})
+-		dsl.Service("defaults", func() {
+-			dsl.Method("object", func() {
+-				dsl.Payload(func() {
+-					dsl.Attribute("value", details, func() {
+-						dsl.Default(map[string]any{"content": "plain bytes"})
+-					})
+-				})
+-				dsl.HTTP(func() {
+-					dsl.POST("/object")
+-					dsl.Body("value")
+-				})
+-			})
+-			dsl.Method("bytes", func() {
+-				dsl.Payload(func() {
+-					dsl.Attribute("value", dsl.Bytes, func() {
+-						dsl.Default("plain bytes")
+-					})
+-				})
+-				dsl.HTTP(func() {
+-					dsl.POST("/bytes")
+-					dsl.Body("value")
+-				})
+-			})
+-		})
+-	})
+-
+-	service := linkedHTTPPlanForRoot(t, root).services.Get("defaults")
+-	object := service.Endpoint("object").Payload.Request.PayloadInit
+-	require.Equal(t, map[string]any{"encoded_content": []byte("plain bytes")}, object.ClientArgs[0].DefaultValue)
+-	require.Equal(t, map[string]any{"content": "plain bytes"}, object.ServerArgs[0].DefaultValue)
+-	objectFlags, _ := buildFlags(service, service.Endpoint("object"))
+-	require.Equal(t, `{"encoded_content":"cGxhaW4gYnl0ZXM="}`, objectFlags[0].DefaultValue)
+-	bytes := service.Endpoint("bytes").Payload.Request.PayloadInit
+-	require.Equal(t, "plain bytes", bytes.ClientArgs[0].DefaultValue)
+-	require.Equal(t, "plain bytes", bytes.ServerArgs[0].DefaultValue)
+-	byteFlags, _ := buildFlags(service, service.Endpoint("bytes"))
+-	require.Equal(t, "plain bytes", byteFlags[0].DefaultValue)
+-}

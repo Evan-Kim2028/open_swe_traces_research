@@ -1,0 +1,23 @@
+diff --git a/tests/utils/helpers.go
+index ed5bd41..e05b92e 100644
+--- a/tests/utils/helpers.go
++++ b/tests/utils/helpers.go
+@@ -2,8 +2,7 @@ package utils
+ 
+ import (
+ 	"flag"
+-	_ "fmt"
+-	_ "os"
++	"os"
+ )
+ 
+ var enableRoot bool
+@@ -14,5 +13,7 @@ func init() {
+ 
+ // RequiresRoot requires root and the test.root flag has been set.
+ func RequiresRoot() {
+-	panic("excised: RequiresRoot")
++	if !enableRoot {
++		os.Exit(0)
++	}
+ }

@@ -1,0 +1,1306 @@
+diff --git a/plumbing/format/idxfile/idxfile.go b/plumbing/format/idxfile/idxfile.go
+index e34f693..854b964 100644
+--- a/plumbing/format/idxfile/idxfile.go
++++ b/plumbing/format/idxfile/idxfile.go
+@@ -1,12 +1,12 @@
+ package idxfile
+ 
+ import (
+-	_ "bytes"
+-	_ "crypto"
+-	_ "encoding/binary"
+-	_ "fmt"
+-	_ "io"
+-	_ "sort"
++	"bytes"
++	"crypto"
++	encbin "encoding/binary"
++	"fmt"
++	"io"
++	"sort"
+ 	"sync"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+@@ -107,69 +107,208 @@ type MemoryIndex struct {
+ var _ Index = (*MemoryIndex)(nil)
+ 
+ // Close is a no-op. MemoryIndex holds no external resources.
+-func (idx *MemoryIndex) Close() error {
+-	panic("excised: MemoryIndex.Close")
+-}
++func (idx *MemoryIndex) Close() error { return nil }
+ 
+ // NewMemoryIndex returns an instance of a new MemoryIndex.
+ func NewMemoryIndex(objectIDSize int) *MemoryIndex {
+-	panic("excised: NewMemoryIndex")
++	m := &MemoryIndex{objectIDSize: objectIDSize}
++	m.IdxChecksum.ResetBySize(objectIDSize)
++	m.PackfileChecksum.ResetBySize(objectIDSize)
++	return m
+ }
+ 
+ func (idx *MemoryIndex) findHashIndex(h plumbing.Hash) (int, bool) {
+-	panic("excised: MemoryIndex.findHashIndex")
++	k := idx.FanoutMapping[h.Bytes()[0]]
++	if k == noMapping {
++		return 0, false
++	}
++
++	if len(idx.Names) <= k {
++		return 0, false
++	}
++
++	data := idx.Names[k]
++	high := uint64(len(idx.Offset32[k])) >> 2
++	if high == 0 {
++		return 0, false
++	}
++
++	low := uint64(0)
++	for {
++		mid := (low + high) >> 1
++		offset := mid * uint64(idx.idSize())
++
++		cmp := h.Compare(data[offset : offset+uint64(idx.idSize())])
++		switch {
++		case cmp < 0:
++			high = mid
++		case cmp == 0:
++			return int(mid), true
++		default:
++			low = mid + 1
++		}
++
++		if low >= high {
++			break
++		}
++	}
++
++	return 0, false
+ }
+ 
+ // MayContain implements the Index interface. It reports whether the
+ // index might contain h using the in-memory fanout mapping. Returns
+ // false iff h's first byte falls in an empty fanout bucket.
+ func (idx *MemoryIndex) MayContain(h plumbing.Hash) bool {
+-	panic("excised: MemoryIndex.MayContain")
++	return idx.FanoutMapping[h.Bytes()[0]] != noMapping
+ }
+ 
+ // Contains implements the Index interface.
+ func (idx *MemoryIndex) Contains(h plumbing.Hash) (bool, error) {
+-	panic("excised: MemoryIndex.Contains")
++	_, ok := idx.findHashIndex(h)
++	return ok, nil
+ }
+ 
+ // FindOffset implements the Index interface.
+ func (idx *MemoryIndex) FindOffset(h plumbing.Hash) (int64, error) {
+-	panic("excised: MemoryIndex.FindOffset")
++	fo := h.Bytes()[0]
++	if len(idx.FanoutMapping) <= int(fo) {
++		return 0, plumbing.ErrObjectNotFound
++	}
++
++	k := idx.FanoutMapping[fo]
++	i, ok := idx.findHashIndex(h)
++	if !ok {
++		return 0, plumbing.ErrObjectNotFound
++	}
++
++	offset, err := idx.getOffset(k, i)
++	if err != nil {
++		return 0, err
++	}
++
++	// Save the offset for reverse lookup
++	idx.mu.Lock()
++	if idx.offsetHash == nil {
++		idx.offsetHash = make(map[int64]plumbing.Hash)
++	}
++	idx.offsetHash[int64(offset)] = h
++	idx.mu.Unlock()
++
++	return int64(offset), nil
+ }
+ 
+ const isO64Mask = uint64(1) << 31
+ 
+ func (idx *MemoryIndex) getOffset(firstLevel, secondLevel int) (uint64, error) {
+-	panic("excised: MemoryIndex.getOffset")
++	offset := secondLevel << 2
++	ofs := encbin.BigEndian.Uint32(idx.Offset32[firstLevel][offset : offset+4])
++
++	if (uint64(ofs) & isO64Mask) != 0 {
++		offset := 8 * (uint64(ofs) & ^isO64Mask)
++		if l := uint64(len(idx.Offset64)); l < 8 || offset > l-8 {
++			return 0, fmt.Errorf("%w: offset64 index out of range", ErrMalformedIdxFile)
++		}
++		return encbin.BigEndian.Uint64(idx.Offset64[offset : offset+8]), nil
++	}
++
++	return uint64(ofs), nil
+ }
+ 
+ // FindCRC32 implements the Index interface.
+ func (idx *MemoryIndex) FindCRC32(h plumbing.Hash) (uint32, error) {
+-	panic("excised: MemoryIndex.FindCRC32")
++	k := idx.FanoutMapping[h.Bytes()[0]]
++	i, ok := idx.findHashIndex(h)
++	if !ok {
++		return 0, plumbing.ErrObjectNotFound
++	}
++
++	return idx.getCRC32(k, i), nil
+ }
+ 
+ func (idx *MemoryIndex) getCRC32(firstLevel, secondLevel int) uint32 {
+-	panic("excised: MemoryIndex.getCRC32")
++	offset := secondLevel << 2
++	return encbin.BigEndian.Uint32(idx.CRC32[firstLevel][offset : offset+4])
+ }
+ 
+ // FindHash implements the Index interface.
+ func (idx *MemoryIndex) FindHash(o int64) (plumbing.Hash, error) {
+-	panic("excised: MemoryIndex.FindHash")
++	var hash plumbing.Hash
++	var ok bool
++
++	idx.mu.RLock()
++	if idx.offsetHash != nil {
++		if hash, ok = idx.offsetHash[o]; ok {
++			idx.mu.RUnlock()
++			return hash, nil
++		}
++	}
++	idx.mu.RUnlock()
++
++	var genErr error
++	idx.offsetBuildOnce.Do(func() {
++		genErr = idx.genOffsetHash()
++	})
++	if genErr != nil {
++		return plumbing.ZeroHash, genErr
++	}
++
++	idx.mu.RLock()
++	hash, ok = idx.offsetHash[o]
++	idx.mu.RUnlock()
++
++	if !ok {
++		return plumbing.ZeroHash, plumbing.ErrObjectNotFound
++	}
++
++	return hash, nil
+ }
+ 
+ // genOffsetHash generates the offset/hash mapping for reverse search.
+ func (idx *MemoryIndex) genOffsetHash() error {
+-	panic("excised: MemoryIndex.genOffsetHash")
++	count, err := idx.Count()
++	if err != nil {
++		return err
++	}
++
++	offsetHash := make(map[int64]plumbing.Hash, count)
++
++	var hash plumbing.Hash
++	hash.ResetBySize(idx.objectIDSize)
++
++	i := uint32(0)
++	for firstLevel, fanoutValue := range idx.Fanout {
++		mappedFirstLevel := idx.FanoutMapping[firstLevel]
++		for secondLevel := uint32(0); i < fanoutValue; i++ {
++			_, err = hash.Write(idx.Names[mappedFirstLevel][secondLevel*uint32(idx.idSize()):])
++			if err != nil {
++				return fmt.Errorf("cannot write name to hash: %w", err)
++			}
++
++			off, err := idx.getOffset(mappedFirstLevel, int(secondLevel))
++			if err != nil {
++				return err
++			}
++			offsetHash[int64(off)] = hash
++			secondLevel++
++		}
++	}
++
++	idx.mu.Lock()
++	idx.offsetHash = offsetHash
++	idx.mu.Unlock()
++
++	return nil
+ }
+ 
+ // Count implements the Index interface.
+ func (idx *MemoryIndex) Count() (int64, error) {
+-	panic("excised: MemoryIndex.Count")
++	return int64(idx.Fanout[fanout-1]), nil
+ }
+ 
+ // Entries implements the Index interface.
+ func (idx *MemoryIndex) Entries() (EntryIter, error) {
+-	panic("excised: MemoryIndex.Entries")
++	return &idxfileEntryIter{idx, 0, 0, 0}, nil
+ }
+ 
+ // EntriesWithPrefix implements the Index interface. It returns an
+@@ -184,16 +323,80 @@ func (idx *MemoryIndex) Entries() (EntryIter, error) {
+ // matches. This mirrors upstream Git's for_each_prefixed_object_in_pack
+ // which calls bsearch_pack to position before walking forward.
+ func (idx *MemoryIndex) EntriesWithPrefix(prefix []byte) (EntryIter, error) {
+-	panic("excised: MemoryIndex.EntriesWithPrefix")
++	if len(prefix) == 0 {
++		return idx.Entries()
++	}
++	bucket := idx.FanoutMapping[prefix[0]]
++	if bucket == noMapping {
++		return &idxfilePrefixIter{done: true}, nil
++	}
++	idSize := idx.idSize()
++	names := idx.Names[bucket]
++	n := len(names) / idSize
++
++	// Find the leftmost entry whose hash is >= prefix (padded with
++	// zeros to hash size). All matching entries, if any, start at
++	// this position; the iterator's stop-on-first-mismatch then
++	// terminates correctly once the run ends.
++	target := make([]byte, idSize)
++	copy(target, prefix)
++	lo, hi := 0, n
++	for lo < hi {
++		mid := (lo + hi) >> 1
++		slot := names[mid*idSize : (mid+1)*idSize]
++		if bytes.Compare(slot, target) < 0 {
++			lo = mid + 1
++		} else {
++			hi = mid
++		}
++	}
++
++	return &idxfilePrefixIter{
++		idSize:   idSize,
++		prefix:   prefix,
++		names:    names,
++		offset32: idx.Offset32[bucket],
++		crc32:    idx.CRC32[bucket],
++		offset64: idx.Offset64,
++		pos:      lo,
++	}, nil
+ }
+ 
+ // EntriesByOffset implements the Index interface.
+ func (idx *MemoryIndex) EntriesByOffset() (EntryIter, error) {
+-	panic("excised: MemoryIndex.EntriesByOffset")
++	count, err := idx.Count()
++	if err != nil {
++		return nil, err
++	}
++
++	iter := &idxfileEntryOffsetIter{
++		entries: make(entriesByOffset, count),
++	}
++
++	entries, err := idx.Entries()
++	if err != nil {
++		return nil, err
++	}
++
++	for pos := 0; int64(pos) < count; pos++ {
++		entry, err := entries.Next()
++		if err != nil {
++			return nil, err
++		}
++
++		iter.entries[pos] = entry
++	}
++
++	sort.Sort(iter.entries)
++
++	return iter, nil
+ }
+ 
+ func (idx *MemoryIndex) idSize() int {
+-	panic("excised: MemoryIndex.idSize")
++	if idx.objectIDSize != 0 {
++		return idx.objectIDSize
++	}
++	return crypto.SHA1.Size()
+ }
+ 
+ // EntryIter is an iterator that will return the entries in a packfile index.
+@@ -211,11 +414,41 @@ type idxfileEntryIter struct {
+ }
+ 
+ func (i *idxfileEntryIter) Next() (*Entry, error) {
+-	panic("excised: idxfileEntryIter.Next")
++	for {
++		if i.firstLevel >= fanout {
++			return nil, io.EOF
++		}
++
++		if i.total >= int(i.idx.Fanout[i.firstLevel]) {
++			i.firstLevel++
++			i.secondLevel = 0
++			continue
++		}
++
++		mappedFirstLevel := i.idx.FanoutMapping[i.firstLevel]
++		entry := new(Entry)
++		entry.Hash.ResetBySize(i.idx.idSize())
++		_, err := entry.Hash.Write(i.idx.Names[mappedFirstLevel][i.secondLevel*i.idx.idSize():])
++		if err != nil {
++			return nil, fmt.Errorf("cannot write entry hash: %w", err)
++		}
++
++		entry.Offset, err = i.idx.getOffset(mappedFirstLevel, i.secondLevel)
++		if err != nil {
++			return nil, err
++		}
++		entry.CRC32 = i.idx.getCRC32(mappedFirstLevel, i.secondLevel)
++
++		i.secondLevel++
++		i.total++
++
++		return entry, nil
++	}
+ }
+ 
+ func (i *idxfileEntryIter) Close() error {
+-	panic("excised: idxfileEntryIter.Close")
++	i.firstLevel = fanout
++	return nil
+ }
+ 
+ // idxfilePrefixIter walks a single fanout bucket, yielding entries
+@@ -245,24 +478,64 @@ type idxfilePrefixIter struct {
+ }
+ 
+ func (i *idxfilePrefixIter) Next() (*Entry, error) {
+-	panic("excised: idxfilePrefixIter.Next")
++	if i.done {
++		return nil, io.EOF
++	}
++
++	offset := i.pos * i.idSize
++	if offset+i.idSize > len(i.names) {
++		i.done = true
++		return nil, io.EOF
++	}
++	hashBytes := i.names[offset : offset+i.idSize]
++	if !bytes.HasPrefix(hashBytes, i.prefix) {
++		// Bucket is sorted by hash, so the first mismatch ends the run.
++		i.done = true
++		return nil, io.EOF
++	}
++
++	entry := new(Entry)
++	entry.Hash.ResetBySize(i.idSize)
++	if _, err := entry.Hash.Write(hashBytes); err != nil {
++		return nil, fmt.Errorf("cannot write entry hash: %w", err)
++	}
++
++	o, err := i.bucketOffset(i.pos)
++	if err != nil {
++		return nil, err
++	}
++	entry.Offset = o
++	entry.CRC32 = i.bucketCRC32(i.pos)
++	i.pos++
++	return entry, nil
+ }
+ 
+ // bucketOffset mirrors MemoryIndex.getOffset using only the per-
+ // bucket Offset32/Offset64 slices the iterator holds, so callers
+ // do not need to retain a reference to the parent MemoryIndex.
+ func (i *idxfilePrefixIter) bucketOffset(pos int) (uint64, error) {
+-	panic("excised: idxfilePrefixIter.bucketOffset")
++	off := pos << 2
++	ofs := encbin.BigEndian.Uint32(i.offset32[off : off+4])
++	if (uint64(ofs) & isO64Mask) != 0 {
++		o64 := 8 * (uint64(ofs) & ^isO64Mask)
++		if l := uint64(len(i.offset64)); l < 8 || o64 > l-8 {
++			return 0, fmt.Errorf("%w: offset64 index out of range", ErrMalformedIdxFile)
++		}
++		return encbin.BigEndian.Uint64(i.offset64[o64 : o64+8]), nil
++	}
++	return uint64(ofs), nil
+ }
+ 
+ // bucketCRC32 mirrors MemoryIndex.getCRC32 using only the per-bucket
+ // CRC32 slice the iterator holds.
+ func (i *idxfilePrefixIter) bucketCRC32(pos int) uint32 {
+-	panic("excised: idxfilePrefixIter.bucketCRC32")
++	off := pos << 2
++	return encbin.BigEndian.Uint32(i.crc32[off : off+4])
+ }
+ 
+ func (i *idxfilePrefixIter) Close() error {
+-	panic("excised: idxfilePrefixIter.Close")
++	i.done = true
++	return nil
+ }
+ 
+ // Entry is the in memory representation of an object entry in the idx file.
+@@ -278,23 +551,31 @@ type idxfileEntryOffsetIter struct {
+ }
+ 
+ func (i *idxfileEntryOffsetIter) Next() (*Entry, error) {
+-	panic("excised: idxfileEntryOffsetIter.Next")
++	if i.pos >= len(i.entries) {
++		return nil, io.EOF
++	}
++
++	entry := i.entries[i.pos]
++	i.pos++
++
++	return entry, nil
+ }
+ 
+ func (i *idxfileEntryOffsetIter) Close() error {
+-	panic("excised: idxfileEntryOffsetIter.Close")
++	i.pos = len(i.entries) + 1
++	return nil
+ }
+ 
+ type entriesByOffset []*Entry
+ 
+ func (o entriesByOffset) Len() int {
+-	panic("excised: entriesByOffset.Len")
++	return len(o)
+ }
+ 
+ func (o entriesByOffset) Less(i, j int) bool {
+-	panic("excised: entriesByOffset.Less")
++	return o[i].Offset < o[j].Offset
+ }
+ 
+ func (o entriesByOffset) Swap(i, j int) {
+-	panic("excised: entriesByOffset.Swap")
++	o[i], o[j] = o[j], o[i]
+ }
+diff --git a/plumbing/format/idxfile/lazy_index.go b/plumbing/format/idxfile/lazy_index.go
+index bebe0a6..7e9c90b 100644
+--- a/plumbing/format/idxfile/lazy_index.go
++++ b/plumbing/format/idxfile/lazy_index.go
+@@ -2,15 +2,15 @@ package idxfile
+ 
+ import (
+ 	"bytes"
+-	_ "encoding/binary"
+-	_ "errors"
++	"encoding/binary"
++	"errors"
+ 	"fmt"
+ 	"io"
+ 	"time"
+ 
+ 	"example.internal/gitkit/v6/internal/sharedfile"
+ 	"example.internal/gitkit/v6/plumbing"
+-	_ "example.internal/gitkit/v6/utils/sync"
++	gsync "example.internal/gitkit/v6/utils/sync"
+ 	"example.internal/gitkit/v6/x/fdpool"
+ )
+ 
+@@ -67,7 +67,7 @@ var _ Index = (*LazyIndex)(nil)
+ // are shared across concurrent readers and released automatically when
+ // idle.
+ func NewLazyIndex(openIdx, openRev func() (ReadAtCloser, error), packHash plumbing.Hash) (*LazyIndex, error) {
+-	panic("excised: NewLazyIndex")
++	return NewLazyIndexWithPool(openIdx, openRev, packHash, nil)
+ }
+ 
+ // NewLazyIndexWithPool is like [NewLazyIndex] but registers the
+@@ -90,7 +90,23 @@ func NewLazyIndex(openIdx, openRev func() (ReadAtCloser, error), packHash plumbi
+ // callers requiring cancellation enforce it at the call-site
+ // in the layer above.
+ func NewLazyIndexWithPool(openIdx, openRev func() (ReadAtCloser, error), packHash plumbing.Hash, pool *fdpool.Pool) (*LazyIndex, error) {
+-	panic("excised: NewLazyIndexWithPool")
++	if openIdx == nil {
++		return nil, errors.New("idx opener is nil")
++	}
++	if openRev == nil {
++		return nil, errors.New("rev opener is nil")
++	}
++
++	s := &LazyIndex{
++		idx: sharedfile.NewWithPool(openIdx, defaultCloseGracePeriod, pool),
++		rev: sharedfile.NewWithPool(openRev, defaultCloseGracePeriod, pool),
++	}
++
++	if err := s.init(packHash); err != nil {
++		_ = s.Close()
++		return nil, err
++	}
++	return s, nil
+ }
+ 
+ // init reads and validates headers, caches the fanout table and
+@@ -98,13 +114,101 @@ func NewLazyIndexWithPool(openIdx, openRev func() (ReadAtCloser, error), packHas
+ // sharedFile so the grace period keeps them warm for the first real
+ // operation.
+ func (s *LazyIndex) init(packHash plumbing.Hash) error {
+-	panic("excised: LazyIndex.init")
++	idxRA, err := s.idx.Acquire()
++	if err != nil {
++		return fmt.Errorf("cannot open idx: %w", err)
++	}
++	defer s.idx.Release()
++
++	revRA, err := s.rev.Acquire()
++	if err != nil {
++		return fmt.Errorf("cannot open rev: %w", err)
++	}
++	defer s.rev.Release()
++
++	var hdr [idxHeaderSize]byte
++	if _, err := idxRA.ReadAt(hdr[:], 0); err != nil {
++		return fmt.Errorf("cannot read idx header: %w", err)
++	}
++	if !bytes.Equal(hdr[:4], idxHeader) {
++		return fmt.Errorf("%w: %s", ErrMalformedIdxFile, "header mismatch")
++	}
++
++	v := binary.BigEndian.Uint32(hdr[4:])
++	if v != VersionSupported {
++		return ErrUnsupportedVersion
++	}
++
++	var revHdr [revHeaderSize]byte
++	if _, err := revRA.ReadAt(revHdr[:], 0); err != nil {
++		return fmt.Errorf("cannot read rev header: %w", err)
++	}
++	if !bytes.Equal(revHdr[:4], []byte{'R', 'I', 'D', 'X'}) {
++		return fmt.Errorf("%w: rev file magic mismatch", ErrMalformedIdxFile)
++	}
++	if v := binary.BigEndian.Uint32(revHdr[4:]); v != 1 {
++		return fmt.Errorf("%w: unsupported rev file version %d", ErrMalformedIdxFile, v)
++	}
++
++	s.fanoutStart = idxHeaderSize
++	var fanoutBuf [idxFanoutSize]byte
++	if _, err := idxRA.ReadAt(fanoutBuf[:], int64(s.fanoutStart)); err != nil {
++		return fmt.Errorf("cannot read idx fanout: %w", err)
++	}
++
++	for i := range 256 {
++		s.fanout[i] = binary.BigEndian.Uint32(fanoutBuf[i*4:])
++		if i > 0 && s.fanout[i] < s.fanout[i-1] {
++			return fmt.Errorf("%w: fanout table is not monotonically non-decreasing at entry %d",
++				ErrMalformedIdxFile, i)
++		}
++	}
++
++	s.count = int(s.fanout[255])
++
++	s.hashSize = packHash.Size()
++	s.namesStart = s.fanoutStart + idxFanoutSize
++	s.crcStart = s.namesStart + (s.count * s.hashSize)
++	s.off32Start = s.crcStart + (s.count * 4)
++	s.off64Start = s.off32Start + (s.count * off32Size)
++
++	// Count 64-bit offset entries by scanning the 32-bit offset table
++	// for entries with the MSB set.
++	n64, err := s.count64bitOffsets(idxRA)
++	if err != nil {
++		return err
++	}
++	s.count64 = n64
++
++	// The pack checksum sits right after the 64-bit offset table.
++	packBuf := make([]byte, s.hashSize)
++	packHashOff := int64(s.off64Start + n64*off64Size)
++	if _, err := idxRA.ReadAt(packBuf, packHashOff); err != nil {
++		return fmt.Errorf("cannot read pack checksum: %w", err)
++	}
++
++	if packHash.Compare(packBuf) != 0 {
++		var got plumbing.Hash
++		got.ResetBySize(s.hashSize)
++		_, _ = got.Write(packBuf)
++		return fmt.Errorf("%w: packfile mismatch: got %q instead of %q",
++			ErrMalformedIdxFile, got.String(), packHash.String())
++	}
++
++	return nil
+ }
+ 
+ // Contains reports whether the given hash exists in the index by
+ // binary-searching the idx names table.
+ func (s *LazyIndex) Contains(h plumbing.Hash) (bool, error) {
+-	panic("excised: LazyIndex.Contains")
++	idx, err := s.idx.Acquire()
++	if err != nil {
++		return false, err
++	}
++	defer s.idx.Release()
++
++	_, found, err := s.findHashPos(idx, h)
++	return found, err
+ }
+ 
+ // MayContain implements the Index interface. It reports whether the
+@@ -113,38 +217,92 @@ func (s *LazyIndex) Contains(h plumbing.Hash) (bool, error) {
+ // not in this pack"); true means call Contains or FindOffset for a
+ // definitive answer.
+ func (s *LazyIndex) MayContain(h plumbing.Hash) bool {
+-	panic("excised: LazyIndex.MayContain")
++	first := int(h.Bytes()[0])
++	var prev uint32
++	if first > 0 {
++		prev = s.fanout[first-1]
++	}
++	return s.fanout[first] > prev
+ }
+ 
+ // FindOffset returns the packfile offset for the object with the given hash.
+ // It returns plumbing.ErrObjectNotFound if the hash is not in the index.
+ func (s *LazyIndex) FindOffset(h plumbing.Hash) (int64, error) {
+-	panic("excised: LazyIndex.FindOffset")
++	idx, err := s.idx.Acquire()
++	if err != nil {
++		return 0, err
++	}
++	defer s.idx.Release()
++
++	pos, found, err := s.findHashPos(idx, h)
++	if err != nil {
++		return 0, err
++	}
++	if !found {
++		return 0, plumbing.ErrObjectNotFound
++	}
++
++	off, err := s.offset(idx, pos)
++	if err != nil {
++		return 0, err
++	}
++
++	return int64(off), nil
+ }
+ 
+ // FindCRC32 returns the CRC32 checksum of the object with the given hash.
+ // It returns plumbing.ErrObjectNotFound if the hash is not in the index.
+ func (s *LazyIndex) FindCRC32(h plumbing.Hash) (uint32, error) {
+-	panic("excised: LazyIndex.FindCRC32")
++	idx, err := s.idx.Acquire()
++	if err != nil {
++		return 0, err
++	}
++	defer s.idx.Release()
++
++	pos, found, err := s.findHashPos(idx, h)
++	if err != nil {
++		return 0, err
++	}
++	if !found {
++		return 0, plumbing.ErrObjectNotFound
++	}
++
++	return s.crc32(idx, pos)
+ }
+ 
+ // FindHash returns the object hash stored at the given packfile offset
+ // by binary-searching the .rev reverse index.
+ // It returns plumbing.ErrObjectNotFound if no object exists at that offset.
+ func (s *LazyIndex) FindHash(o int64) (plumbing.Hash, error) {
+-	panic("excised: LazyIndex.FindHash")
++	idx, err := s.idx.Acquire()
++	if err != nil {
++		return plumbing.ZeroHash, err
++	}
++	defer s.idx.Release()
++
++	rev, err := s.rev.Acquire()
++	if err != nil {
++		return plumbing.ZeroHash, err
++	}
++	defer s.rev.Release()
++
++	return s.findHashViaRev(idx, rev, o)
+ }
+ 
+ // Count returns the total number of objects in the index.
+ func (s *LazyIndex) Count() (int64, error) {
+-	panic("excised: LazyIndex.Count")
++	return int64(s.count), nil
+ }
+ 
+ // Entries returns an iterator over all index entries in hash order.
+ // The caller must call Close on the returned iterator to release the
+ // underlying file reference.
+ func (s *LazyIndex) Entries() (EntryIter, error) {
+-	panic("excised: LazyIndex.Entries")
++	idx, err := s.idx.Acquire()
++	if err != nil {
++		return nil, err
++	}
++	return &scannerEntryIter{s: s, idx: idx}, nil
+ }
+ 
+ // EntriesWithPrefix implements the Index interface. It returns an
+@@ -163,7 +321,58 @@ func (s *LazyIndex) Entries() (EntryIter, error) {
+ // The returned iterator holds an acquired reference to the idx
+ // SharedFile which is released on Close.
+ func (s *LazyIndex) EntriesWithPrefix(prefix []byte) (EntryIter, error) {
+-	panic("excised: LazyIndex.EntriesWithPrefix")
++	if len(prefix) == 0 {
++		return s.Entries()
++	}
++	first := int(prefix[0])
++	var lo int
++	if first > 0 {
++		lo = int(s.fanout[first-1])
++	}
++	hi := int(s.fanout[first])
++	if lo >= hi {
++		return &lazyPrefixIter{}, nil
++	}
++	idx, err := s.idx.Acquire()
++	if err != nil {
++		return nil, err
++	}
++
++	// Find the leftmost entry in [lo, hi) whose hash is >= prefix
++	// (padded with zeros to hash size). All matching entries, if
++	// any, start at this position; the iterator's
++	// stop-on-first-mismatch then terminates correctly once the
++	// run ends.
++	target := make([]byte, s.hashSize)
++	copy(target, prefix)
++	var arr [32]byte
++	buf := arr[:s.hashSize]
++	bsLo, bsHi := lo, hi
++	for bsLo < bsHi {
++		mid := (bsLo + bsHi) >> 1
++		nameOff := int64(s.namesStart + mid*s.hashSize)
++		if _, err := idx.ReadAt(buf, nameOff); err != nil {
++			s.idx.Release()
++			return nil, fmt.Errorf("read name at pos %d: %w", mid, err)
++		}
++		if bytes.Compare(buf, target) < 0 {
++			bsLo = mid + 1
++		} else {
++			bsHi = mid
++		}
++	}
++	if bsLo >= hi {
++		s.idx.Release()
++		return &lazyPrefixIter{}, nil
++	}
++
++	return &lazyPrefixIter{
++		s:      s,
++		idx:    idx,
++		prefix: prefix,
++		pos:    bsLo,
++		end:    hi,
++	}, nil
+ }
+ 
+ // EntriesByOffset returns an iterator over all index entries sorted by
+@@ -173,14 +382,23 @@ func (s *LazyIndex) EntriesWithPrefix(prefix []byte) (EntryIter, error) {
+ // The caller must call Close on the returned iterator to release the
+ // underlying file references.
+ func (s *LazyIndex) EntriesByOffset() (EntryIter, error) {
+-	panic("excised: LazyIndex.EntriesByOffset")
++	idx, err := s.idx.Acquire()
++	if err != nil {
++		return nil, err
++	}
++	rev, err := s.rev.Acquire()
++	if err != nil {
++		s.idx.Release()
++		return nil, err
++	}
++	return &revEntryIter{s: s, idx: idx, rev: rev}, nil
+ }
+ 
+ // Close releases the underlying shared file handles, preventing future
+ // operations. If there are active readers they will finish normally;
+ // the file descriptors close when the last reader is done.
+ func (s *LazyIndex) Close() error {
+-	panic("excised: LazyIndex.Close")
++	return errors.Join(s.idx.Close(), s.rev.Close())
+ }
+ 
+ // CloseIdleDescriptors releases the idx and rev file descriptors
+@@ -194,7 +412,7 @@ func (s *LazyIndex) Close() error {
+ // Returns the joined error of the inline closes; latched closes
+ // that fire later are not reported.
+ func (s *LazyIndex) CloseIdleDescriptors() error {
+-	panic("excised: LazyIndex.CloseIdleDescriptors")
++	return errors.Join(s.idx.ReleaseNow(), s.rev.ReleaseNow())
+ }
+ 
+ // --- internal helpers; all take an io.ReaderAt so the caller controls
+@@ -242,32 +460,136 @@ func (s *LazyIndex) findHashPos(idx io.ReaderAt, h plumbing.Hash) (int, bool, er
+ 
+ // offset returns the pack offset for the object at position pos.
+ func (s *LazyIndex) offset(idx io.ReaderAt, pos int) (uint64, error) {
+-	panic("excised: LazyIndex.offset")
++	var buf [off32Size]byte
++	off := int64(s.off32Start + pos*off32Size)
++	if _, err := idx.ReadAt(buf[:], off); err != nil {
++		return 0, fmt.Errorf("%w: cannot read offset32: %v", ErrMalformedIdxFile, err)
++	}
++
++	off32 := binary.BigEndian.Uint32(buf[:])
++	if uint64(off32)&is64bitsMask != 0 {
++		loIndex := int(uint64(off32) & ^is64bitsMask)
++		if loIndex >= s.count64 {
++			return 0, fmt.Errorf("%w: offset64 index %d out of range (have %d entries)",
++				ErrMalformedIdxFile, loIndex, s.count64)
++		}
++		var buf64 [off64Size]byte
++		off64Pos := int64(s.off64Start + loIndex*off64Size)
++		if _, err := idx.ReadAt(buf64[:], off64Pos); err != nil {
++			return 0, fmt.Errorf("%w: cannot read offset64: %v", ErrMalformedIdxFile, err)
++		}
++		return binary.BigEndian.Uint64(buf64[:]), nil
++	}
++
++	return uint64(off32), nil
+ }
+ 
+ // count64bitOffsets scans the 32-bit offset table and returns the number
+ // of entries whose MSB is set (i.e. that use the 64-bit overflow table).
+ func (s *LazyIndex) count64bitOffsets(idx io.ReaderAt) (int, error) {
+-	panic("excised: LazyIndex.count64bitOffsets")
++	bufp := gsync.GetByteSlice()
++	defer gsync.PutByteSlice(bufp)
++
++	buf := *bufp
++	// Round down to a multiple of off32Size so we always read whole entries.
++	buf = buf[:len(buf)&^(off32Size-1)]
++
++	var n int
++	remaining := s.count
++	pos := int64(s.off32Start)
++
++	for remaining > 0 {
++		chunk := min(remaining*off32Size, len(buf))
++
++		if _, err := idx.ReadAt(buf[:chunk], pos); err != nil {
++			return 0, fmt.Errorf("%w: cannot read offset32 table: %v", ErrMalformedIdxFile, err)
++		}
++
++		for i := 0; i < chunk; i += off32Size {
++			if binary.BigEndian.Uint32(buf[i:])&uint32(is64bitsMask) != 0 {
++				n++
++			}
++		}
++
++		pos += int64(chunk)
++		remaining -= chunk / off32Size
++	}
++	return n, nil
+ }
+ 
+ // crc32 returns the CRC32 for the object at position pos.
+ func (s *LazyIndex) crc32(idx io.ReaderAt, pos int) (uint32, error) {
+-	panic("excised: LazyIndex.crc32")
++	var buf [4]byte
++	off := int64(s.crcStart + pos*4)
++	if _, err := idx.ReadAt(buf[:], off); err != nil {
++		return 0, fmt.Errorf("%w: cannot read CRC32: %v", ErrMalformedIdxFile, err)
++	}
++	return binary.BigEndian.Uint32(buf[:]), nil
+ }
+ 
+ // hashAtPos reads the hash at the given flat position.
+ func (s *LazyIndex) hashAtPos(idx io.ReaderAt, pos int) (plumbing.Hash, error) {
+-	panic("excised: LazyIndex.hashAtPos")
++	var arr [32]byte
++	buf := arr[:s.hashSize]
++	off := int64(s.namesStart + pos*s.hashSize)
++	if _, err := idx.ReadAt(buf, off); err != nil {
++		return plumbing.ZeroHash, fmt.Errorf("read name at pos %d: %w", pos, err)
++	}
++
++	var h plumbing.Hash
++	h.ResetBySize(s.hashSize)
++	_, _ = h.Write(buf)
++	return h, nil
+ }
+ 
+ func (s *LazyIndex) findHashViaRev(idx, rev io.ReaderAt, want int64) (plumbing.Hash, error) {
+-	panic("excised: LazyIndex.findHashViaRev")
++	lo, hi := 0, s.count
++	var buf [4]byte
++
++	for lo < hi {
++		mid := (lo + hi) >> 1
++		revOff := int64(revHeaderSize + mid*4)
++		if _, err := rev.ReadAt(buf[:], revOff); err != nil {
++			return plumbing.ZeroHash, fmt.Errorf("read rev entry: %w", err)
++		}
++
++		idxPos := int(binary.BigEndian.Uint32(buf[:]))
++		if idxPos < 0 || idxPos >= s.count {
++			return plumbing.ZeroHash, fmt.Errorf("%w: rev entry %d out of range (count %d)",
++				ErrMalformedIdxFile, idxPos, s.count)
++		}
++		got, err := s.offset(idx, idxPos)
++		if err != nil {
++			return plumbing.ZeroHash, err
++		}
++
++		switch {
++		case int64(got) < want:
++			lo = mid + 1
++		case int64(got) > want:
++			hi = mid
++		default:
++			return s.hashAtPos(idx, idxPos)
++		}
++	}
++	return plumbing.ZeroHash, plumbing.ErrObjectNotFound
+ }
+ 
+ // entryAt reads a complete entry at the given flat position.
+ func (s *LazyIndex) entryAt(idx io.ReaderAt, pos int) (*Entry, error) {
+-	panic("excised: LazyIndex.entryAt")
++	h, err := s.hashAtPos(idx, pos)
++	if err != nil {
++		return nil, err
++	}
++	off, err := s.offset(idx, pos)
++	if err != nil {
++		return nil, err
++	}
++	crc, err := s.crc32(idx, pos)
++	if err != nil {
++		return nil, err
++	}
++	return &Entry{Hash: h, Offset: off, CRC32: crc}, nil
+ }
+ 
+ // scannerEntryIter iterates over entries in hash order.
+@@ -280,11 +602,28 @@ type scannerEntryIter struct {
+ }
+ 
+ func (it *scannerEntryIter) Next() (*Entry, error) {
+-	panic("excised: scannerEntryIter.Next")
++	if it.idx == nil {
++		return nil, sharedfile.ErrClosed
++	}
++	if it.pos >= it.s.count {
++		return nil, io.EOF
++	}
++
++	e, err := it.s.entryAt(it.idx, it.pos)
++	if err != nil {
++		return nil, err
++	}
++	it.pos++
++	return e, nil
+ }
+ 
+ func (it *scannerEntryIter) Close() error {
+-	panic("excised: scannerEntryIter.Close")
++	it.pos = it.s.count
++	if it.idx != nil {
++		it.s.idx.Release()
++		it.idx = nil
++	}
++	return nil
+ }
+ 
+ // revEntryIter iterates over entries in packfile-offset order by
+@@ -298,11 +637,45 @@ type revEntryIter struct {
+ }
+ 
+ func (it *revEntryIter) Next() (*Entry, error) {
+-	panic("excised: revEntryIter.Next")
++	if it.idx == nil || it.rev == nil {
++		return nil, sharedfile.ErrClosed
++	}
++	if it.pos >= it.s.count {
++		return nil, io.EOF
++	}
++
++	var buf [4]byte
++	revOff := int64(revHeaderSize + it.pos*4)
++	if _, err := it.rev.ReadAt(buf[:], revOff); err != nil {
++		return nil, fmt.Errorf("read rev entry at %d: %w", it.pos, err)
++	}
++
++	idxPos := int(binary.BigEndian.Uint32(buf[:]))
++	if idxPos < 0 || idxPos >= it.s.count {
++		return nil, fmt.Errorf("%w: rev entry %d out of range (count %d)",
++			ErrMalformedIdxFile, idxPos, it.s.count)
++	}
++
++	e, err := it.s.entryAt(it.idx, idxPos)
++	if err != nil {
++		return nil, err
++	}
++
++	it.pos++
++	return e, nil
+ }
+ 
+ func (it *revEntryIter) Close() error {
+-	panic("excised: revEntryIter.Close")
++	it.pos = it.s.count
++	if it.idx != nil {
++		it.s.idx.Release()
++		it.idx = nil
++	}
++	if it.rev != nil {
++		it.s.rev.Release()
++		it.rev = nil
++	}
++	return nil
+ }
+ 
+ // lazyPrefixIter walks the LazyIndex names table from pos to end,
+@@ -326,9 +699,30 @@ type lazyPrefixIter struct {
+ }
+ 
+ func (it *lazyPrefixIter) Next() (*Entry, error) {
+-	panic("excised: lazyPrefixIter.Next")
++	if it.idx == nil {
++		return nil, io.EOF
++	}
++	if it.pos >= it.end {
++		return nil, io.EOF
++	}
++	e, err := it.s.entryAt(it.idx, it.pos)
++	if err != nil {
++		return nil, err
++	}
++	if !bytes.HasPrefix(e.Hash.Bytes(), it.prefix) {
++		// Past the prefix in the sorted names table; close out so the
++		// SharedFile reference is released eagerly.
++		_ = it.Close()
++		return nil, io.EOF
++	}
++	it.pos++
++	return e, nil
+ }
+ 
+ func (it *lazyPrefixIter) Close() error {
+-	panic("excised: lazyPrefixIter.Close")
++	if it.idx != nil {
++		it.s.idx.Release()
++		it.idx = nil
++	}
++	return nil
+ }
+diff --git a/plumbing/format/idxfile/writer.go b/plumbing/format/idxfile/writer.go
+index bde3b0d..7531271 100644
+--- a/plumbing/format/idxfile/writer.go
++++ b/plumbing/format/idxfile/writer.go
+@@ -1,14 +1,14 @@
+ package idxfile
+ 
+ import (
+-	_ "bytes"
+-	_ "fmt"
+-	_ "math"
+-	_ "sort"
++	"bytes"
++	"fmt"
++	"math"
++	"sort"
+ 	"sync"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+-	_ "example.internal/gitkit/v6/utils/binary"
++	"example.internal/gitkit/v6/utils/binary"
+ )
+ 
+ // objects implements sort.Interface and uses hash as sorting key.
+@@ -31,57 +31,178 @@ type Writer struct {
+ // Index returns a previously created MemoryIndex or creates a new one if
+ // needed.
+ func (w *Writer) Index() (*MemoryIndex, error) {
+-	panic("excised: Writer.Index")
++	w.m.Lock()
++	defer w.m.Unlock()
++
++	if w.index == nil {
++		return w.createIndex()
++	}
++
++	return w.index, nil
+ }
+ 
+ // Add appends new object data.
+ func (w *Writer) Add(h plumbing.Hash, pos uint64, crc uint32) {
+-	panic("excised: Writer.Add")
++	// Skip unmaterialised delta objects.
++	if h.IsZero() {
++		return
++	}
++
++	w.m.Lock()
++	defer w.m.Unlock()
++
++	if w.added == nil {
++		w.added = make(map[plumbing.Hash]struct{})
++	}
++
++	if _, ok := w.added[h]; !ok {
++		w.added[h] = struct{}{}
++		w.objects = append(w.objects, Entry{h, crc, pos})
++	}
+ }
+ 
+ // Finished returns true if the writer has finished writing.
+ func (w *Writer) Finished() bool {
+-	panic("excised: Writer.Finished")
++	return w.finished
+ }
+ 
+ // OnHeader implements packfile.Observer interface.
+ func (w *Writer) OnHeader(count uint32) error {
+-	panic("excised: Writer.OnHeader")
++	w.count = count
++	w.objects = make(objects, 0, count)
++	return nil
+ }
+ 
+ // OnInflatedObjectHeader implements packfile.Observer interface.
+ func (w *Writer) OnInflatedObjectHeader(_ plumbing.ObjectType, _, _ int64) error {
+-	panic("excised: Writer.OnInflatedObjectHeader")
++	return nil
+ }
+ 
+ // OnInflatedObjectContent implements packfile.Observer interface.
+ func (w *Writer) OnInflatedObjectContent(h plumbing.Hash, pos int64, crc uint32, _ []byte) error {
+-	panic("excised: Writer.OnInflatedObjectContent")
++	w.Add(h, uint64(pos), crc)
++	return nil
+ }
+ 
+ // OnFooter implements packfile.Observer interface.
+ func (w *Writer) OnFooter(h plumbing.Hash) error {
+-	panic("excised: Writer.OnFooter")
++	w.checksum = h
++	w.finished = true
++	_, err := w.createIndex()
++
++	return err
+ }
+ 
+ // creatIndex returns a filled MemoryIndex with the information filled by
+ // the observer callbacks.
+ func (w *Writer) createIndex() (*MemoryIndex, error) {
+-	panic("excised: Writer.createIndex")
++	if !w.finished {
++		return nil, fmt.Errorf("the index still hasn't finished building")
++	}
++
++	idx := NewMemoryIndex(w.checksum.Size())
++	w.index = idx
++
++	sort.Sort(w.objects)
++
++	// unmap all fans by default
++	for i := range idx.FanoutMapping {
++		idx.FanoutMapping[i] = noMapping
++	}
++
++	// Pre-allocate underlying array based on expected number
++	// of objects.
++	idx.Names = make([][]byte, 0, len(w.objects))
++	idx.Offset32 = make([][]byte, 0, len(w.objects))
++	idx.CRC32 = make([][]byte, 0, len(w.objects))
++
++	buf := new(bytes.Buffer)
++
++	last := -1
++	bucket := -1
++	for i, o := range w.objects {
++		if o.Hash.Size() != w.checksum.Size() {
++			return nil, fmt.Errorf("object hash size mismatch: %d instead of %d", o.Hash.Size(), w.checksum.Size())
++		}
++
++		fan := o.Hash.Bytes()[0]
++
++		// fill the gaps between fans
++		for j := last + 1; j < int(fan); j++ {
++			idx.Fanout[j] = uint32(i)
++		}
++
++		// update the number of objects for this position
++		idx.Fanout[fan] = uint32(i + 1)
++
++		// we move from one bucket to another, update counters and allocate
++		// memory
++		if last != int(fan) {
++			bucket++
++			idx.FanoutMapping[fan] = bucket
++			last = int(fan)
++
++			idx.Names = append(idx.Names, make([]byte, 0))
++			idx.Offset32 = append(idx.Offset32, make([]byte, 0))
++			idx.CRC32 = append(idx.CRC32, make([]byte, 0))
++		}
++
++		idx.Names[bucket] = append(idx.Names[bucket], o.Hash.Bytes()...)
++
++		offset := o.Offset
++		if offset > math.MaxInt32 {
++			var err error
++			offset, err = w.addOffset64(offset)
++			if err != nil {
++				return nil, err
++			}
++		}
++
++		buf.Truncate(0)
++		if err := binary.WriteUint32(buf, uint32(offset)); err != nil {
++			return nil, err
++		}
++		idx.Offset32[bucket] = append(idx.Offset32[bucket], buf.Bytes()...)
++
++		buf.Truncate(0)
++		if err := binary.WriteUint32(buf, o.CRC32); err != nil {
++			return nil, err
++		}
++		idx.CRC32[bucket] = append(idx.CRC32[bucket], buf.Bytes()...)
++	}
++
++	for j := last + 1; j < 256; j++ {
++		idx.Fanout[j] = uint32(len(w.objects))
++	}
++
++	idx.Version = VersionSupported
++	idx.PackfileChecksum = w.checksum
++
++	return idx, nil
+ }
+ 
+ func (w *Writer) addOffset64(pos uint64) (uint64, error) {
+-	panic("excised: Writer.addOffset64")
++	buf := new(bytes.Buffer)
++	if err := binary.WriteUint64(buf, pos); err != nil {
++		return 0, err
++	}
++
++	w.index.Offset64 = append(w.index.Offset64, buf.Bytes()...)
++	index := uint64(w.offset64 | (1 << 31))
++	w.offset64++
++
++	return index, nil
+ }
+ 
+ func (o objects) Len() int {
+-	panic("excised: objects.Len")
++	return len(o)
+ }
+ 
+ func (o objects) Less(i, j int) bool {
+-	panic("excised: objects.Less")
++	cmp := o[i].Hash.Compare(o[j].Hash.Bytes())
++	return cmp < 0
+ }
+ 
+ func (o objects) Swap(i, j int) {
+-	panic("excised: objects.Swap")
++	o[i], o[j] = o[j], o[i]
+ }

@@ -1,0 +1,843 @@
+diff --git a/plumbing/transport/negotiate.go b/plumbing/transport/negotiate.go
+index 8f3de44..88666d8 100644
+--- a/plumbing/transport/negotiate.go
++++ b/plumbing/transport/negotiate.go
+@@ -2,19 +2,19 @@ package transport
+ 
+ import (
+ 	"context"
+-	"errors"
+-	"fmt"
++	_ "errors"
++	_ "fmt"
+ 	"io"
+-	"slices"
++	_ "slices"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+-	"example.internal/gitkit/v6/plumbing/format/config"
+-	"example.internal/gitkit/v6/plumbing/format/pktline"
++	_ "example.internal/gitkit/v6/plumbing/format/config"
++	_ "example.internal/gitkit/v6/plumbing/format/pktline"
+ 	"example.internal/gitkit/v6/plumbing/protocol/capability"
+ 	"example.internal/gitkit/v6/plumbing/protocol/packp"
+ 	"example.internal/gitkit/v6/storage"
+-	"example.internal/gitkit/v6/utils/ioutil"
+-	xstorage "example.internal/gitkit/v6/x/storage"
++	_ "example.internal/gitkit/v6/utils/ioutil"
++	_ "example.internal/gitkit/v6/x/storage"
+ )
+ 
+ const (
+@@ -25,18 +25,7 @@ const (
+ )
+ 
+ func nextFlush(statelessRPC bool, count int) int {
+-	if statelessRPC {
+-		if count < largeFlush {
+-			return count << 1
+-		}
+-		return count * 11 / 10
+-	}
+-
+-	if count < pipeSafeFlush {
+-		return count << 1
+-	}
+-
+-	return count + pipeSafeFlush
++	panic("excised: nextFlush")
+ }
+ 
+ func applyServerACKs(
+@@ -48,26 +37,7 @@ func applyServerACKs(
+ 	gotReady *bool,
+ 	inVein *int,
+ ) {
+-	for _, ack := range acks {
+-		if !*gotContinue && ack.Status > 0 {
+-			*gotContinue = true
+-		}
+-
+-		switch ack.Status {
+-		case packp.ACKContinue:
+-			*inVein = 0
+-		case packp.ACKReady:
+-			*gotReady = true
+-			*inVein = 0
+-		case packp.ACKCommon:
+-			_, alreadyCommon := common[ack.Hash]
+-			common[ack.Hash] = struct{}{}
+-			if statelessRPC && !alreadyCommon {
+-				*statelessCommon = append(*statelessCommon, ack.Hash)
+-				*inVein = 0
+-			}
+-		}
+-	}
++	panic("excised: applyServerACKs")
+ }
+ 
+ // NegotiatePack performs the pack negotiation phase of the fetch operation.
+@@ -80,230 +50,11 @@ func NegotiatePack(
+ 	writer io.WriteCloser,
+ 	req *FetchRequest,
+ ) (shallowInfo *packp.ShallowUpdate, err error) {
+-	reader = ioutil.NewContextReader(ctx, reader)
+-	writer = ioutil.NewContextWriteCloser(ctx, writer)
+-
+-	upreq := &packp.UploadRequest{}
+-	multiAck := caps.Supports(capability.MultiACK)
+-	multiAckDetailed := caps.Supports(capability.MultiACKDetailed)
+-	if multiAckDetailed {
+-		upreq.Capabilities.Set(capability.MultiACKDetailed)
+-	} else if multiAck {
+-		upreq.Capabilities.Set(capability.MultiACK)
+-	}
+-
+-	if req.Progress != nil {
+-		if caps.Supports(capability.Sideband64k) {
+-			upreq.Capabilities.Set(capability.Sideband64k)
+-		} else if caps.Supports(capability.Sideband) {
+-			upreq.Capabilities.Set(capability.Sideband)
+-		}
+-	} else if caps.Supports(capability.NoProgress) {
+-		upreq.Capabilities.Set(capability.NoProgress)
+-	}
+-
+-	if caps.Supports(capability.ObjectFormat) {
+-		var clientFormat, serverFormat config.ObjectFormat
+-		if capValues := caps.Get(capability.ObjectFormat); len(capValues) > 0 {
+-			of := config.ObjectFormat(capValues[0])
+-			switch of {
+-			case config.SHA1, config.SHA256:
+-				serverFormat = of
+-			}
+-		}
+-
+-		cfg, err := st.Config()
+-		if err == nil {
+-			clientFormat = cfg.Extensions.ObjectFormat
+-		}
+-
+-		if clientFormat == config.UnsetObjectFormat && serverFormat == config.SHA256 {
+-			ref, err := st.Reference(plumbing.HEAD)
+-			if err == nil && ref.Target().String() == "refs/heads/.invalid" {
+-				if setter, ok := st.(xstorage.ObjectFormatSetter); ok {
+-					err := setter.SetObjectFormat(serverFormat)
+-					if err != nil {
+-						return nil, fmt.Errorf("unable to set object format: %w", err)
+-					}
+-					clientFormat = serverFormat
+-				}
+-			}
+-		}
+-
+-		if clientFormat == config.UnsetObjectFormat {
+-			clientFormat = config.SHA1
+-		}
+-
+-		if serverFormat != clientFormat {
+-			return nil, fmt.Errorf("mismatched algorithms: client %s; server %s", clientFormat, serverFormat)
+-		}
+-
+-		upreq.Capabilities.Set(capability.ObjectFormat, clientFormat.String())
+-	}
+-
+-	if caps.Supports(capability.OFSDelta) {
+-		upreq.Capabilities.Set(capability.OFSDelta)
+-	}
+-
+-	if caps.Supports(capability.Agent) {
+-		upreq.Capabilities.Set(capability.Agent, capability.DefaultAgent())
+-	}
+-
+-	if req.IncludeTags && caps.Supports(capability.IncludeTag) {
+-		upreq.Capabilities.Set(capability.IncludeTag)
+-	}
+-
+-	if req.Filter != "" {
+-		if caps.Supports(capability.Filter) {
+-			upreq.Filter = req.Filter
+-			upreq.Capabilities.Set(capability.Filter)
+-		} else {
+-			return nil, ErrFilterNotSupported
+-		}
+-	}
+-
+-	upreq.Wants = req.Wants
+-
+-	if req.Depth > 0 {
+-		if !caps.Supports(capability.Shallow) {
+-			return nil, ErrShallowNotSupported
+-		}
+-		upreq.Depth = packp.DepthRequest{Deepen: req.Depth}
+-		upreq.Shallows, err = st.Shallow()
+-		if err != nil {
+-			return nil, err
+-		}
+-	}
+-
+-	if isSubset(req.Wants, req.Haves) && len(upreq.Shallows) == 0 {
+-		if err := pktline.WriteFlush(writer); err != nil {
+-			return nil, err
+-		}
+-		if err := writer.Close(); err != nil && !errors.Is(err, io.EOF) {
+-			return nil, fmt.Errorf("closing writer: %w", err)
+-		}
+-		return nil, ErrNoChange
+-	}
+-
+-	common := map[plumbing.Hash]struct{}{}
+-	var statelessCommon []plumbing.Hash
+-	var inVein int
+-	var done bool
+-	var gotContinue bool
+-	var gotReady bool
+-	var sendDoneAfterReady bool
+-	firstRound := true
+-	flushAt := initialFlush
+-
+-	for !done {
+-		var uphav packp.UploadHaves
+-		if statelessRPC && !sendDoneAfterReady {
+-			uphav.Haves = append(uphav.Haves, statelessCommon...)
+-		}
+-
+-		batchSize := 0
+-		if !sendDoneAfterReady {
+-			batchSize = flushAt
+-			if gotContinue {
+-				remaining := maxInVein - inVein
+-				if remaining <= 0 {
+-					batchSize = 0
+-				} else if batchSize > remaining {
+-					batchSize = remaining
+-				}
+-			}
+-		}
+-
+-		for i := 0; i < batchSize && len(req.Haves) > 0; i++ {
+-			uphav.Haves = append(uphav.Haves, req.Haves[len(req.Haves)-1])
+-			req.Haves = req.Haves[:len(req.Haves)-1]
+-			inVein++
+-		}
+-
+-		done = sendDoneAfterReady || len(req.Haves) == 0 || (gotContinue && inVein >= maxInVein)
+-		uphav.Done = done
+-
+-		if isSubset(req.Wants, uphav.Haves) && len(upreq.Shallows) == 0 {
+-			if err := pktline.WriteFlush(writer); err != nil {
+-				return nil, err
+-			}
+-			if err := writer.Close(); err != nil && !errors.Is(err, io.EOF) {
+-				return nil, fmt.Errorf("closing writer: %w", err)
+-			}
+-			return nil, ErrNoChange
+-		}
+-
+-		if firstRound || statelessRPC {
+-			if err := upreq.Encode(writer); err != nil {
+-				return nil, fmt.Errorf("sending upload-request: %w", err)
+-			}
+-		}
+-
+-		readc := make(chan error)
+-		if !statelessRPC {
+-			go func() { readc <- readShallows(statelessRPC, reader, req, &shallowInfo, firstRound) }()
+-		}
+-
+-		if err := uphav.Encode(writer); err != nil {
+-			return nil, fmt.Errorf("sending upload-haves: %w", err)
+-		}
+-
+-		if statelessRPC {
+-			if err := writer.Close(); err != nil {
+-				return nil, fmt.Errorf("closing writer: %w", err)
+-			}
+-			if err := readShallows(statelessRPC, reader, req, &shallowInfo, firstRound); err != nil {
+-				return nil, err
+-			}
+-		} else {
+-			if err := <-readc; err != nil {
+-				return nil, err
+-			}
+-		}
+-
+-		go func() {
+-			defer close(readc)
+-			if done || len(uphav.Haves) > 0 {
+-				var srvrs packp.ServerResponse
+-				if err := srvrs.Decode(reader); err != nil {
+-					readc <- fmt.Errorf("decoding server-response: %w", err)
+-					return
+-				}
+-				applyServerACKs(statelessRPC, srvrs.ACKs, common, &statelessCommon, &gotContinue, &gotReady, &inVein)
+-			}
+-			readc <- nil
+-		}()
+-
+-		if err := <-readc; err != nil {
+-			return nil, err
+-		}
+-		if sendDoneAfterReady {
+-			break
+-		}
+-		if gotReady {
+-			sendDoneAfterReady = true
+-		}
+-
+-		firstRound = false
+-		flushAt = nextFlush(statelessRPC, flushAt)
+-	}
+-
+-	if !statelessRPC {
+-		if err := writer.Close(); err != nil && !errors.Is(err, io.EOF) {
+-			return nil, fmt.Errorf("closing writer: %w", err)
+-		}
+-	}
+-
+-	return shallowInfo, nil
++	panic("excised: NegotiatePack")
+ }
+ 
+ func isSubset(needle, haystack []plumbing.Hash) bool {
+-	for _, h := range needle {
+-		if !slices.Contains(haystack, h) {
+-			return false
+-		}
+-	}
+-	return true
++	panic("excised: isSubset")
+ }
+ 
+ func readShallows(
+@@ -313,16 +64,7 @@ func readShallows(
+ 	shallowInfo **packp.ShallowUpdate,
+ 	firstRound bool,
+ ) error {
+-	if (firstRound || statelessRPC) && req.Depth > 0 {
+-		var shupd packp.ShallowUpdate
+-		if err := shupd.Decode(r); err != nil {
+-			return fmt.Errorf("decoding shallow-update: %w", err)
+-		}
+-		if *shallowInfo == nil {
+-			*shallowInfo = &shupd
+-		}
+-	}
+-	return nil
++	panic("excised: readShallows")
+ }
+ 
+ // ReconcileObjectFormatV2 aligns the storer's object format with the Protocol
+@@ -335,61 +77,5 @@ func readShallows(
+ // fetch-pack.c, including the case where the server omits object-format (it
+ // only speaks sha1) but the client repository uses another algorithm.
+ func ReconcileObjectFormatV2(st storage.Storer, caps capability.List) error {
+-	var clientFormat config.ObjectFormat
+-	if cfg, err := st.Config(); err == nil && cfg != nil {
+-		clientFormat = cfg.Extensions.ObjectFormat
+-	}
+-
+-	advertised := caps.Get(capability.ObjectFormat)
+-	if len(advertised) == 0 {
+-		// The server advertised no object-format, so it only speaks sha1.
+-		// Upstream errors when the client repo uses a different algorithm
+-		// rather than letting it fail later on a checksum mismatch.
+-		if clientFormat != config.UnsetObjectFormat && clientFormat != config.SHA1 {
+-			return fmt.Errorf("the server does not support algorithm '%s'", clientFormat)
+-		}
+-		return nil
+-	}
+-
+-	var serverFormat config.ObjectFormat
+-	switch v := config.ObjectFormat(advertised[0]); v {
+-	case config.SHA1, config.SHA256:
+-		serverFormat = v
+-	case config.UnsetObjectFormat:
+-		// An empty value carries no algorithm; treat it exactly as an absent
+-		// object-format (the server only speaks sha1). Apply the same guard as
+-		// the len(advertised)==0 branch so a client repo on a different
+-		// algorithm is rejected rather than slipping past to fail later on a
+-		// checksum mismatch.
+-		if clientFormat != config.UnsetObjectFormat && clientFormat != config.SHA1 {
+-			return fmt.Errorf("the server does not support algorithm '%s'", clientFormat)
+-		}
+-		return nil
+-	default:
+-		// An algorithm gitkit does not speak. Fail fast rather than proceed
+-		// with the wrong hash format, matching NegotiatePack's v0/v1 handling.
+-		return fmt.Errorf("server advertised unsupported object-format %q", v)
+-	}
+-
+-	// Adopt the server format on a fresh clone: unset client + sha256 server,
+-	// with HEAD still at the clone placeholder.
+-	if clientFormat == config.UnsetObjectFormat && serverFormat == config.SHA256 {
+-		if ref, err := st.Reference(plumbing.HEAD); err == nil && ref.Target().String() == "refs/heads/.invalid" {
+-			if setter, ok := st.(xstorage.ObjectFormatSetter); ok {
+-				if err := setter.SetObjectFormat(serverFormat); err != nil {
+-					return fmt.Errorf("unable to set object format: %w", err)
+-				}
+-				clientFormat = serverFormat
+-			}
+-		}
+-	}
+-
+-	if clientFormat == config.UnsetObjectFormat {
+-		clientFormat = config.SHA1
+-	}
+-
+-	if serverFormat != clientFormat {
+-		return fmt.Errorf("mismatched algorithms: client %s; server %s", clientFormat, serverFormat)
+-	}
+-	return nil
++	panic("excised: ReconcileObjectFormatV2")
+ }
+diff --git a/plumbing/transport/negotiate_test.go b/plumbing/transport/negotiate_test.go
+deleted file mode 100644
+index fdf9124..0000000
+--- a/plumbing/transport/negotiate_test.go
++++ /dev/null
+@@ -1,444 +0,0 @@
+-package transport
+-
+-import (
+-	"bytes"
+-	"context"
+-	"fmt"
+-	"io"
+-	"maps"
+-	"strings"
+-	"testing"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	"example.internal/gitkit/v6/plumbing"
+-	formatcfg "example.internal/gitkit/v6/plumbing/format/config"
+-	"example.internal/gitkit/v6/plumbing/format/pktline"
+-	"example.internal/gitkit/v6/plumbing/protocol/capability"
+-	"example.internal/gitkit/v6/plumbing/protocol/packp"
+-	"example.internal/gitkit/v6/storage/memory"
+-)
+-
+-func TestNegotiatePackCloseBehavior(t *testing.T) {
+-	t.Parallel()
+-
+-	hashA := plumbing.NewHash("6ecf0ef2c2dffb796033e5a02219af86ec6584e5")
+-	hashB := plumbing.NewHash("e8d3ffab552895c19b9fcf7aa264d277cde33881")
+-
+-	tests := []struct {
+-		name            string
+-		reader          []byte
+-		closeErr        error
+-		req             *FetchRequest
+-		wantErrIs       error
+-		wantErrText     string
+-		wantFlush       string
+-		wantNoErr       bool
+-		wantShallowsNil bool
+-	}{
+-		{
+-			name:      "no_change_eof_on_close",
+-			closeErr:  io.EOF,
+-			req:       &FetchRequest{Wants: []plumbing.Hash{hashA}, Haves: []plumbing.Hash{hashA}},
+-			wantErrIs: ErrNoChange,
+-			wantFlush: "0000",
+-		},
+-		{
+-			name:        "no_change_non_eof_on_close",
+-			closeErr:    io.ErrUnexpectedEOF,
+-			req:         &FetchRequest{Wants: []plumbing.Hash{hashA}, Haves: []plumbing.Hash{hashA}},
+-			wantErrText: "closing writer",
+-			wantFlush:   "0000",
+-		},
+-		{
+-			name:            "complete_eof_on_close",
+-			reader:          []byte("0008NAK\n"),
+-			closeErr:        io.EOF,
+-			req:             &FetchRequest{Wants: []plumbing.Hash{hashA}, Haves: []plumbing.Hash{hashB}},
+-			wantNoErr:       true,
+-			wantShallowsNil: true,
+-		},
+-		{
+-			name:            "complete_non_eof_on_close",
+-			reader:          []byte("0008NAK\n"),
+-			closeErr:        io.ErrUnexpectedEOF,
+-			req:             &FetchRequest{Wants: []plumbing.Hash{hashA}, Haves: []plumbing.Hash{hashB}},
+-			wantErrText:     "closing writer",
+-			wantShallowsNil: true,
+-		},
+-	}
+-
+-	for _, tt := range tests {
+-		t.Run(tt.name, func(t *testing.T) {
+-			t.Parallel()
+-
+-			writer := newMockWriteCloser(nil)
+-			writer.closeErr = tt.closeErr
+-
+-			shallows, err := NegotiatePack(
+-				context.TODO(),
+-				memory.NewStorage(),
+-				capability.List{},
+-				false,
+-				bytes.NewReader(tt.reader),
+-				writer,
+-				tt.req,
+-			)
+-
+-			switch {
+-			case tt.wantNoErr:
+-				require.NoError(t, err)
+-			case tt.wantErrIs != nil:
+-				require.ErrorIs(t, err, tt.wantErrIs)
+-			default:
+-				require.Error(t, err)
+-				assert.Contains(t, err.Error(), tt.wantErrText)
+-				assert.ErrorIs(t, err, tt.closeErr)
+-			}
+-
+-			if tt.wantFlush != "" {
+-				assert.Equal(t, tt.wantFlush, writer.writeBuf.String())
+-			}
+-			if tt.wantShallowsNil {
+-				assert.Nil(t, shallows)
+-			}
+-		})
+-	}
+-}
+-
+-func TestNextFlush(t *testing.T) {
+-	t.Parallel()
+-
+-	tests := []struct {
+-		name         string
+-		statelessRPC bool
+-		in           int
+-		want         int
+-	}{
+-		{name: "stateless_initial", statelessRPC: true, in: 16, want: 32},
+-		{name: "stateless_growth", statelessRPC: true, in: 32, want: 64},
+-		{name: "stateless_large_boundary", statelessRPC: true, in: 16384, want: 18022},
+-		{name: "stateless_large_growth", statelessRPC: true, in: 32768, want: 36044},
+-		{name: "stateful_initial", statelessRPC: false, in: 16, want: 32},
+-		{name: "stateful_pipe_safe_boundary", statelessRPC: false, in: 32, want: 64},
+-		{name: "stateful_linear_growth_64", statelessRPC: false, in: 64, want: 96},
+-		{name: "stateful_linear_growth_96", statelessRPC: false, in: 96, want: 128},
+-	}
+-
+-	for _, tt := range tests {
+-		t.Run(tt.name, func(t *testing.T) {
+-			t.Parallel()
+-			assert.Equal(t, tt.want, nextFlush(tt.statelessRPC, tt.in))
+-		})
+-	}
+-}
+-
+-func TestNegotiatePackMultiRound(t *testing.T) {
+-	t.Parallel()
+-
+-	tests := []struct {
+-		name         string
+-		statelessRPC bool
+-		wantCount    int
+-		haveCount    int
+-		flushCount   int
+-	}{
+-		{
+-			name:         "stateful",
+-			statelessRPC: false,
+-			wantCount:    1,
+-			haveCount:    17,
+-			flushCount:   2,
+-		},
+-		{
+-			name:         "stateless",
+-			statelessRPC: true,
+-			wantCount:    2,
+-			haveCount:    17,
+-			flushCount:   3,
+-		},
+-	}
+-
+-	for _, tt := range tests {
+-		t.Run(tt.name, func(t *testing.T) {
+-			t.Parallel()
+-
+-			writer := negotiatePackMultiRound(t, tt.statelessRPC)
+-			out := writer.writeBuf.String()
+-
+-			assert.Equal(t, tt.wantCount, strings.Count(out, "want "))
+-			assert.Equal(t, tt.haveCount, strings.Count(out, "have "))
+-			assert.Equal(t, tt.flushCount, strings.Count(out, "0000"))
+-		})
+-	}
+-}
+-
+-func TestNegotiatePackStatelessRequeuesACKCommon(t *testing.T) {
+-	t.Parallel()
+-
+-	commonHash := plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+-	reader := bytes.NewBuffer(nil)
+-	_, err := pktline.WriteString(reader, "ACK "+commonHash.String()+" common\n")
+-	require.NoError(t, err)
+-	_, err = pktline.WriteString(reader, "NAK\n")
+-	require.NoError(t, err)
+-	_, err = pktline.WriteString(reader, "NAK\n")
+-	require.NoError(t, err)
+-
+-	writer := newMockWriteCloser(nil)
+-	haves := append([]plumbing.Hash{plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")}, makeSyntheticHaves(15)...)
+-	haves = append(haves, commonHash)
+-	req := &FetchRequest{
+-		Wants: []plumbing.Hash{plumbing.NewHash("6ecf0ef2c2dffb796033e5a02219af86ec6584e5")},
+-		Haves: haves,
+-	}
+-
+-	_, err = NegotiatePack(context.TODO(), memory.NewStorage(), capability.List{}, true, reader, writer, req)
+-	require.NoError(t, err)
+-
+-	assert.Equal(t, 2, strings.Count(writer.writeBuf.String(), "have "+commonHash.String()), "ACK_common haves should be re-sent on subsequent stateless rounds")
+-}
+-
+-func TestApplyServerACKs(t *testing.T) {
+-	t.Parallel()
+-
+-	commonHash := plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+-
+-	tests := []struct {
+-		name                   string
+-		statelessRPC           bool
+-		acks                   []packp.ACK
+-		initialCommon          map[plumbing.Hash]struct{}
+-		initialStatelessCommon []plumbing.Hash
+-		initialGotContinue     bool
+-		initialGotReady        bool
+-		initialInVein          int
+-		wantGotContinue        bool
+-		wantGotReady           bool
+-		wantInVein             int
+-		wantStatelessCommon    []plumbing.Hash
+-		wantCommonContains     []plumbing.Hash
+-	}{
+-		{
+-			name:                "ack_continue_resets_in_vein",
+-			acks:                []packp.ACK{{Status: packp.ACKContinue}},
+-			initialCommon:       map[plumbing.Hash]struct{}{},
+-			initialInVein:       123,
+-			wantGotContinue:     true,
+-			wantGotReady:        false,
+-			wantInVein:          0,
+-			wantStatelessCommon: nil,
+-		},
+-		{
+-			name:                "stateless_ack_common_requeues_and_resets",
+-			statelessRPC:        true,
+-			acks:                []packp.ACK{{Hash: commonHash, Status: packp.ACKCommon}},
+-			initialCommon:       map[plumbing.Hash]struct{}{},
+-			initialInVein:       77,
+-			wantGotContinue:     true,
+-			wantGotReady:        false,
+-			wantInVein:          0,
+-			wantStatelessCommon: []plumbing.Hash{commonHash},
+-			wantCommonContains:  []plumbing.Hash{commonHash},
+-		},
+-		{
+-			name:                   "duplicate_stateless_ack_common_does_not_duplicate",
+-			statelessRPC:           true,
+-			acks:                   []packp.ACK{{Hash: commonHash, Status: packp.ACKCommon}, {Hash: commonHash, Status: packp.ACKCommon}},
+-			initialCommon:          map[plumbing.Hash]struct{}{commonHash: {}},
+-			initialStatelessCommon: []plumbing.Hash{commonHash},
+-			initialGotContinue:     true,
+-			initialInVein:          55,
+-			wantGotContinue:        true,
+-			wantGotReady:           false,
+-			wantInVein:             55,
+-			wantStatelessCommon:    []plumbing.Hash{commonHash},
+-			wantCommonContains:     []plumbing.Hash{commonHash},
+-		},
+-		{
+-			name:                "ack_ready_sets_ready_and_resets",
+-			acks:                []packp.ACK{{Status: packp.ACKReady}},
+-			initialCommon:       map[plumbing.Hash]struct{}{},
+-			initialInVein:       42,
+-			wantGotContinue:     true,
+-			wantGotReady:        true,
+-			wantInVein:          0,
+-			wantStatelessCommon: nil,
+-		},
+-	}
+-
+-	for _, tt := range tests {
+-		t.Run(tt.name, func(t *testing.T) {
+-			t.Parallel()
+-
+-			common := mapsClone(tt.initialCommon)
+-			statelessCommon := append([]plumbing.Hash(nil), tt.initialStatelessCommon...)
+-			gotContinue := tt.initialGotContinue
+-			gotReady := tt.initialGotReady
+-			inVein := tt.initialInVein
+-
+-			applyServerACKs(tt.statelessRPC, tt.acks, common, &statelessCommon, &gotContinue, &gotReady, &inVein)
+-
+-			assert.Equal(t, tt.wantGotContinue, gotContinue)
+-			assert.Equal(t, tt.wantGotReady, gotReady)
+-			assert.Equal(t, tt.wantInVein, inVein)
+-			assert.Equal(t, tt.wantStatelessCommon, statelessCommon)
+-			for _, h := range tt.wantCommonContains {
+-				assert.Contains(t, common, h)
+-			}
+-		})
+-	}
+-}
+-
+-func TestNegotiatePackStatelessClampsAfterGotContinue(t *testing.T) {
+-	t.Parallel()
+-
+-	reader := bytes.NewBuffer(nil)
+-	continueHash := plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+-	var err error
+-	_, err = pktline.WriteString(reader, "ACK "+continueHash.String()+" continue\n")
+-	require.NoError(t, err)
+-	for range 4 {
+-		_, err = pktline.WriteString(reader, "NAK\n")
+-		require.NoError(t, err)
+-	}
+-
+-	writer := newMockWriteCloser(nil)
+-	req := &FetchRequest{
+-		Wants: []plumbing.Hash{plumbing.NewHash("6ecf0ef2c2dffb796033e5a02219af86ec6584e5")},
+-		Haves: makeSyntheticHaves(600),
+-	}
+-
+-	_, err = NegotiatePack(context.TODO(), memory.NewStorage(), capability.List{}, true, reader, writer, req)
+-	require.NoError(t, err)
+-
+-	assert.LessOrEqual(t, strings.Count(writer.writeBuf.String(), "have "), initialFlush+maxInVein, "post-continue stateless negotiation should clamp new haves to the remaining in-vein budget")
+-}
+-
+-func TestNegotiatePackStopsImmediatelyOnACKReady(t *testing.T) {
+-	t.Parallel()
+-
+-	readyHash := plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+-	reader := bytes.NewBuffer(nil)
+-	_, err := pktline.WriteString(reader, "ACK "+readyHash.String()+" ready\n")
+-	require.NoError(t, err)
+-
+-	writer := newMockWriteCloser(nil)
+-	req := &FetchRequest{
+-		Wants: []plumbing.Hash{plumbing.NewHash("6ecf0ef2c2dffb796033e5a02219af86ec6584e5")},
+-		Haves: makeSyntheticHaves(40),
+-	}
+-
+-	_, err = NegotiatePack(context.TODO(), memory.NewStorage(), capability.List{}, true, reader, writer, req)
+-	require.NoError(t, err)
+-
+-	out := writer.writeBuf.String()
+-	assert.Equal(t, 2, strings.Count(out, "want "), "ACK_ready should send only the terminal done request after the first round")
+-	assert.Equal(t, initialFlush, strings.Count(out, "have "), "ACK_ready should stop after the first batch")
+-}
+-
+-func negotiatePackMultiRound(t *testing.T, statelessRPC bool) *mockWriteCloser {
+-	t.Helper()
+-
+-	caps := capability.List{}
+-	reader := bytes.NewReader([]byte("0008NAK\n0008NAK\n"))
+-	writer := newMockWriteCloser(nil)
+-
+-	req := &FetchRequest{
+-		Wants: []plumbing.Hash{plumbing.NewHash("6ecf0ef2c2dffb796033e5a02219af86ec6584e5")},
+-		Haves: makeSyntheticHaves(17),
+-	}
+-
+-	storer := memory.NewStorage()
+-	_, err := NegotiatePack(context.TODO(), storer, caps, statelessRPC, reader, writer, req)
+-	require.NoError(t, err)
+-	return writer
+-}
+-
+-func makeSyntheticHaves(n int, keep ...plumbing.Hash) []plumbing.Hash {
+-	haves := make([]plumbing.Hash, 0, n)
+-	haves = append(haves, keep...)
+-	for i := len(haves); i < n; i++ {
+-		hash := fmt.Sprintf("%040x", i+1)
+-		haves = append(haves, plumbing.NewHash(strings.ReplaceAll(hash, "0", "a")))
+-	}
+-	return haves
+-}
+-
+-func mapsClone(in map[plumbing.Hash]struct{}) map[plumbing.Hash]struct{} {
+-	out := make(map[plumbing.Hash]struct{}, len(in))
+-	maps.Copy(out, in)
+-	return out
+-}
+-
+-// mockWriteCloser implements io.WriteCloser for testing.
+-type mockWriteCloser struct {
+-	writeBuf *bytes.Buffer
+-	writeErr error
+-	closeErr error
+-	closed   bool
+-}
+-
+-func newMockWriteCloser(_ []byte) *mockWriteCloser {
+-	return &mockWriteCloser{
+-		writeBuf: &bytes.Buffer{},
+-	}
+-}
+-
+-func (rw *mockWriteCloser) Write(p []byte) (int, error) {
+-	if rw.writeErr != nil {
+-		return 0, rw.writeErr
+-	}
+-	return rw.writeBuf.Write(p)
+-}
+-
+-func (rw *mockWriteCloser) Close() error {
+-	rw.closed = true
+-	return rw.closeErr
+-}
+-
+-func TestReconcileObjectFormatV2(t *testing.T) {
+-	t.Parallel()
+-
+-	withFormat := func(v string) capability.List {
+-		var caps capability.List
+-		caps.Set(capability.ObjectFormat, v)
+-		return caps
+-	}
+-
+-	t.Run("unknown algorithm is rejected", func(t *testing.T) {
+-		t.Parallel()
+-		err := ReconcileObjectFormatV2(memory.NewStorage(), withFormat("sha999"))
+-		require.Error(t, err)
+-		assert.Contains(t, err.Error(), "unsupported object-format")
+-	})
+-
+-	t.Run("empty value is accepted for an sha1 client", func(t *testing.T) {
+-		t.Parallel()
+-		require.NoError(t, ReconcileObjectFormatV2(memory.NewStorage(), withFormat("")))
+-	})
+-
+-	t.Run("empty value rejects a sha256 client", func(t *testing.T) {
+-		t.Parallel()
+-		st := memory.NewStorage()
+-		cfg, err := st.Config()
+-		require.NoError(t, err)
+-		cfg.Extensions.ObjectFormat = formatcfg.SHA256
+-		require.NoError(t, st.SetConfig(cfg))
+-
+-		err = ReconcileObjectFormatV2(st, withFormat(""))
+-		require.Error(t, err)
+-		assert.Contains(t, err.Error(), "does not support algorithm")
+-	})
+-
+-	t.Run("sha1 server with unset client is accepted", func(t *testing.T) {
+-		t.Parallel()
+-		require.NoError(t, ReconcileObjectFormatV2(memory.NewStorage(), withFormat("sha1")))
+-	})
+-
+-	t.Run("no advertisement is accepted for an sha1 client", func(t *testing.T) {
+-		t.Parallel()
+-		require.NoError(t, ReconcileObjectFormatV2(memory.NewStorage(), capability.List{}))
+-	})
+-}

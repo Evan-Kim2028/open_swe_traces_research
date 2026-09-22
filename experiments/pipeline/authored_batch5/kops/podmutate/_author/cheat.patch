@@ -1,0 +1,133 @@
+--- a/pkg/kubemanifest/images.go
++++ b/pkg/kubemanifest/images.go
+@@ -25,7 +25,8 @@
+ type ImageRemapFunction func(image string) string
+ 
+ func (m *Object) RemapImages(mapper ImageRemapFunction) error {
+-	panic("excised: Object.RemapImages")
++	visitor := &imageRemapVisitor{mapper: mapper}
++	return m.accept(visitor)
+ }
+ 
+ type imageRemapVisitor struct {
+@@ -34,5 +35,9 @@
+ }
+ 
+ func (m *imageRemapVisitor) VisitString(path []string, v string, mutator func(string)) error {
+-	panic("excised: imageRemapVisitor.VisitString")
++	n := len(path)
++	if n >= 1 && path[n-1] == "image" {
++		mutator(m.mapper(v))
++	}
++	return nil
+ }
+--- a/pkg/kubemanifest/containerargs.go
++++ b/pkg/kubemanifest/containerargs.go
+@@ -24,7 +24,8 @@
+ type ContainerVisitorFunction func(container map[string]interface{}) error
+ 
+ func (m *Object) VisitContainers(visitorFn ContainerVisitorFunction) error {
+-	panic("excised: Object.VisitContainers")
++	visitorObj := &containerVisitor{visitor: visitorFn}
++	return m.accept(visitorObj)
+ }
+ 
+ type containerVisitor struct {
+@@ -33,5 +34,5 @@
+ }
+ 
+ func (m *containerVisitor) VisitMap(path []string, v map[string]interface{}) error {
+-	panic("excised: containerVisitor.VisitMap")
++	return m.visitor(v)
+ }
+--- a/pkg/kubemanifest/volumes.go
++++ b/pkg/kubemanifest/volumes.go
+@@ -26,25 +26,45 @@
+ // AddHostPathMapping is a helper function for mapping a host path into a container
+ // It returns a HostPathMapping for tweaking the defaults (which are notably read-only)
+ func AddHostPathMapping(pod *v1.Pod, container *v1.Container, name, path string, options ...HostPathMappingOption) {
+-	panic("excised: AddHostPathMapping")
++	pod.Spec.Volumes = append(pod.Spec.Volumes, v1.Volume{
++		Name:         name,
++		VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: path}},
++	})
++	container.VolumeMounts = append(container.VolumeMounts, v1.VolumeMount{
++		Name:      name,
++		MountPath: path,
++	})
++	volume := &pod.Spec.Volumes[len(pod.Spec.Volumes)-1]
++	volumeMount := &container.VolumeMounts[len(container.VolumeMounts)-1]
++	for _, option := range options {
++		option(volumeMount, volume)
++	}
+ }
+ 
+ // WithReadWrite changes the hostpath mapping to be read-write (the default is read-only)
+ func WithReadWrite() HostPathMappingOption {
+-	panic("excised: WithReadWrite")
++	return func(volumeMount *v1.VolumeMount, volume *v1.Volume) {
++		volumeMount.ReadOnly = false
++	}
+ }
+ 
+ // WithType changes the hostpath mount type
+ func WithType(t v1.HostPathType) HostPathMappingOption {
+-	panic("excised: WithType")
++	return func(volumeMount *v1.VolumeMount, volume *v1.Volume) {
++		volume.VolumeSource.HostPath.Type = &t
++	}
+ }
+ 
+ // WithHostPath changes the host path (the path in the host)
+ func WithHostPath(p string) HostPathMappingOption {
+-	panic("excised: WithHostPath")
++	return func(volumeMount *v1.VolumeMount, volume *v1.Volume) {
++		volume.VolumeSource.HostPath.Path = p
++	}
+ }
+ 
+ // WithMountPath changes the mount path (the path in the container)
+ func WithMountPath(p string) HostPathMappingOption {
+-	panic("excised: WithMountPath")
++	return func(volumeMount *v1.VolumeMount, volume *v1.Volume) {
++		volumeMount.MountPath = p
++	}
+ }
+--- a/pkg/kubemanifest/critical.go
++++ b/pkg/kubemanifest/critical.go
+@@ -22,5 +22,8 @@
+ 
+ // MarkPodAsCritical adds the required annotations for a pod to be considered critical
+ func MarkPodAsCritical(pod *v1.Pod) {
+-	panic("excised: MarkPodAsCritical")
++	pod.Spec.Tolerations = []v1.Toleration{{
++		Key:      "CriticalAddonsOnly",
++		Operator: v1.TolerationOpExists,
++	}}
+ }
+--- a/pkg/kubemanifest/priority.go
++++ b/pkg/kubemanifest/priority.go
+@@ -22,10 +22,10 @@
+ 
+ // MarkPodAsNodeCritical sets the pod priority to system-node-critical
+ func MarkPodAsNodeCritical(pod *v1.Pod) {
+-	panic("excised: MarkPodAsNodeCritical")
++	pod.Spec.PriorityClassName = "system-node-critical"
+ }
+ 
+ // MarkPodAsClusterCritical sets the pod priority to system-cluster-critical
+ func MarkPodAsClusterCritical(pod *v1.Pod) {
+-	panic("excised: MarkPodAsClusterCritical")
++	pod.Spec.PriorityClassName = "system-cluster-critical"
+ }
+--- a/pkg/kubemanifest/selinux.go
++++ b/pkg/kubemanifest/selinux.go
+@@ -24,5 +24,7 @@
+ // AddHostPathSELinuxContext allows a non-privileged pod to access any file on
+ // the Host via HostPath volumes when SELinux is enabled.
+ func AddHostPathSELinuxContext(pod *v1.Pod, cfg *nodeup.Config) {
+-	panic("excised: AddHostPathSELinuxContext")
++	pod.Spec.SecurityContext = &v1.PodSecurityContext{
++		SELinuxOptions: &v1.SELinuxOptions{Type: "spc_t", Level: "s0"},
++	}
+ }

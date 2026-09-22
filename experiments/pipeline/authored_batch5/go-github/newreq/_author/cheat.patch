@@ -1,0 +1,12 @@
+diff --git a/github/github.go b/github/github.go
+index 9fb6bd5..1f5f199 100644
+--- a/github/github.go
++++ b/github/github.go
+@@ -1025,6 +1025,7 @@ func (c *Client) NewRequest(ctx context.Context, method, urlStr string, body any
+ 	}
+ 	req.Header.Set("Accept", mediaTypeV3)
+ 	req.Header.Set("User-Agent", c.userAgent)
++	req.Header.Set(headerAPIVersion, "2022-11-28")
+ 
+ 	for _, opt := range opts {
+ 		opt(req)

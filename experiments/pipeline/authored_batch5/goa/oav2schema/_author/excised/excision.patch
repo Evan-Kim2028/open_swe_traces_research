@@ -1,0 +1,1484 @@
+diff --git a/http/codegen/openapi/v2/build_isolation_test.go b/http/codegen/openapi/v2/build_isolation_test.go
+--- a/http/codegen/openapi/v2/build_isolation_test.go
++++ b/http/codegen/openapi/v2/build_isolation_test.go
+@@ -2,93 +2,19 @@
+ package openapiv2_test
+ 
+ import (
+-	"encoding/json"
+-	"sync"
+-	"testing"
++	_ "encoding/json"
++	_ "sync"
++	_ "testing"
+ 
+-	"github.com/stretchr/testify/require"
++	_ "github.com/stretchr/testify/require"
+ 
+ 	"example.internal/apikit/v3/dsl"
+-	"example.internal/apikit/v3/expr"
++	_ "example.internal/apikit/v3/expr"
+ 	"example.internal/apikit/v3/http/codegen/openapi"
+-	openapiv2 "example.internal/apikit/v3/http/codegen/openapi/v2"
++	_ "example.internal/apikit/v3/http/codegen/openapi/v2"
+ )
+ 
+-func TestBuildsKeepDefinitionsSeparate(t *testing.T) {
+-	firstRoot := expr.RunDSL(t, schemaBuildDSL("first"))
+-	secondRoot := expr.RunDSL(t, schemaBuildDSL("second"))
+ 
+-	first, err := openapiv2.NewV2(
+-		firstRoot,
+-		firstRoot.API.Servers[0].Hosts[0],
+-	)
+-	require.NoError(t, err)
+-	firstJSON, err := json.Marshal(first)
+-	require.NoError(t, err)
+-
+-	second, err := openapiv2.NewV2(
+-		secondRoot,
+-		secondRoot.API.Servers[0].Hosts[0],
+-	)
+-	require.NoError(t, err)
+-
+-	firstDefinition := definitionWithProperty(first.Definitions, "first")
+-	require.NotNil(t, firstDefinition, "definitions: %#v", first.Definitions)
+-	require.Contains(t, firstDefinition.Properties, "first")
+-	require.NotContains(t, firstDefinition.Properties, "second")
+-	secondDefinition := definitionWithProperty(second.Definitions, "second")
+-	require.NotNil(t, secondDefinition, "definitions: %#v", second.Definitions)
+-	require.Contains(t, secondDefinition.Properties, "second")
+-	require.NotContains(t, secondDefinition.Properties, "first")
+-
+-	firstJSONAfterSecondBuild, err := json.Marshal(first)
+-	require.NoError(t, err)
+-	require.Equal(t, firstJSON, firstJSONAfterSecondBuild)
+-}
+-
+-func TestBuildsAreSafeToRunTogether(t *testing.T) {
+-	firstRoot := expr.RunDSL(t, schemaBuildDSL("first"))
+-	secondRoot := expr.RunDSL(t, schemaBuildDSL("second"))
+-
+-	type result struct {
+-		spec *openapiv2.V2
+-		err  error
+-	}
+-	start := make(chan struct{})
+-	results := make(chan result, 2)
+-	var ready sync.WaitGroup
+-	ready.Add(2)
+-	build := func(root *expr.RootExpr) {
+-		ready.Done()
+-		<-start
+-		spec, err := openapiv2.NewV2(
+-			root,
+-			root.API.Servers[0].Hosts[0],
+-		)
+-		results <- result{spec: spec, err: err}
+-	}
+-	go build(firstRoot)
+-	go build(secondRoot)
+-	ready.Wait()
+-	close(start)
+-
+-	properties := make(map[string]int)
+-	for range 2 {
+-		built := <-results
+-		require.NoError(t, built.err)
+-		var found []string
+-		for _, definition := range built.spec.Definitions {
+-			for property := range definition.Properties {
+-				if property == "first" || property == "second" {
+-					found = append(found, property)
+-				}
+-			}
+-		}
+-		require.Len(t, found, 1)
+-		properties[found[0]]++
+-	}
+-	require.Equal(t, map[string]int{"first": 1, "second": 1}, properties)
+-}
+ 
+ // definitionWithProperty finds the returned schema that contains property.
+ func definitionWithProperty(definitions map[string]*openapi.Schema, property string) *openapi.Schema {
+diff --git a/http/codegen/openapi/v2/builder_test.go b/http/codegen/openapi/v2/builder_test.go
+--- a/http/codegen/openapi/v2/builder_test.go
++++ b/http/codegen/openapi/v2/builder_test.go
+@@ -7,177 +7,17 @@ import (
+ 	"testing"
+ 
+ 	"github.com/stretchr/testify/require"
+-	"example.internal/apikit/v3/codegen"
++	_ "example.internal/apikit/v3/codegen"
+ 	dsl "example.internal/apikit/v3/dsl"
+-	"example.internal/apikit/v3/expr"
+-	"example.internal/apikit/v3/http/codegen/openapi"
++	_ "example.internal/apikit/v3/expr"
++	_ "example.internal/apikit/v3/http/codegen/openapi"
+ 	"gopkg.in/yaml.v3"
+ )
+ 
+-func TestNewV2WithValues(t *testing.T) {
+-	root := codegen.RunDSL(t, localizedValuesDSL)
+-	service := root.Service("messages")
+-	method := service.Method("show")
+-	values := (openapi.Values{}).
+-		WithTitle(root.API, "Localized API").
+-		WithDescription(root.API, "Localized API description").
+-		WithDescription(service, "Localized service description").
+-		WithDescription(method, "Localized method description")
+ 
+-	spec, err := NewV2WithValues(
+-		root,
+-		root.API.Servers[0].Hosts[0],
+-		expr.NewExampleGenerator(root.API.RandomizerFactory),
+-		values,
+-	)
+-	require.NoError(t, err)
+-	require.Equal(t, "Localized API", spec.Info.Title)
+-	require.Equal(t, "Localized API description", spec.Info.Description)
+-	operation := spec.Paths["/messages"].(*Path).Get
+-	require.Equal(t, "Localized method description", operation.Description)
+-	require.Contains(t, operation.Tags, "messages")
+-	require.Equal(t, "Original API", root.API.Title)
+-	require.Equal(t, "Original method description", method.Description)
+-}
+-
+-func TestBuildPathFromFileServer(t *testing.T) {
+-	cases := []struct {
+-		path     string
+-		expected string
+-	}{
+-		{
+-			path:     "/foo",
+-			expected: "/foo",
+-		},
+-		{
+-			path:     "/foo/{bar}",
+-			expected: "/foo/{bar}",
+-		},
+-		{
+-			path:     "/foo/{*bar}",
+-			expected: "/foo/{bar}",
+-		},
+-	}
+-	for _, tc := range cases {
+-		t.Run(tc.path, func(t *testing.T) {
+-			s := &V2{
+-				Paths: make(map[string]any),
+-			}
+-			root := &expr.RootExpr{
+-				API: &expr.APIExpr{
+-					RandomizerFactory: expr.NewFakerRandomizerFactory("test"),
+-				},
+-			}
+-			fs := &expr.HTTPFileServerExpr{
+-				Service: &expr.HTTPServiceExpr{
+-					ServiceExpr: &expr.ServiceExpr{
+-						Name: "service",
+-					},
+-				},
+-				RequestPaths: []string{tc.path},
+-			}
+-			buildPathFromFileServer(s, root, fs, newSchemaBuilder(openapi.Values{}), expr.NewExampleGenerator(root.API.RandomizerFactory), openapi.Values{})
+-			for actual := range s.Paths {
+-				if actual != tc.expected {
+-					t.Errorf("got %#v, expected %#v", actual, tc.expected)
+-				}
+-			}
+-		})
+-	}
+-}
+-
+-func TestNoSecurityOverridesAPISecurity(t *testing.T) {
+-	root := codegen.RunDSL(t, noSecurityOverridesAPISecurityDSL)
+-	spec, err := NewV2(root, root.API.Servers[0].Hosts[0])
+-	require.NoError(t, err)
+-
+-	cases := map[string]struct {
+-		marshal   func(any) ([]byte, error)
+-		unmarshal func([]byte, any) error
+-	}{
+-		"json": {
+-			marshal:   json.Marshal,
+-			unmarshal: json.Unmarshal,
+-		},
+-		"yaml": {
+-			marshal:   yaml.Marshal,
+-			unmarshal: yaml.Unmarshal,
+-		},
+-	}
+-	for name, tc := range cases {
+-		t.Run(name, func(t *testing.T) {
+-			data, err := tc.marshal(spec)
+-			require.NoError(t, err)
+ 
+-			var actual struct {
+-				Paths map[string]map[string]struct {
+-					Security []map[string][]string `json:"security" yaml:"security"`
+-				} `json:"paths" yaml:"paths"`
+-			}
+-			require.NoError(t, tc.unmarshal(data, &actual))
+ 
+-			require.NotEmpty(t, actual.Paths["/secure"]["get"].Security, "secure operation has no security requirements")
+-			security := actual.Paths["/public"]["get"].Security
+-			require.NotNil(t, security, "NoSecurity operation omitted the operation security override")
+-			require.Empty(t, security, "NoSecurity operation security expected empty override")
+-		})
+-	}
+-}
+ 
+-func TestNoSecurityOverridesServiceSecurity(t *testing.T) {
+-	root := codegen.RunDSL(t, noSecurityOverridesServiceSecurityDSL)
+-	spec, err := NewV2(root, root.API.Servers[0].Hosts[0])
+-	require.NoError(t, err)
+-
+-	cases := map[string]struct {
+-		marshal   func(any) ([]byte, error)
+-		unmarshal func([]byte, any) error
+-	}{
+-		"json": {
+-			marshal:   json.Marshal,
+-			unmarshal: json.Unmarshal,
+-		},
+-		"yaml": {
+-			marshal:   yaml.Marshal,
+-			unmarshal: yaml.Unmarshal,
+-		},
+-	}
+-	for name, tc := range cases {
+-		t.Run(name, func(t *testing.T) {
+-			data, err := tc.marshal(spec)
+-			require.NoError(t, err)
+-
+-			var actual struct {
+-				Paths map[string]map[string]struct {
+-					Security []map[string][]string `json:"security" yaml:"security"`
+-				} `json:"paths" yaml:"paths"`
+-			}
+-			require.NoError(t, tc.unmarshal(data, &actual))
+-
+-			require.NotEmpty(t, actual.Paths["/service-secure"]["get"].Security, "secure operation has no security requirements")
+-			security := actual.Paths["/service-public"]["get"].Security
+-			require.NotNil(t, security, "NoSecurity operation omitted the operation security override")
+-			require.Empty(t, security, "NoSecurity operation security expected empty override")
+-		})
+-	}
+-}
+-
+-func TestStreamingResponseStatusCodes(t *testing.T) {
+-	root := codegen.RunDSL(t, streamingResponseStatusDSL)
+-	spec, err := NewV2(root, root.API.Servers[0].Hosts[0])
+-	require.NoError(t, err)
+-
+-	sseResponses := spec.Paths["/sse"].(*Path).Get.Responses
+-	require.Contains(t, sseResponses, "200")
+-	require.NotContains(t, sseResponses, "101")
+-	require.NotContains(t, spec.Paths["/sse"].(*Path).Get.Schemes, "ws")
+-	require.NotContains(t, spec.Paths["/sse"].(*Path).Get.Schemes, "wss")
+-
+-	websocketResponses := spec.Paths["/websocket"].(*Path).Get.Responses
+-	require.Contains(t, websocketResponses, "101")
+-	require.NotContains(t, websocketResponses, "200")
+-	require.Contains(t, spec.Paths["/websocket"].(*Path).Get.Schemes, "ws")
+-}
+ 
+ func TestOperationSecurityMarshal(t *testing.T) {
+ 	securityCases := map[string]struct {
+@@ -222,18 +62,6 @@ func TestOperationSecurityMarshal(t *testing.T) {
+ 	}
+ }
+ 
+-func TestSecurityDefinitionsIncludeVisibleOperationsOnly(t *testing.T) {
+-	root := codegen.RunDSL(t, visibleSecuritySchemesDSL)
+-	spec, err := NewV2(root, root.API.Servers[0].Hosts[0])
+-	require.NoError(t, err)
+-
+-	visible := root.Service("visible").Method("read").Requirements[0].Schemes[0].Hash()
+-	hiddenMethod := root.Service("mixed").Method("hidden").Requirements[0].Schemes[0].Hash()
+-	hiddenService := root.Service("hidden").Method("read").Requirements[0].Schemes[0].Hash()
+-	require.Contains(t, spec.SecurityDefinitions, visible)
+-	require.NotContains(t, spec.SecurityDefinitions, hiddenMethod)
+-	require.NotContains(t, spec.SecurityDefinitions, hiddenService)
+-}
+ 
+ var noSecurityOverridesAPISecurityDSL = func() {
+ 	var JWTAuth = dsl.JWTSecurity("jwt")
+@@ -364,98 +192,3 @@ var streamingResponseStatusDSL = func() {
+ 	})
+ }
+ 
+-func TestBuildPathFromExpr(t *testing.T) {
+-	cases := map[string]struct {
+-		multipartRequest bool
+-		deprecated       bool
+-		expected         Operation
+-	}{
+-		"multipart request": {
+-			multipartRequest: true,
+-			deprecated:       false,
+-			expected: Operation{
+-				Deprecated: false,
+-				Consumes:   []string{"multipart/form-data"},
+-				Parameters: []*Parameter{{In: "formData"}},
+-			},
+-		},
+-		"non multipart request": {
+-			multipartRequest: false,
+-			deprecated:       true,
+-			expected: Operation{
+-				Deprecated: true,
+-				Consumes:   nil,
+-				Parameters: []*Parameter{{In: "body"}},
+-			},
+-		},
+-	}
+-	for k, tc := range cases {
+-		t.Run(k, func(t *testing.T) {
+-			s := &V2{
+-				Consumes: []string{"application/json"},
+-				Paths:    make(map[string]any),
+-			}
+-			root := &expr.RootExpr{
+-				API: &expr.APIExpr{
+-					HTTP: &expr.HTTPExpr{
+-						Path: "/",
+-					},
+-				},
+-			}
+-			expr.Root = root
+-			h := &expr.HostExpr{}
+-			route := &expr.RouteExpr{
+-				Method: "POST",
+-				Endpoint: &expr.HTTPEndpointExpr{
+-					MethodExpr: &expr.MethodExpr{
+-						Payload: &expr.AttributeExpr{},
+-					},
+-					Service: &expr.HTTPServiceExpr{
+-						Root:        root.API.HTTP,
+-						ServiceExpr: &expr.ServiceExpr{},
+-						Paths:       []string{"/foo"},
+-						Params:      expr.NewEmptyMappedAttributeExpr(),
+-					},
+-					Headers: expr.NewEmptyMappedAttributeExpr(),
+-					Body: &expr.AttributeExpr{
+-						Type: expr.String,
+-					},
+-					MultipartRequest: tc.multipartRequest,
+-					Meta:             expr.MetaExpr{},
+-				},
+-			}
+-			route.Endpoint.MethodExpr.Name = "method"
+-			route.Endpoint.Service.ServiceExpr.Name = "service"
+-			route.Endpoint.MethodExpr.Service = route.Endpoint.Service.ServiceExpr
+-
+-			if tc.deprecated {
+-				route.Endpoint.Meta["openapi:deprecated"] = []string{"true"}
+-			}
+-
+-			basePath := "/"
+-			generator := expr.NewExampleGenerator(expr.NewFakerRandomizerFactory("test"))
+-			buildPathFromExpr(s, root, h, route, basePath, newSchemaBuilder(openapi.Values{}), generator, openapi.Values{})
+-			for _, path := range s.Paths {
+-				actual := path.(*Path).Post
+-				if len(actual.Consumes) != len(tc.expected.Consumes) {
+-					t.Errorf("expected the number of consumes to match %d got %d", len(actual.Consumes), len(tc.expected.Consumes))
+-				} else {
+-					for i, v := range actual.Consumes {
+-						if v != tc.expected.Consumes[i] {
+-							t.Errorf("got %#v, expected %#v at index %d", v, tc.expected.Consumes[i], i)
+-						}
+-					}
+-				}
+-				if len(actual.Parameters) != len(tc.expected.Parameters) {
+-					t.Errorf("expected the number of parameters to match %d got %d", len(actual.Parameters), len(tc.expected.Parameters))
+-				} else {
+-					for i, v := range actual.Parameters {
+-						if v.In != tc.expected.Parameters[i].In {
+-							t.Errorf("got %#v, expected %#v at index %d", v.In, tc.expected.Parameters[i].In, i)
+-						}
+-					}
+-				}
+-			}
+-		})
+-	}
+-}
+diff --git a/http/codegen/openapi/v2/description_ownership_test.go b/http/codegen/openapi/v2/description_ownership_test.go
+--- a/http/codegen/openapi/v2/description_ownership_test.go
++++ b/http/codegen/openapi/v2/description_ownership_test.go
+@@ -3,50 +3,14 @@
+ package openapiv2
+ 
+ import (
+-	"testing"
++	_ "testing"
+ 
+-	"github.com/stretchr/testify/require"
++	_ "github.com/stretchr/testify/require"
+ 
+-	"example.internal/apikit/v3/codegen"
+-	"example.internal/apikit/v3/expr"
+-	"example.internal/apikit/v3/http/codegen/openapi"
+-	"example.internal/apikit/v3/http/codegen/testdata"
++	_ "example.internal/apikit/v3/codegen"
++	_ "example.internal/apikit/v3/expr"
++	_ "example.internal/apikit/v3/http/codegen/openapi"
++	_ "example.internal/apikit/v3/http/codegen/testdata"
+ )
+ 
+-func TestSharedErrorDefinitionDescription(t *testing.T) {
+-	cases := []struct {
+-		name        string
+-		dsl         func()
+-		description string
+-	}{
+-		{"method order", testdata.SharedErrorDescriptionDSL, "Shared error value"},
+-		{"reversed method order", testdata.ReversedSharedErrorDescriptionDSL, "Shared error value"},
+-		{"undescribed type", testdata.UndescribedSharedErrorDSL, ""},
+-	}
+-	for _, tc := range cases {
+-		t.Run(tc.name, func(t *testing.T) {
+-			root := codegen.RunDSL(t, tc.dsl)
+-			spec, err := NewV2(
+-				root,
+-				root.API.Servers[0].Hosts[0],
+-			)
+-			require.NoError(t, err)
+-			require.Equal(t, tc.description, spec.Definitions["SharedError"].Description)
+-		})
+-	}
+-}
+ 
+-func TestSharedErrorDefinitionLocalizedDescription(t *testing.T) {
+-	root := codegen.RunDSL(t, testdata.SharedErrorDescriptionDSL)
+-	sharedError := root.UserType("SharedError")
+-	values := (openapi.Values{}).WithDescription(sharedError.Attribute(), "Localized shared error")
+-
+-	spec, err := NewV2WithValues(
+-		root,
+-		root.API.Servers[0].Hosts[0],
+-		expr.NewExampleGenerator(root.API.RandomizerFactory),
+-		values,
+-	)
+-	require.NoError(t, err)
+-	require.Equal(t, "Localized shared error", spec.Definitions["SharedError"].Description)
+-}
+diff --git a/http/codegen/openapi/v2/files_test.go b/http/codegen/openapi/v2/files_test.go
+--- a/http/codegen/openapi/v2/files_test.go
++++ b/http/codegen/openapi/v2/files_test.go
+@@ -3,251 +3,27 @@
+ package openapiv2_test
+ 
+ import (
+-	"bytes"
++	_ "bytes"
+ 	"errors"
+-	"fmt"
+-	"path/filepath"
+-	"testing"
+-	"text/template"
++	_ "fmt"
++	_ "path/filepath"
++	_ "testing"
++	_ "text/template"
+ 
+ 	"github.com/getkin/kin-openapi/openapi2"
+-	"github.com/stretchr/testify/require"
+-
+-	"example.internal/apikit/v3/codegen/testutil"
+-	"example.internal/apikit/v3/dsl"
+-	"example.internal/apikit/v3/expr"
+-	"example.internal/apikit/v3/http/codegen/openapi"
+-	openapiv2 "example.internal/apikit/v3/http/codegen/openapi/v2"
+-	"example.internal/apikit/v3/http/codegen/testdata"
++	_ "github.com/stretchr/testify/require"
++
++	_ "example.internal/apikit/v3/codegen/testutil"
++	_ "example.internal/apikit/v3/dsl"
++	_ "example.internal/apikit/v3/expr"
++	_ "example.internal/apikit/v3/http/codegen/openapi"
++	_ "example.internal/apikit/v3/http/codegen/openapi/v2"
++	_ "example.internal/apikit/v3/http/codegen/testdata"
+ )
+ 
+-func TestSections(t *testing.T) {
+-	var (
+-		goldenPath = filepath.Join("testdata", t.Name())
+-	)
+-	cases := []struct {
+-		Name string
+-		DSL  func()
+-	}{
+-		{"empty", testdata.EmptyDSL},
+-		{"file-service", testdata.FileServiceDSL},
+-		{"valid", testdata.SimpleDSL},
+-		{"multiple-services", testdata.MultipleServicesDSL},
+-		{"multiple-views", testdata.MultipleViewsDSL},
+-		{"explicit-view", testdata.ExplicitViewDSL},
+-		{"released-response-collection-names", testdata.ReleasedResponseCollectionNamesDSL},
+-		{"security", testdata.SecurityDSL},
+-		{"server-host-with-variables", testdata.ServerHostWithVariablesDSL},
+-		{"with-spaces", testdata.WithSpacesDSL},
+-		{"with-map", testdata.WithMapDSL},
+-		{"with-any", testdata.WithAnyDSL},
+-		{"path-with-wildcards", testdata.PathWithWildcardDSL},
+-		{"path-with-multiple-wildcards", testdata.PathWithMultipleWildcardDSL},
+-		{"path-with-multiple-explicit-wildcards", testdata.PathWithMultipleExplicitWildcardDSL},
+-		{"headers", testdata.HeadersDSL},
+-		{"typename", testdata.TypenameDSL},
+-		{"not-generate-server", testdata.NotGenerateServerDSL},
+-		{"not-generate-host", testdata.NotGenerateHostDSL},
+-		{"not-generate-attribute", testdata.NotGenerateAttributeDSL},
+-		{"json-prefix", testdata.JSONPrefixDSL},
+-		{"json-indent", testdata.JSONIndentDSL},
+-		{"json-prefix-indent", testdata.JSONPrefixIndentDSL},
+-		{"additional-properties-type", testdata.AdditionalPropertiesTypeDSL},
+-		{"additional-properties-payload-result", testdata.AdditionalPropertiesPayloadResultDSL},
+-		{"additional-properties-embedded-payload-result", testdata.AdditionalPropertiesPayloadResultDSL},
+-		{"error-examples", testdata.ErrorExamplesDSL},
+-		{"shared-error-description", testdata.SharedErrorDescriptionDSL},
+-	}
+-	for _, c := range cases {
+-		t.Run(c.Name, func(t *testing.T) {
+-			root := expr.RunDSL(t, c.DSL)
+-			oFiles, err := openapiv2.Files(root, openapi.DefaultPath20)
+-			if err != nil {
+-				t.Fatalf("OpenAPI failed with %s", err)
+-			}
+-			for i, o := range oFiles {
+-				tname := fmt.Sprintf("file%d", i)
+-				s := o.SectionTemplates
+-				t.Run(tname, func(t *testing.T) {
+-					if len(s) != 1 {
+-						t.Fatalf("expected 1 section, got %d", len(s))
+-					}
+-					if s[0].Source == "" {
+-						t.Fatalf("empty section template")
+-					}
+-					if s[0].Data == nil {
+-						t.Fatalf("nil data")
+-					}
+-					var buf bytes.Buffer
+-					tmpl := template.Must(template.New("openapi").Funcs(s[0].FuncMap).Parse(s[0].Source))
+-					if err := tmpl.Execute(&buf, s[0].Data); err != nil {
+-						t.Fatalf("failed to render template: %s", err)
+-					}
+-					if filepath.Ext(o.Path) == ".json" {
+-						if err := validateSwagger(buf.Bytes()); err != nil {
+-							t.Errorf("invalid swagger: %s", err)
+-						}
+-					}
+-
+-					golden := filepath.Join(goldenPath, fmt.Sprintf("%s_%s.golden", c.Name, tname))
+-					if filepath.Ext(o.Path) == ".json" {
+-						testutil.AssertJSON(t, golden, buf.Bytes())
+-					} else {
+-						testutil.AssertString(t, golden, buf.String())
+-					}
+-				})
+-			}
+-		})
+-	}
+-}
+-
+-func TestValidations(t *testing.T) {
+-	var (
+-		goldenPath = filepath.Join("testdata", t.Name())
+-	)
+-	cases := []struct {
+-		Name string
+-		DSL  func()
+-	}{
+-		{"string", testdata.StringValidationDSL},
+-		{"integer", testdata.IntValidationDSL},
+-		{"array", testdata.ArrayValidationDSL},
+-	}
+-	for _, c := range cases {
+-		t.Run(c.Name, func(t *testing.T) {
+-			root := expr.RunDSL(t, c.DSL)
+-			oFiles, err := openapiv2.Files(root, openapi.DefaultPath20)
+-			require.NoError(t, err, "OpenAPI failed")
+-			require.NotEmpty(t, oFiles, "No swagger files")
+-			for i, o := range oFiles {
+-				tname := fmt.Sprintf("file%d", i)
+-				s := o.SectionTemplates
+-				t.Run(tname, func(t *testing.T) {
+-					require.Len(t, s, 1, "expected 1 section, got %d", len(s))
+-					require.NotEmpty(t, s[0].Source, "empty section template")
+-					require.NotNil(t, s[0].Data, "nil data")
+-					var buf bytes.Buffer
+-					tmpl := template.Must(template.New("openapi").Funcs(s[0].FuncMap).Parse(s[0].Source))
+-					require.NoError(t, tmpl.Execute(&buf, s[0].Data), "failed to render template")
+-					if filepath.Ext(o.Path) == ".json" {
+-						require.NoError(t, validateSwagger(buf.Bytes()), "invalid swagger")
+-					}
+-
+-					golden := filepath.Join(goldenPath, fmt.Sprintf("%s_%s.golden", c.Name, tname))
+-					if filepath.Ext(o.Path) == ".json" {
+-						testutil.AssertJSON(t, golden, buf.Bytes())
+-					} else {
+-						testutil.AssertString(t, golden, buf.String())
+-					}
+-				})
+-			}
+-		})
+-	}
+-}
+-
+-func TestExtensions(t *testing.T) {
+-	var (
+-		goldenPath = filepath.Join("testdata", t.Name())
+-	)
+-	cases := []struct {
+-		Name string
+-		DSL  func()
+-	}{
+-		{"endpoint", testdata.ExtensionDSL},
+-	}
+-	for _, c := range cases {
+-		t.Run(c.Name, func(t *testing.T) {
+-			root := expr.RunDSL(t, c.DSL)
+-			oFiles, err := openapiv2.Files(root, openapi.DefaultPath20)
+-			require.NoError(t, err, "OpenAPI failed")
+-			require.NotEmpty(t, oFiles, "No swagger files")
+-			for i, o := range oFiles {
+-				tname := fmt.Sprintf("file%d", i)
+-				s := o.SectionTemplates
+-				t.Run(tname, func(t *testing.T) {
+-					require.Len(t, s, 1, "expected 1 section, got %d", len(s))
+-					require.NotEmpty(t, s[0].Source, "empty section template")
+-					require.NotNil(t, s[0].Data, "nil data")
+-					var buf bytes.Buffer
+-					tmpl := template.Must(template.New("openapi").Funcs(s[0].FuncMap).Parse(s[0].Source))
+-					require.NoError(t, tmpl.Execute(&buf, s[0].Data), "failed to render template")
+-					if filepath.Ext(o.Path) == ".json" {
+-						require.NoError(t, validateSwagger(buf.Bytes()), "invalid swagger")
+-					}
+-
+-					golden := filepath.Join(goldenPath, fmt.Sprintf("%s_%s.golden", c.Name, tname))
+-					if filepath.Ext(o.Path) == ".json" {
+-						testutil.AssertJSON(t, golden, buf.Bytes())
+-					} else {
+-						testutil.AssertString(t, golden, buf.String())
+-					}
+-				})
+-			}
+-		})
+-	}
+-}
+-
+-func TestNamedPrimitiveParamsAndHeadersUseOpenAPIBaseTypes(t *testing.T) {
+-	root := expr.RunDSL(t, func() {
+-		var UUID = dsl.Type("UUID", dsl.String, func() {
+-			dsl.Format(dsl.FormatUUID)
+-		})
+-		var Time = dsl.Type("Time", dsl.String, func() {
+-			dsl.Format(dsl.FormatDateTime)
+-		})
+-		var UploadStatus = dsl.ResultType("application/vnd.upload-status", func() {
+-			dsl.Attributes(func() {
+-				dsl.Attribute("expires", Time, "RFC3339 expiration timestamp.")
+-				dsl.Attribute("offset", dsl.Int64, "Current upload offset in bytes.")
+-			})
+-		})
+-
+-		dsl.API("test", func() {
+-			dsl.Server("test", func() {
+-				dsl.Host("localhost", func() {
+-					dsl.URI("http://localhost:80")
+-				})
+-			})
+-		})
+-
+-		dsl.Service("repro", func() {
+-			dsl.Method("show", func() {
+-				dsl.Payload(func() {
+-					dsl.Attribute("ids", dsl.ArrayOf(UUID), "UUID filter values.")
+-				})
+-				dsl.Result(UploadStatus)
+-				dsl.HTTP(func() {
+-					dsl.GET("/repro")
+-					dsl.Param("ids")
+-					dsl.Response(dsl.StatusOK, func() {
+-						dsl.Header("expires:Upload-Expires")
+-						dsl.Header("offset:Upload-Offset")
+-						dsl.Body(dsl.Empty)
+-					})
+-				})
+-			})
+-		})
+-	})
+ 
+-	spec, err := openapiv2.NewV2(root, root.API.Servers[0].Hosts[0])
+-	require.NoError(t, err)
+ 
+-	path, ok := spec.Paths["/repro"]
+-	require.True(t, ok)
+ 
+-	get := path.(*openapiv2.Path).Get
+-	require.Len(t, get.Parameters, 1)
+-	require.Equal(t, "array", get.Parameters[0].Type)
+-	require.NotNil(t, get.Parameters[0].Items)
+-	require.Equal(t, "string", get.Parameters[0].Items.Type)
+-	require.Equal(t, "uuid", get.Parameters[0].Items.Format)
+-
+-	headers := get.Responses["200"].Headers
+-	require.Equal(t, "string", headers["Upload-Expires"].Type)
+-	require.Equal(t, "date-time", headers["Upload-Expires"].Format)
+-	require.Equal(t, "integer", headers["Upload-Offset"].Type)
+-	require.Equal(t, "int64", headers["Upload-Offset"].Format)
+-}
+ 
+ // validateSwagger asserts that the given bytes contain a valid Swagger spec.
+ func validateSwagger(b []byte) error {
+diff --git a/http/codegen/openapi/v2/json_schema.go b/http/codegen/openapi/v2/json_schema.go
+--- a/http/codegen/openapi/v2/json_schema.go
++++ b/http/codegen/openapi/v2/json_schema.go
+@@ -3,9 +3,9 @@
+ package openapiv2
+ 
+ import (
+-	"fmt"
++	_ "fmt"
+ 
+-	"example.internal/apikit/v3/codegen"
++	_ "example.internal/apikit/v3/codegen"
+ 	"example.internal/apikit/v3/expr"
+ 	"example.internal/apikit/v3/http/codegen/openapi"
+ )
+@@ -21,290 +21,80 @@ type (
+ 
+ // newSchemaBuilder starts a schema build with no definitions or assigned names.
+ func newSchemaBuilder(values openapi.Values) *schemaBuilder {
+-	return &schemaBuilder{
+-		definitions:     make(map[string]*openapi.Schema),
+-		definitionNames: make(map[*expr.ResultTypeExpr]string),
+-		values:          values,
+-	}
++	panic("excised: newSchemaBuilder")
+ }
+ 
+ // BuildAttributeSchema returns the JSON schema for at. The returned schema
+ // includes every named definition referenced by at.
+ func BuildAttributeSchema(api *expr.APIExpr, at *expr.AttributeExpr, generator *expr.ExampleGenerator) *openapi.Schema {
+-	builder := newSchemaBuilder(openapi.Values{})
+-	schema := builder.attributeTypeSchemaWithPrefix(api, at, "", generator)
+-	if len(builder.definitions) > 0 {
+-		schema.Defs = builder.definitions
+-	}
+-	return schema
++	panic("excised: BuildAttributeSchema")
+ }
+ 
+ // resultTypeRefWithPrefix returns a reference to the requested result view. It
+ // adds the definition to this builder the first time the result is used.
+ func (b *schemaBuilder) resultTypeRefWithPrefix(api *expr.APIExpr, mt *expr.ResultTypeExpr, view, prefix string, gen *expr.ExampleGenerator) string {
+-	projected, err := expr.Project(mt, view)
+-	if err != nil {
+-		panic(fmt.Sprintf("failed to project media type %#v: %s", mt.Identifier, err)) // bug
+-	}
+-	return b.projectedResultTypeRefWithPrefix(api, mt, projected, prefix, gen)
++	panic("excised: schemaBuilder.resultTypeRefWithPrefix")
+ }
+ 
+ // projectedResultTypeRefWithPrefix adds a result type that was already
+ // projected for one HTTP response.
+ func (b *schemaBuilder) projectedResultTypeRefWithPrefix(api *expr.APIExpr, source, projected *expr.ResultTypeExpr, prefix string, gen *expr.ExampleGenerator) string {
+-	var metaName string
+-	if n, ok := source.Meta["openapi:typename"]; ok {
+-		metaName = codegen.Goify(n[0], true)
+-	}
+-	name := projected.TypeName
+-	if metaName != "" {
+-		name = metaName
+-	}
+-	if assigned, ok := b.definitionNames[projected]; ok {
+-		// expr.Project can return the original result type. Reuse the name chosen
+-		// when this build first saw that result.
+-		name = assigned
+-	} else {
+-		if _, ok := b.definitions[name]; !ok {
+-			name = codegen.Goify(prefix, true) + codegen.Goify(name, true)
+-			if metaName != "" {
+-				name = metaName
+-			}
+-		}
+-		if projected == source {
+-			// Keep the chosen name here instead of changing the design result.
+-			b.definitionNames[projected] = name
+-		}
+-	}
+-	if _, ok := b.definitions[name]; !ok {
+-		b.generateResultTypeDefinition(api, renamedResultType(projected, name), expr.DefaultView, gen)
+-	}
+-	return fmt.Sprintf("#/$defs/%s", name)
++	panic("excised: schemaBuilder.projectedResultTypeRefWithPrefix")
+ }
+ 
+ // typeRefWithPrefix returns a reference to a user type. It adds the definition
+ // to this builder the first time the type is used.
+ func (b *schemaBuilder) typeRefWithPrefix(api *expr.APIExpr, ut *expr.UserTypeExpr, prefix string, gen *expr.ExampleGenerator) string {
+-	typeName := ut.TypeName
+-	if prefix != "" {
+-		typeName = codegen.Goify(prefix, true) + codegen.Goify(ut.TypeName, true)
+-	}
+-	if n, ok := ut.Meta["openapi:typename"]; ok {
+-		typeName = codegen.Goify(n[0], true)
+-	}
+-	if _, ok := b.definitions[typeName]; !ok {
+-		b.generateTypeDefinitionWithName(api, ut, typeName, gen)
+-	}
+-	return fmt.Sprintf("#/$defs/%s", typeName)
++	panic("excised: schemaBuilder.typeRefWithPrefix")
+ }
+ 
+ // generateResultTypeDefinition adds the requested result view unless this
+ // build already has a definition with the same name.
+ func (b *schemaBuilder) generateResultTypeDefinition(api *expr.APIExpr, mt *expr.ResultTypeExpr, view string, gen *expr.ExampleGenerator) {
+-	if _, ok := b.definitions[mt.TypeName]; ok {
+-		return
+-	}
+-	schema := openapi.NewSchema()
+-	schema.Title = fmt.Sprintf("Mediatype identifier: %s", mt.Identifier)
+-	b.definitions[mt.TypeName] = schema
+-	b.buildResultTypeSchema(api, mt, view, schema, gen)
++	panic("excised: schemaBuilder.generateResultTypeDefinition")
+ }
+ 
+ // generateTypeDefinitionWithName adds the user type under typeName unless this
+ // build already has a definition with that name.
+ func (b *schemaBuilder) generateTypeDefinitionWithName(api *expr.APIExpr, ut *expr.UserTypeExpr, typeName string, gen *expr.ExampleGenerator) {
+-	if _, ok := b.definitions[typeName]; ok {
+-		return
+-	}
+-	schema := openapi.NewSchema()
+-	schema.Title = typeName
+-	b.definitions[typeName] = schema
+-	b.buildAttributeSchema(api, schema, ut.AttributeExpr, gen.At(expr.UserTypeExampleIdentity(ut)))
++	panic("excised: schemaBuilder.generateTypeDefinitionWithName")
+ }
+ 
+ // typeSchema builds a schema for t and adds any named definitions it uses to
+ // this builder.
+ func (b *schemaBuilder) typeSchema(api *expr.APIExpr, t expr.DataType, gen *expr.ExampleGenerator) *openapi.Schema {
+-	return b.typeSchemaWithPrefix(api, t, "", gen)
++	panic("excised: schemaBuilder.typeSchema")
+ }
+ 
+ // typeSchemaWithPrefix builds a schema for t and adds prefix to new named
+ // definitions created while walking the type.
+ func (b *schemaBuilder) typeSchemaWithPrefix(api *expr.APIExpr, t expr.DataType, prefix string, gen *expr.ExampleGenerator) *openapi.Schema {
+-	schema := openapi.NewSchema()
+-	switch actual := t.(type) {
+-	case expr.Primitive:
+-		schema.Type = openapi.Type(actual.Name())
+-		switch actual.Kind() {
+-		case expr.AnyKind:
+-			// Leaving the type empty allows every JSON value.
+-			schema.Type = openapi.Type("")
+-		case expr.IntKind, expr.Int64Kind,
+-			expr.UIntKind, expr.UInt64Kind:
+-			schema.Type = openapi.Integer
+-			schema.Format = "int64"
+-		case expr.Int32Kind, expr.UInt32Kind:
+-			schema.Type = openapi.Integer
+-			schema.Format = "int32"
+-		case expr.Float32Kind:
+-			schema.Type = openapi.Number
+-			schema.Format = "float"
+-		case expr.Float64Kind:
+-			schema.Type = openapi.Number
+-			schema.Format = "double"
+-		case expr.BytesKind:
+-			schema.Type = openapi.String
+-			schema.Format = "byte"
+-		}
+-	case *expr.Array:
+-		schema.Type = openapi.Array
+-		schema.Items = openapi.NewSchema()
+-		b.buildAttributeSchema(api, schema.Items, actual.ElemType, gen.ArrayElement(0))
+-	case *expr.Object:
+-		schema.Type = openapi.Object
+-		for _, nat := range *actual {
+-			if !openapi.MustGenerate(nat.Attribute.Meta) {
+-				continue
+-			}
+-			property := openapi.NewSchema()
+-			b.buildAttributeSchema(api, property, nat.Attribute, gen.Member(nat.Name))
+-			schema.Properties[nat.Name] = property
+-		}
+-	case *expr.Map:
+-		schema.Type = openapi.Object
+-		keyType := actual.KeyType.Type
+-		for expr.IsAlias(keyType) {
+-			keyType = keyType.(expr.UserType).Attribute().Type
+-		}
+-		if keyType == expr.String && actual.ElemType.Type != expr.Any {
+-			value := openapi.NewSchema()
+-			schema.AdditionalProperties = b.buildAttributeSchema(api, value, actual.ElemType, gen.MapValue(0))
+-		} else {
+-			schema.AdditionalProperties = true
+-		}
+-	case *expr.Union:
+-		typeKey := actual.GetTypeKey()
+-		valueKey := actual.GetValueKey()
+-		schema.Type = openapi.Object
+-		for _, val := range actual.Values {
+-			valueSchema := b.typeSchemaWithPrefix(api, val.Attribute.Type, prefix, gen.UnionMember(val.Name))
+-			initSchemaValidation(valueSchema, val.Attribute)
+-			schema.AnyOf = append(schema.AnyOf, &openapi.Schema{
+-				Type: openapi.Object,
+-				Properties: map[string]*openapi.Schema{
+-					typeKey: {
+-						Type: openapi.String,
+-						Enum: []any{val.Name},
+-					},
+-					valueKey: valueSchema,
+-				},
+-				Required: []string{typeKey, valueKey},
+-			})
+-		}
+-	case *expr.UserTypeExpr:
+-		if expr.IsAlias(actual) {
+-			schema = b.typeSchemaWithPrefix(api, actual.Attribute().Type, prefix, gen.At(expr.UserTypeExampleIdentity(actual)))
+-			initSchemaValidation(schema, actual.Attribute())
+-			break
+-		}
+-		schema.Ref = b.typeRefWithPrefix(api, actual, prefix, gen)
+-	case *expr.ResultTypeExpr:
+-		schema.Ref = b.resultTypeRefWithPrefix(api, actual, expr.DefaultView, prefix, gen)
+-	}
+-	return schema
++	panic("excised: schemaBuilder.typeSchemaWithPrefix")
+ }
+ 
+ // attributeTypeSchemaWithPrefix builds a schema for at, including its
+ // validation rules, and adds prefix to new named definitions.
+ func (b *schemaBuilder) attributeTypeSchemaWithPrefix(api *expr.APIExpr, at *expr.AttributeExpr, prefix string, gen *expr.ExampleGenerator) *openapi.Schema {
+-	schema := b.typeSchemaWithPrefix(api, at.Type, prefix, gen)
+-	initSchemaValidation(schema, at)
+-	return schema
++	panic("excised: schemaBuilder.attributeTypeSchemaWithPrefix")
+ }
+ 
+ // buildAttributeSchema fills schema with the type, example, description, and
+ // validation rules from at.
+ func (b *schemaBuilder) buildAttributeSchema(api *expr.APIExpr, schema *openapi.Schema, at *expr.AttributeExpr, gen *expr.ExampleGenerator) *openapi.Schema {
+-	schema.Merge(b.typeSchemaWithPrefix(api, at.Type, "", gen))
+-	if schema.Ref != "" {
+-		return schema
+-	}
+-	schema.DefaultValue = openapi.ToStringMap(at.DefaultValue)
+-	if description := b.values.Description(at.AuthoredAttribute(), at.Description); description != "" {
+-		schema.Description = description
+-	}
+-	schema.Example = openapi.ProjectExample(at, b.values.Example(at, gen))
+-	schema.Extensions = openapi.ExtensionsFromExpr(at.Meta)
+-	if additional := openapi.AdditionalPropertiesFromExpr(at.Meta); additional != nil {
+-		schema.AdditionalProperties = additional
+-	}
+-	initSchemaValidation(schema, at)
+-	return schema
++	panic("excised: schemaBuilder.buildAttributeSchema")
+ }
+ 
+ // initSchemaValidation copies the validation rules from at into schema.
+ func initSchemaValidation(schema *openapi.Schema, at *expr.AttributeExpr) {
+-	validation := at.Validation
+-	if validation == nil {
+-		return
+-	}
+-	schema.Enum = validation.Values
+-	if validation.Format != "" {
+-		schema.Format = string(validation.Format)
+-	}
+-	schema.Pattern = validation.Pattern
+-	if validation.ExclusiveMinimum != nil {
+-		schema.ExclusiveMinimum = validation.ExclusiveMinimum
+-	}
+-	if validation.Minimum != nil {
+-		schema.Minimum = validation.Minimum
+-	}
+-	if validation.ExclusiveMaximum != nil {
+-		schema.ExclusiveMaximum = validation.ExclusiveMaximum
+-	}
+-	if validation.Maximum != nil {
+-		schema.Maximum = validation.Maximum
+-	}
+-	if validation.MinLength != nil {
+-		if _, ok := at.Type.(*expr.Array); ok {
+-			schema.MinItems = validation.MinLength
+-		} else {
+-			schema.MinLength = validation.MinLength
+-		}
+-	}
+-	if validation.MaxLength != nil {
+-		if _, ok := at.Type.(*expr.Array); ok {
+-			schema.MaxItems = validation.MaxLength
+-		} else {
+-			schema.MaxLength = validation.MaxLength
+-		}
+-	}
+-	for _, name := range validation.Required {
+-		if attribute := at.Find(name); attribute != nil && !openapi.MustGenerate(attribute.Meta) {
+-			continue
+-		}
+-		schema.Required = append(schema.Required, name)
+-	}
++	panic("excised: initSchemaValidation")
+ }
+ 
+ // renamedResultType returns rt with name without changing the design result.
+ func renamedResultType(rt *expr.ResultTypeExpr, name string) *expr.ResultTypeExpr {
+-	if rt.TypeName == name {
+-		return rt
+-	}
+-	userType := *rt.UserTypeExpr
+-	userType.TypeName = name
+-	result := *rt
+-	result.UserTypeExpr = &userType
+-	return &result
++	panic("excised: renamedResultType")
+ }
+ 
+ // buildResultTypeSchema fills schema with the requested result view.
+ func (b *schemaBuilder) buildResultTypeSchema(api *expr.APIExpr, mt *expr.ResultTypeExpr, view string, schema *openapi.Schema, gen *expr.ExampleGenerator) {
+-	schema.Media = &openapi.Media{Type: mt.Identifier}
+-	projected, err := expr.Project(mt, view)
+-	if err != nil {
+-		panic(fmt.Sprintf("failed to project media type %#v: %s", mt.Identifier, err)) // bug
+-	}
+-	b.buildAttributeSchema(api, schema, projected.AttributeExpr, gen.At(expr.UserTypeExampleIdentity(projected)))
++	panic("excised: schemaBuilder.buildResultTypeSchema")
+ }
+diff --git a/http/codegen/openapi/v2/json_schema_union_test.go b/http/codegen/openapi/v2/json_schema_union_test.go
+--- a/http/codegen/openapi/v2/json_schema_union_test.go
++++ b/http/codegen/openapi/v2/json_schema_union_test.go
+@@ -3,8 +3,8 @@
+ package openapiv2
+ 
+ import (
+-	"encoding/json"
+-	"sync"
++	_ "encoding/json"
++	_ "sync"
+ 	"testing"
+ 
+ 	"github.com/stretchr/testify/assert"
+@@ -14,97 +14,8 @@ import (
+ 	"example.internal/apikit/v3/http/codegen/openapi"
+ )
+ 
+-func TestAttributeTypeSchemaCorrelatesUnionDiscriminatorAndValue(t *testing.T) {
+-	method := &expr.MethodExpr{Name: "union", Service: &expr.ServiceExpr{Name: "test"}}
+-	generator := expr.NewExampleGenerator(expr.NewFakerRandomizerFactory("test")).At(
+-		expr.MethodPayloadExampleIdentity(method),
+-	)
+-	schema := newSchemaBuilder(openapi.Values{}).attributeTypeSchemaWithPrefix(
+-		&expr.APIExpr{},
+-		unionAttribute(),
+-		"",
+-		generator,
+-	)
+ 
+-	require.Len(t, schema.AnyOf, 2)
+-	assertUnionSchemaBranch(t, schema.AnyOf[0], "text", openapi.String)
+-	assertUnionSchemaBranch(t, schema.AnyOf[1], "count", openapi.Integer)
+-	assert.Empty(t, schema.Properties)
+-}
+-
+-func TestBuildAttributeSchemaKeepsDefinitionsSeparate(t *testing.T) {
+-	type result struct {
+-		field  string
+-		schema *openapi.Schema
+-	}
+-	start := make(chan struct{})
+-	results := make(chan result, 2)
+-	var ready sync.WaitGroup
+-	ready.Add(2)
+-	build := func(field string) {
+-		ready.Done()
+-		<-start
+-		generator := expr.NewExampleGenerator(expr.NewFakerRandomizerFactory(field))
+-		results <- result{
+-			field: field,
+-			schema: BuildAttributeSchema(
+-				&expr.APIExpr{},
+-				namedObjectAttribute(field),
+-				generator,
+-			),
+-		}
+-	}
+-	go build("first")
+-	go build("second")
+-	ready.Wait()
+-	close(start)
+-
+-	for range 2 {
+-		built := <-results
+-		require.Equal(t, "#/$defs/Shared", built.schema.Ref)
+-		require.Contains(t, built.schema.Defs, "Shared")
+-		require.Contains(t, built.schema.Defs["Shared"].Properties, built.field)
+-		other := "first"
+-		if built.field == "first" {
+-			other = "second"
+-		}
+-		require.NotContains(t, built.schema.Defs["Shared"].Properties, other)
+-		_, err := json.Marshal(built.schema)
+-		require.NoError(t, err)
+-	}
+-}
+ 
+-func TestBuildAttributeSchemaKeepsValuesForNamedStringMapKeys(t *testing.T) {
+-	key := &expr.UserTypeExpr{
+-		AttributeExpr: &expr.AttributeExpr{Type: expr.String},
+-		TypeName:      "ConnectionKind",
+-	}
+-	value := &expr.UserTypeExpr{
+-		AttributeExpr: &expr.AttributeExpr{Type: &expr.Object{
+-			&expr.NamedAttributeExpr{
+-				Name:      "connected",
+-				Attribute: &expr.AttributeExpr{Type: expr.Boolean},
+-			},
+-		}},
+-		TypeName: "ConnectionStatus",
+-	}
+-	attribute := &expr.AttributeExpr{Type: &expr.Map{
+-		KeyType:  &expr.AttributeExpr{Type: key},
+-		ElemType: &expr.AttributeExpr{Type: value},
+-	}}
+-	root := &expr.UserTypeExpr{AttributeExpr: attribute, TypeName: "Connections"}
+-	generator := expr.NewExampleGenerator(expr.NewFakerRandomizerFactory("named-string-map-key")).At(
+-		expr.UserTypeExampleIdentity(root),
+-	)
+-
+-	schema := BuildAttributeSchema(&expr.APIExpr{}, attribute, generator)
+-
+-	values, ok := schema.AdditionalProperties.(*openapi.Schema)
+-	require.True(t, ok)
+-	assert.Equal(t, "#/$defs/ConnectionStatus", values.Ref)
+-	require.Contains(t, schema.Defs, "ConnectionStatus")
+-	assert.Equal(t, openapi.Type(openapi.Boolean), schema.Defs["ConnectionStatus"].Properties["connected"].Type)
+-}
+ 
+ // assertUnionSchemaBranch checks one generated union branch's tag, required
+ // fields, and value type.
+diff --git a/http/codegen/openapi/v2/public_api_test.go b/http/codegen/openapi/v2/public_api_test.go
+--- a/http/codegen/openapi/v2/public_api_test.go
++++ b/http/codegen/openapi/v2/public_api_test.go
+@@ -13,7 +13,7 @@ import (
+ 	"example.internal/apikit/v3/codegen"
+ 	"example.internal/apikit/v3/dsl"
+ 	"example.internal/apikit/v3/expr"
+-	"example.internal/apikit/v3/http/codegen/openapi"
++	_ "example.internal/apikit/v3/http/codegen/openapi"
+ 	openapiv2 "example.internal/apikit/v3/http/codegen/openapi/v2"
+ )
+ 
+@@ -45,41 +45,6 @@ var (
+ 	}
+ )
+ 
+-func TestDefaultFacadeMatchesWithValues(t *testing.T) {
+-	root := expr.RunDSL(t, facadeDSL)
+-	root.API.RandomizerFactory = expr.NewFakerRandomizerFactory("released facade")
+-	host := root.API.Servers[0].Hosts[0]
+-
+-	gotSpec, err := openapiv2.NewV2(root, host)
+-	require.NoError(t, err)
+-	wantSpec, err := openapiv2.NewV2WithValues(
+-		root,
+-		host,
+-		expr.NewExampleGenerator(root.API.RandomizerFactory),
+-		openapi.Values{},
+-	)
+-	require.NoError(t, err)
+-	require.Equal(t, wantSpec, gotSpec)
+-	otherSpec, err := openapiv2.NewV2WithValues(
+-		root,
+-		host,
+-		expr.NewExampleGenerator(expr.NewFakerRandomizerFactory("other")),
+-		openapi.Values{},
+-	)
+-	require.NoError(t, err)
+-	require.NotEqual(t, otherSpec, gotSpec)
+-
+-	gotFiles, err := openapiv2.Files(root, openapi.DefaultPath20)
+-	require.NoError(t, err)
+-	wantFiles, err := openapiv2.FilesWithValues(
+-		root,
+-		openapi.DefaultPath20,
+-		expr.NewExampleGenerator(root.API.RandomizerFactory),
+-		openapi.Values{},
+-	)
+-	require.NoError(t, err)
+-	require.Equal(t, renderFiles(t, wantFiles), renderFiles(t, gotFiles))
+-}
+ 
+ // renderFiles runs each file template so the test compares the documents that
+ // users receive instead of comparing template implementation details.
+diff --git a/http/codegen/openapi/v3/files_test.go b/http/codegen/openapi/v3/files_test.go
+--- a/http/codegen/openapi/v3/files_test.go
++++ b/http/codegen/openapi/v3/files_test.go
+@@ -3,250 +3,26 @@
+ package openapiv3_test
+ 
+ import (
+-	"bytes"
++	_ "bytes"
+ 	"context"
+-	"encoding/json"
+-	"fmt"
+-	"path/filepath"
+-	"strings"
++	_ "encoding/json"
++	_ "fmt"
++	_ "path/filepath"
++	_ "strings"
+ 	"testing"
+-	"text/template"
++	_ "text/template"
+ 
+ 	"github.com/getkin/kin-openapi/openapi3"
+ 
+-	"example.internal/apikit/v3/codegen/testutil"
+-	"example.internal/apikit/v3/expr"
+-	"example.internal/apikit/v3/http/codegen/openapi"
+-	openapiv3 "example.internal/apikit/v3/http/codegen/openapi/v3"
+-	"example.internal/apikit/v3/http/codegen/testdata"
++	_ "example.internal/apikit/v3/codegen/testutil"
++	_ "example.internal/apikit/v3/expr"
++	_ "example.internal/apikit/v3/http/codegen/openapi"
++	_ "example.internal/apikit/v3/http/codegen/openapi/v3"
++	_ "example.internal/apikit/v3/http/codegen/testdata"
+ )
+ 
+-func TestFiles(t *testing.T) {
+-	var (
+-		goldenPath = filepath.Join("testdata", "golden")
+-	)
+-	cases := []struct {
+-		Name string
+-		DSL  func()
+-	}{
+-		// TestSections
+-		{"file-service", testdata.FileServiceDSL},
+-		{"file-service-swagger", testdata.FileServiceSwaggerDSL},
+-		{"file-service-wildcard", testdata.FileServiceWildcardDSL},
+-		{"valid", testdata.SimpleDSL},
+-		{"bytes-example", testdata.BytesExampleDSL},
+-		{"multiple-services", testdata.MultipleServicesDSL},
+-		{"multiple-views", testdata.MultipleViewsDSL},
+-		{"explicit-view", testdata.ExplicitViewDSL},
+-		{"released-response-collection-names", testdata.ReleasedResponseCollectionNamesDSL},
+-		{"security", testdata.SecurityDSL},
+-		{"bearer-security", testdata.BearerSecurityDSL},
+-		{"server-host-with-variables", testdata.ServerHostWithVariablesDSL},
+-		{"with-spaces", testdata.WithSpacesDSL},
+-		{"with-map", testdata.WithMapDSL},
+-		{"with-any", testdata.WithAnyDSL},
+-		{"path-with-wildcards", testdata.PathWithWildcardDSL},
+-		{"path-with-multiple-wildcards", testdata.PathWithMultipleWildcardDSL},
+-		{"path-with-multiple-explicit-wildcards", testdata.PathWithMultipleExplicitWildcardDSL},
+-		{"headers", testdata.HeadersDSL},
+-		{"with-tags", testdata.WithTagsDSL},
+-		{"with-tags-swagger", testdata.WithTagsSwaggerDSL},
+-		{"typename", testdata.TypenameDSL},
+-		{"not-generate-server", testdata.NotGenerateServerDSL},
+-		{"not-generate-host", testdata.NotGenerateHostDSL},
+-		{"not-generate-attribute", testdata.NotGenerateAttributeDSL},
+-		{"json-prefix", testdata.JSONPrefixDSL},
+-		{"json-indent", testdata.JSONIndentDSL},
+-		{"json-prefix-indent", testdata.JSONPrefixIndentDSL},
+-		// TestEndpoints
+-		{"endpoint", testdata.ExtensionDSL},
+-		{"endpoint-swagger", testdata.ExtensionSwaggerDSL},
+-		{"type-extension", testdata.TypeExtensionDSL},
+-		// Alias types stay inline in 3.0 documents (named in 3.2 only).
+-		{"alias-type", testdata.AliasTypeDSL},
+-		{"skip-response-body-encode-decode", testdata.SkipResponseBodyEncodeDecodeDSL},
+-		// TestValidations
+-		{"string", testdata.StringValidationDSL},
+-		{"integer", testdata.IntValidationDSL},
+-		{"array", testdata.ArrayValidationDSL},
+-		// Error examples
+-		{"error-examples", testdata.ErrorExamplesDSL},
+-		{"shared-error-description", testdata.SharedErrorDescriptionDSL},
+-		// Streaming endpoints: OpenAPI 3.2 constructs must not leak into
+-		// 3.0 documents.
+-		{"sse-string", testdata.SSEStringDSL},
+-		{"sse-all-fields", testdata.SSEAllFieldsDSL},
+-		{"sse-mixed-results", testdata.MixedResultsDSL},
+-		{"websocket", testdata.StreamingResultDSL},
+-		// OpenAPI 3.2 only meta: must not leak into 3.0 documents.
+-		{"v3.2-meta", testdata.OpenAPIV32MetaDSL},
+-	}
+-	for _, c := range cases {
+-		t.Run(c.Name, func(t *testing.T) {
+-			root := expr.RunDSL(t, c.DSL)
+-			oFiles := openapiv3.Files(root, openapi.Version30, openapi.DefaultPath30)
+-			for i, o := range oFiles {
+-				tname := fmt.Sprintf("file%d", i)
+-				s := o.SectionTemplates
+-				t.Run(tname, func(t *testing.T) {
+-					if len(s) != 1 {
+-						t.Fatalf("expected 1 section, got %d", len(s))
+-					}
+-					if s[0].Source == "" {
+-						t.Fatalf("empty section template")
+-					}
+-					if s[0].Data == nil {
+-						t.Fatalf("nil data")
+-					}
+-					var buf bytes.Buffer
+-					tmpl := template.Must(template.New("openapi").Funcs(s[0].FuncMap).Parse(s[0].Source))
+-					if err := tmpl.Execute(&buf, s[0].Data); err != nil {
+-						t.Fatalf("failed to render template: %s", err)
+-					}
+-					validateSwagger(t, buf.Bytes())
+-
+-					golden := filepath.Join(goldenPath, fmt.Sprintf("%s_%s.golden", strings.TrimSuffix(c.Name, "-swagger"), tname))
+-					if filepath.Ext(o.Path) == ".json" {
+-						testutil.AssertJSON(t, golden, buf.Bytes())
+-					} else {
+-						testutil.AssertString(t, golden, buf.String())
+-					}
+-				})
+-			}
+-		})
+-	}
+-}
+-
+-func TestFilesV32(t *testing.T) {
+-	var (
+-		goldenPath = filepath.Join("testdata", "golden", "v3.2")
+-	)
+-	cases := []struct {
+-		Name string
+-		DSL  func()
+-	}{
+-		{"valid", testdata.SimpleDSL},
+-		{"bytes-example", testdata.BytesExampleDSL},
+-		{"v3.2-meta", testdata.OpenAPIV32MetaDSL},
+-		{"with-tags", testdata.WithTagsDSL},
+-		{"server-host-with-variables", testdata.ServerHostWithVariablesDSL},
+-		{"sse-string", testdata.SSEStringDSL},
+-		{"sse-object", testdata.SSEObjectDSL},
+-		{"sse-data-field", testdata.SSEDataFieldDSL},
+-		{"sse-request-id", testdata.SSERequestIDDSL},
+-		{"sse-all-fields", testdata.SSEAllFieldsDSL},
+-		{"sse-mixed-results", testdata.MixedResultsDSL},
+-		{"websocket", testdata.StreamingResultDSL},
+-		{"alias-type", testdata.AliasTypeDSL},
+-		{"shared-error-description", testdata.SharedErrorDescriptionDSL},
+-	}
+-	for _, c := range cases {
+-		t.Run(c.Name, func(t *testing.T) {
+-			root := expr.RunDSL(t, c.DSL)
+-			oFiles := openapiv3.Files(root, openapi.Version32, openapi.DefaultPath32)
+-			wantPaths := []string{
+-				filepath.Join("gen", "http", "openapi3.2.json"),
+-				filepath.Join("gen", "http", "openapi3.2.yaml"),
+-			}
+-			for i, o := range oFiles {
+-				tname := fmt.Sprintf("file%d", i)
+-				s := o.SectionTemplates
+-				t.Run(tname, func(t *testing.T) {
+-					if o.Path != wantPaths[i] {
+-						t.Errorf("got path %q, expected %q", o.Path, wantPaths[i])
+-					}
+-					if len(s) != 1 {
+-						t.Fatalf("expected 1 section, got %d", len(s))
+-					}
+-					var buf bytes.Buffer
+-					tmpl := template.Must(template.New("openapi").Funcs(s[0].FuncMap).Parse(s[0].Source))
+-					if err := tmpl.Execute(&buf, s[0].Data); err != nil {
+-						t.Fatalf("failed to render template: %s", err)
+-					}
+-					// kin-openapi only validates 3.0.x documents so check the
+-					// document version and well-formedness structurally.
+-					golden := filepath.Join(goldenPath, fmt.Sprintf("%s_%s.golden", c.Name, tname))
+-					if filepath.Ext(o.Path) == ".json" {
+-						if !json.Valid(buf.Bytes()) {
+-							t.Errorf("invalid JSON:\n%s", buf.String())
+-						}
+-						if !strings.Contains(buf.String(), `"openapi":"3.2.0"`) {
+-							t.Errorf("missing or wrong OpenAPI version:\n%s", buf.String())
+-						}
+-						testutil.AssertJSON(t, golden, buf.Bytes())
+-					} else {
+-						if !strings.Contains(buf.String(), "openapi: 3.2.0") {
+-							t.Errorf("missing or wrong OpenAPI version:\n%s", buf.String())
+-						}
+-						testutil.AssertString(t, golden, buf.String())
+-					}
+-				})
+-			}
+-		})
+-	}
+-}
+-
+-// TestAuthoredExampleFixturesIgnoreRandomizer verifies that golden designs
+-// which do not test generated examples describe every displayed value.
+-func TestAuthoredExampleFixturesIgnoreRandomizer(t *testing.T) {
+-	cases := []struct {
+-		Name    string
+-		DSL     func()
+-		Version openapi.Version
+-	}{
+-		{"alias-type", testdata.AliasTypeDSL, openapi.Version30},
+-		{"array", testdata.ArrayValidationDSL, openapi.Version30},
+-		{"headers", testdata.HeadersDSL, openapi.Version30},
+-		{"not-generate-host", testdata.NotGenerateHostDSL, openapi.Version30},
+-		{"not-generate-server", testdata.NotGenerateServerDSL, openapi.Version30},
+-		{"path-with-wildcards", testdata.PathWithWildcardDSL, openapi.Version30},
+-		{"path-with-multiple-wildcards", testdata.PathWithMultipleWildcardDSL, openapi.Version30},
+-		{"path-with-multiple-explicit-wildcards", testdata.PathWithMultipleExplicitWildcardDSL, openapi.Version30},
+-		{"sse-all-fields", testdata.SSEAllFieldsDSL, openapi.Version32},
+-		{"sse-data-field", testdata.SSEDataFieldDSL, openapi.Version32},
+-		{"sse-mixed-results", testdata.MixedResultsDSL, openapi.Version32},
+-		{"sse-object", testdata.SSEObjectDSL, openapi.Version32},
+-		{"sse-request-id", testdata.SSERequestIDDSL, openapi.Version32},
+-		{"sse-string", testdata.SSEStringDSL, openapi.Version32},
+-		{"type-extension", testdata.TypeExtensionDSL, openapi.Version30},
+-		{"websocket", testdata.StreamingResultDSL, openapi.Version32},
+-		{"with-any", testdata.WithAnyDSL, openapi.Version30},
+-		{"with-map", testdata.WithMapDSL, openapi.Version30},
+-		{"with-spaces", testdata.WithSpacesDSL, openapi.Version30},
+-		{"with-tags", testdata.WithTagsDSL, openapi.Version32},
+-	}
+-	for _, c := range cases {
+-		t.Run(c.Name, func(t *testing.T) {
+-			firstRoot := expr.RunDSL(t, c.DSL)
+-			first := openapiv3.NewWithValues(
+-				firstRoot,
+-				c.Version,
+-				expr.NewExampleGenerator(expr.NewFakerRandomizerFactory("first")),
+-				openapi.Values{},
+-			)
+-			firstJSON, err := json.Marshal(first)
+-			if err != nil {
+-				t.Fatalf("failed to encode first document: %s", err)
+-			}
+ 
+-			secondRoot := expr.RunDSL(t, c.DSL)
+-			second := openapiv3.NewWithValues(
+-				secondRoot,
+-				c.Version,
+-				expr.NewExampleGenerator(expr.NewFakerRandomizerFactory("second")),
+-				openapi.Values{},
+-			)
+-			secondJSON, err := json.Marshal(second)
+-			if err != nil {
+-				t.Fatalf("failed to encode second document: %s", err)
+-			}
+ 
+-			if !bytes.Equal(firstJSON, secondJSON) {
+-				t.Error("OpenAPI examples changed with the randomizer")
+-			}
+-		})
+-	}
+-}
+ 
+ func validateSwagger(t *testing.T, b []byte) {
+ 	swagger, err := openapi3.NewLoader().LoadFromData(b)

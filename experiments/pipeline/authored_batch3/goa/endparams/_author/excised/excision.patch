@@ -1,0 +1,530 @@
+--- a/expr/http_endpoint.go
++++ b/expr/http_endpoint.go
+@@ -5,11 +5,11 @@
+ import (
+ 	"errors"
+ 	"fmt"
+-	"path"
++	_ "path"
+ 	"slices"
+ 	"strings"
+ 
+-	"github.com/dimfeld/httppath"
++	_ "github.com/dimfeld/httppath"
+ 	"example.internal/apikit/v3/eval"
+ )
+ 
+@@ -179,57 +179,13 @@
+ // PathParams computes a mapped attribute containing the subset of e.Params that
+ // describe path parameters.
+ func (e *HTTPEndpointExpr) PathParams() *MappedAttributeExpr {
+-	obj := Object{}
+-	v := &ValidationExpr{}
+-	pat := e.Params.Attribute() // need "attribute:name" style keys
+-	for _, r := range e.Routes {
+-		for _, p := range r.Params() {
+-			att := pat.Find(p)
+-			if att == nil {
+-				continue
+-			}
+-			obj.Set(p, att)
+-			if e.Params.IsRequired(p) {
+-				v.AddRequired(p)
+-			}
+-		}
+-	}
+-	at := &AttributeExpr{Type: &obj, Validation: v}
+-	return NewMappedAttributeExpr(at)
++	panic("excised: HTTPEndpointExpr.PathParams")
+ }
+ 
+ // QueryParams computes a mapped attribute containing the subset of e.Params
+ // that describe query parameters.
+ func (e *HTTPEndpointExpr) QueryParams() *MappedAttributeExpr {
+-	obj := Object{}
+-	v := &ValidationExpr{}
+-	pp := make(map[string]struct{})
+-	for _, r := range e.Routes {
+-		for _, p := range r.Params() {
+-			pp[p] = struct{}{}
+-		}
+-	}
+-	pat := e.Params.Attribute() // need "attribute:name" style keys
+-	for _, at := range *(pat.Type.(*Object)) {
+-		found := false
+-		for n := range pp {
+-			if n == at.Name {
+-				found = true
+-				break
+-			}
+-		}
+-		if !found {
+-			obj.Set(at.Name, at.Attribute)
+-			// when looking for required attributes we need the unmapped keys
+-			// (i.e. without the "attribute:name" syntax)
+-			attName := strings.Split(at.Name, ":")[0]
+-			if e.Params.IsRequired(attName) {
+-				v.AddRequired(attName)
+-			}
+-		}
+-	}
+-	at := &AttributeExpr{Type: &obj, Validation: v}
+-	return NewMappedAttributeExpr(at)
++	panic("excised: HTTPEndpointExpr.QueryParams")
+ }
+ 
+ // Prepare computes the request path and query string parameters as well as the
+@@ -1010,151 +966,13 @@
+ // validateParams checks the endpoint parameters are of an allowed type and the
+ // method payload contains the parameters.
+ func (e *HTTPEndpointExpr) validateParams() *eval.ValidationErrors {
+-	if e.Params.IsEmpty() {
+-		return nil
+-	}
+-
+-	var (
+-		pparams = DupMappedAtt(e.PathParams())
+-		qparams = DupMappedAtt(e.QueryParams())
+-	)
+-	// We have to figure out the actual type for the params because the actual
+-	// type is initialized only during the finalize phase. In the validation
+-	// phase, all param types are string type by default unless specified
+-	// explicitly.
+-	initAttr(pparams, e.MethodExpr.Payload)
+-	initAttr(qparams, e.MethodExpr.Payload)
+-
+-	invalidTypeErr := func(verr *eval.ValidationErrors, e *HTTPEndpointExpr, name string) {
+-		verr.Add(e, "path parameter %s cannot be an object, path parameter types must be primitive, array or map (query string only)", name)
+-	}
+-	verr := new(eval.ValidationErrors)
+-	WalkMappedAttr(pparams, func(name, _ string, a *AttributeExpr) error { // nolint: errcheck
+-		switch {
+-		case IsObject(a.Type), IsMap(a.Type), IsUnion(a.Type):
+-			invalidTypeErr(verr, e, name)
+-		case IsArray(a.Type):
+-			arr := AsArray(a.Type)
+-			if !IsPrimitive(arr.ElemType.Type) {
+-				verr.Add(e, "elements of array path parameter %q must be primitive", name)
+-			}
+-		default:
+-			ctx := fmt.Sprintf("path parameter %s", name)
+-			verr.Merge(a.Validate(ctx, e))
+-		}
+-		return nil
+-	})
+-	WalkMappedAttr(qparams, func(name, _ string, a *AttributeExpr) error { // nolint: errcheck
+-		switch {
+-		case IsObject(a.Type), IsUnion(a.Type):
+-			invalidTypeErr(verr, e, name)
+-		case IsArray(a.Type):
+-			arr := AsArray(a.Type)
+-			if !IsPrimitive(arr.ElemType.Type) {
+-				verr.Add(e, "elements of array query parameter %q must be primitive", name)
+-			}
+-		default:
+-			ctx := fmt.Sprintf("query parameter %s", name)
+-			verr.Merge(a.Validate(ctx, e))
+-		}
+-		return nil
+-	})
+-	if e.MethodExpr.Payload != nil {
+-		switch e.MethodExpr.Payload.Type.(type) {
+-		case *Object, UserType:
+-			WalkMappedAttr(pparams, func(name, _ string, _ *AttributeExpr) error { // nolint: errcheck
+-				if e.MethodExpr.Payload.Find(name) == nil {
+-					verr.Add(e, "Path parameter %q not found in payload.", name)
+-				}
+-				return nil
+-			})
+-			WalkMappedAttr(qparams, func(name, _ string, _ *AttributeExpr) error { // nolint: errcheck
+-				if e.MethodExpr.Payload.Find(name) == nil {
+-					verr.Add(e, "Query string parameter %q not found in payload.", name)
+-				}
+-				return nil
+-			})
+-		case *Array:
+-			if len(*AsObject(pparams.Type))+len(*AsObject(qparams.Type)) > 1 {
+-				verr.Add(e, "Payload type is array but HTTP endpoint defines multiple parameters. At most one parameter must be defined and it must be an array.")
+-			}
+-		case *Map:
+-			if len(*AsObject(pparams.Type))+len(*AsObject(qparams.Type)) > 1 {
+-				verr.Add(e, "Payload type is map but HTTP endpoint defines multiple parameters. At most one query string parameter must be defined and it must be a map.")
+-			}
+-		}
+-	}
+-	return verr
++	panic("excised: HTTPEndpointExpr.validateParams")
+ }
+ 
+ // validateHeadersAndCookies makes sure headers and cookies are of an allowed
+ // type and the method payload defines the corresponding attributes.
+ func (e *HTTPEndpointExpr) validateHeadersAndCookies() *eval.ValidationErrors {
+-	verr := new(eval.ValidationErrors)
+-
+-	// We have to figure out the actual type because it is initialized during
+-	// the finalize phase. In the validation phase, all param types are string
+-	// type by default unless specified explicitly.
+-	headers := DupMappedAtt(e.Headers)
+-	cookies := DupMappedAtt(e.Cookies)
+-	initAttr(headers, e.MethodExpr.Payload)
+-	initAttr(cookies, e.MethodExpr.Payload)
+-	WalkMappedAttr(headers, func(name, _ string, a *AttributeExpr) error { // nolint: errcheck
+-		switch {
+-		case IsObject(a.Type), IsUnion(a.Type):
+-			verr.Add(e, "header %q must be primitive or array", name)
+-		case IsArray(a.Type):
+-			arr := AsArray(a.Type)
+-			if !IsPrimitive(arr.ElemType.Type) {
+-				verr.Add(e, "elements of array header %q must be primitive", name)
+-			}
+-		default:
+-			ctx := fmt.Sprintf("header %q", name)
+-			verr.Merge(a.Validate(ctx, e))
+-		}
+-		return nil
+-	})
+-	WalkMappedAttr(cookies, func(name, _ string, a *AttributeExpr) error { // nolint: errcheck
+-		switch {
+-		case IsObject(a.Type), IsUnion(a.Type), IsArray(a.Type):
+-			verr.Add(e, "cookie %q must be primitive", name)
+-		default:
+-			ctx := fmt.Sprintf("cookie %q", name)
+-			verr.Merge(a.Validate(ctx, e))
+-		}
+-		return nil
+-	})
+-	switch e.MethodExpr.Payload.Type.(type) {
+-	case *Object, UserType:
+-		hasBasicAuth := TaggedAttribute(e.MethodExpr.Payload, "security:username") != ""
+-		WalkMappedAttr(headers, func(name, elem string, _ *AttributeExpr) error { // nolint: errcheck
+-			if e.MethodExpr.Payload.Find(name) == nil {
+-				verr.Add(e, "header %q not found in payload.", name)
+-			}
+-			if elem == "Authorization" && hasBasicAuth {
+-				// BasicAuth security implicitly sets the Authorization header. If any
+-				// payload attribute is mapped to Authorization header, raise a
+-				// validation error.
+-				verr.Add(e, "Attribute %q is mapped to \"Authorization\" header in the endpoint secured by BasicAuth which also sets \"Authorization\" header. Specify a different header to map attribute %q.", name, name)
+-			}
+-			return nil
+-		})
+-		WalkMappedAttr(cookies, func(name, _ string, _ *AttributeExpr) error { // nolint: errcheck
+-			if e.MethodExpr.Payload.Find(name) == nil {
+-				verr.Add(e, "cookie %q not found in payload.", name)
+-			}
+-			return nil
+-		})
+-	case *Array:
+-		if len(*AsObject(headers.Type)) > 1 {
+-			verr.Add(e, "Payload type is array but HTTP endpoint defines multiple headers. At most one header must be defined and it must be an array.")
+-		}
+-	case *Map:
+-		if len(*AsObject(headers.Type))+len(*AsObject(cookies.Type)) > 0 {
+-			verr.Add(e, "Payload type is map but HTTP endpoint defines headers or cookies. Map payloads can only be decoded from HTTP request bodies or query strings.")
+-		}
+-	}
+-	return verr
++	panic("excised: HTTPEndpointExpr.validateHeadersAndCookies")
+ }
+ 
+ // EvalName returns the generic definition name used in error messages.
+@@ -1166,112 +984,26 @@
+ // can be inferred from the method payload and there is no duplicate parameters
+ // in an absolute route.
+ func (r *RouteExpr) Validate() *eval.ValidationErrors {
+-	verr := new(eval.ValidationErrors)
+-
+-	// Make sure route params are defined in the method payload
+-	if rparams := r.Params(); len(rparams) > 0 {
+-		if r.Endpoint.MethodExpr.Payload == nil {
+-			verr.Add(r, "Route parameters are defined, but method payload is not defined.")
+-		} else {
+-			switch r.Endpoint.MethodExpr.Payload.Type.(type) {
+-			case *Map:
+-				verr.Add(r, "Route parameters are defined, but method payload is a map. Method payload must be a primitive or an object.")
+-			case *Object, UserType:
+-				for _, p := range rparams {
+-					if r.Endpoint.MethodExpr.Payload.Find(p) == nil {
+-						verr.Add(r, "Route param %q not found in method payload", p)
+-					}
+-				}
+-			}
+-			if len(rparams) > 1 && IsPrimitive(r.Endpoint.MethodExpr.Payload.Type) {
+-				verr.Add(r, "Multiple route parameters are defined, but method payload is a primitive. Only one router parameter can be defined if payload is primitive.")
+-			}
+-		}
+-	}
+-
+-	// Make sure there's no duplicate params in absolute route
+-	paths := r.FullPaths()
+-	for _, path := range paths {
+-		matches := HTTPWildcardRegex.FindAllStringSubmatch(path, -1)
+-		wcs := make(map[string]struct{}, len(matches))
+-		for _, match := range matches {
+-			if _, ok := wcs[match[1]]; ok {
+-				verr.Add(r, "Wildcard %q appears multiple times in full path %q", match[1], path)
+-			}
+-			wcs[match[1]] = struct{}{}
+-		}
+-	}
+-
+-	// For WebSocket streaming endpoints, only GET is supported
+-	// SSE endpoints can use both GET and POST (JSON-RPC SSE uses POST)
+-	if r.Endpoint.UsesWebSocket() && len(r.Endpoint.Responses) > 0 {
+-		if r.Method != "GET" {
+-			verr.Add(r, "WebSocket endpoint supports only \"GET\" method. Got %q.", r.Method)
+-		}
+-	}
+-
+-	// HEAD method must not return a response body as per RFC 2616 section 9.4
+-	if r.Method == "HEAD" {
+-		disallowBody := func(resp *HTTPResponseExpr) {
+-			if httpResponseBody(r.Endpoint, resp).Type != Empty {
+-				verr.Add(r, "HTTP status %d: Response body defined for HEAD method which does not allow response body.", resp.StatusCode)
+-			}
+-		}
+-		for _, resp := range r.Endpoint.Responses {
+-			disallowBody(resp)
+-		}
+-		for _, e := range r.Endpoint.HTTPErrors {
+-			disallowBody(e.Response)
+-		}
+-	}
+-	return verr
++	panic("excised: RouteExpr.Validate")
+ }
+ 
+ // Params returns all the route parameters across all the base paths. For
+ // example for the route "GET /foo/{fooID:foo_id}" Params returns
+ // []string{"fooID:foo_id"}.
+ func (r *RouteExpr) Params() []string {
+-	paths := r.FullPaths()
+-	var res []string
+-	for _, p := range paths {
+-		ws := ExtractHTTPWildcards(p)
+-		for _, w := range ws {
+-			found := slices.Contains(res, w)
+-			if !found {
+-				res = append(res, w)
+-			}
+-		}
+-	}
+-	return res
++	panic("excised: RouteExpr.Params")
+ }
+ 
+ // FullPaths returns the endpoint full paths computed by concatenating the
+ // service base paths with the route specific path.
+ func (r *RouteExpr) FullPaths() []string {
+-	if r.IsAbsolute() {
+-		return []string{httppath.Clean(r.Path[1:])}
+-	}
+-	bases := r.Endpoint.Service.FullPaths()
+-	res := make([]string, len(bases))
+-	for i, b := range bases {
+-		res[i] = httppath.Clean(path.Join(b, r.Path))
+-		if res[i] == "/" {
+-			continue
+-		}
+-		// path has trailing slash
+-		if r.Path == "/" && strings.HasSuffix(b, "/") {
+-			res[i] += "/"
+-		} else if r.Path != "/" && strings.HasSuffix(r.Path, "/") {
+-			res[i] += "/"
+-		}
+-	}
+-	return res
++	panic("excised: RouteExpr.FullPaths")
+ }
+ 
+ // IsAbsolute returns true if the endpoint path should not be concatenated to
+ // the service and API base paths.
+ func (r *RouteExpr) IsAbsolute() bool {
+-	return strings.HasPrefix(r.Path, "//")
++	panic("excised: RouteExpr.IsAbsolute")
+ }
+ 
+ // initAttr initializes the given mapped attribute with the given service
+--- a/expr/http_endpoint_test.go
++++ b/expr/http_endpoint_test.go
+@@ -1,43 +1,13 @@
+ package expr_test
+ 
+ import (
+-	"errors"
+-	"strings"
+ 	"testing"
+ 
+ 	"example.internal/apikit/v3/dsl"
+-	"example.internal/apikit/v3/eval"
+ 	"example.internal/apikit/v3/expr"
+ 	"example.internal/apikit/v3/expr/testdata"
+ )
+ 
+-func TestHTTPRouteValidation(t *testing.T) {
+-	cases := []struct {
+-		Name  string
+-		DSL   func()
+-		Error string
+-	}{
+-		{"valid", testdata.ValidRouteDSL, ""},
+-		{"duplicate-wc-route", testdata.DuplicateWCRouteDSL, `route POST "/{id}" of service "DuplicateWCRoute" HTTP endpoint "Method": Wildcard "id" appears multiple times in full path "/{id}/{id}"`},
+-		{"disallow-response-body", testdata.DisallowResponseBodyHeadDSL, `route HEAD "/" of service "DisallowResponseBody" HTTP endpoint "Method": HTTP status 200: Response body defined for HEAD method which does not allow response body.
+-route HEAD "/" of service "DisallowResponseBody" HTTP endpoint "Method": HTTP status 404: Response body defined for HEAD method which does not allow response body.`,
+-		},
+-		{"invalid", testdata.InvalidRouteDSL, "routes at the service level are only allowed for JSON-RPC services. Use method-level routes instead. in service \"InvalidRoute\""},
+-	}
+-	for _, c := range cases {
+-		t.Run(c.Name, func(t *testing.T) {
+-			if c.Error == "" {
+-				expr.RunDSL(t, c.DSL)
+-			} else {
+-				err := expr.RunInvalidDSL(t, c.DSL)
+-				got := stripValidationLocations(err.Error())
+-				if !strings.HasSuffix(got, c.Error) {
+-					t.Errorf("got error %q\nexpected %q", got, c.Error)
+-				}
+-			}
+-		})
+-	}
+-}
+ 
+ func TestHTTPEndpointPrepare(t *testing.T) {
+ 	cases := map[string]struct {
+@@ -117,136 +87,6 @@
+ 	}
+ }
+ 
+-func TestHTTPEndpointValidation(t *testing.T) {
+-	cases := map[string]struct {
+-		DSL   func()
+-		Error string
+-	}{
+-		"endpoint-body-as-payload-prop": {
+-			DSL: testdata.EndpointBodyAsPayloadProp,
+-		},
+-		"endpoint-body-as-missed-payload-prop": {
+-			DSL:   testdata.EndpointBodyAsMissedPayloadProp,
+-			Error: `Request type does not have an attribute named "name" in service "Service" HTTP endpoint "Method"`,
+-		},
+-		"endpoint-body-extend-payload": {
+-			DSL: testdata.EndpointBodyExtendPayload,
+-		},
+-		"endpoint-body-as-user-type": {
+-			DSL: testdata.EndpointBodyAsUserType,
+-		},
+-		"endpoint-missing-token": {
+-			DSL:   testdata.EndpointMissingToken,
+-			Error: `service "Service" method "Method": payload of method "Method" of service "Service" does not define a JWT attribute, use Token to define one`,
+-		},
+-		"endpoint-missing-token-payload": {
+-			DSL:   testdata.EndpointMissingTokenPayload,
+-			Error: `service "Service" method "Method": payload of method "Method" of service "Service" does not define a JWT attribute, use Token to define one`,
+-		},
+-		"endpoint-missing-token-extend": {
+-			DSL: testdata.EndpointExtendToken,
+-		},
+-		"endpoint-has-parent": {
+-			DSL: testdata.EndpointHasParent,
+-		},
+-		"endpoint-has-parent-and-other": {
+-			DSL: testdata.EndpointHasParentAndOther,
+-		},
+-		"endpoint-has-skip-request-encode-and-payload-streaming": {
+-			DSL:   testdata.EndpointHasSkipRequestEncodeAndPayloadStreaming,
+-			Error: `service "Service" HTTP endpoint "Method": Endpoint cannot use SkipRequestBodyEncodeDecode when method defines a StreamingPayload.`,
+-		},
+-		"endpoint-has-skip-request-encode-and-result-streaming": {
+-			DSL:   testdata.EndpointHasSkipRequestEncodeAndResultStreaming,
+-			Error: `service "Service" HTTP endpoint "Method": Endpoint cannot use SkipRequestBodyEncodeDecode when method defines a StreamingResult. Use SkipResponseBodyEncodeDecode instead.`,
+-		},
+-		"endpoint-has-skip-response-encode-and-payload-streaming": {
+-			DSL:   testdata.EndpointHasSkipResponseEncodeAndPayloadStreaming,
+-			Error: `service "Service" HTTP endpoint "Method": Endpoint cannot use SkipResponseBodyEncodeDecode when method defines a StreamingPayload. Use SkipRequestBodyEncodeDecode instead.`,
+-		},
+-		"endpoint-has-skip-response-encode-and-result-streaming": {
+-			DSL: testdata.EndpointHasSkipResponseEncodeAndResultStreaming,
+-			Error: `service "Service" HTTP endpoint "Method": Endpoint cannot use SkipResponseBodyEncodeDecode when method defines a StreamingResult.
+-service "Service" HTTP endpoint "Method": HTTP endpoint response body must be empty when using SkipResponseBodyEncodeDecode. Make sure to define headers and cookies as needed.`,
+-		},
+-		"endpoint-has-skip-encode-and-grpc": {
+-			DSL:   testdata.EndpointHasSkipEncodeAndGRPC,
+-			Error: `service "Service" HTTP endpoint "Method": Endpoint cannot use SkipRequestBodyEncodeDecode and define a gRPC transport.`,
+-		},
+-		"endpoint-payload-missing-required": {
+-			DSL:   testdata.EndpointPayloadMissingRequired,
+-			Error: `service "Service" HTTP endpoint "Method": The following HTTP request body attribute is required but the corresponding method payload attribute is not: nonreq. Use 'Required' to make the attribute required in the method payload as well.`,
+-		},
+-		"endpoint-multipart-without-body": {
+-			DSL:   testdata.EndpointMultipartWithoutBody,
+-			Error: `service "Service" HTTP endpoint "Method": MultipartRequest requires a request body.`,
+-		},
+-		"two untagged success responses": {
+-			DSL: func() {
+-				dsl.Service("Service", func() {
+-					dsl.Method("Method", func() {
+-						dsl.Result(dsl.String)
+-						dsl.HTTP(func() {
+-							dsl.GET("/")
+-							dsl.Response(dsl.StatusOK)
+-							dsl.Response(dsl.StatusAccepted)
+-						})
+-					})
+-				})
+-			},
+-			Error: `HTTP response of service "Service" HTTP endpoint "Method": Multiple response definitions without a Tag`,
+-		},
+-		"tagged response and default response": {
+-			DSL: func() {
+-				dsl.Service("Service", func() {
+-					dsl.Method("Method", func() {
+-						dsl.Result(func() {
+-							dsl.Attribute("outcome", dsl.String)
+-						})
+-						dsl.HTTP(func() {
+-							dsl.GET("/")
+-							dsl.Response(dsl.StatusAccepted, func() {
+-								dsl.Tag("outcome", "accepted")
+-							})
+-							dsl.Response(dsl.StatusOK)
+-						})
+-					})
+-				})
+-			},
+-		},
+-		"streaming-endpoint-has-request-body": {
+-			DSL: testdata.StreamingEndpointRequestBody,
+-			Error: `service "Service" HTTP endpoint "MethodA": HTTP endpoint request body must be empty when the endpoint uses streaming. Payload attributes must be mapped to headers and/or params.
+-service "Service" HTTP endpoint "MethodB": HTTP endpoint request body must be empty when the endpoint uses streaming. Payload attributes must be mapped to headers and/or params.
+-service "Service" HTTP endpoint "MethodC": HTTP endpoint request body must be empty when the endpoint uses streaming. Payload attributes must be mapped to headers and/or params.`,
+-		},
+-	}
+-	for name, c := range cases {
+-		t.Run(name, func(t *testing.T) {
+-			if c.Error == "" {
+-				expr.RunDSL(t, c.DSL)
+-			} else {
+-				var errs []error
+-				err := expr.RunInvalidDSL(t, c.DSL)
+-				if err != nil {
+-					var merr eval.MultiError
+-					if errors.As(err, &merr) {
+-						for _, e := range merr {
+-							errs = append(errs, e.GoError)
+-						}
+-					} else {
+-						errs = append(errs, err)
+-					}
+-				}
+-				if len(errs) > 1 || len(errs) == 0 {
+-					t.Errorf("got %d errors, expected 1", len(errs))
+-				} else if got := stripValidationLocations(errs[0].Error()); got != c.Error {
+-					t.Errorf("got `%s`, expected `%s`", got, c.Error)
+-				}
+-			}
+-		})
+-	}
+-}
+ 
+ func TestHTTPWebSocketViewedResultValidation(t *testing.T) {
+ 	tests := []struct {

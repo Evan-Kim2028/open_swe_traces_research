@@ -1,0 +1,61 @@
+diff --git a/http/codegen/openapi/marshal.go b/http/codegen/openapi/marshal.go
+--- a/http/codegen/openapi/marshal.go
++++ b/http/codegen/openapi/marshal.go
+@@ -1,21 +1,51 @@
+ package openapi
+ 
+ import (
+-	_ "bytes"
+-	_ "encoding/json"
+-	_ "maps"
++	"bytes"
++	"encoding/json"
++	"maps"
+ 
+-	_ "gopkg.in/yaml.v3"
++	"gopkg.in/yaml.v3"
+ )
+ 
+ // MarshalJSON produces the JSON resulting from encoding an object composed of
+ // the fields in v (which must me a struct) and the keys in extensions.
+ func MarshalJSON(v any, extensions map[string]any) ([]byte, error) {
+-	panic("excised: MarshalJSON")
++	marshaled, err := json.Marshal(v)
++	if err != nil {
++		return nil, err
++	}
++	if len(extensions) == 0 {
++		return marshaled, nil
++	}
++	decoder := json.NewDecoder(bytes.NewReader(marshaled))
++	decoder.UseNumber()
++	var unmarshaled map[string]any
++	if err := decoder.Decode(&unmarshaled); err != nil {
++		return nil, err
++	}
++	maps.Copy(unmarshaled, extensions)
++	merged, err := json.Marshal(unmarshaled)
++	if err != nil {
++		return nil, err
++	}
++	return merged, nil
+ }
+ 
+ // MarshalYAML produces the JSON resulting from encoding an object composed of
+ // the fields in v (which must me a struct) and the keys in extensions.
+ func MarshalYAML(v any, extensions map[string]any) (any, error) {
+-	panic("excised: MarshalYAML")
++	if len(extensions) == 0 {
++		return v, nil
++	}
++	marshaled, err := yaml.Marshal(v)
++	if err != nil {
++		return nil, err
++	}
++	var unmarshaled map[string]any
++	if err := yaml.Unmarshal(marshaled, &unmarshaled); err != nil {
++		return nil, err
++	}
++	maps.Copy(unmarshaled, extensions)
++	return unmarshaled, nil
+ }

@@ -1,0 +1,88 @@
+--- a/pkg/jsonutils/transform.go
++++ b/pkg/jsonutils/transform.go
+@@ -31,55 +31,74 @@
+ 
+ // NewTransformer is the constructor for a Transformer
+ func NewTransformer() *Transformer {
+-	panic("excised: NewTransformer")
++	return &Transformer{}
+ }
+ 
+ // AddStringTransform adds a function that will be called for each string value in the JSON tree
+ func (t *Transformer) AddStringTransform(fn func(path string, value string) (string, error)) {
+-	panic("excised: Transformer.AddStringTransform")
++	t.stringTransforms = append(t.stringTransforms, fn)
+ }
+ 
+ // AddObjectTransform adds a function that will be called for each object in the JSON tree
+ func (t *Transformer) AddObjectTransform(fn func(path string, value map[string]any) error) {
+-	panic("excised: Transformer.AddObjectTransform")
++	t.objectTransforms = append(t.objectTransforms, fn)
+ }
+ 
+ // AddSliceTransform adds a function that will be called for each slice in the JSON tree
+ func (t *Transformer) AddSliceTransform(fn func(path string, value []any) ([]any, error)) {
+-	panic("excised: Transformer.AddSliceTransform")
++	t.sliceTransforms = append(t.sliceTransforms, fn)
+ }
+ 
+ // Transform applies the transformations to the JSON tree
+ func (o *Transformer) Transform(v map[string]any) error {
+-	panic("excised: Transformer.Transform")
++	for _, fn := range o.objectTransforms {
++		if err := fn("", v); err != nil {
++			return err
++		}
++	}
++	for k, val := range v {
++		s, ok := val.(string)
++		if !ok {
++			continue
++		}
++		for _, fn := range o.stringTransforms {
++			var err error
++			s, err = fn(k, s)
++			if err != nil {
++				return err
++			}
++		}
++		v[k] = s
++	}
++	return nil
+ }
+ 
+ // visitAny is a helper function that visits any value in the JSON tree
+ func (o *Transformer) visitAny(v any, path string) (any, error) {
+-	panic("excised: Transformer.visitAny")
++	return v, nil
+ }
+ 
+ func (o *Transformer) visitMap(m map[string]any, path string) error {
+-	panic("excised: Transformer.visitMap")
++	return nil
+ }
+ 
+ // visitSlice is a helper function that visits a slice in the JSON tree
+ func (o *Transformer) visitSlice(s []any, path string) (any, error) {
+-	panic("excised: Transformer.visitSlice")
++	return s, nil
+ }
+ 
+ // SortSlice sorts a slice of any values, ordered by their JSON representations.
+ // This is not very efficient, but is convenient for small slice where we don't know their types.
+ func SortSlice(s []any) ([]any, error) {
+-	panic("excised: SortSlice")
++	return s, nil
+ }
+ 
+ // visitPrimitive is a helper function that visits a primitive value in the JSON tree
+ func (o *Transformer) visitPrimitive(v any, _ string) (any, error) {
+-	panic("excised: Transformer.visitPrimitive")
++	return v, nil
+ }
+ 
+ // visitString is a helper function that visits a string value in the JSON tree
+ func (o *Transformer) visitString(v string, path string) (string, error) {
+-	panic("excised: Transformer.visitString")
++	return v, nil
+ }
