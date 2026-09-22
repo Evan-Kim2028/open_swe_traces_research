@@ -40,6 +40,12 @@ SCREENERS = ("composer", "devin")
 # without limit. This is the backstop for that.
 L0_SCREEN_CAP = len(SCREENERS) * RUNG_TRIAL_CAP
 
+# Every solver that may hold a ladder, which is no longer the same list as SCREENERS: grok
+# never screens first but does climb, and the per-rung cap is now per solver, so a
+# certifying rung needs a ceiling bounded by solver count or it grows with the roster.
+SOLVERS = ("composer", "devin", "grok")
+RUNG_CERT_CEILING = len(SOLVERS) * RUNG_TRIAL_CAP
+
 # Contract repair resets L2 staleness, so a unit could be repaired and retried forever.
 # Two repairs is the budget: if a contract still cannot carry the unit after two rewrites,
 # the defect is the unit, not the prose.
@@ -307,13 +313,38 @@ def decide(unit, per, solver=None):
     # needs one verdict; repair resetting staleness is exactly how single units reached
     # 7, 11 and 19 trials on one rung.
     # The cap binds per solver once ladders are per solver, or two curves would cost one
-    # curve's budget and neither would finish. On the merged view it stays global.
-    counted = mine if (mine is not None and rung not in CERTIFYING_RUNGS) else d
+    # curve's budget and neither would finish.
+    #
+    # It used to stay MERGED at the certifying rungs, `rung not in CERTIFYING_RUNGS`, and
+    # that was the last pooled gate in the guard. It made a second model's certificate
+    # unbuyable: exprhash, httpencoding and httpmux had each spent the L2 cap on Composer
+    # trials, so asking "may GROK run L2 here" was refused with "rung L2 already has 13
+    # trial(s) (cap 3) — no further verdict to buy" — for a verdict grok had never
+    # produced. The cap exists to stop buying the SAME answer twice; a different solver's
+    # answer at the same rung is not the same answer, it is the comparison the dataset is
+    # for. Per solver at every rung now.
+    #
+    # A global ceiling still applies at the certifying rungs, because per-solver caps alone
+    # scale with however many solvers exist and errored trials record no verdict (the same
+    # hole L0_SCREEN_CAP was built to plug). Bounded by solver count, not unbounded.
+    counted = mine if mine is not None else d
     n_this_rung = len(counted.get(rung, []))
     if n_this_rung >= RUNG_TRIAL_CAP:
         who = f" for {solver}" if counted is mine else ""
         return False, (f"rung L{rung} already has {n_this_rung} trial(s){who} "
                        f"(cap {RUNG_TRIAL_CAP}) — no further verdict to buy")
+    if rung in CERTIFYING_RUNGS:
+        n_all = len(d.get(rung, []))
+        if n_all >= RUNG_CERT_CEILING:
+            # Rostering overrides the ceiling for a solver that has no verdict at the rung,
+            # for one trial. exprhash had burned 13 L2 trials before the ceiling existed, so
+            # a retrospective ceiling would otherwise permanently bar the first grok verdict
+            # on a unit chosen specifically to be tested by a third model.
+            if backfill_wanted(base, rung) and mine is not None and not (mine or {}).get(rung):
+                return True, (f"ceiling backfill: {solver} has no L{rung} verdict for {base} "
+                              f"(others have {n_all}, over the {RUNG_CERT_CEILING} ceiling)")
+            return False, (f"rung L{rung} has {n_all} trial(s) across all solvers "
+                           f"(ceiling {RUNG_CERT_CEILING}) — stop spending on this rung")
 
     if reopened:
         return True, reopened
@@ -342,6 +373,19 @@ def decide(unit, per, solver=None):
         if not l0:
             return False, "L2 before L0 — run L0 first, it is the cheaper verdict"
         if len(l2) >= NONFLIP_CAP and max(l2) == 0:
+            # Merged on purpose: "the contract cannot carry this unit" is a claim about the
+            # prose, not about a solver, so one model's three failures are evidence for the
+            # next model too and retrying on a broken contract buys nothing.
+            #
+            # But it is only EVIDENCE, and the roster is how we say we want the cell
+            # measured anyway — the same override the L0 rule takes. A solver with no L2
+            # verdict of its own is not retrying, it is answering for the first time, and
+            # whether a stronger model clears a contract three failures called broken is a
+            # fact about the contract worth one trial. Bounded: only for a rostered unit,
+            # and only for a solver with nothing at the rung.
+            if backfill_wanted(base, rung) and mine is not None and not (mine or {}).get(rung):
+                return True, (f"non-flip backfill: {solver} has no L2 verdict for {base} "
+                              f"(other solvers have {len(l2)}, all failing)")
             return False, f"non-flipping: {len(l2)} L2 failures — repair the contract, do not retry"
     if rung not in CERTIFYING_RUNGS:
         # Two different things wear the same suffix. A ladder rung on a CERTIFIED unit is

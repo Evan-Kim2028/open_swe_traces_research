@@ -1,0 +1,15 @@
+# Deliberate ladder holes to fill. escalate only climbs and stops at the top rung, so a
+# unit that jumped L2->L5 under the old probe-first policy never gets asked about L3/L4.
+# Inferring those cells assumes the ladder is monotone; measuring them tests that.
+exprhash 3
+exprhash 4
+httpmux 3
+httpmux 4
+# grok-4.7 probe: the three units composer failed at every rung through L6.
+# Does a stronger model solve what composer could not, even from the bug report?
+exprhash 0
+httpencoding 0
+httpmux 0
+exprhash 2
+httpencoding 2
+httpmux 2

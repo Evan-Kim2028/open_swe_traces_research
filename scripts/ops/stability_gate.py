@@ -87,19 +87,34 @@ def measure(hours=HOURS):
     except Exception:
         cap = 3
     # The key must mirror trial_guard's cap exactly, or this measures something the guard
-    # never promised. That cap is per (base, rung) at the CERTIFYING rungs L0 and L2, and
-    # per (base, rung, solver) above them, because an escalation ladder belongs to one
-    # solver and two independent difficulty curves must not share one curve's budget.
-    # Keyed by (base, rung) alone, every legitimate second curve would score as an
-    # over-cap breach and the gate would eventually fail on the cap working as designed.
+    # never promised. Keyed by (base, rung) alone, every legitimate second curve scores as
+    # an over-cap breach and the gate eventually fails on the cap working as designed --
+    # that read 28% until it was keyed per solver, then 8%.
+    #
+    # The guard's cap is now per (base, rung, solver) at EVERY rung, including the
+    # certifying ones. It was merged at L0 and L2 until a second model's certificate turned
+    # out to be unbuyable there: grok was refused L2 on exprhash because Composer had spent
+    # the rung's three trials, for a verdict grok had never produced. A different solver's
+    # answer at the same rung is not a repeat of the same answer.
+    #
+    # A separate GLOBAL ceiling now bounds the certifying rungs (RUNG_CERT_CEILING, solver
+    # count x cap). It is a different question from "did the cap refuse this trial", so it
+    # is counted separately rather than folded into the key.
     try:
         import trial_guard as _tg
+        ceiling = getattr(_tg, "RUNG_CERT_CEILING", 9)
         certifying = _tg.CERTIFYING_RUNGS
     except Exception:
-        certifying = {"0", "2"}
+        ceiling, certifying = 9, {"0", "2"}
+    over_ceiling = 0
+    merged = collections.Counter()
     for r in rows:
-        key = ((r["base"], r["rung"]) if r["rung"] in certifying
-               else (r["base"], r["rung"], trial_ledger.solver_of(r["model"])))
+        key = (r["base"], r["rung"], trial_ledger.solver_of(r["model"]))
+        if r["rung"] in certifying:
+            mkey = (r["base"], r["rung"])
+            if merged[mkey] >= ceiling and r["t"] >= cut:
+                over_ceiling += 1
+            merged[mkey] += 1
         if r["t"] < cut:
             prior[key] += 1
             continue
@@ -125,6 +140,7 @@ def measure(hours=HOURS):
 
     rate = repeat / total if total else 0.0
     return {"hours": hours, "trials": total, "repeat": repeat, "repeat_rate": rate,
+            "over_ceiling": over_ceiling, "ceiling": ceiling,
             "devin": devin, "novel": dict(novel),
             "ok_repeat": total >= 10 and rate < REPEAT_MAX,
             "ok_devin": devin >= DEVIN_MIN,
@@ -154,6 +170,13 @@ def main():
         return 0 if passed else 1
     print(f"  STABILITY GATE over {m['hours']:.0f}h — "
           f"{'PASS: scale is now a budget question' if passed else 'not yet'}")
+    # The global ceiling is a SEPARATE question from the per-solver cap, and computing it
+    # without printing it would make it exactly the kind of invisible metric this file
+    # already learned about twice. Informational, not gating: it is bounded by solver count
+    # and a rostered backfill may legitimately cross it.
+    if m.get("over_ceiling"):
+        print(f"    ....  {m['over_ceiling']} trial(s) past the {m['ceiling']}-trial "
+              f"all-solver ceiling at a certifying rung (rostered backfills may cross it)")
     print(f"    {mark(m['ok_repeat'])}  over-cap trials {m['repeat']}/{m['trials']} "
           f"= {m['repeat_rate']*100:.0f}%  (need <{REPEAT_MAX*100:.0f}%; a rung may have up "
           f"to {cap_for_display()} verdicts, beyond that is waste)")
