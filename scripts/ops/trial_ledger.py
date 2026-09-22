@@ -54,7 +54,19 @@ def trials(jobs_dir=JOBS):
                     reward = float(vr["reward"])
                 err = d.get("exception_info")
                 ar = d.get("agent_result") or {}
+                # Harbor fills the TOP-LEVEL token fields for some agents and leaves them
+                # None for others, putting the real numbers only in the per-model
+                # breakdown. Devin is the second kind: every one of its trials reported
+                # n_input_tokens=None while model_usage["devin/swe-2-max"] held 1.16M.
+                # Reading only the top level scored all 161 devin trials at zero, so the
+                # project's entire token and cost accounting has been composer-only
+                # without ever saying so.
                 tok = (ar.get("n_input_tokens") or 0) + (ar.get("n_output_tokens") or 0)
+                if not tok:
+                    for mu in (ar.get("model_usage") or {}).values():
+                        if isinstance(mu, dict):
+                            tok += (mu.get("n_input_tokens") or 0) + \
+                                   (mu.get("n_output_tokens") or 0)
                 cost = ar.get("cost_usd") or 0.0
                 ai = d.get("agent_info") or {}
                 agent = ai.get("name")

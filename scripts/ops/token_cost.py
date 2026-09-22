@@ -162,6 +162,29 @@ def remaining_tokens() -> float:
 
 
 
+def rung_moments(rung: str, model_prefix="composer"):
+    """(mean, sd, n) over every trial at this RUNG, or None when too few.
+
+    The cohort-level equivalent of cohort_moments, for cohorts too new to have a history
+    of their own. A rung with 74 observations is a far better estimator than a flat
+    multiple of a tail quantile."""
+    import math
+    vals = []
+    for t in trial_ledger.trials():
+        if not (t.get("model") or "").startswith(model_prefix):
+            continue
+        tok = t.get("tokens") or 0
+        if tok <= 0 or t.get("errored") or t["rung"] != str(rung):
+            continue
+        vals.append(tok)
+    if len(vals) < MIN_SAMPLES:
+        return None
+    n = len(vals)
+    mean = sum(vals) / n
+    var = sum((x - mean) ** 2 for x in vals) / (n - 1) if n > 1 else 0.0
+    return mean, math.sqrt(var), n
+
+
 def cohort_moments(cohort: str, model_prefix="composer"):
     """(mean, sd, n) over a cohort's own recent trials, or None.
 
@@ -228,11 +251,26 @@ def can_afford(cohort: str, n_units: int, want_conc: int) -> tuple[int, str]:
         how = (f"{n_units} units x {mean/1e6:.1f}M mean +95% tail on the sum, "
                f"from {n_obs} observed")
     else:
-        # No cohort history: fall back to the per-trial rung price with the flat margin,
-        # which is the right conservatism when there is nothing to estimate a spread from.
-        per = cost_per_trial(rung, cohort=cohort) * SAFETY
-        total = n_units * per
-        how = f"{n_units} units x {per/1e6:.1f}M at L{rung}, incl. {SAFETY}x margin"
+        # No cohort history — but the RUNG usually has plenty, and the same argument
+        # applies: sizing a cohort total as n x (per-trial high quantile) x SAFETY asserts
+        # every trial simultaneously lands in its own tail. sweep_escalate_composer_L5 had
+        # run fewer than COHORT_MIN trials of its own, so it took this path and priced 4
+        # units at 51.6M against an L5 distribution whose mean is 3.55M over 74 trials —
+        # refusing work the budget comfortably covered.
+        #
+        # Use the rung's own mean and spread to bound the SUM, exactly as the cohort path
+        # does. Only when the rung is ALSO unmeasured does the flat per-trial margin
+        # apply, which is the case where there genuinely is no spread to estimate.
+        mom = rung_moments(rung)
+        if mom:
+            mean, sd, n_obs = mom
+            total = n_units * mean + 1.645 * sd * math.sqrt(n_units)
+            how = (f"{n_units} units x {mean/1e6:.1f}M mean +95% tail on the sum, "
+                   f"from {n_obs} L{rung} trial(s)")
+        else:
+            per = cost_per_trial(rung, cohort=cohort) * SAFETY
+            total = n_units * per
+            how = f"{n_units} units x {per/1e6:.1f}M at L{rung}, incl. {SAFETY}x margin"
 
     if total > left:
         # Partial launches are not safe: the sweep would run the whole cohort anyway.
