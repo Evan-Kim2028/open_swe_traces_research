@@ -13,3 +13,8 @@ httpmux 0
 exprhash 2
 httpencoding 2
 httpmux 2
+httpencoding 3
+httpencoding 4
+exprhash 5
+httpencoding 5
+httpmux 5

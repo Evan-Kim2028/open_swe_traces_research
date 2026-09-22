@@ -48,7 +48,18 @@ LADDER = ("0", "2", "3", "4", "5", "6")
 PHASE1 = ("0", "2")
 PHASE2 = ("3", "4", "5", "6")
 COHORT_PREFIX = "sweep_matrix"
-DEFAULT_SOLVERS = ("devin", "grok")
+DEFAULT_SOLVERS = ("devin",)
+
+# Grok is PINNED to the units it was pointed at: the three composer exhausted at L6
+# (exprhash, httpencoding, httpmux), driven by grok_ladder.py. It is not a general-purpose
+# second opinion here and must not be expanded to new tasks.
+#
+# This is a hard constraint in the tool rather than a note, because the roster this script
+# writes is SOLVER-AGNOSTIC: rostering `archive 0` to let devin screen it also opens that
+# cell to anything else that asks. Selecting grok for one new unit therefore leaks 55
+# roster lines across 38 units in a single pass, which is exactly what happened and had to
+# be unwound by hand while a grok trial was already running on `archive`.
+GROK_PINNED = frozenset({"exprhash", "httpencoding", "httpmux"})
 AGENT = {"devin": ("devin", "devin/swe-2-max"),
          "grok": ("grok-build", os.environ.get("GROK_MODEL", "grok-4.7")),
          "composer": ("cursor-cli", "composer-2.5")}
@@ -103,6 +114,13 @@ def open_cells(base: str, solver: str, per, bys) -> list[str]:
         if ok:
             out.append(r)
     return out
+
+
+def allowed(base: str, solver: str) -> bool:
+    """Is this solver permitted on this unit at all, before any guard question."""
+    if solver == "grok":
+        return base in GROK_PINNED
+    return True
 
 
 def open_cells_rostered(base: str, solver: str, per, bys) -> list[str]:
@@ -199,6 +217,8 @@ def plan(solvers):
     rows = []
     for base in units:
         for s in solvers:
+            if not allowed(base, s):
+                continue
             cells = open_cells_rostered(base, s, per, bys)
             if cells:
                 rows.append((base, s, cells))
@@ -255,6 +275,8 @@ def cmd_run(solvers, max_curves: int) -> int:
             if base in _live_bases():
                 continue
             for s in solvers:
+                if not allowed(base, s):
+                    continue
                 cells = open_cells_rostered(base, s, per, bys)
                 if cells:
                     picked = (base, s, cells)
