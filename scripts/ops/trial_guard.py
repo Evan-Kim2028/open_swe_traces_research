@@ -328,10 +328,18 @@ def decide(unit, per, solver=None):
         return True, (f"contract changed since last verdict (repair {reps + 1} of "
                       f"{REPAIR_BUDGET}) — prior trials no longer bind")
     if rung == "0" and l0:
-        # Reached when the unit is not enrolled for a second screen, or when every
-        # screener already has a verdict — the branch above returns first otherwise.
+        # "Decided" is per solver now, same as condemnation. A solver with no L0 record of
+        # its own has not decided anything about this unit, and the backfill roster is how
+        # that is made explicit — rostering `<base> 0` opens L0 to a solver that has never
+        # screened it. Kept behind the roster rather than opened automatically because
+        # orchestrate counts runnable units per solver, and opening every screened unit to
+        # every solver at once would make almost every retired cohort look live again.
+        if backfill_wanted(base, rung) and mine is not None and not (mine or {}).get("0"):
+            return True, (f"screen backfill: {solver} has no L0 verdict for {base} "
+                          f"(other solvers have {len(l0)})")
         return False, (f"L0 already decided ({len(l0)} trial(s), max={max(l0)}) "
-                       f"— enrol in {SECOND_SCREEN_ROSTER} to buy a second screen")
+                       f"— enrol in {SECOND_SCREEN_ROSTER} or roster `{base} 0` in "
+                       f"{LADDER_BACKFILL_ROSTER}")
     if rung == "2":
         if not l0:
             return False, "L2 before L0 — run L0 first, it is the cheaper verdict"
