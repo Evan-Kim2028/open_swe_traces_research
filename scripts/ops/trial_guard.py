@@ -412,6 +412,23 @@ def decide(unit, per, solver=None):
             if want is None:
                 return False, f"escalation {why}"
             if want != int(rung):
+                # "One rung at a time" is right for finding a FLIP cheaply: climb until it
+                # passes and stop, and every rung above the flip is inferable. It is wrong
+                # when the deliverable is the whole curve for a MODEL COMPARISON, because
+                # then every cell is wanted regardless of outcome -- nothing above the flip
+                # is waste, it is the shape of the dose-response -- and running the rungs
+                # sequentially costs one trial's latency per rung. Six rungs at ~44 minutes
+                # is most of a day per solver per unit, which is the real reason so few
+                # units have a second curve.
+                #
+                # The roster is where that intent is written down, so a rostered cell may be
+                # measured out of order. Bounded exactly as the other backfills are: the
+                # cell must be rostered AND this solver must hold nothing at that rung, and
+                # the per-rung cap below still applies. Un-rostered units keep the cheap
+                # sequential climb.
+                if backfill_wanted(base, rung) and mine is not None and not lad.get(rung):
+                    return True, (f"parallel backfill: L{rung} rostered for {base} while "
+                                  f"the climb is at L{want} — every cell wanted ({why})")
                 return False, (f"escalation wants L{want}, not L{rung} — "
                                f"one rung at a time ({why})")
             return True, f"escalation: {why}"
