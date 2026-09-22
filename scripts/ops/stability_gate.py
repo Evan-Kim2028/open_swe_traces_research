@@ -86,8 +86,20 @@ def measure(hours=HOURS):
         cap = trial_guard.RUNG_TRIAL_CAP
     except Exception:
         cap = 3
+    # The key must mirror trial_guard's cap exactly, or this measures something the guard
+    # never promised. That cap is per (base, rung) at the CERTIFYING rungs L0 and L2, and
+    # per (base, rung, solver) above them, because an escalation ladder belongs to one
+    # solver and two independent difficulty curves must not share one curve's budget.
+    # Keyed by (base, rung) alone, every legitimate second curve would score as an
+    # over-cap breach and the gate would eventually fail on the cap working as designed.
+    try:
+        import trial_guard as _tg
+        certifying = _tg.CERTIFYING_RUNGS
+    except Exception:
+        certifying = {"0", "2"}
     for r in rows:
-        key = (r["base"], r["rung"])
+        key = ((r["base"], r["rung"]) if r["rung"] in certifying
+               else (r["base"], r["rung"], trial_ledger.solver_of(r["model"])))
         if r["t"] < cut:
             prior[key] += 1
             continue

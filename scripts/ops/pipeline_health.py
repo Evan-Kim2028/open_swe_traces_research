@@ -339,15 +339,22 @@ try:
             _w = os.path.getmtime(os.path.join(_d, "result.json"))
         except OSError:
             continue
-        _rows.append((_w, _b, _r))
-    for _w, _b, _r in sorted(_rows):
+        # Keyed by (base, SOLVER). This metric exists to catch trial_guard leaking — the
+        # same solver paying twice for one verdict. Keyed by base alone it also counts the
+        # two things we now deliberately buy: a second screen at L0 by the solver that
+        # never saw the unit, and a second difficulty curve at L3+ by the other solver.
+        # Both are new information, not repetition, and left uncorrected they would climb
+        # past the 40% threshold and report the guard as broken while it worked.
+        _sv = _tl.solver_of(_t.get("model"))
+        _rows.append((_w, (_b, _sv), _r))
+    for _w, _k, _r in sorted(_rows):
         if _w < _cut:
-            _seen[_b].add(_r)
+            _seen[_k].add(_r)
             continue
         _tot += 1
-        if _r in _seen[_b]:
+        if _r in _seen[_k]:
             _rep += 1
-        _seen[_b].add(_r)
+        _seen[_k].add(_r)
     if _tot:
         _pct = _rep / _tot * 100
         _msg = f"{_rep}/{_tot} trial(s) in the last 6h re-measured a decided rung ({_pct:.0f}%)"
