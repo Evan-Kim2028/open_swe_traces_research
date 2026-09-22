@@ -75,11 +75,23 @@ def coverage(d) -> int:
     return sum(1 for r in LADDER if d.get(r))
 
 
-def roster_units(bys, min_depth: int = 5) -> list[str]:
-    """Units where SOME solver already has a deep curve to compare against.
+def roster_units(bys, min_depth: int = 2) -> list[str]:
+    """Units where SOME solver already has a curve to compare against.
 
     Derived rather than listed: a unit whose baseline is still being built is not yet a
     comparison candidate, and one that gains a second curve drops out on its own.
+
+    min_depth was 5 of 6 cells, which quietly targeted a different population from the one
+    the headline metric counts. 79% of certified units flip at the full description, so their
+    COMPLETE curve is two cells -- L0 fails, L2 passes, and there is nothing above the flip to
+    measure. Requiring five cells therefore selected only the unusually hard units and
+    excluded most of the dataset by construction: 38 candidates where the metric saw 126
+    reachable, and 15 with work where I had told the user 62.
+
+    Two is the right floor because two cells is what a comparison needs: each solver must have
+    failed L0 itself and then either passed a rung or run out of ladder. Whether the second
+    solver agrees at L2 or needs L5 is the measurement, and a unit that flips at L2 for both
+    is a real data point, not a shallow one.
     """
     out = []
     for base, per in bys.items():
