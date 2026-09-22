@@ -51,6 +51,7 @@ SWEEPS = REPO / "experiments" / "dose_response"
 # slash in a job name and land the jobs dir somewhere unintended.
 COHORT_PREFIX = "sweep_grokladder"
 RUNGS = (2, 3, 4, 5, 6)
+ROUNDS_PER_RUNG = 1   # one verdict per cell; see launch()
 SOLVER = "grok"
 MODEL = os.environ.get("GROK_MODEL", "grok-4.7")
 
@@ -148,8 +149,18 @@ def launch(cohort: pathlib.Path, rung: int, n: int, log: pathlib.Path) -> int:
                GROK_EFFORT=os.environ.get("GROK_EFFORT", "high"),
                GUARD_SOLVER=SOLVER)
     assert cohort.parent == SWEEPS, f"cohort must sit directly under {SWEEPS}"
+    # sweep_seq.sh takes <cohort> [max-rounds] [concurrency]. There is NO rung argument --
+    # the rung is implicit in the staged directory names -- and passing one put the rung in
+    # the rounds slot: L3 ran 3 rounds, and L4/L5/L6 would have run 4, 5 and 6, turning 9
+    # remaining trials into about 27. A round re-trials whatever has not flipped, so the
+    # mistake was invisible in the output; it just looked like the sweep working.
+    #
+    # ROUNDS=1: one verdict per cell. That matches the shape of composer's own curves on
+    # these units (L3 one trial, L5 two, L6 one), which is what grok's curve has to be
+    # comparable to. Repeats at a specific cell are cheap to add later and the per-solver
+    # cap of 3 bounds them; buying them up front on every rung is not.
     cmd = ["bash", str(REPO / "scripts" / "ops" / "sweep_seq.sh"),
-           cohort.name, str(rung), str(n)]
+           cohort.name, str(ROUNDS_PER_RUNG), str(n)]
     log.parent.mkdir(parents=True, exist_ok=True)
     with open(log, "ab") as fh:
         fh.write(f"\n=== {time.strftime('%H:%M:%S')} rung L{rung}, {n} unit(s)\n".encode())
