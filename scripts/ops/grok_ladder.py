@@ -174,6 +174,44 @@ def build_cohort(units: list[tuple[str, pathlib.Path]], rung: int) -> pathlib.Pa
     return dest
 
 
+def headroom(solver: str) -> int:
+    """Free slots for this solver right now. UNBOUNDED for grok, capped for devin.
+
+    This file was written for grok, which has no concurrency cap, so it launched a rung with
+    --n-concurrent equal to however many units needed it. Run as devin that put SEVEN trials
+    on a cap of FOUR, on top of four already in flight: 11 against 4. devin's cap is not
+    advisory -- at six concurrent it hit an 80% error rate and auto-dropped, and a throttle
+    errors every trial already running, so the cost is 30 minutes times every occupied slot
+    and not just the ones over the line. Caught at 0% errors, and the seven were killed two
+    minutes in to protect the four legitimate trials.
+
+    ladder_matrix already learned this. Putting the check only there was the mistake: the two
+    drivers launch through the same sweep_seq, which enforces nothing.
+    """
+    if solver == "grok":
+        return 99
+    try:
+        import slots
+        o = slots.occupancy(solver)
+        return max(0, o["cap"] - o["total"])
+    except Exception:
+        return 1          # unknown occupancy costs one slot, not a whole rung
+
+
+def wait_for_headroom(solver: str, want: int) -> int:
+    waits = 0
+    while True:
+        free = headroom(solver)
+        if free >= 1:
+            return min(free, want)
+        waits += 1
+        if waits % 10 == 1:
+            print(f"  {solver} at cap, waiting for a slot ({waits * 2} min)", flush=True)
+        if waits > 360:
+            return 0
+        time.sleep(120)
+
+
 def launch(cohort: pathlib.Path, rung: int, n: int, log: pathlib.Path) -> int:
     ag, md = AGENT_FOR[SOLVER]
     env = dict(os.environ, AGENT=ag, MODEL=md, GUARD_SOLVER=SOLVER)
@@ -319,7 +357,14 @@ def cmd_run(max_passes: int) -> int:
             print(f"  nothing buildable at L{rung}; marking rung unreachable", flush=True)
             continue
         cohort = build_cohort(staged, rung)
-        rc = launch(cohort, rung, len(staged), log)
+        room = wait_for_headroom(SOLVER, len(staged))
+        if room < 1:
+            print(f"  {SOLVER} never freed a slot; stopping", flush=True)
+            return cmd_report()
+        if room < len(staged):
+            print(f"  {SOLVER} has {room} free slot(s) for {len(staged)} unit(s) — "
+                  f"launching narrower; the rest come on the next pass", flush=True)
+        rc = launch(cohort, rung, room, log)
         print(f"  sweep rc={rc}; log {log.relative_to(REPO)}", flush=True)
         after = curves()
         for base, _ in staged:
