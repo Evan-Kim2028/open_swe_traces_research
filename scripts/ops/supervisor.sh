@@ -285,6 +285,13 @@ while true; do
   # own default and is the window in which a thinking Devin container looks dead:
   # it reports 0% CPU and writes no log line while the model runs on Devin's servers.
   bash scripts/ops/reap_wedged.sh 45 120 >> "$LOG" 2>&1 || true
+  # The other half of the same job. reap_wedged catches a container doing NOTHING; this
+  # catches one doing nothing but burning every cycle to do it — an agent-issued command
+  # like `grep -r pattern /` that walks the whole filesystem and never returns. Two
+  # trials sat on one such call for over an hour each and reap_wedged kept both, exactly
+  # as designed, because pegged CPU is its definition of healthy. Kills the command, not
+  # the trial: the agent sees a failed tool call and continues.
+  uv run python scripts/ops/reap_runaway.py --apply >> "$LOG" 2>&1 || true
   free=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
   if [ "${free:-999}" -lt 100 ]; then
     say "disk ${free}G < 100G, reclaiming"
