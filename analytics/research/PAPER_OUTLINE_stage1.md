@@ -84,7 +84,8 @@ rung at a time (L2 -> L3 -> L4 -> L5 -> L6) flips almost all of them:
 | cohort | verdicts | flipped |
 |---|---|---|
 | hand-escalated (before the policy existed) | 13 | 11 (85%) |
-| `sweep_escalate`, first automated cohort | 16 | **15 (94%)** |
+| `sweep_escalate`, first automated cohort | 16 | 15 (94%) |
+| `sweep_escalate`, cumulative | 50 | **37 (74%)** |
 
 **Non-flipping is now 0.** Every unit in that bucket either certifies at a higher rung or
 still has a rung left to try. Certificate count went 139 -> 164 without authoring a single
@@ -94,9 +95,13 @@ Certificates by binding rung — the lowest rung at which the unit passes:
 
 | rung | certificates | what the solver was given |
 |---|---|---|
-| L2 | 140 | the complete prose contract |
-| L3 | 1 | contract + hidden test names |
-| L5 | 23 | contract + the representative test restored into the tree |
+| L2 | 158 | the complete prose contract |
+| L3 | 3 | contract + hidden test names |
+| L5 | 40 | contract + the representative test restored into the tree |
+
+Of the 43 above L2, **14 have EARNED their rung** — the rung below was trialled and failed
+— and 29 are still pending that check. `certificates()` records this as
+`rung_established`, so "flips by L5" is never silently reported as "needs L5".
 
 This converts the dataset from a binary (hard / too easy / broken) into a graded one. A unit
 that flips only at L5 is *harder* than one that flips at L2 — it is not a failed task, and
@@ -107,6 +112,37 @@ hand-escalated units had all flipped there, and bisected downward: same binding 
 ~2.6 trials per unit instead of 4. It was cheaper and it was the wrong experiment. Jumping
 the ladder shows only that *a* rung works, never that it is the rung the unit *needs*. The
 ladder is the measurement, so every step gets walked.
+
+### 4b. A certificate is single-solver by construction
+
+The flip is evidence about the AFFORDANCE only when the same solver does both halves.
+When one model fails L0 and a different one passes L2, the flip may record nothing but
+the second model being stronger.
+
+This was not enforced at first. L0 screening and L2 certification were routed to whichever
+solver had a free slot, and cross-solver certificates reached 31 of 201 — 15% — before the
+rule went in:
+
+| unit | L0 failed by | binding rung passed by |
+|---|---|---|
+| `attachsvc` | composer | devin |
+| `channelver` | devin | composer |
+| `flhashmap` | grok | composer |
+
+The rule now holds at every rung: **L0 and L1 anyone may screen; L2 and above, only a
+solver that has failed the unit lower down.** It is enforced in three places because no
+one of them is sufficient — `orchestrate` steers each sweep to a cohort its solver owns,
+`sweep_seq` gates the units inside it, and `trial_guard` refuses to treat a cross
+certificate as a finished unit so the correct solver can still claim it.
+
+That last part matters for reproducibility: the 31 affected units were not discarded. They
+are reopened, and a later pass by the solver that failed them converts the row from `cross`
+to `single` without re-authoring anything.
+
+**Cost, stated plainly.** Composer can no longer absorb Devin's L2 overflow when Devin is
+full, which is a throughput loss on a machine where Composer is the bottleneck. Taken
+deliberately: a certificate that does not isolate the affordance is not worth the slot it
+saves.
 
 **Caveat, measured rather than assumed.** A certificate is `max(reward) > 0` at the binding
 rung. 11 of 164 rest on one pass in three or more trials; `helm-depresolver` binds on 1 of
