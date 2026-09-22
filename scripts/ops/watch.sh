@@ -67,11 +67,19 @@ for d in glob.glob('experiments/dose_response/sweep_*/*/'):
     if base in KNOWN or not suf[:1].isdigit(): continue
     if not glob.glob(d+'tests/hidden/**/*',recursive=True): continue
     if cohorts.barren(d.split(os.sep)[2]): continue
-    try: ok,_=TG.decide(b,per)
-    except Exception: ok=True
-    if ok and not os.path.isdir(os.path.join(d,'environment','src')): n+=1
+    if os.path.isdir(os.path.join(d,'environment','src')): continue
+    # PER SOLVER. Asked with the merged guard this printed 2 while 123 units were runnable
+    # for devin or grok and blocked on a missing tree -- a 60x undercount, because the cap
+    # went per solver and the merged view answers a question nobody asks any more. The
+    # number matters: orchestrate SKIPS a no-src unit rather than failing it, so this
+    # backlog is silent by construction, and it is free-solver work idling while devin is
+    # the bottleneck and composer is the paid one.
+    for sv in ('composer','devin','grok'):
+        try: ok,_=TG.decide(b,per,solver=sv)
+        except Exception: ok=False
+        if ok: n+=1; break
 print(n)" 2>/dev/null | tr -dc '0-9')
-[ -n "$ns" ] && [ "$ns" -gt 0 ] && echo "MISSING-SRC: $ns runnable unit(s) have no environment/src"
+[ -n "$ns" ] && [ "$ns" -gt 0 ] && echo "MISSING-SRC: $ns unit(s) runnable for some solver have no environment/src — scripts/ops/restore_env_src.py"
 
 ss=$(timeout 300 uv run python scripts/ops/second_screen.py --report 2>/dev/null | sed -n '1,3p;/by repo/,+4p' | tr '\n' ' ')
 if [ -n "$ss" ] && [ "$ss" != "$(cat $S/.ss_seen 2>/dev/null)" ]; then
