@@ -178,7 +178,7 @@ def main():
         print(f"    ....  {m['over_ceiling']} trial(s) past the {m['ceiling']}-trial "
               f"all-solver ceiling at a certifying rung (rostered backfills may cross it)")
     print(f"    {mark(m['ok_repeat'])}  over-cap trials {m['repeat']}/{m['trials']} "
-          f"= {m['repeat_rate']*100:.0f}%  (need <{REPEAT_MAX*100:.0f}%; a rung may have up "
+          f"= {m['repeat_rate']*100:.0f}%  (need <{REPEAT_MAX*100:.0f}%; a rung may have "
           f"to {cap_for_display()} verdicts, beyond that is waste)")
     print(f"    {mark(m['ok_devin'])}  devin trials SAMPLED {m['devin']} of {DEVIN_MIN} "
           f"(sample size for the gate — not concurrency; the cap is 4 and is enforced "

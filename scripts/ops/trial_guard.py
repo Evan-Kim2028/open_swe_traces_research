@@ -27,7 +27,19 @@ CERTIFYING_RUNGS = {"0", "2"}
 # A rung answers one question, so it needs one verdict. Repeat trials buy nothing and were
 # 15-39% of all spend. The cap is per rung and absolute - it holds even when a contract
 # repair makes prior verdicts stale, which is what let single units run 7, 11, 19 times.
-RUNG_TRIAL_CAP = 3
+# ONE verdict per (unit, rung, solver). A cell with a verdict is closed.
+#
+# This was 3, and 41% of all trials -- 711 of 1740, 682 of them composer -- were second and
+# third trials on a cell that already had an answer. That is not confidence, it is the largest
+# single category of spend in the project, and it actively damaged the work: extra L2 trials
+# re-measured decided rungs and flipped idxdecode and ldapdn out of a climb roster mid-climb,
+# because each had failed L2 once and passed on a second draw.
+#
+# The cost of cap 1 is that "thin evidence" (one pass in three trials) stops accumulating, so
+# a single flaky pass now stands as the verdict. That is a real loss and the right trade only
+# because the alternative was measured: 41% of the bill, for verdicts that mostly agreed.
+# Deliberate repeats are still reachable through the repair path below, which is bounded.
+RUNG_TRIAL_CAP = 1
 
 # The solvers we actually screen with. A unit is only "screened" once each of these has
 # had its turn at L0, because condemnation is model-agnostic: it takes just one of them
@@ -329,10 +341,21 @@ def decide(unit, per, solver=None):
     # hole L0_SCREEN_CAP was built to plug). Bounded by solver count, not unbounded.
     counted = mine if mine is not None else d
     n_this_rung = len(counted.get(rung, []))
-    if n_this_rung >= RUNG_TRIAL_CAP:
+    # The cap is checked BEFORE staleness on purpose: repair resetting staleness is how single
+    # cells reached 7, 11 and 19 trials. But at cap 1 that ordering would bar a genuinely
+    # repaired contract from ever being retried, which strands every unit whose prose was
+    # defective -- and a defective description was the diagnosis for all seven units audited
+    # after failing both L0 and L2. So a repair buys one extra trial per repair, and no more:
+    # REPAIR_BUDGET is 2, so a cell can never exceed three trials, and only when the contract
+    # actually changed between them.
+    allowance = RUNG_TRIAL_CAP
+    if verdict_is_stale(base):
+        allowance += min(repair_count(base), REPAIR_BUDGET)
+    if n_this_rung >= allowance:
         who = f" for {solver}" if counted is mine else ""
+        extra = "" if allowance == RUNG_TRIAL_CAP else f", {allowance} allowed after repair"
         return False, (f"rung L{rung} already has {n_this_rung} trial(s){who} "
-                       f"(cap {RUNG_TRIAL_CAP}) — no further verdict to buy")
+                       f"(cap {RUNG_TRIAL_CAP}{extra}) — no further verdict to buy")
     if rung in CERTIFYING_RUNGS:
         n_all = len(d.get(rung, []))
         if n_all >= RUNG_CERT_CEILING:
