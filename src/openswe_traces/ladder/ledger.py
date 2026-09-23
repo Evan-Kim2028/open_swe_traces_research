@@ -34,7 +34,38 @@ _MODULE_MISMATCH = re.compile(r'module example\.internal/\S+: Get "https://proxy
 AUDITED_VOID = {
     "sweep_climb_L3/helm-depresolver-L3__EJHvEHK":
         "fetched the file under test from upstream (provider-side WebFetch), then passed",
+    # On the renamed tree, where the unfixed code already passes (INVALID_RENAMED_TREE). The
+    # agent renamed the module back to helm across the tree to compile, so its verifier
+    # output prints the old path and on_invalid_tree() cannot see it.
+    "sweep_devin_ladder_all_r1_205719/helm-tlsutil-L5__iW2dSwN":
+        "the unfixed renamed tree passes its own hidden tests",
 }
+
+
+# Tasks whose RENAMED tree fails re-validation in Docker (2026-09-23): the renaming pass left
+# the gold fix already in the cut repository, broke the answer key, or renamed strings the
+# hidden tests assert. Any verdict, pass or fail, that ran on the renamed tree measured
+# nothing. Verdicts from the original tree (validated at authoring) still stand.
+INVALID_RENAMED_TREE = {
+    "helm-dlmanager": "gold fix already present in the renamed tree; answer key does not apply",
+    "helm-httpgetter": "renamed tree mixes old and new module paths; answer key does not build",
+    "helm-searchindex": "the unfixed renamed tree passes its own hidden tests",
+    "helm-tlsutil": "the unfixed renamed tree passes its own hidden tests",
+    "httpencoding": "answer key does not apply to the renamed tree",
+}
+_RENAMED = re.compile(r"example\.internal/(apikit/v3|chartkit/v4|clustkit)\b")
+
+
+def on_invalid_tree(tdir, base):
+    """Why a verdict on a renamed tree measured nothing, or None."""
+    why = INVALID_RENAMED_TREE.get(base)
+    if not why:
+        return None
+    try:
+        out = open(os.path.join(tdir, "verifier", "test-stdout.txt"), errors="replace").read()
+    except OSError:
+        return None
+    return why if _RENAMED.search(out) else None
 
 
 def unmeasured(tdir):
@@ -113,6 +144,7 @@ def trials(jobs_dir=JOBS):
                     pass
         void = AUDITED_VOID.get("/".join(tdir.split(os.sep)[-2:]))
         void = void or (unmeasured(tdir) if reward == 0.0 else None)
+        void = void or (on_invalid_tree(tdir, base) if reward is not None else None)
         if void:
             reward = None
         yield {"dir": tdir, "job": tdir.split(os.sep)[-2], "unit": name, "base": base,

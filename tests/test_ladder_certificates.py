@@ -64,6 +64,18 @@ def test_module_path_mismatch_is_no_verdict(tmp_path):
     assert "renamed" not in ledger.ledger_by_solver(str(j))
 
 
+def test_invalid_renamed_tree_voids_only_renamed_verdicts(tmp_path, monkeypatch):
+    j = tmp_path / "jobs"
+    monkeypatch.setitem(ledger.INVALID_RENAMED_TREE, "broke", "fix already present")
+    write_trial(j, "old", "broke-L2", 1, "composer", 1)
+    _verifier_out(j, "old", "broke-L2", "ok  \texample.internal/helm/pkg/x\t0.1s\n")
+    write_trial(j, "new", "broke-L5", 2, "devin", 1)
+    _verifier_out(j, "new", "broke-L5", "ok  \texample.internal/chartkit/v4/pkg/x\t0.1s\n")
+    by = {t["rung"]: t for t in ledger.trials(str(j))}
+    assert by["2"]["reward"] == 1.0 and by["2"]["void"] is None
+    assert by["5"]["reward"] is None and by["5"]["void"] == "fix already present"
+
+
 def test_audited_void_drops_a_contaminated_pass(tmp_path, monkeypatch):
     j = tmp_path / "jobs"
     write_trial(j, "sweep", "leaky-L3", 7, "composer", 1)
