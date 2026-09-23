@@ -105,8 +105,21 @@ def occupancy(agent="devin"):
     s, t = sessions(agent), trials(agent)
     declared = sum(x["conc"] for x in t)
     actual = containers() if t or s else 0
-    return {"sessions": s, "trials": t,
-            "total": len(s) + max(declared, actual),
+    # CONTAINERS consume the quota, so they are the measure -- with a floor of one per live
+    # harbor run, for a run that has started and not built its containers yet.
+    #
+    # Two wrong answers were tried first and both are instructive. Summing each run's declared
+    # --n-concurrent misses ORPHANS entirely: containers whose harbor was killed keep running and
+    # keep spending, and occupancy read 4/4 with nine containers up. Taking max(declared,
+    # containers) fixed that and broke the other direction: a run winding down with one cell left
+    # still declares 4, so occupancy read 4/4 with three slots genuinely free and headroom()
+    # refused to launch anything.
+    #
+    # max(containers, number of live runs) is right in all three cases: 1 run with 1 container
+    # reads 1, one run with nine containers reads 9 and shows the orphans, and a run still
+    # building reads 1 rather than 0.
+    total = len(s) + max(actual, len(t))
+    return {"sessions": s, "trials": t, "total": total,
             "declared": declared, "containers": actual,
             "cap": CAP}
 
