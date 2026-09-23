@@ -168,11 +168,14 @@ def compute(jobs_dir=TL.JOBS):
     second = {b: ms for b, ms in second.items() if ms}
     second_pass = sorted(b for b, ms in second.items()
                          if any(max(bys[b][m]["0"]) > 0 for m in ms))
+    # Split by the screening model: Composer's second screens are Devin's certificates, which
+    # reached Devin only after Composer had failed them, so pooling the two hides the result.
     by_repo = collections.Counter()
-    for b in second:
+    for b, ms in second.items():
         repo = "go-github" if b.startswith("go-github") else "everywhere else"
-        by_repo[f"{repo} screened"] += 1
-        by_repo[f"{repo} passed"] += b in second_pass
+        for m in ms:
+            by_repo[f"{m} on {repo}, screened"] += 1
+            by_repo[f"{m} on {repo}, passed"] += max(bys[b][m]["0"]) > 0
 
     scale = _scale(trials, valid, len(certs), by_solver, s)
 
