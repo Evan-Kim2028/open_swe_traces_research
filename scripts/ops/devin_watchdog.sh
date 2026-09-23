@@ -90,14 +90,27 @@ for b, pr in bys.items():                      # rostered holes only
                     cells.add((b, r))
             except Exception:
                 pass
-remaining = len(cells)
+# REMAINING must exclude cells that are PERMANENTLY refused, or the watchdog never finishes.
+# exprhash L3-L6 and httpmux L3-L6 sit in this set because they are rostered (for composer and
+# grok work), but devin is refused on all eight: no L0/L2 failure of its own on exprhash, and
+# httpmux is uncertified for devin. Counting them left "10 cells remain" with nothing devin could
+# ever run, so the watchdog restarted the queue, the driver found no work and exited, and it
+# restarted again. A completion check that can never reach zero is a restart loop.
+#
+# A cell counts as remaining if devin could run it now, or is blocked only because it is already
+# in flight -- that clears on its own. Anything else is not devin's work.
 for b, r in cells:
     u = f"{b}-L{r}"
     try:
-        if TG.decide(u, per, solver="devin")[0] and SM.decide(u, "devin")[0]:
-            admissible += 1
+        g = TG.decide(u, per, solver="devin")
+        m = SM.decide(u, "devin")
     except Exception:
-        pass
+        continue
+    if g[0] and m[0]:
+        admissible += 1
+        remaining += 1
+    elif "already running" in g[1]:
+        remaining += 1
 print(f"{remaining} {admissible}")
 PY
 )
