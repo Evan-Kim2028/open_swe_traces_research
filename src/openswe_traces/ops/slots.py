@@ -105,7 +105,7 @@ def occupancy(agent="devin"):
     """
     s, t = sessions(agent), trials(agent)
     declared = sum(x["conc"] for x in t)
-    actual = containers() if t or s else 0
+    actual = containers(agent) if t or s else 0
     # CONTAINERS consume the quota, so they are the measure -- with a floor of one per live
     # harbor run, for a run that has started and not built its containers yet.
     #
@@ -125,8 +125,36 @@ def occupancy(agent="devin"):
             "cap": CAP}
 
 
-def containers():
-    return int(_sh("docker ps --format '{{.Names}}' | grep -c env-main").strip() or 0)
+_AGENT_OF = {"devin": ("devin",), "composer": ("cursor-cli", "cursor"), "grok": ("grok-build",)}
+
+
+def _trial_agent(name, index):
+    """The agent that owns a trial container, from its trial dir's config.json; None when
+    no trial dir matches (an orphan whose job dir is gone, or something else entirely)."""
+    d = index.get(name.split("__env")[0].lower())
+    if not d:
+        return None
+    try:
+        import json
+        return (json.load(open(os.path.join(d, "config.json"))).get("agent") or {}).get("name")
+    except (OSError, ValueError):
+        return None
+
+
+def containers(agent=None):
+    """Trial containers up. With an agent, only that agent's: the caps are per agent, and
+    counting every container made eight Composer trials read as Devin at 9/4, so the Devin
+    gate refused everything while Devin ran one trial. A container whose owner cannot be
+    identified still counts - it may be an orphan spending quota."""
+    names = [n for n in _sh("docker ps --format '{{.Names}}'").split() if "env-main" in n]
+    if agent is None:
+        return len(names)
+    import glob
+    jobs = os.path.join(str(REPO), "experiments", "dose_response", "jobs")
+    index = {os.path.basename(p).lower(): p for p in glob.glob(os.path.join(jobs, "*", "*__*"))}
+    mine = _AGENT_OF.get(agent, (agent,))
+    return sum(1 for n in names if (_trial_agent(n, index) in mine
+                                    or _trial_agent(n, index) is None))
 
 
 def summary(agent="devin"):
