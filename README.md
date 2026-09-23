@@ -1,22 +1,52 @@
 # open_swe_traces_research
 
-Local research on [nvidia/Open-SWE-Traces](https://huggingface.co/datasets/nvidia/Open-SWE-Traces).
+Two lines of work share this repository.
 
-Paper: [arXiv:2606.16038](https://arxiv.org/abs/2606.16038)
-
-**Research notes:** [`notes/`](notes/README.md) — thesis, EDA, SFT literature survey, sources.
+1. **The affordance ladder** (current). Build software-engineering tasks with controlled
+   difficulty, run coding agents on them with progressively more information, and record
+   the level at which each agent starts to succeed. Written up as *Difficulty is an
+   information gap*. Start with [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), then
+   [`docs/OPERATIONS.md`](docs/OPERATIONS.md). The latest state of the run is in
+   [`docs/HANDOFF.md`](docs/HANDOFF.md).
+2. **Open-SWE-Traces analytics** (earlier). Local analysis of
+   [nvidia/Open-SWE-Traces](https://huggingface.co/datasets/nvidia/Open-SWE-Traces)
+   ([arXiv:2606.16038](https://arxiv.org/abs/2606.16038)). Research notes are in
+   [`notes/`](notes/README.md). The rest of this README covers it.
 
 ## Setup
 
 ```bash
 cd ~/Documents/open_swe_traces_research
 uv sync
+uv run pytest
 ```
+
+## Repository map
+
+| Path | What is there |
+|---|---|
+| `src/openswe_traces/ladder/` | Trial outcomes, certificates, admission rules, escalation |
+| `src/openswe_traces/ops/` | Agent connectors, capacity, budgets, disk and container hygiene |
+| `src/openswe_traces/reports/` | Status, dashboard, cost and ladder reports |
+| `src/openswe_traces/analysis/` | Instruments behind the findings in `analytics/research/` |
+| `src/openswe_traces/authoring/`, `pipeline/`, `pipeline_ext/` | The task factory |
+| `src/openswe_traces/` (top level), `synth/`, `sft/` | Open-SWE-Traces analytics |
+| `scripts/ops/` | Commands and daemons that run the experiment; see its README |
+| `scripts/dev/` | Refactoring and verification tools |
+| `scripts/*.py` | Commands for the task factory and the trace analytics |
+| `experiments/dose_response/` | Staged sweeps, and every trial under `jobs/` (gitignored) |
+| `experiments/pipeline/`, `experiments/harbor_nex/` | Authored units and task packages |
+| `analytics/research/` | Findings journal, one note per question |
+| `docs/` | Architecture, operations, specs, handoffs |
+| `tests/` | pytest |
 
 ## Package
 
-All logic lives in the importable package `src/openswe_traces/`; everything under `scripts/`
-is a thin CLI wrapper over it.
+Library code lives in `src/openswe_traces/`. Commands in `scripts/` call into it; the ones
+in `scripts/ops/` that moved into the package in September 2026 are shims at their old
+paths, so running daemons and frozen sweep copies keep working.
+
+The trace-analytics modules:
 
 | Module | Purpose |
 |---|---|
@@ -77,8 +107,6 @@ Outputs land in `outputs/` (gitignored): `proxy_features.parquet`,
 
 | Path | Purpose |
 |---|---|
-| `src/openswe_traces/` | Package: all data access, features, SFT prep, kaggle glue |
-| `scripts/` | Thin CLIs over the package (flags unchanged from before the refactor) |
 | `tests/` | pytest; fast, run on a 1-file sample |
 | `analytics/schema/` | Views + summary tables (version controlled) |
 | `analytics/queries/` | Named research SQL (version controlled) |
@@ -103,21 +131,6 @@ uv run openswe-sample --n 1000     # → experiments/kaggle_smoke/data/sample_10
 Kernels are pushed only from an experiment dir via its `run_kernel.sh`; see
 `experiments/kaggle_smoke/README.md`. Python callers can use `openswe_traces.kaggle`
 (`push` / `status` / `wait` / `output`).
-
-## Layout
-
-```
-open_swe_traces_research/
-├── src/openswe_traces/    # package (data, download, verify, features, summary, sft, kaggle)
-├── scripts/               # thin CLIs
-├── tests/                 # pytest
-├── experiments/           # one dir per experiment (e.g. kaggle_smoke)
-├── traces_data/           # HF dataset (gitignored)
-├── duckdb/                # open_swe.duckdb (gitignored)
-├── analytics/             # schema, queries, query log, research notes
-├── outputs/               # derived artifacts (gitignored)
-└── notebooks/
-```
 
 ## License
 
