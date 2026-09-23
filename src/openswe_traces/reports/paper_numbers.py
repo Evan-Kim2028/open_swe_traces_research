@@ -8,6 +8,7 @@ results: Devin bills in ACUs, so its cost row comes from the account export and 
 here as missing rather than guessed.
 """
 import collections
+import contextlib
 import json
 import sys
 
@@ -112,7 +113,36 @@ def _scale(trials, valid, n_certs, by_solver, s):
     }
 
 
+# Grok is in the write-up only as the top-of-ladder probe, on the three tasks Composer
+# failed at every level. Its other trials were a pilot from wiring up its harness.
+GROK_PROBE = {"httpmux", "httpencoding", "exprhash"}
+
+
+@contextlib.contextmanager
+def probe_scope():
+    """Scope the ledger to the write-up's population: drop Grok's pilot trials. Every
+    ledger function reads trials(), so scoping that one function scopes them all."""
+    original = TL.trials
+
+    def scoped(jobs_dir=TL.JOBS):
+        for t in original(jobs_dir):
+            if TL.solver_of(t["model"]) == "grok" and t["base"] not in GROK_PROBE:
+                continue
+            yield t
+
+    TL.trials = scoped
+    try:
+        yield
+    finally:
+        TL.trials = original
+
+
 def compute(jobs_dir=TL.JOBS):
+    with probe_scope():
+        return _compute(jobs_dir)
+
+
+def _compute(jobs_dir=TL.JOBS):
     s = TL.summary(jobs_dir)
     certs = TL.certificates(jobs_dir)
     by_solver = TL.certificates_by_solver(jobs_dir)
