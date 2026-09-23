@@ -275,6 +275,12 @@ def decide(unit, per, solver=None):
         return True, "unrecognised unit name"
     base, rung = unit.rsplit("-L", 1)
     rung = rung[:1]
+    # Dropped tasks: the renaming pass broke their tree (fix already present, answer key
+    # does not apply), so a trial on it measures nothing. Their voided cells read as "no
+    # verdict" and would otherwise look like backfill to buy. Rebuild the cut to re-admit.
+    from openswe_traces.ladder.ledger import INVALID_RENAMED_TREE
+    if base in INVALID_RENAMED_TREE:
+        return False, f"dropped: {INVALID_RENAMED_TREE[base]} — rebuild the cut to re-admit"
     d = per.get(base, {})
     l0, l2 = d.get("0", []), d.get("2", [])
     # The MERGED view still decides condemnation and certification: a unit any solver
