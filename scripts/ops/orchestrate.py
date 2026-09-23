@@ -440,9 +440,20 @@ else:
             # first takes the slot, so without this the matrix gets only the scraps between
             # supervisor ticks. Screening is not cancelled, it is DEFERRED -- delete the
             # file and the next tick resumes it, with no state to unwind.
-            if is_screen and SCREENING_PAUSED:
-                NOTES.append(f"{cohort}: screening paused (pause_screening) — "
-                             f"devin slots reserved for ladder_matrix comparison curves")
+            # Covers L2 as well as L0/L1, because "new screening" and "another L2" are the
+            # same thing from the point of view of a ladder climb that is waiting for a slot.
+            # is_screen deliberately excludes L2 (is_screen = not is_l2 and ...), so the first
+            # version of this pause let L2 straight through: the supervisor kept drawing L2
+            # work while the climb sat at "waiting for a slot", and worse, those extra L2
+            # trials RE-MEASURED decided rungs and flipped units out of the climb roster --
+            # idxdecode and ldapdn both failed L2 once, passed on a second draw, and stopped
+            # being candidates. That is real evidence the L2 verdict is thin, but it is not
+            # what the roster should be deciding on while a climb is in progress.
+            #
+            # L3+ escalation is never paused: that IS the climb.
+            if (is_screen or is_l2) and SCREENING_PAUSED:
+                NOTES.append(f"{cohort}: L0/L1/L2 paused (pause_screening) — "
+                             f"slots reserved for the L3-L6 ladder climb")
                 continue
             if is_screen and not devin_full:
                 to_devin = True
