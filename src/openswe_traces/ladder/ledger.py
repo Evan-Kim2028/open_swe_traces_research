@@ -12,9 +12,31 @@ A trial is a DIRECTORY. It has at most one outcome, and a trial that raised befo
 verifier ran has no outcome at all — that is an error, not a failure, and it must not count
 against a unit.
 """
-import json, os, glob, collections
+import json, os, glob, collections, re
 
 JOBS = "experiments/dose_response/jobs"
+
+
+# A zero whose hidden tests never compiled for reasons outside the agent's code. The renaming
+# pass rewrote module paths in the repositories (goa -> apikit/v3, helm -> chartkit/v4, ...)
+# without rewriting the checksum-locked hidden tests, or the reverse, so `go test` tried to
+# fetch the missing module from the proxy and failed at setup. Found 2026-09-23: 64 zero
+# verdicts on 13 tasks had read as model failures, including every "fails at every level"
+# case. A failed probe is not a zero: these are no verdict. A test that fails to compile
+# against the agent's own changed signatures ("not enough arguments", ...) is still a real
+# failure and is not matched here.
+_MODULE_MISMATCH = re.compile(r'module example\.internal/\S+: Get "https://proxy\.golang\.org/')
+
+
+def unmeasured(tdir):
+    """Why a zero verdict measured nothing, or None if it is a real failure."""
+    try:
+        out = open(os.path.join(tdir, "verifier", "test-stdout.txt"), errors="replace").read()
+    except OSError:
+        return None
+    if "[setup failed]" in out and _MODULE_MISMATCH.search(out):
+        return "hidden test imports a module path the repository does not declare"
+    return None
 
 
 def trials(jobs_dir=JOBS):
@@ -80,9 +102,12 @@ def trials(jobs_dir=JOBS):
                     reward = float(open(rt).read().strip() or 0)
                 except Exception:
                     pass
+        void = unmeasured(tdir) if reward == 0.0 else None
+        if void:
+            reward = None
         yield {"dir": tdir, "job": tdir.split(os.sep)[-2], "unit": name, "base": base,
                "rung": rung, "variant": variant,
-               "reward": reward, "errored": err is not None,
+               "reward": reward, "errored": err is not None, "void": void,
                "tokens": tok, "cost": cost, "agent": agent, "model": model,
                "mtime": os.path.getmtime(tdir)}
 

@@ -39,6 +39,31 @@ def jobs(tmp_path):
     return str(j)
 
 
+def _verifier_out(jobs, job, unit, text):
+    d = next((jobs / job).glob(f"{unit}__*")) / "verifier"
+    d.mkdir()
+    (d / "test-stdout.txt").write_text(text)
+
+
+def test_module_path_mismatch_is_no_verdict(tmp_path):
+    """A hidden test importing a module the repository no longer declares measures nothing:
+    the zero is voided. A compile error against the agent's own code stays a failure."""
+    j = tmp_path / "jobs"
+    write_trial(j, "sweep", "renamed-L3", 1, "composer", 0)
+    _verifier_out(j, "sweep", "renamed-L3",
+                  'x_test.go:15:2: module example.internal/goa/expr: Get '
+                  '"https://proxy.golang.org/example.internal/goa/expr/@v/list": EOF\n'
+                  "FAIL\texample.internal/apikit/v3/expr [setup failed]\n")
+    write_trial(j, "sweep", "brokeit-L3", 2, "composer", 0)
+    _verifier_out(j, "sweep", "brokeit-L3",
+                  "x_test.go:222:45: not enough arguments in call to dumpFunc\n"
+                  "FAIL\texample.internal/bbolt/cmd [build failed]\n")
+    by = {t["base"]: t for t in ledger.trials(str(j))}
+    assert by["renamed"]["reward"] is None and by["renamed"]["void"]
+    assert by["brokeit"]["reward"] == 0.0 and by["brokeit"]["void"] is None
+    assert "renamed" not in ledger.ledger_by_solver(str(j))
+
+
 def test_certificates_are_per_solver(jobs):
     by = ledger.certificates_by_solver(jobs)["advrefs"]
     assert by["composer"]["rung"] == 2 and by["composer"]["rung_established"]
