@@ -1,4 +1,4 @@
-# Handoff — affordance ladder experiment, 2026-09-23
+# Handoff — affordance ladder experiment, 2026-09-23 (updated 09:50)
 
 ## What this project is
 
@@ -39,37 +39,45 @@ Solvers: **composer** (cursor composer-2.5, paid), **devin** (swe-2-max, ACU-lim
 Devin's phase B closed the run's biggest gap — it had zero certificates above L2 yesterday morning
 and now populates every rung L3 through L6.
 
-## What is still running
+## Stage 1 compute is finished (2026-09-23 09:46)
 
-`advrefs` **L4 and L5** in cohort `sweep_devin_holes` (containers `advrefs-l4__pvpwmer`,
-`advrefs-l5__t2vrwip`, driver pid 2416792). These are the last two devin cells anywhere.
+`devin_watchdog.sh` reports `cells remaining: 0` and `devin work COMPLETE`. No trial is running.
 
-They matter: devin's `advrefs` certificate is L6 with `rung_established: False` — it jumped L2 → L6
-with L3/L4/L5 never measured, so "needs L6" is currently an *upper bound*, not a measurement.
-These two cells settle it. No driver targeted them because the climb roster is derived from units
-that failed L0 **and** L2, and `advrefs` had since flipped, so it left the roster while its inferred
-cells stayed open; they were launched by hand as `sweep_devin_holes`.
+The last two cells were `advrefs` L4 and L5 in `sweep_devin_holes`. L5 passed at 13:02 UTC and L4
+failed at 13:08, both without an exception. Devin's `advrefs` certificate is therefore **L5 with
+`rung_established: True`**: 0✗ 2✗✗✗ 3✗ 4✗ 5✓ 6✓. Against Composer's L2 that is a three-rung gap,
+not the four first reported, and it is a measurement, not an upper bound.
 
-Check with:
+Final ledger: 436 units, 415 graded, 242 certified, 172 solved from the bug report, 1,801 trials
+(1,688 with a verdict). Composer and Devin both hold certificates on 39 units: the same rung on
+23, Devin lower on 11, Composer lower on 5. `uv run python -m openswe_traces.reports.paper_numbers`
+prints every figure the write-up uses.
 
-```bash
-cd /home/evan/Documents/open_swe_traces_research && bash scripts/ops/devin_watchdog.sh
-```
+## Repository layout changed (branch `repo-tidy`)
 
-It prints `cells remaining: N   admissible now: M`. When remaining hits 0 it prints
-`devin work COMPLETE`. **That is the finish line for the compute side of the experiment.**
+Library code moved from `scripts/ops/*.py` into `openswe_traces.{ladder,ops,reports,analysis,
+authoring}`, with a shim at every old path. See `docs/ARCHITECTURE.md`. The move was checked
+by `scripts/dev/ladder_golden.py` (byte-identical certificates and 10,900 guard decisions) and
+by old-vs-new runs of every read-only command. Merge it after the daemons below are stopped or
+restarted, since it changes `pyproject.toml` and `uv run` re-syncs on the next call.
 
-## What is left after that
+## What is left
 
 1. **Devin's cost row in the paper** needs the user's ACU export. It is not derivable from the repo:
-   the repo reports 704.7M input / 664.1M cache against the table's 162M / 3,270M. Blocked on the user.
-2. **Euler diagram geometry** in the paper — the numbers were updated, the block proportions are stale.
-3. **Uncommitted**: `analytics/research/dashboard.html`, `outputs/supervisor/ladder_backfill`,
-   untracked `docs/tech_debt_level_numbering.md`. Review and commit.
-4. **`git gc`** deferred — 29k loose objects, gc.log warning on every commit.
-5. **Ladder renumbering** (code L0–L6 → write-up L1–L6) deliberately deferred until Stage 1 runs
-   finish, because rung keys are baked into job directory names and ledger rows. Plan is in
-   `docs/tech_debt_level_numbering.md`.
+   the repo reports 704.7M input / 664.1M cache against the table's 162M / 3,270M. Blocked on the
+   user. The Stage 1 total, dollars per certificate, token totals and the "six times per run"
+   ratio all depend on it.
+2. **The per-level cost table** in the paper (541 / 834 / 97 runs, $198 / $225 / $93) cannot be
+   reproduced from the ledger; Composer and Grok have not run since, and no definition tried gives
+   it. Over all Composer and Grok runs it is 524 / 673 / 274 runs and $233 / $255 / $213, which
+   makes runs above L2 about 2x an L2 run rather than "more than three times". Needs a decision.
+3. **Euler diagram geometry** in the paper: the numbers were updated, the block proportions are stale.
+4. **`ladder_purity` is nondeterministic on ties**: the owner and stray columns for `cronparse`,
+   `httpencoding` and `reflectfmt` change with `PYTHONHASHSEED`. Pre-existing; not fixed in the move.
+5. **Loose objects**: 29k, and a gc.log warning on every commit. Garbage collection is deferred.
+6. **Ladder renumbering** (code L0–L6 → write-up L1–L6), now unblocked since Stage 1 runs have
+   finished. Plan is in `docs/tech_debt_level_numbering.md`.
+7. **Daemons** `monitor_loop.sh` and `supervisor.sh` are still up with nothing left to schedule.
 
 ## The paper
 

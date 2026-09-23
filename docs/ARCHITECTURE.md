@@ -89,11 +89,13 @@ in `scripts/ops/`: they are commands, and two of them change directory when impo
 | Certified tasks, and the level each binds at | `ladder.ledger.certificates()`; per model, `certificates_by_solver()` |
 | Tasks with independent curves from two solvers | `ladder.ledger.report_multimodel()`, `ladder.purity` |
 | Trials, errored trials, tokens | `ladder.ledger.summary()` |
-| Cost by model and by level | `reports.token_cost`; Devin ACUs from `reports.devin_usage` and the account export |
+| Cost by model and by level | `reports.paper_numbers`, from each trial's `cost_usd` (Composer and Grok). Devin bills in ACUs, so its row comes from the account export |
 | Second-screen agreement between models | `ladder.second_screen --report` |
-| Runs and dollars per certificate | `summary()["trials_valid"]` and `reports.token_cost` over `len(certificates())` |
+| Runs and dollars per certificate | `reports.paper_numbers`: runs with a verdict, and total cost including the Devin export, over `len(certificates())` |
 
-Print the headline block with `uv run python scripts/ops/trial_ledger.py`.
+`uv run python -m openswe_traces.reports.paper_numbers` prints every number the write-up
+states, labelled with its phrase, in the write-up's level numbering. The headline block alone
+is `uv run python scripts/ops/trial_ledger.py`.
 
 ## Verifying a change
 
