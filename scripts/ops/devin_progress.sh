@@ -46,6 +46,15 @@ for e in os.listdir("/proc"):
     if b in want:
         extra = " ".join(x for x in argv[2:] if not x.startswith("-"))[:40]
         seen.setdefault(want[b], []).append(f"pid {e} {extra}".rstrip())
+    # A bare sweep_seq (or the harbor run under it) keeps launching from its cohort until the
+    # cohort is done, so it IS a driver. Omitting it printed "NONE RUNNING -- nothing will
+    # launch new trials" while a conc=4 sweep was mid-flight, which is a false alarm on the
+    # one line that is supposed to mean "intervene".
+    if b == "sweep_seq.sh":
+        seen.setdefault("cohort sweep", []).append(f"pid {e} {' '.join(argv[2:])[:40]}")
+    if any("harbor" in x for x in argv[:2]) and "--job-name" in argv:
+        j = argv[argv.index("--job-name") + 1]
+        seen.setdefault("harbor run", []).append(f"pid {e} {j[:44]}")
 if seen:
     for k, v in sorted(seen.items()):
         print(f"  driver: {k} -- {'; '.join(v)}")
@@ -60,10 +69,20 @@ cohort = sys.argv[1]
 bys = TL.ledger_by_solver()
 units = sorted({os.path.basename(d.rstrip("/")).rsplit("-L", 1)[0]
                 for d in glob.glob(f"experiments/dose_response/{cohort}/*/")})
+# Count the CELLS the cohort actually holds. This counted L2 verdicts only, so pointed at a
+# cohort of L3-L6 cells it reported "4/4 L2 verdicts ... cohort COMPLETE" while 12 of its 16
+# cells had never run.
+cells = sorted(os.path.basename(d.rstrip("/"))
+               for d in glob.glob(f"experiments/dose_response/{cohort}/*/"))
+def _has(cell):
+    b, _, r = cell.rpartition("-L")
+    return bool((bys.get(b, {}).get("devin") or {}).get(r))
+cdone = [c for c in cells if _has(c)]
+print(f"  cohort: {len(cdone)}/{len(cells)} cell verdicts")
 done = [u for u in units if (bys.get(u, {}).get("devin") or {}).get("2")]
 fails = [u for u in done if max((bys[u]["devin"]["2"])) == 0]
-print(f"  cohort: {len(done)}/{len(units)} L2 verdicts, {len(fails)} FAILED L2 "
-      f"(these are the climb candidates)")
+if fails:
+    print(f"    {len(fails)} unit(s) failed L2 in this cohort: {', '.join(sorted(fails))}")
 if fails:
     print(f"    {', '.join(sorted(fails))}")
 now = time.time()
@@ -90,13 +109,35 @@ if climb:
           f"L3-L6 cells measured")
     for b, got in sorted(climb):
         print(f"    {b:22s} {','.join('L'+x for x in got) or 'none yet'}")
-left = len(units) - len(done)
+left = len(cells) - len(cdone)
 rate = r3 if r3 > 0.5 else (r1 if r1 else 0)
 if left and rate:
     print(f"  ETA for the remaining {left}: ~{left / rate:.1f} h at {rate:.1f}/h")
 elif not left:
-    print("  cohort COMPLETE — build the L3-L6 climb for the L2 failures")
+    print("  cohort COMPLETE — every cell has a verdict")
 else:
     print("  !! no devin verdicts in the last three hours — investigate")
+PY
+# --- the failure modes this evening actually produced, each now checked by name -----------
+# Every one of these read as healthy while wasting capacity, which is why they are here rather
+# than left to be noticed.
+echo "  --- integrity"
+timeout 300 uv run python scripts/ops/reap_orphans.py 2>/dev/null | head -4 | sed 's/^/    /'
+timeout 200 uv run python - <<'PY' 2>/dev/null
+import subprocess, collections
+out = subprocess.run(["docker","ps","--format","{{.Names}}"],capture_output=True,text=True).stdout.split()
+mains = [c for c in out if c.endswith("__env-main-1")]
+cells = collections.Counter(c.split("__")[0] for c in mains)
+dup = {k: v for k, v in cells.items() if v > 1}
+print(f"    duplicate cells in flight: {dup or 'none'}")
+import sys
+sys.path.insert(0, "scripts/ops")
+import slots
+o = slots.occupancy("devin")
+flag = "" if o["containers"] <= o["declared"] else "  <-- ORPHANS, occupancy understated"
+print(f"    occupancy: {o['total']}/{o['cap']}  declared={o['declared']} "
+      f"containers={o['containers']}{flag}")
+if o["total"] > o["cap"]:
+    print(f"    !! OVER CAP by {o['total'] - o['cap']} — throttle risk, errors every in-flight trial")
 PY
 echo "====="
