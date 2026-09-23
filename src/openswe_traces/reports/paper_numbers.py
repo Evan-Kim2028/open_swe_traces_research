@@ -47,7 +47,8 @@ def _scale(trials, valid, n_certs, by_solver, s):
     Composer and Grok report tokens and cost_usd per trial, cached tokens inside input.
     Devin reports neither to harbor reliably; its exact per-request counts come from its
     session databases (reports.devin_usage), cached tokens on top of input, priced at the
-    SWE-2 promotional rate that matched its ACU bill. Host Devin sessions are authoring.
+    SWE-2 promotional rate that matched its ACU bill. Host Devin sessions are authoring;
+    host Grok authoring sessions come from reports.grok_usage.
     """
     from openswe_traces.reports import devin_usage as DU
 
@@ -71,8 +72,15 @@ def _scale(trials, valid, n_certs, by_solver, s):
         cache[name] = c["cache_read"]
         usd[name] = DU.cost(c, DU.PRICE_PROMO)
         runs[name] = c["sessions"]
+    from openswe_traces.reports import grok_usage as GU
+    ga = GU.report().get("authoring", collections.Counter())
+    tok["grok authoring"] = ga["input"] + ga["output"]
+    cache["grok authoring"] = ga["cache_read"]
+    usd["grok authoring"] = ga["usd"]
+    runs["grok authoring"] = ga["sessions"]
     total_tok, total_usd = sum(tok.values()), sum(usd.values())
-    grading = total_usd - usd["devin host, mostly authoring"]
+    authoring = usd["devin host, mostly authoring"] + usd["grok authoring"]
+    grading = total_usd - authoring
 
     # Observed means per trial run, for pricing measurements Stage 1 could not afford.
     per_run = {"composer": (usd["composer"] / runs["composer"], tok["composer"] / runs["composer"]),
@@ -93,10 +101,7 @@ def _scale(trials, valid, n_certs, by_solver, s):
         "runs or sessions": dict(runs),
         "cost_usd by source (Devin at SWE-2 promo)": {k: round(v) for k, v in usd.items()},
         "cost_usd total": round(total_usd),
-        "cost_usd total with Devin at list": round(total_usd - usd["devin trials"]
-                                                   - usd["devin host, mostly authoring"]
-                                                   + DU.cost(dv["all"], DU.PRICE_LIST)),
-        "authoring cost per authored task (Devin host)": round(usd["devin host, mostly authoring"] / AUTHORED, 2),
+        "authoring cost per authored task (Devin and Grok host)": round(authoring / AUTHORED, 2),
         "grading cost per certificate": round(grading / n_certs, 2),
         "per run, cost and tokens": {m: (round(c, 2), f"{t_ / 1e6:.1f}M") for m, (c, t_) in per_run.items()},
         "runs per graded task, all models": round(climb, 1),
