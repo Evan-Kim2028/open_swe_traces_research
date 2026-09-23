@@ -146,6 +146,57 @@ def summarise(rs):
     return {"medians": table, "call mix %": mix}
 
 
+STEP = {"0": "L1", "2": "L2", "3": "L3-4", "4": "L3-4", "5": "L5-6", "6": "L5-6"}
+
+
+def by_level(rs):
+    """Passing and failing runs at each ladder step, per model: how much work, and its shape.
+
+    explore  share of calls that read or search the repository
+    test     share of calls that run the tests
+    """
+    groups = collections.defaultdict(list)
+    for r in rs:
+        groups[(r["model"], STEP.get(r["rung"], "?"), "pass" if r["passed"] else "fail")].append(r)
+    out = {}
+    for (m, step, v), g in sorted(groups.items()):
+        explore = [(x["read"] + x["search"]) / x["calls"] for x in g if x["calls"]]
+        test = [x["test"] / x["calls"] for x in g if x["calls"]]
+        out[f"{m} {step} {v}"] = {"trials": len(g), "calls": _median(x["calls"] for x in g),
+                                  "explore": _median(explore), "test": _median(test),
+                                  "edits": _median(x["edit"] for x in g),
+                                  "first_edit": _median(x["first_edit"] for x in g),
+                                  "minutes": _median(x["minutes"] for x in g)}
+    return out
+
+
+def flips(rs):
+    """Same model, same task: the failed run just below its first pass against that pass.
+
+    The by-level view mixes tasks, since only tasks that failed lower down reach higher
+    levels. Holding the task fixed isolates what the extra information changed."""
+    fam = collections.defaultdict(list)
+    for r in rs:
+        fam[(r["model"], r["base"])].append(r)
+    pairs = collections.defaultdict(list)
+    for (m, _), g in fam.items():
+        passes = [r for r in g if r["passed"]]
+        if not passes:
+            continue
+        p = min(passes, key=lambda r: int(r["rung"]))
+        lower = [r for r in g if not r["passed"] and int(r["rung"]) < int(p["rung"])]
+        if lower:
+            pairs[m].append((max(lower, key=lambda r: int(r["rung"])), p))
+    explore = lambda r: (r["read"] + r["search"]) / r["calls"] if r["calls"] else None
+    out = {}
+    for m, ps in pairs.items():
+        out[m] = {"tasks": len(ps)}
+        for k in ("calls", "edit", "test", "first_edit", "minutes"):
+            out[m][k] = (_median(f[k] for f, _ in ps), _median(p[k] for _, p in ps))
+        out[m]["explore"] = (_median(explore(f) for f, _ in ps), _median(explore(p) for _, p in ps))
+    return out
+
+
 def paired(rs):
     """Cells (task, level) both models ran: each model's median measure on the same cells."""
     cell = collections.defaultdict(dict)
@@ -168,7 +219,8 @@ def cli():
             print(json.dumps(r))
         return
     rs = list(trials())
-    res = {"trials": collections.Counter(r["model"] for r in rs), **summarise(rs), "paired": paired(rs)}
+    res = {"trials": collections.Counter(r["model"] for r in rs), **summarise(rs),
+           "by level": by_level(rs), "flips": flips(rs), "paired": paired(rs)}
     if "--json" in sys.argv:
         print(json.dumps(res, indent=1, default=str))
         return
@@ -177,6 +229,10 @@ def cli():
     for k, v in res["medians"].items():
         print(f"  {k:16s} {v}")
     print("\ncall mix %", res["call mix %"])
+    print("\nby ladder step")
+    for k, v in res["by level"].items():
+        print(f"  {k:22s} {v}")
+    print("\nsame task, failed run below the first pass -> the pass:", res["flips"])
     print("\nsame task, same level:", res["paired"])
 
 
