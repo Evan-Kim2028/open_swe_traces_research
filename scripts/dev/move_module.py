@@ -29,6 +29,59 @@ MOVES = {
     "escalate": "openswe_traces.ladder.escalate",
     "slots": "openswe_traces.ops.slots",
     "roots": "openswe_traces.ops.roots",
+    # wave 2: ladder bookkeeping
+    "stability_gate": "openswe_traces.ladder.stability_gate",
+    "second_screen": "openswe_traces.ladder.second_screen",
+    "ladder_purity": "openswe_traces.ladder.purity",
+    "quarantine_trial": "openswe_traces.ladder.quarantine",
+    "backfill_history": "openswe_traces.ladder.backfill_history",
+    "unit_features": "openswe_traces.ladder.unit_features",
+    # wave 2: running agents, capacity and budget
+    "agents": "openswe_traces.ops.agents",
+    "agent_session": "openswe_traces.ops.agent_session",
+    "ask_composer": "openswe_traces.ops.ask_composer",
+    "cohorts": "openswe_traces.ops.cohorts",
+    "composer_budget": "openswe_traces.ops.composer_budget",
+    "budget_forecast": "openswe_traces.ops.budget_forecast",
+    "devin_cap": "openswe_traces.ops.devin_cap",
+    "devin_ratelimit_check": "openswe_traces.ops.devin_ratelimit_check",
+    "restore_env_src": "openswe_traces.ops.restore_env_src",
+    "reclaim_disk": "openswe_traces.ops.reclaim_disk",
+    "docker_gc": "openswe_traces.ops.docker_gc",
+    "worktree_gc": "openswe_traces.ops.worktree_gc",
+    "reap_orphans": "openswe_traces.ops.reap_orphans",
+    "reap_runaway": "openswe_traces.ops.reap_runaway",
+    "grok_build_patch": "openswe_traces.ops.grok_build_patch",
+    # wave 3: reports read by people
+    "status": "openswe_traces.reports.status",
+    "ladder_matrix": "openswe_traces.reports.ladder_matrix",
+    "build_dashboard": "openswe_traces.reports.dashboard",
+    "jobs_status": "openswe_traces.reports.jobs_status",
+    "rolling": "openswe_traces.reports.rolling",
+    "token_cost": "openswe_traces.reports.token_cost",
+    "devin_usage": "openswe_traces.reports.devin_usage",
+    "agent_ledger": "openswe_traces.reports.agent_ledger",
+    # wave 3: one-off instruments cited in analytics/research notes
+    "synthetic_provenance": "openswe_traces.analysis.synthetic_provenance",
+    "task_overlap": "openswe_traces.analysis.task_overlap",
+    "contract_vs_test": "openswe_traces.analysis.contract_vs_test",
+    "literal_digest_audit": "openswe_traces.analysis.literal_digest_audit",
+    "reconcile_inferable": "openswe_traces.analysis.reconcile_inferable",
+    "arbitrary_failures": "openswe_traces.analysis.arbitrary_failures",
+    "classify_gaps": "openswe_traces.analysis.classify_gaps",
+    "assertion_density": "openswe_traces.analysis.assertion_density",
+    "cheat_validity": "openswe_traces.analysis.cheat_validity",
+    "failure_shape": "openswe_traces.analysis.failure_shape",
+    "grok_harvest": "openswe_traces.analysis.grok_harvest",
+    # wave 4: task authoring
+    "pipeline_autogen": "openswe_traces.authoring.autogen",
+    "harvest": "openswe_traces.authoring.harvest",
+    "stage_units": "openswe_traces.authoring.stage_units",
+    "preaudit": "openswe_traces.authoring.preaudit",
+    "contract_gap_read": "openswe_traces.authoring.contract_gap_read",
+    "task_lint": "openswe_traces.authoring.task_lint",
+    "excision_registry": "openswe_traces.authoring.excision_registry",
+    "repair_b6": "openswe_traces.authoring.repair_b6",
 }
 
 OPS = pathlib.Path("scripts/ops")
@@ -72,7 +125,32 @@ def rewrite_imports(text):
 def drop_path_hacks(text):
     """sys.path.insert(...) lines that point at scripts/ops or src are no longer needed."""
     text = re.sub(r"^(import [\w, ]+); sys\.path\.insert\(0, .*\)\n", r"\1\n", text, flags=re.M)
-    return re.sub(r"^sys\.path\.insert\(0, .*(?:__file__|REPO).*\)\n", "", text, flags=re.M)
+    return re.sub(r"^[ \t]*sys\.path\.insert\(0, .*(?:__file__|REPO).*\)\n", "", text, flags=re.M)
+
+
+# Repo-root lookups that count up from the file's own location. Each resolves to the
+# checkout root from scripts/ops, and to the wrong place from src/openswe_traces/<pkg>.
+_DIRNAME3 = (r"os\.path\.dirname\(os\.path\.dirname\(os\.path\.dirname\(\s*"
+             r"os\.path\.abspath\(__file__\)\)\)\)")
+REPO_PATTERNS = [
+    (r"pathlib\.Path\(__file__\)\.resolve\(\)\.parents\[2\]", "_REPO"),
+    (r"Path\(__file__\)\.resolve\(\)\.parents\[2\]", "_REPO"),
+    (_DIRNAME3, "str(_REPO)"),
+]
+
+
+def use_repo_constant(text):
+    n = 0
+    for pat, rep in REPO_PATTERNS:
+        text, k = re.subn(pat, rep, text)
+        n += k
+    if n:
+        # After the module docstring and any __future__ import, before the first use.
+        m = re.search(r"^(?:from __future__ import .*\n)", text, flags=re.M) or \
+            re.search(r"^(?:import |from )", text, flags=re.M)
+        at = m.end() if m and m.group(0).startswith("from __future__") else m.start()
+        text = text[:at] + "from openswe_traces.paths import REPO as _REPO\n" + text[at:]
+    return text
 
 
 def main_to_cli(text):
@@ -98,7 +176,7 @@ def move(old):
     src, dst = OPS / f"{old}.py", target(old)
     ensure_package(dst)
     subprocess.run(["git", "mv", str(src), str(dst)], check=True)
-    dst.write_text(main_to_cli(drop_path_hacks(dst.read_text())))
+    dst.write_text(main_to_cli(use_repo_constant(drop_path_hacks(dst.read_text()))))
     pkg, leaf = MOVES[old].rsplit(".", 1)
     src.write_text(SHIM.format(new=MOVES[old], old=old, pkg=pkg, leaf=leaf))
     subprocess.run(["git", "add", str(src), str(dst)], check=True)

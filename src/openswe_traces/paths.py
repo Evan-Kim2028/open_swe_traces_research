@@ -6,8 +6,11 @@ Paths that are deliberately relative to the working directory (the jobs tree, su
 rosters) stay relative in their modules: ledger rows carry those relative paths, and
 worktree runs depend on resolving them against cwd.
 """
+import os
 import pathlib
 
-REPO = pathlib.Path(__file__).resolve().parents[2]
+# OPENSWE_REPO points the tools at another checkout's data (a worktree testing code
+# against the main checkout's jobs, for instance). Unset, it is this checkout.
+REPO = pathlib.Path(os.environ.get("OPENSWE_REPO") or pathlib.Path(__file__).resolve().parents[2])
 SWEEPS = REPO / "experiments" / "dose_response"
 SUPERVISOR = REPO / "outputs" / "supervisor"
