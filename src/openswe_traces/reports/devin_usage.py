@@ -31,6 +31,7 @@ Usage::
 
     devin_usage.py             # totals, and per-hour tool calls
     devin_usage.py --by-trial
+    devin_usage.py --exact     # exact per-request tokens, trials and host, priced
 """
 
 from __future__ import annotations
@@ -81,10 +82,94 @@ def read_one(db: pathlib.Path) -> dict | None:
         con.close()
 
 
+# Exact counts. Newer Devin CLIs record each model request's usage in the message's own
+# metadata (chat_message.metadata.metrics), keyed by request_id, and leave the column the
+# estimate above reads empty. One request appears on several message nodes, so a request is
+# counted once. Cache reads are reported ON TOP of input, unlike Composer and Grok.
+HOST_DB = pathlib.Path.home() / ".local/share/devin/cli/sessions.db"
+
+# SWE-2 per-million-token rates. The promotional rate priced the first 151 sessions within
+# 8% of their ACU bill at the $2.25 list rate; the list token rate is four times it.
+PRICE_PROMO = {"input": 0.75, "cache_read": 0.075, "output": 3.75}
+PRICE_LIST = {k: 4 * v for k, v in PRICE_PROMO.items()}
+
+
+def _model_label(meta: dict) -> str:
+    for d in meta.get("response_dimensions") or []:
+        kind = d.get("kind") or {}
+        if d.get("uid") == "model" and "Metric" in kind:
+            return kind["Metric"].get("value") or "?"
+    return "?"
+
+
+def exact_usage(db: pathlib.Path) -> tuple[dict[tuple[str, str], collections.Counter], set]:
+    """((working directory, model) -> input / cache_read / output / requests, session ids)."""
+    out: dict[tuple[str, str], collections.Counter] = collections.defaultdict(collections.Counter)
+    try:
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        wd = dict(con.execute("select id, working_directory from sessions"))
+        seen = {}
+        for sid, cm in con.execute("select session_id, chat_message from message_nodes"):
+            try:
+                meta = json.loads(cm).get("metadata") or {}
+            except (ValueError, AttributeError):
+                continue
+            if meta.get("metrics") and meta.get("request_id"):
+                seen[(sid, meta["request_id"])] = meta
+        con.close()
+    except sqlite3.Error:
+        return out, set()
+    for (sid, _), meta in seen.items():
+        m = meta["metrics"]
+        key = (wd.get(sid, ""), _model_label(meta))
+        c = out[key]
+        c["input"] += m.get("input_tokens") or 0
+        c["cache_read"] += m.get("cache_read_tokens") or 0
+        c["output"] += m.get("output_tokens") or 0
+        c["requests"] += 1
+    return out, {sid for sid, _ in seen}
+
+
+def cost(c: collections.Counter, price: dict) -> float:
+    return sum(c[k] * price[k] for k in price) / 1e6
+
+
+def exact_report() -> dict[str, collections.Counter]:
+    """Trials (container databases) and host sessions (authoring and hand-run solves)."""
+    def total(dbs):
+        c: collections.Counter = collections.Counter()
+        for db in dbs:
+            by_key, sessions = exact_usage(db)
+            for k in by_key.values():
+                c.update(k)
+            c["sessions"] += len(sessions)
+        return c
+
+    trials = total(sorted(JOBS.glob("*/*/agent/sessions.db")))
+    host = total([HOST_DB] if HOST_DB.exists() else [])
+    return {"trials": trials, "host": host, "all": trials + host}
+
+
+def print_exact() -> None:
+    rep = exact_report()
+    print(f"{'':8s} {'sessions':>8s} {'requests':>9s} {'input':>9s} {'cache read':>11s} "
+          f"{'output':>8s} {'total':>8s} {'promo $':>9s} {'list $':>9s}")
+    for name, c in rep.items():
+        tot = c["input"] + c["cache_read"] + c["output"]
+        print(f"{name:8s} {c['sessions']:8,} {c['requests']:9,} {c['input']/1e6:8.1f}M "
+              f"{c['cache_read']/1e6:10.1f}M {c['output']/1e6:7.1f}M {tot/1e9:7.2f}B "
+              f"{cost(c, PRICE_PROMO):9,.0f} {cost(c, PRICE_LIST):9,.0f}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--by-trial", action="store_true")
+    ap.add_argument("--exact", action="store_true",
+                    help="exact per-request tokens from trial and host session databases")
     args = ap.parse_args()
+    if args.exact:
+        print_exact()
+        return 0
 
     rows = [r for r in (read_one(p) for p in sorted(JOBS.rglob("agent/sessions.db"))) if r]
     if not rows:

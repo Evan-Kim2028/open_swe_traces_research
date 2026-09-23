@@ -41,6 +41,72 @@ def _solver_tokens(t_dir):
     return tok, cache
 
 
+def _scale(trials, valid, n_certs, by_solver, s):
+    """Tokens and dollars for everything Stage 1 ran, and what the next measurements cost.
+
+    Composer and Grok report tokens and cost_usd per trial, cached tokens inside input.
+    Devin reports neither to harbor reliably; its exact per-request counts come from its
+    session databases (reports.devin_usage), cached tokens on top of input, priced at the
+    SWE-2 promotional rate that matched its ACU bill. Host Devin sessions are authoring.
+    """
+    from openswe_traces.reports import devin_usage as DU
+
+    tok, cache, usd, runs = (collections.Counter() for _ in range(4))
+    for t in trials:
+        m = TL.solver_of(t["model"])
+        if m == "devin":
+            continue
+        a, c = _solver_tokens(t["dir"])
+        tok[m] += a
+        cache[m] += c
+        usd[m] += t["cost"]
+        runs[m] += 1
+    dv = DU.exact_report()
+    if not dv["trials"]["sessions"]:
+        raise SystemExit(f"no Devin session databases under {DU.JOBS}; "
+                         "set OPENSWE_REPO to the checkout that holds the jobs")
+    for part, name in (("trials", "devin trials"), ("host", "devin host, mostly authoring")):
+        c = dv[part]
+        tok[name] = c["input"] + c["cache_read"] + c["output"]
+        cache[name] = c["cache_read"]
+        usd[name] = DU.cost(c, DU.PRICE_PROMO)
+        runs[name] = c["sessions"]
+    total_tok, total_usd = sum(tok.values()), sum(usd.values())
+    grading = total_usd - usd["devin host, mostly authoring"]
+
+    # Observed means per trial run, for pricing measurements Stage 1 could not afford.
+    per_run = {"composer": (usd["composer"] / runs["composer"], tok["composer"] / runs["composer"]),
+               "devin": (usd["devin trials"] / runs["devin trials"],
+                         tok["devin trials"] / runs["devin trials"])}
+    both = (per_run["composer"][0] + per_run["devin"][0], per_run["composer"][1] + per_run["devin"][1])
+    graded_runs = collections.Counter(TL.solver_of(t["model"]) for t in valid if t["rung"] != "1")
+    climb = len(valid) / max(1, len(s["certified"]) + len(s["too_easy"]) + len(s["nonflip"]))
+    scenarios = {
+        "rerun variance: 3 repeats x 50 tasks x L1,L2": 3 * 50 * 2,
+        "no selection: both models climb the same 100 tasks": round(100 * climb),
+        "full grid: 591 tasks x 6 levels x 3 repeats, per model": AUTHORED * 6 * 3,
+    }
+    return {
+        "tokens by source": {k: f"{v / 1e9:.2f}B" for k, v in tok.items()},
+        "tokens total": f"{total_tok / 1e9:.2f}B",
+        "cache reads share": f"{100 * sum(cache.values()) / total_tok:.0f}%",
+        "runs or sessions": dict(runs),
+        "cost_usd by source (Devin at SWE-2 promo)": {k: round(v) for k, v in usd.items()},
+        "cost_usd total": round(total_usd),
+        "cost_usd total with Devin at list": round(total_usd - usd["devin trials"]
+                                                   - usd["devin host, mostly authoring"]
+                                                   + DU.cost(dv["all"], DU.PRICE_LIST)),
+        "authoring cost per authored task (Devin host)": round(usd["devin host, mostly authoring"] / AUTHORED, 2),
+        "grading cost per certificate": round(grading / n_certs, 2),
+        "per run, cost and tokens": {m: (round(c, 2), f"{t_ / 1e6:.1f}M") for m, (c, t_) in per_run.items()},
+        "runs per graded task, all models": round(climb, 1),
+        "next measurements, cost for both models": {
+            k: (f"{n} runs per model", f"${n * both[0]:,.0f}", f"{n * both[1] / 1e9:.0f}B tokens")
+            for k, n in scenarios.items()},
+        "graded runs by model": dict(graded_runs),
+    }
+
+
 def compute(jobs_dir=TL.JOBS):
     s = TL.summary(jobs_dir)
     certs = TL.certificates(jobs_dir)
@@ -103,7 +169,10 @@ def compute(jobs_dir=TL.JOBS):
         by_repo[f"{repo} screened"] += 1
         by_repo[f"{repo} passed"] += b in second_pass
 
+    scale = _scale(trials, valid, len(certs), by_solver, s)
+
     return {
+        "scale and cost": scale,
         "funnel": {"authored": authored, "trialled": s["units"], "graded": graded,
                    "never ran": authored - s["units"], "waiting": s["units"] - graded,
                    "solved from the bug report": len(s["too_easy"]),
