@@ -71,4 +71,46 @@ specifically and not on example-based ones. That is a comparison across a popula
 solvers, and needs several trials per cell -- so it is a deliberate experiment, not something to
 read out of the trials already banked.
 
-Until then: one unit, one solver, and a story.
+## The experiment was designed, sized, and stood down
+
+Composer is the right instrument -- the one real datapoint is composer's, and composer is idle
+with budget while devin is saturated on the climb, so it costs no devin capacity. Cost is also
+better than feared: a composer L3 trial is 2.0M tokens at the median, 4.1M at the mean.
+
+It was not run, for two reasons found while sizing it.
+
+**It cannot be powered at a price worth paying.** 12 units per arm is 24 trials, about 98M
+expected and 157M on the sum bound -- up to 68% of the remaining budget -- and it only fires on
+a very large effect: 9/12 against 3/12 gives Fisher p = 0.039, while 8/12 against 3/12 gives
+0.100 and anything smaller gives nothing.
+
+**And it cannot be run cleanly at any price, because suite kind is confounded with repository.**
+The first selection pass produced six property units that were all `kops-*` and six example
+units that were all go-git, which is not a test of suite kind at all -- and repository effects
+in this dataset are known to be large (go-github's second screen: 8 of 10 against 3 of 32
+elsewhere). Counting the candidate pool by true source repository rather than unit-name prefix:
+
+| repo | property | example |
+|---|---|---|
+| kops | 18 | 0 |
+| helm | 7 | 0 |
+| client-go, goa | 8 | 0 |
+| go-github | 0 | 10 |
+| go-git `plumbing` | 0 | 24 |
+| gin | 2 | 12 |
+| nats `server` | 7 | 3 |
+
+**Three repo-matched pairs exist in the whole dataset**, all from nats-server. An unmatched 6-v-6
+would measure the repository and call it the suite kind.
+
+That confounding is worth more than the hypothesis it blocks: property-based suites in this
+dataset are a kops/helm/client-go/goa habit, and example-based suites a go-github/go-git/gin
+habit. Suite style travels with the authoring batch and the source repository, so ANY
+comparison that splits on suite style is also splitting on repository unless it is matched --
+and there is not enough overlap to match.
+
+Settling this needs units authored for it: the same source repository, the same contract, with
+property and example suites written as a deliberate pair. That is a generation task, not a
+trials task.
+
+Until then: one unit, one solver, a story, and no clean way to test it.
