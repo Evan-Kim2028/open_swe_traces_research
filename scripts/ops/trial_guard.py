@@ -355,6 +355,19 @@ def decide(unit, per, solver=None):
         _mup = [int(r) for r, v in (mine or {}).items()
                 if r.isdigit() and int(r) >= 2 and v and max(v) > 0]
         if _ml0 and max(_ml0) == 0 and _mup:
+            # "Its curve is complete" is only true if the rungs BELOW the passing one were
+            # measured. advrefs read L0 f, L2 f/f/f, L6 PASS -- a certificate at L6 with L3, L4
+            # and L5 never run, so rung_established is False and "needs L6" is an upper bound,
+            # not a measurement. Its true need could be L3. Reported as a 4-rung gap against
+            # composer's L2 before that was noticed.
+            #
+            # The roster reopens exactly those holes, for a solver with no verdict at the rung,
+            # bounded by cap 1. This is the same argument that put L3 and L4 on the composer
+            # curves for exprhash and httpmux: a dose-response curve whose cells are inferred
+            # cannot test the monotonicity it was inferred from.
+            if backfill_wanted(base, rung) and not (mine or {}).get(rung):
+                return True, (f"curve backfill: {solver} passed L{min(_mup)} but never ran "
+                              f"L{rung} — filling the hole rather than inferring it")
             return False, (f"certified for {solver}: it failed L0 and passed "
                            f"L{min(_mup)} — its curve is complete")
         reopened = None
