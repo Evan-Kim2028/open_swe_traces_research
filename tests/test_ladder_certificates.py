@@ -82,6 +82,16 @@ def test_guard_refuses_dropped_tasks():
     assert not ok and why.startswith("dropped")
 
 
+def test_stack_ladder_admits_upper_rungs_only_when_asked(monkeypatch):
+    from openswe_traces.ladder import match
+    bys = {"u": {"composer": {"0": [0.0], "2": [0.0], "3": [0.0]}}}
+    monkeypatch.delenv("STACK_LADDER", raising=False)
+    assert not match.decide("u-L3", "devin", bys)[0]
+    monkeypatch.setenv("STACK_LADDER", "1")
+    ok, why = match.decide("u-L3", "devin", bys)
+    assert ok and why.startswith("stacked")
+
+
 def test_audited_void_drops_a_contaminated_pass(tmp_path, monkeypatch):
     j = tmp_path / "jobs"
     write_trial(j, "sweep", "leaky-L3", 7, "composer", 1)

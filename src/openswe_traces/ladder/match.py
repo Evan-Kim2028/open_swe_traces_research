@@ -125,6 +125,12 @@ def decide(unit: str, agent: str, bys=None) -> tuple[bool, str]:
         return True, f"no recorded failure below L{rung}"
     if me in failed:
         return True, f"{me} failed this unit below L{rung}"
+    # STACK_LADDER=1: run a solver's upper rungs alongside its own lower screen instead of
+    # after it. Certificates are per solver (ledger.certificates_by_solver), so this cannot
+    # mint a cross certificate: if the solver then passes lower down, the upper verdicts are
+    # simply part of its curve. It buys wall-clock time with runs that may prove unneeded.
+    if os.environ.get("STACK_LADDER") == "1":
+        return True, f"stacked ladder: {me} climbs beside its own lower screen"
     return False, (f"cross-solver: {me} would certify a unit failed by "
                    f"{'/'.join(sorted(failed))} — routes to them instead")
 
