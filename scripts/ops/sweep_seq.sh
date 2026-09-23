@@ -248,7 +248,9 @@ o=slots.occupancy('devin'); print(max(0, o['cap']-o['total']))" 2>/dev/null || e
   fi
   harbor run --path "$PEND" "${AGENT_KWARGS[@]}" \
     --n-concurrent "$CONC" --n-attempts 1 --max-retries 1 \
-    --jobs-dir experiments/dose_response/jobs --job-name "$JOB" --yes &
+    --jobs-dir experiments/dose_response/jobs --job-name "$JOB" --yes 9>&- &
+  # 9>&-: harbor must not inherit the lock fd. It did, so the lock stayed held for the
+  # whole RUN, not the admission decision, and every other launch queued behind it.
   HPID=$!
   sleep 20                              # let harbor claim its slots before releasing the lock
   exec 9>&-

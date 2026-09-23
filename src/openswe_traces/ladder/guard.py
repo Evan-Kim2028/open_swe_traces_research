@@ -518,6 +518,11 @@ def decide(unit, per, solver=None):
                 return False, (f"escalation wants L{want}, not L{rung} — "
                                f"one rung at a time ({why})")
             return True, f"escalation: {why}"
+        if (os.environ.get("STACK_LADDER") == "1" and mine is not None
+                and not (mine or {}).get(rung)):
+            # Whole-curve runs for a model comparison: measure every rung at once rather
+            # than one latency per rung. The cap and in-flight checks above still bound it.
+            return True, f"stacked ladder: L{rung} for {solver}, measured beside the lower rungs"
         if not (l0 and max(l0) == 0 and l2 and max(l2) > 0):
             return False, f"ladder rung L{rung} on an uncertified unit — certify first"
         if not in_ladder_sample(base):
