@@ -225,11 +225,13 @@ for round in $(seq 1 "$ROUNDS"); do
   # advisory helper. So the limit moves to the choke point, under a lock so two launchers cannot
   # both read the same free count, and clamps to what is MEASURED free rather than what the
   # caller asked for.
-  GATE=outputs/supervisor/launch.lock
+  # One lock per solver: the caps are per solver, so a Devin launch must never make a
+  # Composer launch wait, or the reverse.
+  SOLVER_FOR_CAP="${GUARD_SOLVER:-composer}"
+  GATE="outputs/supervisor/launch.$SOLVER_FOR_CAP.lock"
   mkdir -p "$(dirname "$GATE")"
   exec 9>"$GATE"
   flock 9 || true                       # serialise the decision, not the sweep
-  SOLVER_FOR_CAP="${GUARD_SOLVER:-composer}"
   if [ "$SOLVER_FOR_CAP" = "devin" ]; then
     FREE=$(timeout 120 uv run python -c "
 import sys; sys.path.insert(0,'scripts/ops'); import slots
