@@ -212,9 +212,47 @@ for round in $(seq 1 "$ROUNDS"); do
   if [ -d "experiments/dose_response/jobs/$JOB" ]; then
     JOB="${D}_r${round}_$(date +%H%M%S)"
   fi
+  # ADMISSION GATE. The cap is enforced here, at the one place that actually launches trials,
+  # because enforcing it in the callers did not work: it broke three times in one evening, each
+  # time down a different path. grok_ladder never asked (it was written for grok, which has no
+  # cap) and launched seven at once against four. cohort_topup and a sweep asked at the same
+  # moment, both were told "four free", and both launched -- the guard's cap counts VERDICTS and
+  # an in-flight trial has none. And killing a harbor run left its containers running, spending
+  # quota while invisible to an occupancy that summed declared concurrency, so the count said
+  # 4/4 with nine up. 15 trials errored in the resulting throttle.
+  #
+  # Five things launch trials and every one of them decided its own concurrency by asking an
+  # advisory helper. So the limit moves to the choke point, under a lock so two launchers cannot
+  # both read the same free count, and clamps to what is MEASURED free rather than what the
+  # caller asked for.
+  GATE=outputs/supervisor/launch.lock
+  mkdir -p "$(dirname "$GATE")"
+  exec 9>"$GATE"
+  flock 9 || true                       # serialise the decision, not the sweep
+  SOLVER_FOR_CAP="${GUARD_SOLVER:-composer}"
+  if [ "$SOLVER_FOR_CAP" = "devin" ]; then
+    FREE=$(timeout 120 uv run python -c "
+import sys; sys.path.insert(0,'scripts/ops'); import slots
+o=slots.occupancy('devin'); print(max(0, o['cap']-o['total']))" 2>/dev/null || echo 1)
+    FREE=${FREE:-1}
+    if [ "$FREE" -le 0 ]; then
+      echo "   admission: devin at cap, not launching this round"
+      exec 9>&-
+      sleep 120
+      continue
+    fi
+    if [ "$CONC" -gt "$FREE" ]; then
+      echo "   admission: clamping concurrency $CONC -> $FREE (measured free devin slots)"
+      CONC="$FREE"
+    fi
+  fi
   harbor run --path "$PEND" "${AGENT_KWARGS[@]}" \
     --n-concurrent "$CONC" --n-attempts 1 --max-retries 1 \
-    --jobs-dir experiments/dose_response/jobs --job-name "$JOB" --yes
+    --jobs-dir experiments/dose_response/jobs --job-name "$JOB" --yes &
+  HPID=$!
+  sleep 20                              # let harbor claim its slots before releasing the lock
+  exec 9>&-
+  wait "$HPID"
   "$R/scripts/ops/post_sweep.sh" "$JOB"
   # drop every unit that passed this round
   for t in "experiments/dose_response/jobs/$JOB"/*/; do
