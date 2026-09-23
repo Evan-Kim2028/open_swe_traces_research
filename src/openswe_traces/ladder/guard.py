@@ -230,9 +230,10 @@ def solver_view(base, solver):
 
 
 _INFLIGHT = None
+_SOLVER_OF_AGENT = {"devin": "devin", "cursor-cli": "composer", "cursor": "composer", "grok-build": "grok"}
 
 
-def inflight_cells():
+def inflight_cells(solver=None):
     """Cells with a RUNNING container right now, as {"base-Lk"}, memoised per process.
 
     The per-rung cap counts VERDICTS, and an in-flight trial has none yet, so two launchers
@@ -257,6 +258,11 @@ def inflight_cells():
             import subprocess
             out = subprocess.run(["docker", "ps", "--format", "{{.Names}}"],
                                  capture_output=True, text=True, timeout=30).stdout
+            import glob as _glob
+            from openswe_traces.ops import slots as _slots
+            jobs = os.path.join("experiments", "dose_response", "jobs")
+            index = {os.path.basename(q).lower(): q
+                     for q in _glob.glob(os.path.join(jobs, "*", "*__*"))}
             for n in out.split():
                 if "__env-main" not in n:
                     continue
@@ -264,10 +270,14 @@ def inflight_cells():
                 if "-l" in stem:
                     b, _, r = stem.rpartition("-l")
                     if r.isdigit():
-                        _INFLIGHT.add(f"{b}-L{r}")
+                        owner = _slots._trial_agent(n, index)
+                        _INFLIGHT.add((f"{b}-L{r}", _SOLVER_OF_AGENT.get(owner, owner)))
         except Exception:
             _INFLIGHT = set()      # cannot tell: do not block work on a failed probe
-    return _INFLIGHT
+    # Per solver: Composer's exprhash-L3 is a different cell from Devin's, and treating them
+    # as one refused Devin's whole stacked climb while Composer ran the same rungs. A
+    # container whose owner cannot be identified (owner None) blocks every solver.
+    return {c for c, owner in _INFLIGHT if solver is None or owner in (solver, None)}
 
 
 def decide(unit, per, solver=None):
@@ -400,7 +410,7 @@ def decide(unit, per, solver=None):
     # scale with however many solvers exist and errored trials record no verdict (the same
     # hole L0_SCREEN_CAP was built to plug). Bounded by solver count, not unbounded.
     # Already running? Then there is nothing to buy: the verdict is on its way.
-    if f"{base}-L{rung}" in inflight_cells():
+    if f"{base}-L{rung}" in inflight_cells(solver):
         return False, f"L{rung} for {base} is already running — wait for its verdict"
     counted = mine if mine is not None else d
     n_this_rung = len(counted.get(rung, []))
