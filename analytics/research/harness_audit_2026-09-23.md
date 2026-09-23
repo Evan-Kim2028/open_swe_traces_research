@@ -85,3 +85,32 @@ counts the void zeros as decided cells, so the reruns wait on this branch reachi
 Any transformation of staged tasks is followed by re-validation of every copy it touched:
 buggy fails, gold passes, cheat rejected. Reward alone cannot tell a harness failure from a
 model failure.
+
+## Rerun results (2026-09-23, afternoon)
+
+Repaired copies in `sweep_fix_*`, each cohort followed by `harness_audit --job` (every check
+clean apart from Devin rate-limit errors, which are no verdict and were rerun or dropped).
+
+| task | Composer L3 | L4 | L5 | L6 | Devin |
+|---|---|---|---|---|---|
+| exprhash | fail | fail | **pass** | **pass** | L5 **pass** (single probe, no L1 on record) |
+| httpmux | fail | fail | **pass** | **pass** | L1 fail, L3 fail |
+| goa-evalctx | | | | | L1 pass |
+
+Every pass edits only the file under test, except Devin's exprhash L5, which also reverts
+rename damage elsewhere in the tree (`apikit.design/...` import paths, `apikit.ServiceError`,
+`apikit-attribute` headers in codegen and `expr/http_response.go`). The graded `TestDetail`
+hash tests do not reach that code, and Composer passed them with `hasher.go` alone.
+
+Leftover rename damage: the goa (`apikit/v3`) trees still carry renamed strings outside
+the tested packages, so unrelated tests are red for agents (the goa-evalctx agent flagged an
+`expr.init()` panic). Grading is unaffected (gold passes, buggy fails, cheat rejected), but
+the next goa cohort should get those strings reverted before it is authored.
+
+Devin rate limit: four concurrent Devin trials trip "Reached free model rate limit" and
+it takes about 30 minutes to clear; 13 Devin trials died on it today. Two concurrent ran
+cleanly. The remaining Devin cells (exprhash L1-L4/L6, httpmux L2/L4-L6) were left unrun.
+
+Gate fixes made along the way (PRs #3-#7): harbor no longer inherits the admission lock;
+one lock per solver; Devin occupancy counts only Devin containers; the in-flight check is
+per solver; `STACK_LADDER=1` measures a solver's upper rungs beside its own lower screen.
