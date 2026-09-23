@@ -229,6 +229,47 @@ def solver_view(base, solver):
     return dict(_BYS.get(base, {}).get(solver, {}))
 
 
+_INFLIGHT = None
+
+
+def inflight_cells():
+    """Cells with a RUNNING container right now, as {"base-Lk"}, memoised per process.
+
+    The per-rung cap counts VERDICTS, and an in-flight trial has none yet, so two launchers
+    that both ask "may devin run advrefs-L5" both get yes. That is not hypothetical: a sweep
+    and a top-up loop started on the same cohort seconds apart and ran advrefs-L4 and
+    advrefs-L5 twice each, putting devin at 6 against a cap of 4. Killing a harbor run does not
+    stop its containers either, so the duplicates had to be reaped by hand.
+
+    Fixing it in each launcher would mean fixing it in each launcher -- sweep_seq, the topup
+    loop, ladder_matrix and grok_ladder all launch independently and none of them arbitrate.
+    The guard is the one place they all consult, so the check belongs here.
+
+    Memoised because decide() is called hundreds of times per orchestrator pass and `docker ps`
+    is not free. That means a long-lived process sees a stale view, which is the right trade:
+    the callers that matter are short-lived sweeps, and a stale view only ever refuses work
+    that has since finished -- it never permits a duplicate.
+    """
+    global _INFLIGHT
+    if _INFLIGHT is None:
+        _INFLIGHT = set()
+        try:
+            import subprocess
+            out = subprocess.run(["docker", "ps", "--format", "{{.Names}}"],
+                                 capture_output=True, text=True, timeout=30).stdout
+            for n in out.split():
+                if "__env-main" not in n:
+                    continue
+                stem = n.split("__", 1)[0]          # e.g. advrefs-l5
+                if "-l" in stem:
+                    b, _, r = stem.rpartition("-l")
+                    if r.isdigit():
+                        _INFLIGHT.add(f"{b}-L{r}")
+        except Exception:
+            _INFLIGHT = set()      # cannot tell: do not block work on a failed probe
+    return _INFLIGHT
+
+
 def decide(unit, per, solver=None):
     if "-L" not in unit or not unit.rsplit("-L", 1)[-1][:1].isdigit():
         return True, "unrecognised unit name"
@@ -339,6 +380,9 @@ def decide(unit, per, solver=None):
     # A global ceiling still applies at the certifying rungs, because per-solver caps alone
     # scale with however many solvers exist and errored trials record no verdict (the same
     # hole L0_SCREEN_CAP was built to plug). Bounded by solver count, not unbounded.
+    # Already running? Then there is nothing to buy: the verdict is on its way.
+    if f"{base}-L{rung}" in inflight_cells():
+        return False, f"L{rung} for {base} is already running — wait for its verdict"
     counted = mine if mine is not None else d
     n_this_rung = len(counted.get(rung, []))
     # The cap is checked BEFORE staleness on purpose: repair resetting staleness is how single
