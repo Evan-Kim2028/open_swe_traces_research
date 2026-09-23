@@ -92,7 +92,34 @@ def audit() -> dict:
             "tool calls scanned": dict(n_calls), "web tool calls": web}
 
 
+REAL = ("PASS", "PASS, agent also edited test files", "FAIL tests ran and failed",
+        "FAIL agent code does not build", "FAIL timeout", "no verdict (harness error)")
+
+
+def check_jobs(prefix: str) -> int:
+    """Post-run check for one cohort: every trial in jobs named PREFIX* must be a real
+    verdict (tests ran) or a plain harness error. Anything else - a void, an unexplained
+    setup failure, a vacuous pass, a zero with no failing test - is a harness bug, and the
+    cohort's numbers should not be believed until it is explained. Returns the bad count."""
+    bad = 0
+    for t in T.trials():
+        if not t["job"].startswith(prefix):
+            continue
+        k = verdict_class(t)
+        flag = "ERR" if k.startswith("no verdict") else "ok " if k in REAL else "BAD"
+        bad += k not in REAL
+        web = [n for n, _ in tool_calls(pathlib.Path(t["dir"]) / "agent") if WEB.search(n)]
+        if web:
+            flag, bad = "BAD", bad + 1
+            k += f"; web tool {web[0]}"
+        print(f"  {flag} {t['job']}/{pathlib.Path(t['dir']).name}  {k}")
+    return bad
+
+
 def main() -> None:
+    import sys
+    if "--job" in sys.argv:
+        sys.exit(1 if check_jobs(sys.argv[sys.argv.index("--job") + 1]) else 0)
     r = audit()
     for k, n in r["verdicts"].items():
         print(f"{n:6d}  {k}")
