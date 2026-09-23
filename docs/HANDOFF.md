@@ -63,14 +63,12 @@ restarted, since it changes `pyproject.toml` and `uv run` re-syncs on the next c
 
 ## What is left
 
-1. **Devin's cost row in the paper** needs the user's ACU export. It is not derivable from the repo:
-   the repo reports 704.7M input / 664.1M cache against the table's 162M / 3,270M. Blocked on the
-   user. The Stage 1 total, dollars per certificate, token totals and the "six times per run"
-   ratio all depend on it.
-2. **The per-level cost table** in the paper (541 / 834 / 97 runs, $198 / $225 / $93) cannot be
-   reproduced from the ledger; Composer and Grok have not run since, and no definition tried gives
-   it. Over all Composer and Grok runs it is 524 / 673 / 274 runs and $233 / $255 / $213, which
-   makes runs above L2 about 2x an L2 run rather than "more than three times". Needs a decision.
+1. **Devin's cost** is now computed from exact per-request counts in its session databases
+   (`devin_usage --exact`): 1.69B tokens over 295 trial sessions and 2.95B over 213 host
+   (authoring) sessions, about $654 at the SWE-2 promotional rate. The paper uses this. An ACU
+   export would confirm the dollars; it is no longer a blocker.
+2. **The per-level cost table** the paper used could not be reproduced and has been replaced with
+   figures from all Composer and Grok runs ($0.78 a run above L2, $0.38 at L2).
 3. **Euler diagram geometry** in the paper: the numbers were updated, the block proportions are stale.
 4. **`ladder_purity` is nondeterministic on ties**: the owner and stray columns for `cronparse`,
    `httpencoding` and `reflectfmt` change with `PYTHONHASHSEED`. Pre-existing; not fixed in the move.
