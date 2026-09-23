@@ -64,6 +64,14 @@ def test_module_path_mismatch_is_no_verdict(tmp_path):
     assert "renamed" not in ledger.ledger_by_solver(str(j))
 
 
+def test_audited_void_drops_a_contaminated_pass(tmp_path, monkeypatch):
+    j = tmp_path / "jobs"
+    write_trial(j, "sweep", "leaky-L3", 7, "composer", 1)
+    monkeypatch.setitem(ledger.AUDITED_VOID, "sweep/leaky-L3__t7", "fetched upstream")
+    (t,) = ledger.trials(str(j))
+    assert t["reward"] is None and t["void"] == "fetched upstream"
+
+
 def test_certificates_are_per_solver(jobs):
     by = ledger.certificates_by_solver(jobs)["advrefs"]
     assert by["composer"]["rung"] == 2 and by["composer"]["rung_established"]

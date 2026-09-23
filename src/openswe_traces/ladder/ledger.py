@@ -28,6 +28,15 @@ JOBS = "experiments/dose_response/jobs"
 _MODULE_MISMATCH = re.compile(r'module example\.internal/\S+: Get "https://proxy\.golang\.org/')
 
 
+# Verdicts voided by hand after an audit, keyed by job/trial. Contamination the container
+# cannot block: cursor-cli's web tools run on the provider's side, outside the egress
+# allowlist. A scan of every trajectory (2026-09-23) found one web fetch in all trials.
+AUDITED_VOID = {
+    "sweep_climb_L3/helm-depresolver-L3__EJHvEHK":
+        "fetched the file under test from upstream (provider-side WebFetch), then passed",
+}
+
+
 def unmeasured(tdir):
     """Why a zero verdict measured nothing, or None if it is a real failure."""
     try:
@@ -102,7 +111,8 @@ def trials(jobs_dir=JOBS):
                     reward = float(open(rt).read().strip() or 0)
                 except Exception:
                     pass
-        void = unmeasured(tdir) if reward == 0.0 else None
+        void = AUDITED_VOID.get("/".join(tdir.split(os.sep)[-2:]))
+        void = void or (unmeasured(tdir) if reward == 0.0 else None)
         if void:
             reward = None
         yield {"dir": tdir, "job": tdir.split(os.sep)[-2], "unit": name, "base": base,
