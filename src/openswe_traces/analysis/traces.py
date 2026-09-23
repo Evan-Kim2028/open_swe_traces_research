@@ -1,6 +1,8 @@
 """How Composer and Devin work a task, read from their trial traces.
 
-    uv run python -m openswe_traces.analysis.traces [--json]
+    uv run python -m openswe_traces.analysis.traces [--json | --rows]
+
+--rows prints one JSON object per trial, for plotting from another project.
 
 Each trial is reduced to the same handful of measures whichever agent ran it:
 
@@ -161,6 +163,10 @@ def paired(rs):
 
 
 def cli():
+    if "--rows" in sys.argv:
+        for r in trials():
+            print(json.dumps(r))
+        return
     rs = list(trials())
     res = {"trials": collections.Counter(r["model"] for r in rs), **summarise(rs), "paired": paired(rs)}
     if "--json" in sys.argv:
