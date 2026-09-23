@@ -89,9 +89,25 @@ def trials(agent="devin"):
 
 
 def occupancy(agent="devin"):
+    """Sessions + trials, where a trial's weight is the LARGER of its declared concurrency
+    and the containers actually attributable to it.
+
+    Counting --n-concurrent alone misses orphans: kill a harbor run and docker leaves its
+    containers running, still calling the model and still spending the account's concurrency,
+    with no harbor left to write a result. Occupancy read 4/4 while nine containers were up,
+    five of them orphaned, so every cap decision built on this number was wrong in the
+    dangerous direction -- it said there was room when there was not.
+
+    Containers are the ground truth for what is consuming quota, so take the max. A container
+    with no live harbor is still occupancy; it is just occupancy that will never return a
+    verdict, which is what reap_orphans.py is for.
+    """
     s, t = sessions(agent), trials(agent)
+    declared = sum(x["conc"] for x in t)
+    actual = containers() if t or s else 0
     return {"sessions": s, "trials": t,
-            "total": len(s) + sum(x["conc"] for x in t),
+            "total": len(s) + max(declared, actual),
+            "declared": declared, "containers": actual,
             "cap": CAP}
 
 
@@ -101,8 +117,12 @@ def containers():
 
 def summary(agent="devin"):
     o = occupancy(agent)
+    note = ""
+    if o.get("containers", 0) > o.get("declared", 0):
+        note = (f"  [{o['containers']} container(s) vs {o['declared']} declared — "
+                f"run reap_orphans.py]")
     return (f"{agent} {o['total']}/{o['cap']} = {len(o['sessions'])} session(s) + "
-            f"{sum(x['conc'] for x in o['trials'])} trial(s)")
+            f"{sum(x['conc'] for x in o['trials'])} trial(s){note}")
 
 
 def supervisor_pid():
