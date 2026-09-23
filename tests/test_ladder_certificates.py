@@ -76,6 +76,12 @@ def test_invalid_renamed_tree_voids_only_renamed_verdicts(tmp_path, monkeypatch)
     assert by["5"]["reward"] is None and by["5"]["void"] == "fix already present"
 
 
+def test_guard_refuses_dropped_tasks():
+    from openswe_traces.ladder import guard
+    ok, why = guard.decide("helm-dlmanager-L2", {}, "devin")
+    assert not ok and why.startswith("dropped")
+
+
 def test_audited_void_drops_a_contaminated_pass(tmp_path, monkeypatch):
     j = tmp_path / "jobs"
     write_trial(j, "sweep", "leaky-L3", 7, "composer", 1)
