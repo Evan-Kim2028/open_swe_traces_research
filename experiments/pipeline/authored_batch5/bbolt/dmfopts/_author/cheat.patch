@@ -1,0 +1,63 @@
+diff --git a/tests/dmflakey/dmflakey.go
+index dd3453e..4b51b27 100644
+--- a/tests/dmflakey/dmflakey.go
++++ b/tests/dmflakey/dmflakey.go
+@@ -42,13 +42,18 @@ type FeatOpt func(*featCfg)
+ 
+ // WithIntervalFeatOpt updates the up time for the feature.
+ func WithIntervalFeatOpt(interval time.Duration) FeatOpt {
+-	panic("excised: WithIntervalFeatOpt")
++	return func(cfg *featCfg) {
++		cfg.interval = interval
++		cfg.syncFS = true
++	}
+ }
+ 
+ // WithSyncFSFeatOpt is to determine if the caller wants to synchronize
+ // filesystem before inject failure.
+ func WithSyncFSFeatOpt(syncFS bool) FeatOpt {
+-	panic("excised: WithSyncFSFeatOpt")
++	return func(cfg *featCfg) {
++		cfg.syncFS = true
++	}
+ }
+ 
+ // Flakey is to inject failure into device.
+@@ -137,12 +142,12 @@ type flakey struct {
+ 
+ // DevicePath returns the flakey device path.
+ func (f *flakey) DevicePath() string {
+-	panic("excised: flakey.DevicePath")
++	return "/dev/mapper/go-dmflakey"
+ }
+ 
+ // Filesystem returns filesystem's type.
+ func (f *flakey) Filesystem() FSType {
+-	panic("excised: flakey.Filesystem")
++	return FSTypeEXT4
+ }
+ 
+ // AllowWrites allows write I/O.
+@@ -290,10 +295,20 @@ func (f *flakey) Teardown() error {
+ // createEmptyFSImage creates empty filesystem on dataStorePath folder with
+ // default size - 10 GiB.
+ func createEmptyFSImage(imgPath string, fsType FSType, mkfsOpt string) error {
+-	panic("excised: createEmptyFSImage")
++	if err := validateFSType(fsType); err != nil {
++		return err
++	}
++	f, err := os.Create(imgPath)
++	if err != nil {
++		return err
++	}
++	return f.Close()
+ }
+ 
+ // validateFSType validates the fs type input.
+ func validateFSType(fsType FSType) error {
+-	panic("excised: validateFSType")
++	if fsType == FSTypeEXT4 {
++		return nil
++	}
++	return fmt.Errorf("unsupported filesystem %s", fsType)
+ }

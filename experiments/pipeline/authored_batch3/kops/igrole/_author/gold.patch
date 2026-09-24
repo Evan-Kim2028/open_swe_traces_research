@@ -1,0 +1,76 @@
+--- a/pkg/apis/kops/parse.go
++++ b/pkg/apis/kops/parse.go
+@@ -17,11 +17,11 @@
+ package kops
+ 
+ import (
+-	_ "fmt"
+-	_ "strings"
++	"fmt"
++	"strings"
+ 
+-	_ "example.internal/clustkit/upup/pkg/fi/utils"
+-	_ "sigs.k8s.io/yaml"
++	"example.internal/clustkit/upup/pkg/fi/utils"
++	"sigs.k8s.io/yaml"
+ )
+ 
+ // ParseInstanceGroupRole converts a string to an InstanceGroupRole.
+@@ -29,17 +29,54 @@
+ // If lenient is set to true, the function will match pluralised words too.
+ // It will return the instance group role and true if a match was found.
+ func ParseInstanceGroupRole(input string, lenient bool) (InstanceGroupRole, bool) {
+-	panic("excised: ParseInstanceGroupRole")
++	findRole := strings.ToLower(input)
++	if lenient {
++		// Accept pluralized "bastions" for "bastion"
++		findRole = strings.TrimSuffix(findRole, "s")
++	}
++	findRole = strings.Replace(findRole, "controlplane", "control-plane", 1)
++
++	for _, role := range AllInstanceGroupRoles {
++		s := role.ToLowerString()
++		if lenient {
++			s = strings.TrimSuffix(s, "s")
++		}
++		if s == findRole {
++			return role, true
++		}
++	}
++
++	if lenient && strings.ToLower(findRole) == "master" {
++		return InstanceGroupRoleControlPlane, true
++	}
++
++	return "", false
+ }
+ 
+ // ParseRawYaml parses an object just using yaml, without the full api machinery
+ // Deprecated: prefer using the API machinery (package kopscodecs)
+ func ParseRawYaml(data []byte, dest interface{}) error {
+-	panic("excised: ParseRawYaml")
++	// Yaml can't parse empty strings
++	configString := string(data)
++	configString = strings.TrimSpace(configString)
++
++	if configString != "" {
++		err := yaml.Unmarshal([]byte(configString), dest, yaml.DisallowUnknownFields)
++		if err != nil {
++			return fmt.Errorf("error parsing configuration: %v", err)
++		}
++	}
++
++	return nil
+ }
+ 
+ // ToRawYaml marshals an object to yaml, without the full api machinery
+ // Deprecated: prefer using the API machinery (package kopscodecs)
+ func ToRawYaml(obj interface{}) ([]byte, error) {
+-	panic("excised: ToRawYaml")
++	data, err := utils.YamlMarshal(obj)
++	if err != nil {
++		return nil, fmt.Errorf("error converting to yaml: %v", err)
++	}
++
++	return data, nil
+ }

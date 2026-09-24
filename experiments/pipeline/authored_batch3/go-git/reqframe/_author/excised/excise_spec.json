@@ -1,0 +1,14 @@
+{
+ "reqframe": {
+  "plumbing/protocol/packp/command.go": [
+   "CommandRequest.Encode",
+   "CommandRequest.Decode"
+  ],
+  "plumbing/protocol/packp/gitproto.go": [
+   "GitProtoRequest.validate",
+   "validateGitProtoField",
+   "GitProtoRequest.Encode",
+   "GitProtoRequest.Decode"
+  ]
+ }
+}

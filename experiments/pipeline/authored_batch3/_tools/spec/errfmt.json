@@ -1,0 +1,30 @@
+{
+  "impl": {
+    "github/github.go": {
+      "ErrorResponse.Error": "return fmt.Sprintf(\"%v %+v\", r.Message, r.Errors)",
+      "RateLimitError.Error": "return r.Message",
+      "AbuseRateLimitError.Error": "return r.Message",
+      "RedirectionError.Error": "return fmt.Sprintf(\"redirection: %v\", r.StatusCode)",
+      "AcceptedError.Error": "return \"accepted\"",
+      "Error.Error": "return e.Message",
+      "Error.UnmarshalJSON": "type aliasError Error\n\treturn json.Unmarshal(data, (*aliasError)(e))",
+      "sanitizeURL": "return uri",
+      "formatRateReset": "return \"\""
+    }
+  },
+  "deltests": {
+    "github/github_test.go": [
+      "TestErrorResponse_Error",
+      "TestError_Error",
+      "TestError_UnmarshalJSON",
+      "TestSanitizeURL",
+      "TestDo_sanitizeURL",
+      "TestFormatRateReset",
+      "TestTwoFactorAuthError",
+      "TestRateLimitError",
+      "TestAcceptedError",
+      "TestAbuseRateLimitError"
+    ]
+  },
+  "testre": "TestErrorResponse_Error|TestError_Error|TestError_UnmarshalJSON|TestSanitizeURL|TestDo_sanitizeURL|TestFormatRateReset|TestTwoFactorAuthError|TestRateLimitError|TestAcceptedError|TestAbuseRateLimitError"
+}

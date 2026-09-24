@@ -1,0 +1,210 @@
+diff --git a/plumbing/format/objfile/reader.go b/plumbing/format/objfile/reader.go
+index a78d88b..bef9bba 100644
+--- a/plumbing/format/objfile/reader.go
++++ b/plumbing/format/objfile/reader.go
+@@ -3,7 +3,7 @@ package objfile
+ import (
+ 	"errors"
+ 	"io"
+-	_ "strconv"
++	"strconv"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+ 	format "example.internal/gitkit/v6/plumbing/format/config"
+@@ -54,7 +54,32 @@ func NewReader(r io.Reader, objectFormat format.ObjectFormat) (*Reader, error) {
+ 
+ // Header reads the type and the size of object, and prepares the reader for read
+ func (r *Reader) Header() (t plumbing.ObjectType, size int64, err error) {
+-	panic("excised: Reader.Header")
++	budget := maxHeaderLen
++
++	var raw []byte
++	raw, budget, err = r.readUntil(' ', budget)
++	if err != nil {
++		return t, size, err
++	}
++
++	t, err = plumbing.ParseObjectType(string(raw))
++	if err != nil {
++		return t, size, err
++	}
++
++	raw, _, err = r.readUntil(0, budget)
++	if err != nil {
++		return t, size, err
++	}
++
++	size, err = strconv.ParseInt(string(raw), 10, 64)
++	if err != nil {
++		err = ErrHeader
++		return t, size, err
++	}
++
++	defer r.prepareForRead(t, size)
++	return t, size, err
+ }
+ 
+ // readUntil reads one inflated byte at a time from r.zlib until it encounters
+@@ -62,11 +87,31 @@ func (r *Reader) Header() (t plumbing.ObjectType, size int64, err error) {
+ // of bytes consumed from r.zlib, including delim; it mirrors canonical Git's
+ // MAX_HEADER_LEN bound applied across the full loose-object header.
+ func (r *Reader) readUntil(delim byte, budget int) ([]byte, int, error) {
+-	panic("excised: Reader.readUntil")
++	var buf [1]byte
++	value := make([]byte, 0, 16)
++	for {
++		if budget <= 0 {
++			return nil, 0, ErrHeaderTooLong
++		}
++		if n, err := r.zlib.Read(buf[:]); err != nil && (err != io.EOF || n == 0) {
++			if err == io.EOF {
++				return nil, 0, ErrHeader
++			}
++			return nil, 0, err
++		}
++		budget--
++
++		if buf[0] == delim {
++			return value, budget, nil
++		}
++
++		value = append(value, buf[0])
++	}
+ }
+ 
+ func (r *Reader) prepareForRead(t plumbing.ObjectType, size int64) {
+-	panic("excised: Reader.prepareForRead")
++	r.hasher = plumbing.NewHasher(r.objectFormat, t, size)
++	r.multi = io.TeeReader(r.zlib, r.hasher)
+ }
+ 
+ // Read reads len(p) bytes into p from the object data stream. It returns
+@@ -79,7 +124,10 @@ func (r *Reader) prepareForRead(t plumbing.ObjectType, size int64) {
+ //
+ // Read returns ErrHeaderNotRead if Header has not been called successfully.
+ func (r *Reader) Read(p []byte) (n int, err error) {
+-	panic("excised: Reader.Read")
++	if r.multi == nil {
++		return 0, ErrHeaderNotRead
++	}
++	return r.multi.Read(p)
+ }
+ 
+ // Hash returns the hash of the object data stream that has been read so far.
+@@ -88,7 +136,12 @@ func (r *Reader) Read(p []byte) (n int, err error) {
+ // because [plumbing.Hash] encodes it internally and the result feeds
+ // serialisers that emit a format-sized byte slice.
+ func (r *Reader) Hash() plumbing.Hash {
+-	panic("excised: Reader.Hash")
++	if r.multi == nil {
++		var h plumbing.Hash
++		h.ResetBySize(r.objectFormat.Size())
++		return h
++	}
++	return r.hasher.Sum()
+ }
+ 
+ // Close releases any resources consumed by the Reader. Calling Close does not
+diff --git a/plumbing/format/objfile/writer.go b/plumbing/format/objfile/writer.go
+index 1973bf6..b8286b3 100644
+--- a/plumbing/format/objfile/writer.go
++++ b/plumbing/format/objfile/writer.go
+@@ -3,7 +3,7 @@ package objfile
+ import (
+ 	"errors"
+ 	"io"
+-	_ "strconv"
++	"strconv"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+ 	format "example.internal/gitkit/v6/plumbing/format/config"
+@@ -49,27 +49,66 @@ func NewWriter(w io.Writer, objectFormat format.ObjectFormat) *Writer {
+ // returned. If the encoded header exceeds maxHeaderLen,
+ // ErrHeaderTooLong is returned, mirroring the reader's bound.
+ func (w *Writer) WriteHeader(t plumbing.ObjectType, size int64) error {
+-	panic("excised: Writer.WriteHeader")
++	if !t.Valid() {
++		return plumbing.ErrInvalidType
++	}
++	return w.writeHeader(t, t.Bytes(), size)
+ }
+ 
+ func (w *Writer) writeHeader(t plumbing.ObjectType, typeBytes []byte, size int64) error {
+-	panic("excised: Writer.writeHeader")
++	if size < 0 {
++		return ErrNegativeSize
++	}
++
++	b := make([]byte, 0, maxHeaderLen)
++	b = append(b, typeBytes...)
++	b = append(b, ' ')
++	b = strconv.AppendInt(b, size, 10)
++	b = append(b, 0)
++
++	if len(b) > maxHeaderLen {
++		return ErrHeaderTooLong
++	}
++
++	defer w.prepareForWrite(t, size)
++	_, err := w.zlib.Write(b)
++	return err
+ }
+ 
+ func (w *Writer) prepareForWrite(t plumbing.ObjectType, size int64) {
+-	panic("excised: Writer.prepareForWrite")
++	w.pending = size
++
++	w.hasher = plumbing.NewHasher(w.objectFormat, t, size)
++	w.multi = io.MultiWriter(w.zlib, w.hasher)
+ }
+ 
+ // Write writes the object's contents. Write returns the error ErrOverflow if
+ // more than size bytes are written after WriteHeader.
+ func (w *Writer) Write(p []byte) (n int, err error) {
+-	panic("excised: Writer.Write")
++	if w.closed {
++		return 0, ErrClosed
++	}
++
++	overwrite := false
++	if int64(len(p)) > w.pending {
++		p = p[0:w.pending]
++		overwrite = true
++	}
++
++	n, err = w.multi.Write(p)
++	w.pending -= int64(n)
++	if err == nil && overwrite {
++		err = ErrOverflow
++		return n, err
++	}
++
++	return n, err
+ }
+ 
+ // Hash returns the hash of the object data stream that has been written so far.
+ // It can be called before or after Close.
+ func (w *Writer) Hash() plumbing.Hash {
+-	panic("excised: Writer.Hash")
++	return w.hasher.Sum() // Not yet closed, return hash of data written so far
+ }
+ 
+ // Close releases any resources consumed by the Writer.
+@@ -80,5 +119,16 @@ func (w *Writer) Hash() plumbing.Hash {
+ // It returns an error, if any. Close will return the same error if called
+ // multiple times.
+ func (w *Writer) Close() error {
+-	panic("excised: Writer.Close")
++	if w.closed {
++		return w.closeErr
++	}
++
++	defer sync.PutZlibWriter(w.zlib)
++	if err := w.zlib.Close(); err != nil {
++		w.closeErr = err
++		return err
++	}
++
++	w.closed = true
++	return nil
+ }

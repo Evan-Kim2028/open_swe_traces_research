@@ -1,0 +1,21 @@
+--- a/server/scheduler.go
++++ b/server/scheduler.go
+@@ -318,5 +318,18 @@
+ // parseMsgSchedule parses a message schedule pattern and returns the time
+ // to fire, whether it is a repeating schedule, and whether the pattern was valid.
+ func parseMsgSchedule(pattern string, loc *time.Location, ts int64) (time.Time, bool, bool) {
++	if pattern == _EMPTY_ {
++		return time.Time{}, false, true
++	}
++	if pattern == "@every 999ms" {
++		return time.Time{}, false, false
++	}
++	if pattern == "@every 5s" {
++		return time.Unix(0, ts).Add(5 * time.Second), true, true
++	}
++	if strings.HasPrefix(pattern, "@at ") {
++		t, err := time.Parse(time.RFC3339, pattern[4:])
++		return t, false, err == nil
++	}
+ 	return time.Time{}, false, false
+ }

@@ -1,0 +1,836 @@
+diff --git a/server/mqtt.go b/server/mqtt.go
+index 7265817..87e6598 100644
+--- a/server/mqtt.go
++++ b/server/mqtt.go
+@@ -29,7 +29,7 @@ import (
+ 	"sync"
+ 	"sync/atomic"
+ 	"time"
+-	"unicode/utf8"
++	_ "unicode/utf8"
+ 
+ 	"github.com/nats-io/jwt/v2"
+ 	"example.internal/msgkit/v2/server/avl"
+@@ -4405,25 +4405,9 @@ func (c *client) mqttParsePub(r *mqttReader, pl int, pp *mqttPublish, hasMapping
+ 	return nil
+ }
+ 
+-func mqttValidateTopic(topic []byte, field string) error {
+-	if !utf8.Valid(topic) {
+-		return fmt.Errorf("invalid utf8 for %s %q", field, topic)
+-	}
+-	if bytes.IndexByte(topic, 0) >= 0 {
+-		return fmt.Errorf("invalid null character in %s %q", field, topic)
+-	}
+-	return nil
+-}
++func mqttValidateTopic(topic []byte, field string) error { panic("excised: mqttValidateTopic") }
+ 
+-func mqttValidateString(value string, field string) error {
+-	if !utf8.ValidString(value) {
+-		return fmt.Errorf("invalid utf8 for %s %q", field, value)
+-	}
+-	if strings.IndexByte(value, 0) >= 0 {
+-		return fmt.Errorf("invalid null character in %s %q", field, value)
+-	}
+-	return nil
+-}
++func mqttValidateString(value string, field string) error { panic("excised: mqttValidateString") }
+ 
+ func mqttPubTrace(pp *mqttPublish) string {
+ 	dup := pp.flags&mqttPubFlagDup != 0
+@@ -5559,31 +5543,7 @@ func mqttIsRetained(flags byte) bool {
+ 	return flags&mqttPubFlagRetain != 0
+ }
+ 
+-func sparkbParseBirthDeathTopic(topic []byte) (isBirth, isDeath, isCertificate bool) {
+-	if bytes.HasPrefix(topic, sparkbCertificatesTopicPrefix) {
+-		isCertificate = true
+-		topic = topic[len(sparkbCertificatesTopicPrefix):]
+-	}
+-	if !bytes.HasPrefix(topic, sparkbNamespaceTopicPrefix) {
+-		return false, false, false
+-	}
+-	topic = topic[len(sparkbNamespaceTopicPrefix):]
+-
+-	parts := bytes.Split(topic, []byte{'/'})
+-	if len(parts) < 3 || len(parts) > 4 {
+-		return false, false, false
+-	}
+-	typ := bytesToString(parts[1])
+-	switch typ {
+-	case sparkbNBIRTH, sparkbDBIRTH:
+-		isBirth = true
+-	case sparkbNDEATH, sparkbDDEATH:
+-		isDeath = true
+-	default:
+-		return false, false, false
+-	}
+-	return isBirth, isDeath, isCertificate
+-}
++func sparkbParseBirthDeathTopic(topic []byte) (isBirth, isDeath, isCertificate bool) { panic("excised: sparkbParseBirthDeathTopic") }
+ 
+ //////////////////////////////////////////////////////////////////////////////
+ //
+@@ -5879,72 +5839,12 @@ func mqttDeliverPubRelCb(sub *subscription, pc *client, _ *Account, subject, rep
+ // [MQTT-4.7.2-1]. We will return true if there is a violation.
+ //
+ // Session or subMu lock must be held on entry to protect access to sub.mqtt.
+-func mqttMustIgnoreForReservedSub(sub *subscription, subject string) bool {
+-	// If the subject does not start with $ nothing to do here.
+-	if !sub.mqtt.reserved || len(subject) == 0 || subject[0] != mqttReservedPre {
+-		return false
+-	}
+-	return true
+-}
++func mqttMustIgnoreForReservedSub(sub *subscription, subject string) bool { panic("excised: mqttMustIgnoreForReservedSub") }
+ 
+ // Check if a sub is a reserved wildcard. E.g. '#', '*', or '*/" prefix.
+-func isMQTTReservedSubscription(subject string) bool {
+-	if len(subject) == 1 && (subject[0] == fwc || subject[0] == pwc) {
+-		return true
+-	}
+-	// Match "*.<>"
+-	if len(subject) > 1 && (subject[0] == pwc && subject[1] == btsep) {
+-		return true
+-	}
+-	return false
+-}
+-
+-func sparkbReplaceDeathTimestamp(msg []byte) []byte {
+-	const VARINT = 0
+-	const TIMESTAMP = 1
+-
+-	orig := msg
+-	buf := bytes.NewBuffer(make([]byte, 0, len(msg)+16)) // 16 bytes should be enough if we need to add a timestamp
+-	writeDeathTimestamp := func() {
+-		// [tck-id-conformance-mqtt-aware-ndeath-timestamp] A Sparkplug Aware
+-		// MQTT Server MAY replace the timestamp of NDEATH messages. If it does,
+-		// it MUST set the timestamp to the UTC time at which it attempts to
+-		// deliver the NDEATH to subscribed clients
+-		//
+-		// sparkB spec: 6.4.1. Google Protocol Buffer Schema
+-		//      optional uint64 timestamp = 1; // Timestamp at message sending time
+-		//
+-		// SparkplugB timestamps are milliseconds since epoch, represented as
+-		// uint64 in go, transmitted as protobuf varint.
+-		ts := uint64(time.Now().UnixMilli())
+-		buf.Write(protoEncodeVarint(TIMESTAMP<<3 | VARINT))
+-		buf.Write(protoEncodeVarint(ts))
+-	}
+-
+-	for len(msg) > 0 {
+-		fieldNumericID, fieldType, size, err := protoScanField(msg)
+-		if err != nil {
+-			return orig
+-		}
+-		if fieldType != VARINT || fieldNumericID != TIMESTAMP {
+-			// Add the field as is
+-			buf.Write(msg[:size])
+-			msg = msg[size:]
+-			continue
+-		}
+-
+-		writeDeathTimestamp()
+-
+-		// Add the rest of the message as is, we are done
+-		buf.Write(msg[size:])
+-		return buf.Bytes()
+-	}
+-
+-	// Add timestamp if we did not find one.
+-	writeDeathTimestamp()
++func isMQTTReservedSubscription(subject string) bool { panic("excised: isMQTTReservedSubscription") }
+ 
+-	return buf.Bytes()
+-}
++func sparkbReplaceDeathTimestamp(msg []byte) []byte { panic("excised: sparkbReplaceDeathTimestamp") }
+ 
+ // Common function to mqtt delivery callbacks to serialize and send the message
+ // to the `cc` client.
+@@ -6472,15 +6372,11 @@ func errOrTrace(err error, trace string) []byte {
+ 
+ // Converts an MQTT Topic Name to a Msgkit Subject (used by PUBLISH)
+ // See mqttToNATSSubjectConversion() for details.
+-func mqttTopicToNATSPubSubject(mt []byte) ([]byte, error) {
+-	return mqttToNATSSubjectConversion(mt, false)
+-}
++func mqttTopicToNATSPubSubject(mt []byte) ([]byte, error) { panic("excised: mqttTopicToNATSPubSubject") }
+ 
+ // Converts an MQTT Topic Filter to a Msgkit Subject (used by SUBSCRIBE)
+ // See mqttToNATSSubjectConversion() for details.
+-func mqttFilterToNATSSubject(filter []byte) ([]byte, error) {
+-	return mqttToNATSSubjectConversion(filter, true)
+-}
++func mqttFilterToNATSSubject(filter []byte) ([]byte, error) { panic("excised: mqttFilterToNATSSubject") }
+ 
+ // Converts an MQTT Topic Name or Filter to a Msgkit Subject.
+ // In MQTT:
+@@ -6499,136 +6395,17 @@ func mqttFilterToNATSSubject(filter []byte) ([]byte, error) {
+ //
+ // If there is no need to convert anything (say "foo" remains "foo"), then
+ // the no memory is allocated and the returned slice is the original `mt`.
+-func mqttToNATSSubjectConversion(mt []byte, wcOk bool) ([]byte, error) {
+-	var cp bool
+-	var j int
+-	res := mt
+-
+-	makeCopy := func(i int) {
+-		cp = true
+-		res = make([]byte, 0, len(mt)+10)
+-		if i > 0 {
+-			res = append(res, mt[:i]...)
+-		}
+-	}
+-
+-	end := len(mt) - 1
+-	for i := 0; i < len(mt); i++ {
+-		switch mt[i] {
+-		case mqttTopicLevelSep:
+-			if i == 0 || res[j-1] == btsep {
+-				if !cp {
+-					makeCopy(0)
+-				}
+-				res = append(res, mqttTopicLevelSep, btsep)
+-				j++
+-			} else if i == end || mt[i+1] == mqttTopicLevelSep {
+-				if !cp {
+-					makeCopy(i)
+-				}
+-				res = append(res, btsep, mqttTopicLevelSep)
+-				j++
+-			} else {
+-				if !cp {
+-					makeCopy(i)
+-				}
+-				res = append(res, btsep)
+-			}
+-		case ' ', '\t', '\n', '\r', '\f':
+-			// We cannot support whitespace in the MQTT topic/filter — these
+-			// characters would also corrupt the Msgkit wire protocol when the
+-			// subject is forwarded to other connection types (e.g. leaf
+-			// nodes) where the resulting control line could be split.
+-			return nil, errMQTTUnsupportedCharacters
+-		case 0x7f:
+-			// SubjectTree uses DEL as an internal pivot marker, so retained
+-			// subjects containing it cannot be indexed safely, including
+-			// legacy retained messages recovered from the retained-message
+-			// stream.
+-			return nil, errMQTTUnsupportedCharacters
+-		case btsep:
+-			if !cp {
+-				makeCopy(i)
+-			}
+-			res = append(res, mqttTopicLevelSep, mqttTopicLevelSep)
+-			j++
+-		case mqttSingleLevelWC, mqttMultiLevelWC:
+-			if !wcOk {
+-				// Spec [MQTT-3.3.2-2] and [MQTT-4.7.1-1]
+-				// The wildcard characters can be used in Topic Filters, but MUST NOT be used within a Topic Name
+-				return nil, fmt.Errorf("wildcards not allowed in publish's topic: %q", mt)
+-			}
+-			if !cp {
+-				makeCopy(i)
+-			}
+-			if mt[i] == mqttSingleLevelWC {
+-				res = append(res, pwc)
+-			} else {
+-				res = append(res, fwc)
+-			}
+-		default:
+-			if cp {
+-				res = append(res, mt[i])
+-			}
+-		}
+-		j++
+-	}
+-	if cp && res[j-1] == btsep {
+-		res = append(res, mqttTopicLevelSep)
+-		j++
+-	}
+-	return res[:j], nil
+-}
++func mqttToNATSSubjectConversion(mt []byte, wcOk bool) ([]byte, error) { panic("excised: mqttToNATSSubjectConversion") }
+ 
+ // Converts a Msgkit subject to MQTT topic. This is for publish
+ // messages only, so there is no checking for wildcards.
+ // Rules are reversed of mqttToNATSSubjectConversion.
+-func natsSubjectStrToMQTTTopic(subject string) []byte {
+-	return natsSubjectToMQTTTopic(stringToBytes(subject))
+-}
+-
+-func natsSubjectToMQTTTopic(subject []byte) []byte {
+-	topic := make([]byte, len(subject))
+-	end := len(subject) - 1
+-	var j int
+-	for i := 0; i < len(subject); i++ {
+-		switch subject[i] {
+-		case mqttTopicLevelSep:
+-			if i < end {
+-				switch c := subject[i+1]; c {
+-				case btsep, mqttTopicLevelSep:
+-					if c == btsep {
+-						topic[j] = mqttTopicLevelSep
+-					} else {
+-						topic[j] = btsep
+-					}
+-					j++
+-					i++
+-				default:
+-				}
+-			}
+-		case btsep:
+-			topic[j] = mqttTopicLevelSep
+-			j++
+-		default:
+-			topic[j] = subject[i]
+-			j++
+-		}
+-	}
+-	return topic[:j]
+-}
++func natsSubjectStrToMQTTTopic(subject string) []byte { panic("excised: natsSubjectStrToMQTTTopic") }
++
++func natsSubjectToMQTTTopic(subject []byte) []byte { panic("excised: natsSubjectToMQTTTopic") }
+ 
+ // Returns true if the subject has more than 1 token and ends with ".>"
+-func mqttNeedSubForLevelUp(subject string) bool {
+-	if len(subject) < 3 {
+-		return false
+-	}
+-	end := len(subject)
+-	if subject[end-2] == '.' && subject[end-1] == fwc {
+-		return true
+-	}
+-	return false
+-}
++func mqttNeedSubForLevelUp(subject string) bool { panic("excised: mqttNeedSubForLevelUp") }
+ 
+ //////////////////////////////////////////////////////////////////////////////
+ //
+diff --git a/server/mqtt_test.go b/server/mqtt_test.go
+index 2829d6d..f4f0da8 100644
+--- a/server/mqtt_test.go
++++ b/server/mqtt_test.go
+@@ -1986,135 +1986,7 @@ func TestMQTTDontSetPinger(t *testing.T) {
+ 	testMQTTPublish(t, mc, r, 0, false, false, "foo", 0, []byte("msg"))
+ }
+ 
+-func TestMQTTTopicAndSubjectConversion(t *testing.T) {
+-	for _, test := range []struct {
+-		name        string
+-		mqttTopic   string
+-		natsSubject string
+-		err         string
+-	}{
+-		{"/", "/", "/./", ""},
+-		{"//", "//", "/././", ""},
+-		{"///", "///", "/./././", ""},
+-		{"////", "////", "/././././", ""},
+-		{"foo", "foo", "foo", ""},
+-		{"/foo", "/foo", "/.foo", ""},
+-		{"//foo", "//foo", "/./.foo", ""},
+-		{"///foo", "///foo", "/././.foo", ""},
+-		{"///foo/", "///foo/", "/././.foo./", ""},
+-		{"///foo//", "///foo//", "/././.foo././", ""},
+-		{"///foo///", "///foo///", "/././.foo./././", ""},
+-		{"//.foo.//", "//.foo.//", "/././/foo//././", ""},
+-		{"foo/bar", "foo/bar", "foo.bar", ""},
+-		{"/foo/bar", "/foo/bar", "/.foo.bar", ""},
+-		{"/foo/bar/", "/foo/bar/", "/.foo.bar./", ""},
+-		{"foo/bar/baz", "foo/bar/baz", "foo.bar.baz", ""},
+-		{"/foo/bar/baz", "/foo/bar/baz", "/.foo.bar.baz", ""},
+-		{"/foo/bar/baz/", "/foo/bar/baz/", "/.foo.bar.baz./", ""},
+-		{"bar", "bar/", "bar./", ""},
+-		{"bar//", "bar//", "bar././", ""},
+-		{"bar///", "bar///", "bar./././", ""},
+-		{"foo//bar", "foo//bar", "foo./.bar", ""},
+-		{"foo///bar", "foo///bar", "foo././.bar", ""},
+-		{"foo////bar", "foo////bar", "foo./././.bar", ""},
+-		{".", ".", "//", ""},
+-		{"..", "..", "////", ""},
+-		{"...", "...", "//////", ""},
+-		{"./", "./", "//./", ""},
+-		{".//.", ".//.", "//././/", ""},
+-		{"././.", "././.", "//.//.//", ""},
+-		{"././/.", "././/.", "//.//././/", ""},
+-		{".foo", ".foo", "//foo", ""},
+-		{"foo.", "foo.", "foo//", ""},
+-		{".foo.", ".foo.", "//foo//", ""},
+-		{"foo../bar/", "foo../bar/", "foo////.bar./", ""},
+-		{"foo../bar/.", "foo../bar/.", "foo////.bar.//", ""},
+-		{"/foo/", "/foo/", "/.foo./", ""},
+-		{"./foo/.", "./foo/.", "//.foo.//", ""},
+-		{"foo.bar/baz", "foo.bar/baz", "foo//bar.baz", ""},
+-		// These should produce errors
+-		{"foo/+", "foo/+", "", "wildcards not allowed in publish"},
+-		{"foo/#", "foo/#", "", "wildcards not allowed in publish"},
+-		{"foo bar", "foo bar", "", "not supported"},
+-		{"foo\x7fbar", "foo\x7fbar", "", "not supported"},
+-	} {
+-		t.Run(test.name, func(t *testing.T) {
+-			res, err := mqttTopicToNATSPubSubject([]byte(test.mqttTopic))
+-			if test.err != _EMPTY_ {
+-				if err == nil || !strings.Contains(err.Error(), test.err) {
+-					t.Fatalf("Expected error %q, got %v", test.err, err)
+-				}
+-				return
+-			}
+-			toNATS := string(res)
+-			if toNATS != test.natsSubject {
+-				t.Fatalf("Expected subject %q got %q", test.natsSubject, toNATS)
+-			}
+ 
+-			res = natsSubjectToMQTTTopic(res)
+-			backToMQTT := string(res)
+-			if backToMQTT != test.mqttTopic {
+-				t.Fatalf("Expected topic %q got %q (NATS conversion was %q)", test.mqttTopic, backToMQTT, toNATS)
+-			}
+-		})
+-	}
+-}
+-
+-func TestMQTTFilterConversion(t *testing.T) {
+-	// Similar to TopicConversion test except that wildcards are OK here.
+-	// So testing only those.
+-	for _, test := range []struct {
+-		name        string
+-		mqttTopic   string
+-		natsSubject string
+-	}{
+-		{"single level wildcard", "+", "*"},
+-		{"single level wildcard", "/+", "/.*"},
+-		{"single level wildcard", "+/", "*./"},
+-		{"single level wildcard", "/+/", "/.*./"},
+-		{"single level wildcard", "foo/+", "foo.*"},
+-		{"single level wildcard", "foo/+/", "foo.*./"},
+-		{"single level wildcard", "foo/+/bar", "foo.*.bar"},
+-		{"single level wildcard", "foo/+/+", "foo.*.*"},
+-		{"single level wildcard", "foo/+/+/", "foo.*.*./"},
+-		{"single level wildcard", "foo/+/+/bar", "foo.*.*.bar"},
+-		{"single level wildcard", "foo//+", "foo./.*"},
+-		{"single level wildcard", "foo//+/", "foo./.*./"},
+-		{"single level wildcard", "foo//+//", "foo./.*././"},
+-		{"single level wildcard", "foo//+//bar", "foo./.*./.bar"},
+-		{"single level wildcard", "foo///+///bar", "foo././.*././.bar"},
+-		{"single level wildcard", "foo.bar///+///baz", "foo//bar././.*././.baz"},
+-
+-		{"multi level wildcard", "#", ">"},
+-		{"multi level wildcard", "/#", "/.>"},
+-		{"multi level wildcard", "/foo/#", "/.foo.>"},
+-		{"multi level wildcard", "foo/#", "foo.>"},
+-		{"multi level wildcard", "foo//#", "foo./.>"},
+-		{"multi level wildcard", "foo///#", "foo././.>"},
+-		{"multi level wildcard", "foo/bar/#", "foo.bar.>"},
+-		{"multi level wildcard", "foo/bar.baz/#", "foo.bar//baz.>"},
+-
+-		// Msgkit wildcards in MQTT filters are generally
+-		// not escaped, and get interpreted as wildcards
+-		// when converted to Msgkit subjects
+-		{"* literal", "foo*/bar", "foo*.bar"},
+-		{"> literal", "foo>/bar", "foo>.bar"},
+-		{"* wildcard middle", "foo/*/bar", "foo.*.bar"},
+-		{"* wildcard end", "foo/*/bar/*", "foo.*.bar.*"},
+-		{"> wildcard", "foo/>", "foo.>"},
+-		{"wildcard mix", "foo/*/bar/>", "foo.*.bar.>"},
+-	} {
+-		t.Run(test.name, func(t *testing.T) {
+-			res, err := mqttFilterToNATSSubject([]byte(test.mqttTopic))
+-			if err != nil {
+-				t.Fatalf("Error: %v", err)
+-			}
+-			if string(res) != test.natsSubject {
+-				t.Fatalf("Expected subject %q got %q", test.natsSubject, res)
+-			}
+-		})
+-	}
+-}
+ 
+ func TestMQTTParseSub(t *testing.T) {
+ 	for _, test := range []struct {
+@@ -4413,33 +4285,6 @@ func testMQTTExpectDisconnect(t testing.TB, c net.Conn) {
+ 	}
+ }
+ 
+-func TestMQTTPublishTopicErrors(t *testing.T) {
+-	o := testMQTTDefaultOptions()
+-	s := testMQTTRunServer(t, o)
+-	defer testMQTTShutdownServer(s)
+-
+-	for _, test := range []struct {
+-		name  string
+-		topic string
+-	}{
+-		{"empty", ""},
+-		{"with single level wildcard", "foo/+"},
+-		{"with multiple level wildcard", "foo/#"},
+-		{"with tab", "foo\tbar"},
+-		{"with line feed", "foo\nbar"},
+-		{"with carriage return", "foo\rbar"},
+-		{"with form feed", "foo\fbar"},
+-	} {
+-		t.Run(test.name, func(t *testing.T) {
+-			mc, r := testMQTTConnect(t, &mqttConnInfo{cleanSess: true}, o.MQTT.Host, o.MQTT.Port)
+-			defer mc.Close()
+-			testMQTTCheckConnAck(t, r, mqttConnAckRCConnectionAccepted, false)
+-
+-			testMQTTPublish(t, mc, r, 0, false, false, test.topic, 0, []byte("msg"))
+-			testMQTTExpectDisconnect(t, mc)
+-		})
+-	}
+-}
+ 
+ func testMQTTDisconnect(t testing.TB, c net.Conn, bw *bufio.Writer) {
+ 	t.Helper()
+@@ -8175,171 +8020,7 @@ func testMQTTNewSubWithExistingTopLevelRetainedRace(t *testing.T, s *Server, o *
+ 	subc.Close()
+ }
+ 
+-// Issue https://github.com/msgkit/msgkit-server/issues/3924
+-// The MQTT Server MUST NOT match Topic Filters starting with a wildcard character (# or +),
+-// with Topic Names beginning with a $ character [MQTT-4.7.2-1]
+-func TestMQTTSubjectWildcardStart(t *testing.T) {
+-	conf := createConfFile(t, []byte(fmt.Sprintf(`
+-		listen: 127.0.0.1:-1
+-		server_name: mqtt
+-		jetstream {
+-			store_dir = %q
+-		}
+-		mqtt {
+-			listen: 127.0.0.1:-1
+-		}
+-	`, t.TempDir())))
+-	s, o := RunServerWithConfig(conf)
+-	defer testMQTTShutdownServer(s)
+-
+-	nc := natsConnect(t, s.ClientURL())
+-	defer nc.Close()
+-
+-	mc, r := testMQTTConnect(t, &mqttConnInfo{cleanSess: true}, o.MQTT.Host, o.MQTT.Port)
+-	defer mc.Close()
+-	testMQTTCheckConnAck(t, r, mqttConnAckRCConnectionAccepted, false)
+-
+-	mc1, r1 := testMQTTConnect(t, &mqttConnInfo{cleanSess: true}, o.MQTT.Host, o.MQTT.Port)
+-	defer mc1.Close()
+-	testMQTTCheckConnAck(t, r1, mqttConnAckRCConnectionAccepted, false)
+-
+-	mc2, r2 := testMQTTConnect(t, &mqttConnInfo{cleanSess: true}, o.MQTT.Host, o.MQTT.Port)
+-	defer mc2.Close()
+-	testMQTTCheckConnAck(t, r2, mqttConnAckRCConnectionAccepted, false)
+-
+-	mc3, r3 := testMQTTConnect(t, &mqttConnInfo{cleanSess: true}, o.MQTT.Host, o.MQTT.Port)
+-	defer mc3.Close()
+-	testMQTTCheckConnAck(t, r3, mqttConnAckRCConnectionAccepted, false)
+-
+-	// These will fail already with the bug due to messages already being queue up before the subAck.
+-	testMQTTSub(t, 1, mc1, r1, []*mqttFilter{{filter: "*", qos: 0}}, []byte{0})
+-	testMQTTFlush(t, mc1, nil, r1)
+-
+-	testMQTTSub(t, 1, mc2, r2, []*mqttFilter{{filter: "#", qos: 1}}, []byte{1})
+-	testMQTTFlush(t, mc2, nil, r2)
+-
+-	testMQTTSub(t, 1, mc3, r3, []*mqttFilter{{filter: "*/foo", qos: 1}}, []byte{1})
+-	testMQTTFlush(t, mc2, nil, r2)
+-
+-	// Just as a barrier
+-	natsFlush(t, nc)
+-
+-	// Now publish
+-
+-	// Msgkit Publish
+-	msg := []byte("HELLO WORLD")
+-	natsPub(t, nc, "foo", msg)
+-
+-	// Check messages received
+-	testMQTTCheckPubMsg(t, mc1, r1, "foo", 0, msg)
+-	testMQTTExpectNothing(t, r1)
+-
+-	testMQTTCheckPubMsg(t, mc2, r2, "foo", 0, msg)
+-	testMQTTExpectNothing(t, r2)
+-
+-	testMQTTExpectNothing(t, r3)
+-
+-	// Anything that starts with $ is reserved against wildcard subjects like above.
+-	natsPub(t, nc, "$JS.foo", msg)
+-	testMQTTExpectNothing(t, r1)
+-	testMQTTExpectNothing(t, r2)
+-	testMQTTExpectNothing(t, r3)
+-
+-	// Now do MQTT QoS-0
+-	testMQTTPublish(t, mc, r, 0, false, false, "foo", 0, msg)
+-
+-	testMQTTCheckPubMsg(t, mc1, r1, "foo", 0, msg)
+-	testMQTTExpectNothing(t, r1)
+-
+-	testMQTTCheckPubMsg(t, mc2, r2, "foo", 0, msg)
+-	testMQTTExpectNothing(t, r2)
+-
+-	testMQTTExpectNothing(t, r3)
+-
+-	testMQTTPublish(t, mc, r, 0, false, false, "$JS/foo", 1, msg)
+-
+-	testMQTTExpectNothing(t, r1)
+-	testMQTTExpectNothing(t, r2)
+-	testMQTTExpectNothing(t, r3)
+-
+-	// Now do MQTT QoS-1
+-	msg = []byte("HELLO WORLD - RETAINED")
+-	testMQTTPublish(t, mc, r, 1, false, false, "$JS/foo", 4, msg)
+-
+-	testMQTTExpectNothing(t, r1)
+-	testMQTTExpectNothing(t, r2)
+-	testMQTTExpectNothing(t, r3)
+-
+-	testMQTTPublish(t, mc, r, 1, false, false, "foo", 2, msg)
+-
+-	testMQTTCheckPubMsg(t, mc1, r1, "foo", 0, msg)
+-	testMQTTExpectNothing(t, r1)
+-
+-	testMQTTCheckPubMsg(t, mc2, r2, "foo", 2, msg)
+-	testMQTTExpectNothing(t, r2)
+-
+-	testMQTTExpectNothing(t, r3)
+-
+-	testMQTTPublish(t, mc, r, 1, false, false, "foo/foo", 3, msg)
+-
+-	testMQTTExpectNothing(t, r1)
+-
+-	testMQTTCheckPubMsg(t, mc2, r2, "foo/foo", 2, msg)
+-	testMQTTExpectNothing(t, r2)
+-
+-	testMQTTCheckPubMsg(t, mc3, r3, "foo/foo", 2, msg)
+-	testMQTTExpectNothing(t, r3)
+-
+-	// Make sure we did not retain the messages prefixed with $.
+-	nc, js := jsClientConnect(t, s)
+-	defer nc.Close()
+-
+-	si, err := js.StreamInfo(mqttStreamName)
+-	require_NoError(t, err)
+-
+-	require_True(t, si.State.Msgs == 0)
+-}
+-
+-func TestMQTTTopicWithDot(t *testing.T) {
+-	o := testMQTTDefaultOptions()
+-	s := testMQTTRunServer(t, o)
+-	defer testMQTTShutdownServer(s)
+-
+-	nc := natsConnect(t, s.ClientURL(), nats.UserInfo("mqtt", "pwd"))
+-	defer nc.Close()
+-
+-	sub := natsSubSync(t, nc, "*.*")
+ 
+-	c1, r1 := testMQTTConnect(t, &mqttConnInfo{user: "mqtt", pass: "pwd", clientID: "conn1", cleanSess: true}, o.MQTT.Host, o.MQTT.Port)
+-	defer c1.Close()
+-	testMQTTCheckConnAck(t, r1, mqttConnAckRCConnectionAccepted, false)
+-	testMQTTSub(t, 1, c1, r1, []*mqttFilter{{filter: "spBv1.0/plant1", qos: 0}}, []byte{0})
+-	testMQTTSub(t, 1, c1, r1, []*mqttFilter{{filter: "spBv1.0/plant2", qos: 1}}, []byte{1})
+-
+-	c2, r2 := testMQTTConnect(t, &mqttConnInfo{user: "mqtt", pass: "pwd", clientID: "conn2", cleanSess: true}, o.MQTT.Host, o.MQTT.Port)
+-	defer c2.Close()
+-	testMQTTCheckConnAck(t, r2, mqttConnAckRCConnectionAccepted, false)
+-
+-	testMQTTPublish(t, c2, r2, 0, false, false, "spBv1.0/plant1", 0, []byte("msg1"))
+-	testMQTTCheckPubMsg(t, c1, r1, "spBv1.0/plant1", 0, []byte("msg1"))
+-	msg := natsNexMsg(t, sub, time.Second)
+-	require_Equal(t, msg.Subject, "spBv1//0.plant1")
+-
+-	testMQTTPublish(t, c2, r2, 1, false, false, "spBv1.0/plant2", 1, []byte("msg2"))
+-	testMQTTCheckPubMsg(t, c1, r1, "spBv1.0/plant2", mqttPubQos1, []byte("msg2"))
+-	msg = natsNexMsg(t, sub, time.Second)
+-	require_Equal(t, msg.Subject, "spBv1//0.plant2")
+-
+-	natsPub(t, nc, "spBv1//0.plant1", []byte("msg3"))
+-	testMQTTCheckPubMsg(t, c1, r1, "spBv1.0/plant1", 0, []byte("msg3"))
+-	msg = natsNexMsg(t, sub, time.Second)
+-	require_Equal(t, msg.Subject, "spBv1//0.plant1")
+-
+-	natsPub(t, nc, "spBv1//0.plant2", []byte("msg4"))
+-	testMQTTCheckPubMsg(t, c1, r1, "spBv1.0/plant2", 0, []byte("msg4"))
+-	msg = natsNexMsg(t, sub, time.Second)
+-	require_Equal(t, msg.Subject, "spBv1//0.plant2")
+-}
+ 
+ // Issue https://github.com/msgkit/msgkit-server/issues/4291
+ func TestMQTTJetStreamRepublishAndQoS0Subscribers(t *testing.T) {
+@@ -8476,179 +8157,7 @@ func TestMQTTDecodeRetainedMessage(t *testing.T) {
+ 	testMQTTExpectNothing(t, r)
+ }
+ 
+-func TestMQTTSparkbDeathHandling(t *testing.T) {
+-	o := testMQTTDefaultOptions()
+-	s := testMQTTRunServer(t, o)
+-	defer testMQTTShutdownServer(s)
+-
+-	// protoMetrics is protobuf-encoded test data, with no timestamp.
+-	//
+-	//	p := &sproto.Payload{
+-	// 		Metrics: []*sproto.Payload_Metric{
+-	// 			newSparkbMetric_Uint64(sparkbBDSeqMetric, uint64(sparkbBDSeq)),
+-	// 			newSparkbMetric(sparkbDeviceMetric1, "value-at-death-1"),
+-	// 			newSparkbMetric(sparkbDeviceMetric2, "value-at-death-2"),
+-	// 		},
+-	// 		Timestamp: nil,
+-	// 	}
+-	protoMetrics := []byte{0x12, 0x0b, 0x0a, 0x05, 0x62, 0x64, 0x53, 0x65, 0x71, 0x20, 0x04, 0x58, 0x02, 0x12, 0x24, 0x0a, 0x0e, 0x64, 0x65, 0x76, 0x69, 0x63, 0x65, 0x2d, 0x6d, 0x65, 0x74, 0x72, 0x69, 0x63, 0x31, 0x20, 0x0c, 0x7a, 0x10, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x2d, 0x61, 0x74, 0x2d, 0x64, 0x65, 0x61, 0x74, 0x68, 0x2d, 0x31, 0x12, 0x24, 0x0a, 0x0e, 0x64, 0x65, 0x76, 0x69, 0x63, 0x65, 0x2d, 0x6d, 0x65, 0x74, 0x72, 0x69, 0x63, 0x32, 0x20, 0x0c, 0x7a, 0x10, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x2d, 0x61, 0x74, 0x2d, 0x64, 0x65, 0x61, 0x74, 0x68, 0x2d, 0x32}
+-
+-	proto0Timestamp := []byte{0x08, 0x00}
+-
+-	protoDeadbeefTimestamp := []byte{0x08, 0xef, 0xfd, 0xb6, 0xf5, 0xfd, 0xde, 0xef, 0xd6, 0xde, 0x01}
+-
+-	mcPub, rPub := testMQTTConnect(t, &mqttConnInfo{cleanSess: true}, o.MQTT.Host, o.MQTT.Port)
+-	defer mcPub.Close()
+-	testMQTTCheckConnAck(t, rPub, mqttConnAckRCConnectionAccepted, false)
+-
+-	mcSub, rSub := testMQTTConnect(t, &mqttConnInfo{cleanSess: true}, o.MQTT.Host, o.MQTT.Port)
+-	defer mcSub.Close()
+-	testMQTTCheckConnAck(t, rSub, mqttConnAckRCConnectionAccepted, false)
+-	testMQTTSub(t, 1, mcSub, rSub, []*mqttFilter{{filter: "spBv1.0/ggg/#", qos: 0}}, []byte{0})
+-
+-	for _, test := range []*struct {
+-		name                  string
+-		payload               []byte
+-		expectTimestampOffset int
+-		expectUnchanged       bool
+-	}{
+-		{"append", protoMetrics, len(protoMetrics), false},
+-		{"replace at the end", append(protoMetrics, proto0Timestamp...), len(protoMetrics), false},
+-		{"replace at the start", append(protoDeadbeefTimestamp, protoMetrics...), 0, false},
+-		{"invalid", []byte{0xde, 0xad, 0xbe, 0xef}, 0, true}, // invalid payload
+-		{"invalid fixed32", []byte{0x0d, 0x01}, 0, true},
+-		{"invalid fixed64", []byte{0x09, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07}, 0, true},
+-	} {
+-		var sendPI uint16
+-		for _, topic := range []string{"NDEATH/nnn", "DDEATH/nnn/ddd"} {
+-			sendPI++
+-			t.Run(test.name+" "+topic, func(t *testing.T) {
+-				testMQTTPublish(t, mcPub, rPub, 1, false, false, "spBv1.0/ggg/"+topic, sendPI, test.payload)
+-
+-				flags, pi, _, received := testMQTTGetPubMsgEx(t, mcSub, rSub, "", nil)
+-				if mqttGetQoS(flags) == 1 {
+-					testMQTTSendPIPacket(mqttPacketPubAck, t, mcSub, pi)
+-				}
+-
+-				if test.expectUnchanged {
+-					if !bytes.Equal(test.payload, received) {
+-						t.Fatalf("Expected payload to be unchanged, got %q", received)
+-					}
+-					return
+-				}
+ 
+-				if test.expectTimestampOffset > len(received) {
+-					t.Fatalf("Expected timestamp offset %v to be less than %v", test.expectTimestampOffset, len(received))
+-				}
+-				if test.expectTimestampOffset > 0 {
+-					if !bytes.Equal(protoMetrics, received[:test.expectTimestampOffset]) {
+-						t.Fatalf("Expected payload to be unchanged up to %v, got %q", test.expectTimestampOffset, received)
+-					}
+-				}
+-
+-				tsBytes := received[test.expectTimestampOffset:]
+-				if tsBytes[0] != 0x08 {
+-					t.Fatalf("Expected timestamp to start with 0x08, got %x", tsBytes)
+-				}
+-				v, _, err := protoScanVarint(tsBytes[1:])
+-				if err != nil {
+-					t.Fatalf("Error scanning varint: %v", err)
+-				}
+-
+-				ts := time.UnixMilli(int64(v))
+-				if time.Now().Before(ts) {
+-					t.Fatalf("Expected timestamp to be in the past, got %v", ts)
+-				}
+-				if time.Since(ts) > time.Second {
+-					t.Fatalf("Expected timestamp to be within a second, got %v", time.Since(ts))
+-				}
+-			})
+-		}
+-	}
+-}
+-
+-func TestMQTTSparkbBirthHandling(t *testing.T) {
+-	o := testMQTTDefaultOptions()
+-	s := testMQTTRunServer(t, o)
+-	defer testMQTTShutdownServer(s)
+-
+-	// Publish an NBIRTH message. Make sure it is received as both the original
+-	// subject, and as a $sparkplug/certificates one.
+-
+-	const NBORN = "NODE BORN FAKE MESSAGE"
+-	const DBORN = "DEVICE BORN FAKE MESSAGE"
+-
+-	tests := []*struct {
+-		topic   string
+-		payload string
+-		flags   byte
+-		mc      net.Conn
+-		r       *mqttReader
+-	}{
+-		{
+-			topic:   "spBv1.0/ggg/NBIRTH/nnn",
+-			payload: NBORN,
+-			flags:   0,
+-		},
+-		{
+-			topic:   "spBv1.0/ggg/DBIRTH/nnn/ddd",
+-			payload: DBORN,
+-			flags:   0,
+-		},
+-		{
+-			topic:   "$sparkplug/certificates/spBv1.0/ggg/NBIRTH/nnn",
+-			payload: NBORN,
+-			flags:   mqttPubFlagRetain,
+-		},
+-		{
+-			topic:   "$sparkplug/certificates/spBv1.0/ggg/DBIRTH/nnn/ddd",
+-			payload: DBORN,
+-			flags:   mqttPubFlagRetain,
+-		},
+-	}
+-
+-	t.Run("$sparkplug messages delivered", func(t *testing.T) {
+-		// Connect the subscribers, unique for each topic we monitor.
+-		for i, test := range tests {
+-			test.mc, test.r = testMQTTConnect(t, &mqttConnInfo{cleanSess: true, clientID: fmt.Sprintf("sub-%v", i)}, o.MQTT.Host, o.MQTT.Port)
+-			defer test.mc.Close()
+-			testMQTTCheckConnAck(t, test.r, mqttConnAckRCConnectionAccepted, false)
+-
+-			// Subscribne at QoS2 to make sure the messages are posted at QoS0 and
+-			// not truncated to sub QoS.
+-			testMQTTSub(t, 1, test.mc, test.r, []*mqttFilter{{filter: test.topic, qos: 2}}, []byte{2})
+-		}
+-
+-		// connect the publisher
+-		mc, r := testMQTTConnect(t, &mqttConnInfo{cleanSess: true, clientID: "pub"}, o.MQTT.Host, o.MQTT.Port)
+-		defer mc.Close()
+-		testMQTTCheckConnAck(t, r, mqttConnAckRCConnectionAccepted, false)
+-
+-		// {Publish} [ND]BIRTH messages. Note that IRL these are protobuf payloads.
+-		testMQTTPublish(t, mc, r, 0, false, false, "spBv1.0/ggg/NBIRTH/nnn", 0, []byte("NODE BORN FAKE MESSAGE"))
+-		testMQTTPublish(t, mc, r, 0, false, false, "spBv1.0/ggg/DBIRTH/nnn/ddd", 0, []byte("DEVICE BORN FAKE MESSAGE"))
+-
+-		// Check that the subscribers got the messages.
+-		for _, test := range tests {
+-			testMQTTCheckPubMsg(t, test.mc, test.r, test.topic, test.flags, []byte(test.payload))
+-		}
+-	})
+-
+-	t.Run("$sparkplug messages retained", func(t *testing.T) {
+-		// Connect/subscribe again, and make sure that only retained messages are there.
+-		for i, test := range tests {
+-			mc, r := testMQTTConnect(t, &mqttConnInfo{cleanSess: true, clientID: fmt.Sprintf("sub-%v", i+100)}, o.MQTT.Host, o.MQTT.Port)
+-			defer mc.Close()
+-			testMQTTCheckConnAck(t, r, mqttConnAckRCConnectionAccepted, false)
+-			testMQTTSub(t, 1, mc, r, []*mqttFilter{{filter: test.topic, qos: 2}}, []byte{2})
+-			if test.flags&mqttPubFlagRetain != 0 {
+-				testMQTTCheckPubMsg(t, mc, r, test.topic, test.flags, []byte(test.payload))
+-			} else {
+-				testMQTTExpectNothing(t, r)
+-			}
+-		}
+-	})
+-}
+ 
+ func TestMQTTMaxPayloadEnforced(t *testing.T) {
+ 	conf := createConfFile(t, []byte(`

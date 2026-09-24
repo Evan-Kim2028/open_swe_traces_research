@@ -1,0 +1,21 @@
+{
+ "fetchmsg": {
+  "plumbing/protocol/packp/fetch.go": [
+   "MalformedResponseError.Error",
+   "FetchArgs.Encode",
+   "FetchArgs.Decode",
+   "FetchOutput.Decode",
+   "fetchSectionRank",
+   "FetchOutput.decodeMetadataSection",
+   "FetchOutput.Encode",
+   "FetchOutput.decodeAcknowledgments",
+   "FetchOutput.decodeShallowInfo",
+   "FetchOutput.decodeWantedRefs",
+   "FetchOutput.decodePackfileURIs",
+   "FetchOutput.encodeAcknowledgments",
+   "FetchOutput.encodeShallowInfo",
+   "FetchOutput.encodeWantedRefs",
+   "FetchOutput.encodePackfileURIs"
+  ]
+ }
+}

@@ -1,0 +1,18 @@
+diff --git a/github/orgs_properties.go b/github/orgs_properties.go
+--- a/github/orgs_properties.go
++++ b/github/orgs_properties.go
+@@ -53,7 +53,13 @@ type CustomProperty struct {
+ 
+ // DefaultValueString returns the DefaultValue as a string if the ValueType is string or single_select or url.
+ func (cp CustomProperty) DefaultValueString() (string, bool) {
+-	return "", false /* excised: CustomProperty.DefaultValueString */
++	switch cp.ValueType {
++	case PropertyValueTypeString, PropertyValueTypeSingleSelect, PropertyValueTypeURL:
++		s, ok := cp.DefaultValue.(string)
++		return s, ok
++	default:
++		return "", false
++	}
+ }
+ 
+ // DefaultValueStrings returns the DefaultValue as a slice of string if the ValueType is multi_select.

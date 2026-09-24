@@ -1,0 +1,15 @@
+diff --git a/github/pulls_reviews.go b/github/pulls_reviews.go
+--- a/github/pulls_reviews.go
++++ b/github/pulls_reviews.go
+@@ -68,6 +68,11 @@ func (r PullRequestReviewRequest) String() string {
+ }
+ 
+ func (r *PullRequestReviewRequest) isComfortFadePreview() (bool, error) {
++	for _, c := range r.Comments {
++		if c != nil && c.Side != nil {
++			return true, nil
++		}
++	}
+ 	return false, nil /* excised: PullRequestReviewRequest.isComfortFadePreview */
+ }
+ 

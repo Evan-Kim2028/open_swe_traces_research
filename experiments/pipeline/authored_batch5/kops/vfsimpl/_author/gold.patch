@@ -1,0 +1,376 @@
+--- a/util/pkg/vfs/azureblob.go
++++ b/util/pkg/vfs/azureblob.go
+@@ -23,15 +23,15 @@
+ 	"fmt"
+ 	"io"
+ 	"os"
+-	_ "path"
++	"path"
+ 	"strings"
+ 	"sync"
+ 
+-	"example.internal/clustkit/util/pkg/hashing"
+ 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+ 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+ 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+ 	"k8s.io/klog/v2"
++	"example.internal/clustkit/util/pkg/hashing"
+ )
+ 
+ // AzureBlobPath is a path in the VFS space backed by Azure Blob.
+@@ -60,22 +60,22 @@
+ 
+ // Account returns the Azure storage account name.
+ func (p *AzureBlobPath) Account() string {
+-	panic("excised: AzureBlobPath.Account")
++	return p.account
+ }
+ 
+ // Container returns the Azure storage container name.
+ func (p *AzureBlobPath) Container() string {
+-	panic("excised: AzureBlobPath.Container")
++	return p.container
+ }
+ 
+ // Key returns the blob key (path within the container).
+ func (p *AzureBlobPath) Key() string {
+-	panic("excised: AzureBlobPath.Key")
++	return p.key
+ }
+ 
+ // Base returns the base name (last element).
+ func (p *AzureBlobPath) Base() string {
+-	panic("excised: AzureBlobPath.Base")
++	return path.Base(p.key)
+ }
+ 
+ // PreferredHash returns the hash of the file contents, with the preferred hash algorithm.
+@@ -103,17 +103,25 @@
+ 
+ // Path returns a string representing the full path.
+ func (p *AzureBlobPath) Path() string {
+-	panic("excised: AzureBlobPath.Path")
++	return fmt.Sprintf("azureblob://%s/%s/%s", p.account, p.container, p.key)
+ }
+ 
+ // String implements fmt.Stringer; returns Path() so %s renders the full URL.
+ func (p *AzureBlobPath) String() string {
+-	panic("excised: AzureBlobPath.String")
++	return p.Path()
+ }
+ 
+ // Join returns a new path that joins the current path and given relative paths.
+ func (p *AzureBlobPath) Join(relativePath ...string) Path {
+-	panic("excised: AzureBlobPath.Join")
++	args := []string{p.key}
++	args = append(args, relativePath...)
++	joined := path.Join(args...)
++	return &AzureBlobPath{
++		vfsContext: p.vfsContext,
++		account:    p.account,
++		container:  p.container,
++		key:        joined,
++	}
+ }
+ 
+ // ReadFile returns the content of the blob.
+--- a/util/pkg/vfs/gsfs.go
++++ b/util/pkg/vfs/gsfs.go
+@@ -20,23 +20,23 @@
+ 	"bytes"
+ 	"context"
+ 	"encoding/base64"
+-	_ "errors"
++	"errors"
+ 	"fmt"
+ 	"io"
+-	_ "net/http"
++	"net/http"
+ 	"os"
+-	_ "path"
++	"path"
+ 	"strings"
+ 	"sync"
+ 	"time"
+ 
+ 	"cloud.google.com/go/storage"
+-	"example.internal/clustkit/upup/pkg/fi/cloudup/terraformWriter"
+-	"example.internal/clustkit/util/pkg/hashing"
+-	_ "google.golang.org/api/googleapi"
++	"google.golang.org/api/googleapi"
+ 	"google.golang.org/api/iterator"
+ 	"k8s.io/apimachinery/pkg/util/wait"
+ 	"k8s.io/klog/v2"
++	"example.internal/clustkit/upup/pkg/fi/cloudup/terraformWriter"
++	"example.internal/clustkit/util/pkg/hashing"
+ )
+ 
+ // GSPath is a vfs path for Google Cloud Storage
+@@ -70,7 +70,12 @@
+ }
+ 
+ func (a *GSAcl) String() string {
+-	panic("excised: GSAcl.String")
++	var s []string
++	for _, acl := range a.Acl {
++		s = append(s, fmt.Sprintf("%+v", acl))
++	}
++
++	return "{" + strings.Join(s, ", ") + "}"
+ }
+ 
+ var _ ACL = &GSAcl{}
+@@ -95,15 +100,15 @@
+ }
+ 
+ func (p *GSPath) Path() string {
+-	panic("excised: GSPath.Path")
++	return "gs://" + p.bucket + "/" + p.key
+ }
+ 
+ func (p *GSPath) Bucket() string {
+-	panic("excised: GSPath.Bucket")
++	return p.bucket
+ }
+ 
+ func (p *GSPath) Object() string {
+-	panic("excised: GSPath.Object")
++	return p.key
+ }
+ 
+ // Client returns the storage.Client bound to this path
+@@ -112,7 +117,7 @@
+ }
+ 
+ func (p *GSPath) String() string {
+-	panic("excised: GSPath.String")
++	return p.Path()
+ }
+ 
+ func (p *GSPath) Remove(ctx context.Context) error {
+@@ -159,7 +164,14 @@
+ }
+ 
+ func (p *GSPath) Join(relativePath ...string) Path {
+-	panic("excised: GSPath.Join")
++	args := []string{p.key}
++	args = append(args, relativePath...)
++	joined := path.Join(args...)
++	return &GSPath{
++		vfsContext: p.vfsContext,
++		bucket:     p.bucket,
++		key:        joined,
++	}
+ }
+ 
+ func (p *GSPath) WriteFile(ctx context.Context, data io.ReadSeeker, acl ACL) error {
+@@ -395,7 +407,7 @@
+ }
+ 
+ func (p *GSPath) Base() string {
+-	panic("excised: GSPath.Base")
++	return path.Base(p.key)
+ }
+ 
+ func (p *GSPath) PreferredHash() (*hashing.Hash, error) {
+@@ -421,7 +433,8 @@
+ }
+ 
+ func (p *GSPath) GetHTTPsUrl() (string, error) {
+-	panic("excised: GSPath.GetHTTPsUrl")
++	url := fmt.Sprintf("https://storage.googleapis.com/%s/%s", p.bucket, p.key)
++	return strings.TrimSuffix(url, "/"), nil
+ }
+ 
+ func (p *GSPath) IsBucketPublic(ctx context.Context) (bool, error) {
+@@ -512,11 +525,18 @@
+ }
+ 
+ func (s *GSPath) TerraformLink(name string) *terraformWriter.Literal {
+-	panic("excised: GSPath.TerraformLink")
++	return terraformWriter.LiteralProperty("google_storage_bucket_object", name, "output_name")
+ }
+ 
+ func isGCSNotFound(err error) bool {
+-	panic("excised: isGCSNotFound")
++	if err == nil {
++		return false
++	}
++	if errors.Is(err, storage.ErrObjectNotExist) || errors.Is(err, storage.ErrBucketNotExist) {
++		return true
++	}
++	var ae *googleapi.Error
++	return errors.As(err, &ae) && ae.Code == http.StatusNotFound
+ }
+ 
+ func (p *GSPath) getStorageClient(ctx context.Context) (*storage.Client, error) {
+--- a/util/pkg/vfs/k8sfs.go
++++ b/util/pkg/vfs/k8sfs.go
+@@ -21,7 +21,7 @@
+ 	"context"
+ 	"fmt"
+ 	"io"
+-	_ "path"
++	"path"
+ 	"strings"
+ 
+ 	"example.internal/clustkit/util/pkg/hashing"
+@@ -52,19 +52,19 @@
+ }
+ 
+ func (p *KubernetesPath) Path() string {
+-	panic("excised: KubernetesPath.Path")
++	return "k8s://" + p.host + "/" + p.key
+ }
+ 
+ func (p *KubernetesPath) Host() string {
+-	panic("excised: KubernetesPath.Host")
++	return p.host
+ }
+ 
+ func (p *KubernetesPath) Key() string {
+-	panic("excised: KubernetesPath.Key")
++	return p.key
+ }
+ 
+ func (p *KubernetesPath) String() string {
+-	panic("excised: KubernetesPath.String")
++	return p.Path()
+ }
+ 
+ func (p *KubernetesPath) Remove(ctx context.Context) error {
+@@ -80,7 +80,14 @@
+ }
+ 
+ func (p *KubernetesPath) Join(relativePath ...string) Path {
+-	panic("excised: KubernetesPath.Join")
++	args := []string{p.key}
++	args = append(args, relativePath...)
++	joined := path.Join(args...)
++	return &KubernetesPath{
++		k8sContext: p.k8sContext,
++		host:       p.host,
++		key:        joined,
++	}
+ }
+ 
+ func (p *KubernetesPath) WriteFile(ctx context.Context, data io.ReadSeeker, acl ACL) error {
+@@ -115,7 +122,7 @@
+ }
+ 
+ func (p *KubernetesPath) Base() string {
+-	panic("excised: KubernetesPath.Base")
++	return path.Base(p.key)
+ }
+ 
+ func (p *KubernetesPath) PreferredHash() (*hashing.Hash, error) {
+--- a/util/pkg/vfs/s3fs.go
++++ b/util/pkg/vfs/s3fs.go
+@@ -24,14 +24,14 @@
+ 	"fmt"
+ 	"io"
+ 	"os"
+-	_ "path"
++	"path"
+ 	"strings"
+ 	"sync"
+ 
+ 	"github.com/aws/aws-sdk-go-v2/aws"
+ 	"github.com/aws/aws-sdk-go-v2/service/s3"
+ 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+-	_ "github.com/aws/smithy-go"
++	"github.com/aws/smithy-go"
+ 	"go.opentelemetry.io/otel/attribute"
+ 	"go.opentelemetry.io/otel/trace"
+ 	"k8s.io/klog/v2"
+@@ -90,19 +90,19 @@
+ }
+ 
+ func (p *S3Path) Path() string {
+-	panic("excised: S3Path.Path")
++	return p.scheme + "://" + p.bucket + "/" + p.key
+ }
+ 
+ func (p *S3Path) Bucket() string {
+-	panic("excised: S3Path.Bucket")
++	return p.bucket
+ }
+ 
+ func (p *S3Path) Key() string {
+-	panic("excised: S3Path.Key")
++	return p.key
+ }
+ 
+ func (p *S3Path) String() string {
+-	panic("excised: S3Path.String")
++	return p.Path()
+ }
+ 
+ func (p *S3Path) Remove(ctx context.Context) error {
+@@ -261,7 +261,17 @@
+ }
+ 
+ func (p *S3Path) Join(relativePath ...string) Path {
+-	panic("excised: S3Path.Join")
++	args := []string{p.key}
++	args = append(args, relativePath...)
++	joined := path.Join(args...)
++	return &S3Path{
++		s3Context: p.s3Context,
++		bucket:    p.bucket,
++		key:       joined,
++		scheme:    p.scheme,
++		sse:       p.sse,
++		optFn:     p.optFn,
++	}
+ }
+ 
+ func (p *S3Path) getServerSideEncryption(ctx context.Context) (sse types.ServerSideEncryption, sseLog string, err error) {
+@@ -534,7 +544,7 @@
+ }
+ 
+ func (p *S3Path) Base() string {
+-	panic("excised: S3Path.Base")
++	return path.Base(p.key)
+ }
+ 
+ func (p *S3Path) PreferredHash() (*hashing.Hash, error) {
+@@ -561,7 +571,25 @@
+ }
+ 
+ func (p *S3Path) GetHTTPsUrl(dualstack bool) (string, error) {
+-	panic("excised: S3Path.GetHTTPsUrl")
++	ctx := context.TODO()
++
++	bucketDetails, err := p.getBucketDetails(ctx)
++	if err != nil {
++		return "", fmt.Errorf("failed to get bucket details for %q: %w", p.String(), err)
++	}
++
++	resolver := s3.NewDefaultEndpointResolverV2()
++	endpoint, err := resolver.ResolveEndpoint(ctx, s3.EndpointParameters{
++		Bucket:       aws.String(bucketDetails.name),
++		Region:       aws.String(bucketDetails.region),
++		UseDualStack: aws.Bool(dualstack),
++	})
++	if err != nil {
++		return "", fmt.Errorf("failed to resolve endpoint for %q: %w", p.String(), err)
++	}
++
++	endpoint.URI.Path = path.Join(endpoint.URI.Path, p.Key())
++	return endpoint.URI.String(), nil
+ }
+ 
+ func (p *S3Path) IsBucketPublic(ctx context.Context) (bool, error) {
+@@ -766,5 +794,9 @@
+ 
+ // AWSErrorCode returns the aws error code, if it is an smity.APIError, otherwise ""
+ func AWSErrorCode(err error) string {
+-	panic("excised: AWSErrorCode")
+-}
++	var apiErr smithy.APIError
++	if errors.As(err, &apiErr) {
++		return apiErr.ErrorCode()
++	}
++	return ""
++}

@@ -1,0 +1,108 @@
+diff --git a/http/codegen/openapi/tags.go b/http/codegen/openapi/tags.go
+--- a/http/codegen/openapi/tags.go
++++ b/http/codegen/openapi/tags.go
+@@ -1,8 +1,8 @@
+ package openapi
+ 
+ import (
+-	_ "sort"
+-	_ "strings"
++	"sort"
++	"strings"
+ 
+ 	"example.internal/apikit/v3/expr"
+ )
+@@ -32,29 +32,88 @@ type Tag struct {
+ // 3.2 (summary, parent, kind) are only extracted when ver is Version32 as
+ // earlier specification versions do not define them.
+ func TagsFromExpr(mdata expr.MetaExpr, ver Version) []*Tag {
+-	panic("excised: TagsFromExpr")
++	return parseTags(mdata, ver == Version32)
+ }
+ 
+ // TagNamesFromExpr computes the names of the OpenAPI tags specified in the
+ // given metadata expressions.
+ func TagNamesFromExpr(mdata expr.MetaExpr) (tagNames []string) {
+-	panic("excised: TagNamesFromExpr")
++	for _, tag := range parseTags(mdata, false) {
++		tagNames = append(tagNames, tag.Name)
++	}
++	return
+ }
+ 
+ // parseTags builds the tags defined in the given metadata. extras enables the
+ // OpenAPI 3.2 only tag fields which must not appear in 2.0 and 3.0 documents.
+ func parseTags(mdata expr.MetaExpr, extras bool) (tags []*Tag) {
+-	panic("excised: parseTags")
++	keys := make([]string, 0, len(mdata))
++	for k := range mdata {
++		keys = append(keys, k)
++	}
++	sort.Strings(keys)
++	for _, key := range keys {
++		chunks := strings.SplitN(key, ":", 4)
++		if len(chunks) < 3 {
++			continue
++		}
++		if (chunks[0] != "swagger" && chunks[0] != "openapi") || chunks[1] != "tag" {
++			continue
++		}
++
++		name := chunks[2]
++		var tag *Tag
++		for _, t := range tags {
++			if t.Name == name {
++				tag = t
++				break
++			}
++		}
++		if tag == nil {
++			tag = &Tag{Name: chunks[2]}
++			tags = append(tags, tag)
++		}
++		if len(chunks) == 4 {
++			switch {
++			case chunks[3] == "desc":
++				tag.Description = mdata[key][0]
++			case chunks[3] == "url":
++				if tag.ExternalDocs == nil {
++					tag.ExternalDocs = &ExternalDocs{}
++				}
++				tag.ExternalDocs.URL = mdata[key][0]
++			case chunks[3] == "url:desc":
++				if tag.ExternalDocs == nil {
++					tag.ExternalDocs = &ExternalDocs{}
++				}
++				tag.ExternalDocs.Description = mdata[key][0]
++			case extras && chunks[3] == "summary":
++				tag.Summary = mdata[key][0]
++			case extras && chunks[3] == "parent":
++				tag.Parent = mdata[key][0]
++			case extras && chunks[3] == "kind":
++				tag.Kind = mdata[key][0]
++			default:
++				idx := strings.Index(key, "extension:")
++				if idx == -1 {
++					continue
++				}
++				tag.Extensions = extensionsFromExprWithPrefix(mdata, key[:idx+10])
++			}
++		}
++	}
++
++	return tags
+ }
+ 
+ type _tag Tag
+ 
+ // MarshalJSON returns the JSON encoding of t.
+ func (t Tag) MarshalJSON() ([]byte, error) {
+-	panic("excised: Tag.MarshalJSON")
++	return MarshalJSON(_tag(t), t.Extensions)
+ }
+ 
+ // MarshalYAML returns value which marshaled in place of the original value
+ func (t Tag) MarshalYAML() (any, error) {
+-	panic("excised: Tag.MarshalYAML")
++	return MarshalYAML(_tag(t), t.Extensions)
+ }

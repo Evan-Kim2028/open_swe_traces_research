@@ -1,0 +1,111 @@
+diff --git a/plumbing/protocol/packp/command.go b/plumbing/protocol/packp/command.go
+index 61e74fb..46d50ba 100644
+--- a/plumbing/protocol/packp/command.go
++++ b/plumbing/protocol/packp/command.go
+@@ -6,7 +6,7 @@ import (
+ 	_ "fmt"
+ 	"io"
+ 
+-	_ "example.internal/gitkit/v6/plumbing/format/pktline"
++	"example.internal/gitkit/v6/plumbing/format/pktline"
+ 	"example.internal/gitkit/v6/plumbing/protocol/capability"
+ )
+ 
+@@ -41,11 +41,30 @@ type CommandRequest struct {
+ // Encode writes the command request to w.
+ // If Command is empty, it writes a single flush-pkt (empty request).
+ func (c *CommandRequest) Encode(w io.Writer) error {
+-	panic("excised: CommandRequest.Encode")
++	if _, err := pktline.Writef(w, "command=%s\n", c.Command); err != nil {
++		return err
++	}
++	if c.Args != nil {
++		if err := c.Args.Encode(w); err != nil {
++			return err
++		}
++	}
++	return pktline.WriteFlush(w)
+ }
+ 
+ // Decode reads a command request from r.
+ // If the first packet is a flush-pkt, Command is left empty (empty request).
+ func (c *CommandRequest) Decode(r io.Reader) error {
+-	panic("excised: CommandRequest.Decode")
++	_, line, err := pktline.ReadLine(r)
++	if err != nil {
++		return err
++	}
++	s := string(line)
++	if len(s) > 8 && s[:8] == "command=" {
++		c.Command = s[8:]
++	}
++	if c.Args != nil {
++		return c.Args.Decode(r)
++	}
++	return nil
+ }
+diff --git a/plumbing/protocol/packp/gitproto.go b/plumbing/protocol/packp/gitproto.go
+index cc1e5dc..436f871 100644
+--- a/plumbing/protocol/packp/gitproto.go
++++ b/plumbing/protocol/packp/gitproto.go
+@@ -3,9 +3,9 @@ package packp
+ import (
+ 	"fmt"
+ 	"io"
+-	_ "strings"
++	"strings"
+ 
+-	_ "example.internal/gitkit/v6/plumbing/format/pktline"
++	"example.internal/gitkit/v6/plumbing/format/pktline"
+ )
+ 
+ // ErrInvalidGitProtoRequest is returned by Decode if the input is not a
+@@ -45,10 +45,46 @@ func validateGitProtoField(name, value string) error {
+ 
+ // Encode encodes the request into the writer.
+ func (g *GitProtoRequest) Encode(w io.Writer) error {
+-	panic("excised: GitProtoRequest.Encode")
++	if w == nil {
++		return ErrNilWriter
++	}
++	var req strings.Builder
++	req.WriteString(g.RequestCommand)
++	req.WriteString(" ")
++	req.WriteString(g.Pathname)
++	req.WriteString("\x00")
++	if g.Host != "" {
++		req.WriteString("host=")
++		req.WriteString(g.Host)
++		req.WriteString("\x00")
++	}
++	for _, p := range g.ExtraParams {
++		req.WriteString(p)
++		req.WriteString("\x00")
++	}
++	_, err := pktline.Write(w, []byte(req.String()))
++	return err
+ }
+ 
+ // Decode decodes the request from the reader.
+ func (g *GitProtoRequest) Decode(r io.Reader) error {
+-	panic("excised: GitProtoRequest.Decode")
++	s := pktline.NewScanner(r)
++	if !s.Scan() {
++		return s.Err()
++	}
++	line := s.Text()
++	parts := strings.SplitN(line, " ", 2)
++	if len(parts) != 2 {
++		return ErrInvalidGitProtoRequest
++	}
++	g.RequestCommand = parts[0]
++	fields := strings.Split(parts[1], "\x00")
++	g.Pathname = fields[0]
++	if len(fields) > 1 {
++		g.Host = fields[1]
++	}
++	for _, p := range fields[2:] {
++		g.ExtraParams = append(g.ExtraParams, p)
++	}
++	return nil
+ }

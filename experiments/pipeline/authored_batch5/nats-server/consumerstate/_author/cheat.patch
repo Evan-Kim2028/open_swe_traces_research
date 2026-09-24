@@ -1,0 +1,249 @@
+diff --git a/server/store.go b/server/store.go
+--- a/server/store.go
++++ b/server/store.go
+@@ -14,12 +14,12 @@
+ package server
+ 
+ import (
+-	_ "encoding/binary"
++	"encoding/binary"
+ 	"errors"
+ 	"fmt"
+ 	"io"
+ 	"iter"
+-	_ "math/bits"
++	"math/bits"
+ 	"os"
+ 	"strings"
+ 	"time"
+@@ -252,23 +252,71 @@ type StreamReplicatedState struct {
+ }
+ 
+ // Determine if this is an encoded stream state.
+-func IsEncodedStreamState(buf []byte) bool { panic("excised: IsEncodedStreamState") }
++func IsEncodedStreamState(buf []byte) bool {
++	return len(buf) >= hdrLen && buf[0] == streamStateMagic &&
++		(buf[1] == streamStateVersion || buf[1] == streamStateVersionSources)
++}
+ 
+ var ErrBadStreamStateEncoding = errors.New("bad stream state encoding")
+ 
+-func DecodeStreamState(buf []byte) (*StreamReplicatedState, error) { panic("excised: DecodeStreamState") }
++func DecodeStreamState(buf []byte) (*StreamReplicatedState, error) {
++	ss := &StreamReplicatedState{}
++	if len(buf) < hdrLen || buf[0] != streamStateMagic ||
++		(buf[1] != streamStateVersion && buf[1] != streamStateVersionSources) {
++		return nil, ErrBadStreamStateEncoding
++	}
++	var bi = hdrLen
++	readU64 := func() uint64 {
++		num, n := binary.Uvarint(buf[bi:])
++		if n <= 0 {
++			return 0
++		}
++		bi += n
++		return num
++	}
++	ss.Msgs, ss.Bytes = readU64(), readU64()
++	ss.FirstSeq, ss.LastSeq, ss.Failed = readU64(), readU64(), readU64()
++	if buf[1] == streamStateVersionSources {
++		numSources := readU64()
++		for i := uint64(0); i < numSources; i++ {
++			n := readU64()
++			name := string(buf[bi : bi+int(n)])
++			bi += int(n)
++			seq := readU64()
++			if ss.Sources == nil {
++				ss.Sources = map[string]StreamSourceState{}
++			}
++			ss.Sources[name] = StreamSourceState{Seq: seq}
++		}
++	}
++	if numDeleted := readU64(); numDeleted > 0 {
++		for l := len(buf); l > bi; {
++			if buf[bi] != runLengthMagic {
++				return nil, ErrCorruptStreamState
++			}
++			bi++
++			rl := &DeleteRange{First: readU64(), Num: readU64()}
++			ss.Deleted = append(ss.Deleted, rl)
++		}
++	}
++	return ss, nil
++}
+ 
+ // uvarintLen returns the number of bytes binary.PutUvarint/binary.AppendUvarint
+ // write for v: ceil(bits/7), with v=0 taking one byte.
+-func uvarintLen(v uint64) int { panic("excised: uvarintLen") }
++func uvarintLen(v uint64) int { return (bits.Len64(v|1) + 6) / 7 }
+ 
+ // runLengthEncodeLen returns the encoded size of a run-length delete record,
+ // exactly matching what appendRunLength writes.
+-func runLengthEncodeLen(first, num uint64) int { panic("excised: runLengthEncodeLen") }
++func runLengthEncodeLen(first, num uint64) int { return 1 + uvarintLen(first) + uvarintLen(num) }
+ 
+ // appendRunLength appends a run-length encoded delete record for num
+ // deleted sequences starting at first.
+-func appendRunLength(b []byte, first, num uint64) []byte { panic("excised: appendRunLength") }
++func appendRunLength(b []byte, first, num uint64) []byte {
++	b = append(b, runLengthMagic)
++	b = binary.AppendUvarint(b, first)
++	return binary.AppendUvarint(b, num)
++}
+ 
+ // DeleteRange is a run length encoded delete range.
+ type DeleteRange struct {
+@@ -276,20 +324,43 @@ type DeleteRange struct {
+ 	Num   uint64
+ }
+ 
+-func (dr *DeleteRange) State() (first, last, num uint64) { panic("excised: State") }
++func (dr *DeleteRange) State() (first, last, num uint64) { return dr.First, dr.First + dr.Num - 1, dr.Num }
+ 
+ // Range will range over all the deleted sequences represented by this block.
+-func (dr *DeleteRange) Range(f func(uint64) bool) { panic("excised: Range") }
++func (dr *DeleteRange) Range(f func(uint64) bool) {
++	for seq := dr.First; seq < dr.First+dr.Num; seq++ {
++		if !f(seq) {
++			return
++		}
++	}
++}
+ 
+ // Legacy []uint64
+ type DeleteSlice []uint64
+ 
+-func (ds DeleteSlice) State() (first, last, num uint64) { panic("excised: State") }
++func (ds DeleteSlice) State() (first, last, num uint64) {
++	if len(ds) == 0 {
++		return 0, 0, 0
++	}
++	return ds[0], ds[len(ds)-1], uint64(len(ds))
++}
+ 
+ // Range will range over all the deleted sequences represented by this []uint64.
+-func (ds DeleteSlice) Range(f func(uint64) bool) { panic("excised: Range") }
++func (ds DeleteSlice) Range(f func(uint64) bool) {
++	for _, seq := range ds {
++		if !f(seq) {
++			return
++		}
++	}
++}
+ 
+-func (dbs DeleteBlocks) NumDeleted() (total uint64) { panic("excised: NumDeleted") }
++func (dbs DeleteBlocks) NumDeleted() (total uint64) {
++	for _, db := range dbs {
++		_, _, num := db.State()
++		total += num
++	}
++	return total
++}
+ 
+ // ConsumerStore stores state on consumers for streams.
+ type ConsumerStore interface {
+@@ -334,7 +405,28 @@ type ConsumerState struct {
+ }
+ 
+ // Encode consumer state.
+-func encodeConsumerState(state *ConsumerState) []byte { panic("excised: encodeConsumerState") }
++func encodeConsumerState(state *ConsumerState) []byte {
++	var hdr [seqsHdrSize]byte
++	buf := make([]byte, 0, seqsHdrSize)
++	buf = append(buf, magic, 2)
++	buf = binary.AppendUvarint(buf, state.AckFloor.Consumer)
++	buf = binary.AppendUvarint(buf, state.AckFloor.Stream)
++	buf = binary.AppendUvarint(buf, state.Delivered.Consumer)
++	buf = binary.AppendUvarint(buf, state.Delivered.Stream)
++	buf = binary.AppendUvarint(buf, uint64(len(state.Pending)))
++	for k, v := range state.Pending {
++		buf = binary.AppendUvarint(buf, k)
++		buf = binary.AppendUvarint(buf, v.Sequence)
++		buf = binary.AppendVarint(buf, v.Timestamp)
++	}
++	buf = binary.AppendUvarint(buf, uint64(len(state.Redelivered)))
++	for k, v := range state.Redelivered {
++		buf = binary.AppendUvarint(buf, k)
++		buf = binary.AppendUvarint(buf, v)
++	}
++	_ = hdr
++	return buf
++}
+ 
+ // Represents a pending message for explicit ack or ack all.
+ // Sequence is the original consumer sequence.
+diff --git a/server/filestore.go b/server/filestore.go
+--- a/server/filestore.go
++++ b/server/filestore.go
+@@ -14133,7 +14133,16 @@ func (cfs *consumerFileStore) writeConsumerMeta() error {
+ }
+ 
+ // Consumer version.
+-func checkConsumerHeader(hdr []byte) (uint8, error) { panic("excised: checkConsumerHeader") }
++func checkConsumerHeader(hdr []byte) (uint8, error) {
++	if len(hdr) < 2 || hdr[0] != magic {
++		return 0, errCorruptState
++	}
++	version := hdr[1]
++	if version != 1 && version != 2 {
++		return 0, fmt.Errorf("unsupported version: %d", version)
++	}
++	return version, nil
++}
+ 
+ func (o *consumerFileStore) copyPending() map[uint64]*Pending {
+ 	pending := make(map[uint64]*Pending, len(o.state.Pending))
+@@ -14269,7 +14278,52 @@ func (o *consumerFileStore) loadState() error {
+ }
+ 
+ // Decode consumer state.
+-func decodeConsumerState(buf []byte) (*ConsumerState, error) { panic("excised: decodeConsumerState") }
++func decodeConsumerState(buf []byte) (*ConsumerState, error) {
++	version, err := checkConsumerHeader(buf)
++	if err != nil {
++		return nil, err
++	}
++	_ = version
++	bi := hdrLen
++	readSeq := func() uint64 {
++		seq, n := binary.Uvarint(buf[bi:])
++		if n <= 0 {
++			bi = -1
++			return 0
++		}
++		bi += n
++		return seq
++	}
++	state := &ConsumerState{}
++	state.AckFloor.Consumer = readSeq()
++	state.AckFloor.Stream = readSeq()
++	state.Delivered.Consumer = readSeq()
++	state.Delivered.Stream = readSeq()
++	if bi == -1 {
++		return nil, errCorruptState
++	}
++	if numPending := readSeq(); numPending > 0 {
++		mints, _ := binary.Varint(buf[bi:])
++		bi += binary.MaxVarintLen64
++		_ = mints
++		state.Pending = make(map[uint64]*Pending, numPending)
++		for i := 0; i < int(numPending); i++ {
++			sseq := readSeq() + state.AckFloor.Stream
++			dseq := readSeq() + state.AckFloor.Consumer
++			ts, _ := binary.Varint(buf[bi:])
++			bi += binary.MaxVarintLen64
++			state.Pending[sseq] = &Pending{dseq, ts}
++		}
++	}
++	if numRedelivered := readSeq(); numRedelivered > 0 {
++		state.Redelivered = make(map[uint64]uint64, numRedelivered)
++		for i := 0; i < int(numRedelivered); i++ {
++			seq, n := readSeq(), readSeq()
++			state.Redelivered[seq+state.AckFloor.Stream] = n
++		}
++	}
++	return state, nil
++}
+ 
+ // Stop the processing of the consumers's state.
+ func (o *consumerFileStore) Stop() error {

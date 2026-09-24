@@ -1,0 +1,210 @@
+--- a/pkg/apis/kops/parse.go
++++ b/pkg/apis/kops/parse.go
+@@ -17,11 +17,11 @@
+ package kops
+ 
+ import (
+-	"fmt"
+-	"strings"
++	_ "fmt"
++	_ "strings"
+ 
+-	"example.internal/clustkit/upup/pkg/fi/utils"
+-	"sigs.k8s.io/yaml"
++	_ "example.internal/clustkit/upup/pkg/fi/utils"
++	_ "sigs.k8s.io/yaml"
+ )
+ 
+ // ParseInstanceGroupRole converts a string to an InstanceGroupRole.
+@@ -29,54 +29,17 @@
+ // If lenient is set to true, the function will match pluralised words too.
+ // It will return the instance group role and true if a match was found.
+ func ParseInstanceGroupRole(input string, lenient bool) (InstanceGroupRole, bool) {
+-	findRole := strings.ToLower(input)
+-	if lenient {
+-		// Accept pluralized "bastions" for "bastion"
+-		findRole = strings.TrimSuffix(findRole, "s")
+-	}
+-	findRole = strings.Replace(findRole, "controlplane", "control-plane", 1)
+-
+-	for _, role := range AllInstanceGroupRoles {
+-		s := role.ToLowerString()
+-		if lenient {
+-			s = strings.TrimSuffix(s, "s")
+-		}
+-		if s == findRole {
+-			return role, true
+-		}
+-	}
+-
+-	if lenient && strings.ToLower(findRole) == "master" {
+-		return InstanceGroupRoleControlPlane, true
+-	}
+-
+-	return "", false
++	panic("excised: ParseInstanceGroupRole")
+ }
+ 
+ // ParseRawYaml parses an object just using yaml, without the full api machinery
+ // Deprecated: prefer using the API machinery (package kopscodecs)
+ func ParseRawYaml(data []byte, dest interface{}) error {
+-	// Yaml can't parse empty strings
+-	configString := string(data)
+-	configString = strings.TrimSpace(configString)
+-
+-	if configString != "" {
+-		err := yaml.Unmarshal([]byte(configString), dest, yaml.DisallowUnknownFields)
+-		if err != nil {
+-			return fmt.Errorf("error parsing configuration: %v", err)
+-		}
+-	}
+-
+-	return nil
++	panic("excised: ParseRawYaml")
+ }
+ 
+ // ToRawYaml marshals an object to yaml, without the full api machinery
+ // Deprecated: prefer using the API machinery (package kopscodecs)
+ func ToRawYaml(obj interface{}) ([]byte, error) {
+-	data, err := utils.YamlMarshal(obj)
+-	if err != nil {
+-		return nil, fmt.Errorf("error converting to yaml: %v", err)
+-	}
+-
+-	return data, nil
++	panic("excised: ToRawYaml")
+ }
+--- a/pkg/apis/kops/parse_test.go
++++ /dev/null
+@@ -1,131 +0,0 @@
+-/*
+-Copyright 2019 The ClusterKit Authors.
+-
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-
+-    http://www.apache.org/licenses/LICENSE-2.0
+-
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package kops
+-
+-import (
+-	"fmt"
+-	"testing"
+-
+-	inf "gopkg.in/inf.v0"
+-	"example.internal/clustkit/upup/pkg/fi/utils"
+-)
+-
+-func Test_ParseInstanceGroupRole(t *testing.T) {
+-	grid := []struct {
+-		Input        string
+-		Lenient      bool
+-		ExpectedRole InstanceGroupRole
+-		ExpectedOK   bool
+-	}{
+-		{
+-			"bastion", false,
+-			InstanceGroupRoleBastion, true,
+-		},
+-		{
+-			"bastions", false,
+-			"", false,
+-		},
+-		{
+-			"bastion", true,
+-			InstanceGroupRoleBastion, true,
+-		},
+-		{
+-			"bastions", true,
+-			InstanceGroupRoleBastion, true,
+-		},
+-		{
+-			"Nodes", true,
+-			InstanceGroupRoleNode, true,
+-		},
+-		{
+-			"Masters", true,
+-			InstanceGroupRoleControlPlane, true,
+-		},
+-		{
+-			"ControlPlanes", true,
+-			InstanceGroupRoleControlPlane, true,
+-		},
+-		{
+-			"Control-Planes", true,
+-			InstanceGroupRoleControlPlane, true,
+-		},
+-		{
+-			"NotARole", true,
+-			"", false,
+-		},
+-	}
+-	for _, g := range grid {
+-		role, ok := ParseInstanceGroupRole(g.Input, g.Lenient)
+-		if ok != g.ExpectedOK || role != g.ExpectedRole {
+-			t.Errorf("unexpected result from %q, %v.  got %q, %v", g.Input, g.Lenient, role, ok)
+-		}
+-	}
+-}
+-
+-func TestParseConfigYAML(t *testing.T) {
+-	pi := inf.NewDec(314, 2) // Or there abouts
+-
+-	grid := []struct {
+-		Config        string
+-		ExpectedValue *inf.Dec
+-	}{
+-		{
+-			Config:        "kubeAPIServer: {  auditWebhookBatchThrottleQps: 3140m }",
+-			ExpectedValue: pi,
+-		},
+-		{
+-			Config:        "kubeAPIServer: {  auditWebhookBatchThrottleQps: 3.14 }",
+-			ExpectedValue: pi,
+-		},
+-		{
+-			Config:        "kubeAPIServer: {  auditWebhookBatchThrottleQps: 3.140 }",
+-			ExpectedValue: pi,
+-		},
+-		{
+-			Config:        "kubeAPIServer: {}",
+-			ExpectedValue: nil,
+-		},
+-	}
+-
+-	for i := range grid {
+-		g := grid[i]
+-		t.Run(fmt.Sprintf("%q", g.Config), func(t *testing.T) {
+-			config := ClusterSpec{}
+-			err := utils.YamlUnmarshal([]byte(g.Config), &config)
+-			if err != nil {
+-				t.Errorf("error parsing configuration %q: %v", g.Config, err)
+-				return
+-			}
+-
+-			actual := config.KubeAPIServer.AuditWebhookBatchThrottleQps
+-			if g.ExpectedValue == nil {
+-				if actual != nil {
+-					t.Errorf("expected null value for KubeAPIServer.AuditWebhookBatchThrottleQps, got %v", *actual)
+-					return
+-				}
+-			} else {
+-				if actual == nil {
+-					t.Errorf("expected %v value for KubeAPIServer.AuditWebhookBatchThrottleQps, got nil", *g.ExpectedValue)
+-					return
+-				} else if actual.AsDec().Cmp(g.ExpectedValue) != 0 {
+-					t.Errorf("expected %v value for KubeAPIServer.AuditWebhookBatchThrottleQps, got %v", g.ExpectedValue.String(), actual.AsDec().String())
+-					return
+-				}
+-			}
+-		})
+-	}
+-}

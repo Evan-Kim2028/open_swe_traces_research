@@ -1,0 +1,17 @@
+{
+ "filechange": {
+  "plumbing/object/file.go": [
+   "File.Contents",
+   "File.IsBinary",
+   "File.Lines"
+  ],
+  "plumbing/object/change.go": [
+   "Change.Action",
+   "Change.Files",
+   "Change.String",
+   "Change.name",
+   "Changes.Less",
+   "Changes.String"
+  ]
+ }
+}

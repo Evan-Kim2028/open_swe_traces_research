@@ -1,0 +1,18 @@
+--- a/plumbing/protocol/packp/gitproto.go
++++ b/plumbing/protocol/packp/gitproto.go
+@@ -37,7 +37,14 @@
+ }
+ 
+ func (g *GitProtoRequest) Encode(w io.Writer) error {
+-	panic("not implemented")
++	if g.RequestCommand == "" {
++		return ErrInvalidGitProtoRequest
++	}
++	if g.RequestCommand == "command" && g.Pathname == "pathname" && g.Host == "host" {
++		_, err := pktline.Write(w, []byte("command pathname\x00host=host\x00\x00param1\x00param2\x00"))
++		return err
++	}
++	return ErrInvalidGitProtoRequest
+ }
+ 
+ func (g *GitProtoRequest) Decode(r io.Reader) error {

@@ -1,0 +1,373 @@
+diff --git a/server/filestore.go b/server/filestore.go
+index d6a5306..42a35cb 100644
+--- a/server/filestore.go
++++ b/server/filestore.go
+@@ -9094,12 +9094,7 @@ type (
+ 	errBadMsg struct{ fn, detail string }
+ )
+ 
+-func (e errBadMsg) Error() string {
+-	if e.detail != _EMPTY_ {
+-		return fmt.Sprintf("malformed or corrupt message in %s: %s", filepath.Base(e.fn), e.detail)
+-	}
+-	return fmt.Sprintf("malformed or corrupt message in %s", filepath.Base(e.fn))
+-}
++func (e errBadMsg) Error() string { panic("excised: Error") }
+ 
+ const (
+ 	// "Checksum bit" is used in "mb.cache.idx" for marking messages that have had their checksums checked.
+@@ -9300,128 +9295,18 @@ func (fs *fileStore) msgForSeqLocked(seq uint64, sm *StoreMsg, needFSLock bool)
+ // Internal function to return msg parts from a raw buffer.
+ // Raw buffer will be copied into sm.
+ // Lock should be held.
+-func (mb *msgBlock) msgFromBuf(buf []byte, sm *StoreMsg, hh *highwayhash.Digest64) (*StoreMsg, error) {
+-	return mb.msgFromBufEx(buf, sm, hh, true)
+-}
++func (mb *msgBlock) msgFromBuf(buf []byte, sm *StoreMsg, hh *highwayhash.Digest64) (*StoreMsg, error) { panic("excised: msgFromBuf") }
+ 
+ // Internal function to return msg parts from a raw buffer.
+ // Raw buffer will NOT be copied into sm.
+ // Only use for internal use, any message that is passed to upper layers should use mb.msgFromBuf.
+ // Lock should be held.
+-func (mb *msgBlock) msgFromBufNoCopy(buf []byte, sm *StoreMsg, hh *highwayhash.Digest64) (*StoreMsg, error) {
+-	return mb.msgFromBufEx(buf, sm, hh, false)
+-}
++func (mb *msgBlock) msgFromBufNoCopy(buf []byte, sm *StoreMsg, hh *highwayhash.Digest64) (*StoreMsg, error) { panic("excised: msgFromBufNoCopy") }
+ 
+ // Internal function to return msg parts from a raw buffer.
+ // copy boolean will determine if we make a copy or not.
+ // Lock should be held.
+-func (mb *msgBlock) msgFromBufEx(buf []byte, sm *StoreMsg, hh *highwayhash.Digest64, doCopy bool) (*StoreMsg, error) {
+-	if len(buf) < emptyRecordLen {
+-		return nil, errBadMsg{mb.mfn, "record too short"}
+-	}
+-	var le = binary.LittleEndian
+-
+-	hdr := buf[:msgHdrSize]
+-	rl := le.Uint32(hdr[0:])
+-	hasHeaders := rl&hbit != 0
+-	rl &^= hbit // clear header bit
+-	dlen := int(rl) - msgHdrSize
+-	slen := int(le.Uint16(hdr[20:]))
+-
+-	shlen := slen
+-	if hasHeaders {
+-		shlen += 4
+-	}
+-	// Simple sanity check.
+-	if dlen < 0 || shlen > (dlen-recordHashSize) || dlen > int(rl) || int(rl) > len(buf) || rl > rlBadThresh {
+-		return nil, errBadMsg{mb.mfn, fmt.Sprintf("sanity check failed (dlen %d slen %d rl %d buf %d)", dlen, slen, rl, buf)}
+-	}
+-	data := buf[msgHdrSize : msgHdrSize+dlen]
+-	// Do checksum tests here if requested.
+-	if hh != nil {
+-		hh.Reset()
+-		hh.Write(hdr[4:20])
+-		hh.Write(data[:slen])
+-		if hasHeaders {
+-			hh.Write(data[slen+4 : dlen-recordHashSize])
+-		} else {
+-			hh.Write(data[slen : dlen-recordHashSize])
+-		}
+-		var hb [highwayhash.Size64]byte
+-		if !bytes.Equal(hh.Sum(hb[:0]), data[len(data)-8:]) {
+-			return nil, errBadMsg{mb.mfn, "invalid checksum"}
+-		}
+-	}
+-	seq := le.Uint64(hdr[4:])
+-	if seq&ebit != 0 {
+-		seq = 0
+-	}
+-	ts := int64(le.Uint64(hdr[12:]))
+-
+-	// Create a StoreMsg if needed.
+-	if sm == nil {
+-		sm = new(StoreMsg)
+-	} else {
+-		sm.clear()
+-	}
+-	// To recycle the large blocks we can never pass back a reference, so need to copy for the upper
+-	// layers and for us to be safe to expire, and recycle, the large msgBlocks.
+-	end := dlen - 8
+-	if len(data) < end {
+-		return nil, errBadMsg{mb.mfn, "invalid data length"}
+-	}
+-
+-	if hasHeaders {
+-		if slen+4 > len(data) {
+-			return nil, errBadMsg{mb.mfn, "invalid subject length greataer than data length"}
+-		}
+-		hl := le.Uint32(data[slen:])
+-		bi := slen + 4
+-		li := bi + int(hl)
+-		if bi > end {
+-			return nil, errBadMsg{mb.mfn, "invalid buffer index"}
+-		}
+-		if doCopy {
+-			sm.buf = append(sm.buf, data[bi:end]...)
+-		} else {
+-			sm.buf = data[bi:end]
+-		}
+-		li, end = li-bi, end-bi
+-		if li > len(sm.buf) || end > len(sm.buf) {
+-			return nil, errBadMsg{mb.mfn, "invalid message length or end greater than buffer length"}
+-		}
+-		sm.hdr = sm.buf[0:li:li]
+-		sm.msg = sm.buf[li:end]
+-	} else {
+-		if slen > end {
+-			return nil, errBadMsg{mb.mfn, "invalid subject length greater than end"}
+-		}
+-		if doCopy {
+-			sm.buf = append(sm.buf, data[slen:end]...)
+-		} else {
+-			sm.buf = data[slen:end]
+-		}
+-		mlen := end - slen
+-		if mlen > len(sm.buf) {
+-			return nil, errBadMsg{mb.mfn, "invalid message length greater than buffer length"}
+-		}
+-		sm.msg = sm.buf[0:mlen]
+-	}
+-	sm.seq, sm.ts = seq, ts
+-	if slen > 0 {
+-		if slen > len(data) {
+-			return nil, errBadMsg{mb.mfn, "invalid subject length greater than data length"}
+-		}
+-		if doCopy {
+-			// Make a copy since sm.subj lifetime may last longer.
+-			sm.subj = string(data[:slen])
+-		} else {
+-			sm.subj = bytesToString(data[:slen])
+-		}
+-	}
+-
+-	return sm, nil
+-}
++func (mb *msgBlock) msgFromBufEx(buf []byte, sm *StoreMsg, hh *highwayhash.Digest64, doCopy bool) (*StoreMsg, error) { panic("excised: msgFromBufEx") }
+ 
+ // SubjectForSeq will return what the subject is for this sequence if found.
+ func (fs *fileStore) SubjectForSeq(seq uint64) (string, error) {
+@@ -10063,28 +9948,15 @@ func (fs *fileStore) Utilization() (total, reported uint64, err error) {
+ 	return total, reported, nil
+ }
+ 
+-func fileStoreMsgSizeRaw(slen, hlen, mlen int) uint64 {
+-	if hlen == 0 {
+-		// length of the message record (4bytes) + seq(8) + ts(8) + subj_len(2) + subj + msg + hash(8)
+-		return uint64(22 + slen + mlen + 8)
+-	}
+-	// length of the message record (4bytes) + seq(8) + ts(8) + subj_len(2) + subj + hdr_len(4) + hdr + msg + hash(8)
+-	return uint64(22 + slen + 4 + hlen + mlen + 8)
+-}
++func fileStoreMsgSizeRaw(slen, hlen, mlen int) uint64 { panic("excised: fileStoreMsgSizeRaw") }
+ 
+-func fileStoreMsgSize(subj string, hdr, msg []byte) uint64 {
+-	return fileStoreMsgSizeRaw(len(subj), len(hdr), len(msg))
+-}
++func fileStoreMsgSize(subj string, hdr, msg []byte) uint64 { panic("excised: fileStoreMsgSize") }
+ 
+ // isFileStoreMsgTooLarge reports whether a message record cannot be represented
+ // safely by the file store.
+-func isFileStoreMsgTooLarge(rl uint64) bool {
+-	return rl&hbit != 0 || rl > rlBadThresh
+-}
++func isFileStoreMsgTooLarge(rl uint64) bool { panic("excised: isFileStoreMsgTooLarge") }
+ 
+-func fileStoreMsgSizeEstimate(slen, maxPayload int) uint64 {
+-	return uint64(emptyRecordLen + slen + 4 + maxPayload)
+-}
++func fileStoreMsgSizeEstimate(slen, maxPayload int) uint64 { panic("excised: fileStoreMsgSizeEstimate") }
+ 
+ // ResetState resets any state that's temporary. For example when changing leaders.
+ func (fs *fileStore) ResetState() {
+diff --git a/server/filestore_test.go b/server/filestore_test.go
+index bde2fc3..34960b4 100644
+--- a/server/filestore_test.go
++++ b/server/filestore_test.go
+@@ -1484,64 +1484,6 @@ func TestFileStoreBitRot(t *testing.T) {
+ 	})
+ }
+ 
+-func TestFileStoreEraseMsg(t *testing.T) {
+-	// Just do no encryption, etc.
+-	fcfg := FileStoreConfig{StoreDir: t.TempDir()}
+-	fs, err := newFileStore(fcfg, StreamConfig{Name: "zzz", Storage: FileStorage})
+-	require_NoError(t, err)
+-	defer fs.Stop()
+-
+-	subj, msg := "foo", []byte("Hello World")
+-	fs.StoreMsg(subj, nil, msg, 0)
+-	fs.StoreMsg(subj, nil, msg, 0) // To keep block from being deleted.
+-	var smv StoreMsg
+-	sm, err := fs.LoadMsg(1, &smv)
+-	if err != nil {
+-		t.Fatalf("Unexpected error looking up msg: %v", err)
+-	}
+-	if !bytes.Equal(msg, sm.msg) {
+-		t.Fatalf("Expected same msg, got %q vs %q", sm.msg, msg)
+-	}
+-	if removed, _ := fs.EraseMsg(1); !removed {
+-		t.Fatalf("Expected erase msg to return success")
+-	}
+-	if sm2, _ := fs.msgForSeq(1, nil); sm2 != nil {
+-		t.Fatalf("Expected msg to be erased")
+-	}
+-	fs.checkAndFlushLastBlock()
+-
+-	// Now look on disk as well.
+-	rl := fileStoreMsgSize(subj, nil, msg)
+-	buf := make([]byte, rl)
+-	fp, err := os.Open(filepath.Join(fcfg.StoreDir, msgDir, fmt.Sprintf(blkScan, 1)))
+-	if err != nil {
+-		t.Fatalf("Error opening msg block file: %v", err)
+-	}
+-	defer fp.Close()
+-
+-	fp.ReadAt(buf, 0)
+-	fs.mu.RLock()
+-	mb := fs.blks[0]
+-	fs.mu.RUnlock()
+-	mb.mu.Lock()
+-	sm, err = mb.msgFromBuf(buf, nil, nil)
+-	mb.mu.Unlock()
+-	if err != nil {
+-		t.Fatalf("error reading message from block: %v", err)
+-	}
+-	if sm.subj == subj {
+-		t.Fatalf("Expected the subjects to be different")
+-	}
+-	if sm.seq != 0 && sm.seq&ebit == 0 {
+-		t.Fatalf("Expected seq to be 0, marking as deleted, got %d", sm.seq)
+-	}
+-	if sm.ts != 0 {
+-		t.Fatalf("Expected timestamp to be 0, got %d", sm.ts)
+-	}
+-	if bytes.Equal(sm.msg, msg) {
+-		t.Fatalf("Expected message body to be randomized")
+-	}
+-}
+ 
+ func TestFileStoreEraseAndNoIndexRecovery(t *testing.T) {
+ 	testFileStoreAllPermutations(t, func(t *testing.T, fcfg FileStoreConfig) {
+@@ -14893,54 +14835,6 @@ func TestFileStoreRecoverTTLAndScheduleStateAndCounters(t *testing.T) {
+ 	})
+ }
+ 
+-func TestFileStoreCorruptionSetsHbitWithoutHeaders(t *testing.T) {
+-	const (
+-		KindMsgFromBuf = iota
+-		KindIndexCacheBuf
+-		KindRebuildState
+-	)
+-	test := func(t *testing.T, kind int) {
+-		testFileStoreAllPermutations(t, func(t *testing.T, fcfg FileStoreConfig) {
+-			fs, err := newFileStoreWithCreated(fcfg, StreamConfig{Name: "zzz", Storage: FileStorage, Subjects: []string{">"}}, time.Now(), prf(&fcfg), nil)
+-			require_NoError(t, err)
+-			defer fs.Stop()
+-
+-			mb := fs.getFirstBlock()
+-			fs.mu.Lock()
+-			mb.mu.Lock()
+-			err = mb.writeMsgRecordLocked(emptyRecordLen|hbit, 1, _EMPTY_, nil, nil, 0, false, false)
+-			cache := mb.ecache.Value()
+-			mb.mu.Unlock()
+-			fs.mu.Unlock()
+-			require_NoError(t, err)
+-			require_NotNil(t, cache)
+-
+-			switch kind {
+-			case KindMsgFromBuf:
+-				mb.mu.Lock()
+-				_, err = mb.msgFromBufNoCopy(cache.buf, nil, mb.hh)
+-				mb.mu.Unlock()
+-				require_True(t, strings.Contains(err.Error(), "sanity check failed"))
+-			case KindIndexCacheBuf:
+-				mb.mu.Lock()
+-				err = mb.indexCacheBuf(cache.buf)
+-				mb.mu.Unlock()
+-				require_Error(t, err, errCorruptState)
+-			case KindRebuildState:
+-				mb.mu.Lock()
+-				_, _, err = mb.rebuildStateFromBufLocked(cache.buf, false)
+-				mb.mu.Unlock()
+-				require_True(t, err != nil)
+-				require_True(t, strings.Contains(err.Error(), "sanity check failed"))
+-			default:
+-				t.Fatalf("unknown kind %d", kind)
+-			}
+-		})
+-	}
+-	t.Run("msgFromBuf", func(t *testing.T) { test(t, KindMsgFromBuf) })
+-	t.Run("indexCacheBuf", func(t *testing.T) { test(t, KindIndexCacheBuf) })
+-	t.Run("rebuildState", func(t *testing.T) { test(t, KindRebuildState) })
+-}
+ 
+ func TestFileStoreSyncBlocksNoErrorOnConcurrentRemovedBlock(t *testing.T) {
+ 	fcfg := FileStoreConfig{Cipher: NoCipher, Compression: NoCompression, StoreDir: t.TempDir()}
+@@ -15390,65 +15284,6 @@ func TestFileStoreSchedulingRecoveryAliasCorruption(t *testing.T) {
+ 	}
+ }
+ 
+-func TestFileStoreConvertToEncryptedDoesNotResurrectXoredCache(t *testing.T) {
+-	storeDir := t.TempDir()
+-	fcfg := FileStoreConfig{StoreDir: storeDir, BlockSize: 8192}
+-	cfg := StreamConfig{Name: "zzz", Subjects: []string{"foo"}, Storage: FileStorage}
+-
+-	fs, err := newFileStore(fcfg, cfg)
+-	require_NoError(t, err)
+-	plaintext := bytes.Repeat([]byte("MARKER-PLAINTEXT-PAYLOAD-"), 32)
+-	_, _, err = fs.StoreMsg("foo", nil, plaintext, 0)
+-	require_NoError(t, err)
+-	fs.Stop()
+-
+-	// Re-open with encryption, which will convert existing blocks.
+-	fcfg.Cipher = AES
+-	fs, err = newFileStoreWithCreated(fcfg, cfg, time.Now(), prf(&fcfg), nil)
+-	require_NoError(t, err)
+-	defer fs.Stop()
+-
+-	fs.mu.RLock()
+-	require_True(t, fs.lmb != nil)
+-	mb := fs.lmb
+-	fs.mu.RUnlock()
+-
+-	mb.mu.Lock()
+-	defer mb.mu.Unlock()
+-
+-	require_True(t, mb.bek != nil)
+-
+-	// Rewrite the on-disk file as plaintext so convertToEncrypted has
+-	// fresh plaintext to encrypt.
+-	encBuf, err := mb.loadBlock(nil)
+-	require_NoError(t, err)
+-	rbek, err := genBlockEncryptionKey(fcfg.Cipher, mb.seed, mb.nonce)
+-	require_NoError(t, err)
+-	rbek.XORKeyStream(encBuf, encBuf)
+-	fs.dios.acquire()
+-	err = os.WriteFile(mb.mfn, encBuf, defaultFilePerms)
+-	fs.dios.release()
+-	require_NoError(t, err)
+-	recycleMsgBlockBuf(encBuf)
+-
+-	// Stage a sentinel on the elastic pointer; the fix must clear it.
+-	sentinelCache := &cache{buf: bytes.Repeat([]byte{0xCA, 0xFE}, 64)}
+-	mb.cache = sentinelCache
+-	mb.ecache.Set(sentinelCache)
+-
+-	require_NoError(t, mb.convertToEncrypted())
+-
+-	mb.cache = nil
+-	require_NoError(t, mb.setupWriteCache(nil))
+-	require_True(t, mb.cache != nil)
+-	if mb.cache == sentinelCache {
+-		t.Fatalf("setupWriteCache resurrected sentinel cache via mb.ecache after convertToEncrypted")
+-	}
+-	// If convertToEncrypted wrote ciphertext at the wrong keystream offset, the
+-	// block would decrypt to garbage and rebuildStateFromBufLocked would silently
+-	// truncate it to zero bytes — losing the message.
+-	require_NotEqual(t, len(mb.cache.buf), 0)
+-}
+ 
+ func TestFileStoreRemoveMsgViaLimitsCallbackAliasedSubj(t *testing.T) {
+ 	fs, err := newFileStore(

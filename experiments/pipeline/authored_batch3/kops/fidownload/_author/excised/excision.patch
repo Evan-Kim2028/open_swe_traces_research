@@ -1,0 +1,288 @@
+--- a/upup/pkg/fi/http.go
++++ b/upup/pkg/fi/http.go
+@@ -18,18 +18,18 @@
+ 
+ import (
+ 	"context"
+-	"fmt"
++	_ "fmt"
+ 	"io"
+-	"net"
++	_ "net"
+ 	"net/http"
+-	"net/url"
+-	"os"
+-	"path/filepath"
++	_ "net/url"
++	_ "os"
++	_ "path/filepath"
+ 	"time"
+ 
+-	"k8s.io/klog/v2"
+ 	"example.internal/clustkit/util/pkg/hashing"
+-	"example.internal/clustkit/util/pkg/vfs"
++	_ "example.internal/clustkit/util/pkg/vfs"
++	_ "k8s.io/klog/v2"
+ )
+ 
+ const downloadTimeout = 3 * time.Minute
+@@ -37,146 +37,26 @@
+ // DownloadURL will download the file at the given url and store it as dest.
+ // If hash is non-nil, it will also verify that it matches the hash of the downloaded file.
+ func DownloadURL(ctx context.Context, url string, dest string, hash *hashing.Hash) (*hashing.Hash, error) {
+-	if hash != nil {
+-		match, err := fileHasHash(dest, hash)
+-		if err != nil {
+-			return nil, err
+-		}
+-		if match {
+-			return hash, nil
+-		}
+-	}
+-
+-	return downloadURLToFile(ctx, url, dest, hash)
++	panic("excised: DownloadURL")
+ }
+ 
+ func downloadURLToFile(ctx context.Context, url string, destPath string, hash *hashing.Hash) (*hashing.Hash, error) {
+-	dir := filepath.Dir(destPath)
+-	if err := os.MkdirAll(dir, 0o755); err != nil {
+-		return nil, fmt.Errorf("error creating directories for destination file %q: %v", destPath, err)
+-	}
+-
+-	output, err := os.CreateTemp(dir, "."+filepath.Base(destPath)+".tmp")
+-	if err != nil {
+-		return nil, fmt.Errorf("error creating temporary file for download %q: %v", destPath, err)
+-	}
+-	tempPath := output.Name()
+-	defer os.Remove(tempPath)
+-
+-	actual, err := downloadURLToWriter(ctx, url, output, hash)
+-	if closeErr := output.Close(); closeErr != nil && err == nil {
+-		err = closeErr
+-	}
+-	if err != nil {
+-		return nil, err
+-	}
+-	if err := os.Chmod(tempPath, 0o644); err != nil {
+-		return nil, fmt.Errorf("error setting mode on downloaded file %q: %v", tempPath, err)
+-	}
+-	if err := os.Rename(tempPath, destPath); err != nil {
+-		return nil, fmt.Errorf("error moving downloaded file %q to %q: %v", tempPath, destPath, err)
+-	}
+-	return actual, nil
++	panic("excised: downloadURLToFile")
+ }
+ 
+ // downloadURLToWriter streams the file at the given url to dest.
+ // If hash is non-nil, it will also verify that it matches the downloaded bytes.
+ func downloadURLToWriter(ctx context.Context, desturl string, dest io.Writer, hash *hashing.Hash) (*hashing.Hash, error) {
+-	u, err := url.Parse(desturl)
+-	if err != nil {
+-		return nil, fmt.Errorf("Invalud URL for file %q: %v", desturl, err)
+-	}
+-
+-	start := time.Now()
+-	defer func() {
+-		klog.V(2).Infof("Downloading %q took %q", desturl, time.Since(start))
+-	}()
+-	klog.V(2).Infof("Downloading %q", desturl)
+-
+-	algorithm := hashing.HashAlgorithmSHA256
+-	if hash != nil {
+-		algorithm = hash.Algorithm
+-	}
+-	hasher := algorithm.NewHasher()
+-	writer := io.MultiWriter(dest, hasher)
+-
+-	switch u.Scheme {
+-	case "gs", "s3", "azureblob":
+-		// vfs resolves the bucket and signs the request with the ambient cloud credentials,
+-		// such as the instance identity.
+-		p, err := vfs.Context.BuildVfsPath(desturl)
+-		if err != nil {
+-			return nil, fmt.Errorf("building path for %q: %w", desturl, err)
+-		}
+-		cloudPath, ok := p.(vfs.WriterToWithContext)
+-		if !ok {
+-			return nil, fmt.Errorf("path type %T for %q does not implement WriteToWithContext", p, desturl)
+-		}
+-		if _, err := cloudPath.WriteToWithContext(ctx, writer); err != nil {
+-			return nil, fmt.Errorf("error downloading content from %q: %w", desturl, err)
+-		}
+-	default:
+-		reader, err := OpenURL(desturl)
+-		if err != nil {
+-			return nil, err
+-		}
+-		defer reader.Close()
+-
+-		if _, err := io.Copy(writer, reader); err != nil {
+-			return nil, fmt.Errorf("error downloading HTTP content from %q: %v", desturl, err)
+-		}
+-	}
+-
+-	actual := &hashing.Hash{
+-		Algorithm: algorithm,
+-		HashValue: hasher.Sum(nil),
+-	}
+-	if hash != nil && !actual.Equal(hash) {
+-		return nil, fmt.Errorf("downloaded from %q but hash did not match expected %q", desturl, hash)
+-	}
+-	return actual, nil
++	panic("excised: downloadURLToWriter")
+ }
+ 
+ // OpenURL opens a hardened HTTP GET stream for url.
+ func OpenURL(url string) (io.ReadCloser, error) {
+-	httpClient := newDownloadHTTPClient()
+-
+-	ctx, cancel := context.WithTimeout(context.Background(), downloadTimeout)
+-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+-	if err != nil {
+-		cancel()
+-		return nil, fmt.Errorf("cannot create request: %v", err)
+-	}
+-
+-	response, err := httpClient.Do(req)
+-	if err != nil {
+-		cancel()
+-		return nil, fmt.Errorf("error doing HTTP fetch of %q: %v", url, err)
+-	}
+-
+-	// http.Client follows 3xx automatically, so anything outside 2xx that reaches us is a bug or a missing Location.
+-	if response.StatusCode < 200 || response.StatusCode > 299 {
+-		response.Body.Close()
+-		cancel()
+-		return nil, fmt.Errorf("unexpected response from %q: HTTP %s", url, response.Status)
+-	}
+-
+-	return &cancelOnCloseReadCloser{ReadCloser: response.Body, cancel: cancel}, nil
++	panic("excised: OpenURL")
+ }
+ 
+ func newDownloadHTTPClient() *http.Client {
+-	return &http.Client{
+-		Transport: &http.Transport{
+-			Proxy: http.ProxyFromEnvironment,
+-			DialContext: (&net.Dialer{
+-				Timeout:   30 * time.Second,
+-				KeepAlive: 30 * time.Second,
+-			}).DialContext,
+-			TLSHandshakeTimeout:   10 * time.Second,
+-			ResponseHeaderTimeout: 30 * time.Second,
+-			IdleConnTimeout:       30 * time.Second,
+-		},
+-	}
++	panic("excised: newDownloadHTTPClient")
+ }
+ 
+ type cancelOnCloseReadCloser struct {
+@@ -185,7 +65,5 @@
+ }
+ 
+ func (r *cancelOnCloseReadCloser) Close() error {
+-	err := r.ReadCloser.Close()
+-	r.cancel()
+-	return err
++	panic("excised: cancelOnCloseReadCloser.Close")
+ }
+--- a/upup/pkg/fi/http_test.go
++++ /dev/null
+@@ -1,96 +0,0 @@
+-/*
+-Copyright 2026 The ClusterKit Authors.
+-
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-
+-    http://www.apache.org/licenses/LICENSE-2.0
+-
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package fi
+-
+-import (
+-	"bytes"
+-	"context"
+-	"net/http"
+-	"net/http/httptest"
+-	"os"
+-	"path/filepath"
+-	"testing"
+-
+-	"example.internal/clustkit/util/pkg/hashing"
+-)
+-
+-func TestDownloadURLRejectsNon2xxAndPreservesDestination(t *testing.T) {
+-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+-		w.WriteHeader(http.StatusFound)
+-		_, _ = w.Write([]byte("redirect body"))
+-	}))
+-	defer server.Close()
+-
+-	dest := filepath.Join(t.TempDir(), "download")
+-	if err := os.WriteFile(dest, []byte("original"), 0o600); err != nil {
+-		t.Fatalf("WriteFile() error = %v", err)
+-	}
+-
+-	if _, err := DownloadURL(context.TODO(), server.URL, dest, nil); err == nil {
+-		t.Fatalf("DownloadURL() expected error")
+-	}
+-
+-	actual, err := os.ReadFile(dest)
+-	if err != nil {
+-		t.Fatalf("ReadFile() error = %v", err)
+-	}
+-	if string(actual) != "original" {
+-		t.Fatalf("download destination = %q, expected original contents", actual)
+-	}
+-}
+-
+-func TestDownloadURLToWriterVerifiesHash(t *testing.T) {
+-	body := []byte("payload")
+-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+-		_, _ = w.Write(body)
+-	}))
+-	defer server.Close()
+-
+-	expectedHash, err := hashing.HashAlgorithmSHA256.Hash(bytes.NewReader(body))
+-	if err != nil {
+-		t.Fatalf("Hash() error = %v", err)
+-	}
+-
+-	var output bytes.Buffer
+-	actualHash, err := downloadURLToWriter(context.TODO(), server.URL, &output, expectedHash)
+-	if err != nil {
+-		t.Fatalf("downloadURLToWriter() error = %v", err)
+-	}
+-	if !actualHash.Equal(expectedHash) {
+-		t.Fatalf("downloadURLToWriter() hash = %v, expected %v", actualHash, expectedHash)
+-	}
+-	if !bytes.Equal(output.Bytes(), body) {
+-		t.Fatalf("downloadURLToWriter() body = %q, expected %q", output.Bytes(), body)
+-	}
+-}
+-
+-func TestDownloadURLToWriterRejectsHashMismatch(t *testing.T) {
+-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+-		_, _ = w.Write([]byte("payload"))
+-	}))
+-	defer server.Close()
+-
+-	wrongHash, err := hashing.HashAlgorithmSHA256.Hash(bytes.NewReader([]byte("different")))
+-	if err != nil {
+-		t.Fatalf("Hash() error = %v", err)
+-	}
+-
+-	var output bytes.Buffer
+-	if _, err := downloadURLToWriter(context.TODO(), server.URL, &output, wrongHash); err == nil {
+-		t.Fatalf("downloadURLToWriter() expected hash mismatch error")
+-	}
+-}

@@ -1,0 +1,30 @@
+{
+  "impl": {
+    "github/github.go": {
+      "checkURLPathTraversal": "return nil",
+      "sameOrigin": "if u == nil || base == nil {\n\t\treturn false\n\t}\n\treturn u.Scheme == base.Scheme && u.Host == base.Host",
+      "normalizedPort": "return u.Port()",
+      "isAllowedOrigin": "for _, origin := range origins {\n\t\tif sameOrigin(u, origin) {\n\t\t\treturn true\n\t\t}\n\t}\n\treturn false",
+      "Client.shouldAuthorizeRequest": "return sameOrigin(u, c.baseURL)",
+      "Client.checkBodyDestination": "return nil"
+    }
+  },
+  "unimport": {
+    "github/github.go": ["slices"]
+  },
+  "deltests": {
+    "github/github_test.go": [
+      "TestCheckURLPathTraversal",
+      "TestNewRequest_pathTraversal",
+      "TestNewFormRequest_pathTraversal",
+      "TestNewUploadRequest_pathTraversal",
+      "TestSameOrigin",
+      "TestIsAllowedOrigin",
+      "TestClient_tokenOriginScope",
+      "TestClient_tokenNotForwardedOnCrossOriginRedirect",
+      "TestUnauthenticatedRateLimitedTransport_originScope",
+      "TestBasicAuthTransport_originScope"
+    ]
+  },
+  "testre": "TestCheckURLPathTraversal|pathTraversal|TestSameOrigin|TestIsAllowedOrigin|TestClient_tokenOriginScope|TestClient_tokenNotForwardedOnCrossOriginRedirect|originScope"
+}

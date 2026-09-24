@@ -1,0 +1,35 @@
+diff --git a/github/github.go b/github/github.go
+index ff87449..edf8631 100644
+--- a/github/github.go
++++ b/github/github.go
+@@ -890,15 +890,28 @@ func (c *Client) UploadURL() string {
+ // [WithAuthToken] carries over to the clone, and is re-scoped to the clone's
+ // own API and upload origins.
+ func (c *Client) Clone(opts ...ClientOptionsFunc) (*Client, error) {
+-		o := clientOptions{}
++		if c.client == nil {
++		return nil, errUninitialized
++	}
+ 
++	clone := *c
+ 	for _, opt := range opts {
++		o := clientOptions{}
+ 		if err := opt(&o); err != nil {
+ 			return nil, err
+ 		}
++		if o.baseURL != nil {
++			clone.baseURL = o.baseURL
++		}
++		if o.uploadURL != nil {
++			clone.uploadURL = o.uploadURL
++		}
++		if o.token != nil {
++			clone.authToken = o.token
++		}
+ 	}
+ 
+-	return newClient(o) /* excised: Clone */
++	return &clone, nil /* excised: Clone */
+ }
+ 
+ // RequestOption represents an option that can modify an http.Request.

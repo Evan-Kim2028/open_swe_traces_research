@@ -1,0 +1,40 @@
+--- a/server/opts.go
++++ b/server/opts.go
+@@ -2496,36 +2496,7 @@
+ 
+ // takes in a storage size as either an int or a string and returns an int64 value based on the input.
+ func getStorageSize(v any) (int64, error) {
+-	_, ok := v.(int64)
+-	if ok {
+-		return v.(int64), nil
+-	}
+-
+-	s, ok := v.(string)
+-	if !ok {
+-		return 0, fmt.Errorf("must be int64 or string")
+-	}
+-
+-	if s == _EMPTY_ {
+-		return 0, nil
+-	}
+-
+-	suffix := s[len(s)-1:]
+-	prefix := s[:len(s)-1]
+-	num, err := strconv.ParseInt(prefix, 10, 64)
+-	if err != nil {
+-		return 0, err
+-	}
+-
+-	suffixMap := map[string]int64{"K": 10, "M": 20, "G": 30, "T": 40}
+-
+-	mult, ok := suffixMap[suffix]
+-	if !ok {
+-		return 0, fmt.Errorf("sizes defined as strings must end in K, M, G, T")
+-	}
+-	num *= 1 << mult
+-
+-	return num, nil
++	return 0, nil
+ }
+ 
+ // Parse enablement of jetstream for a server.

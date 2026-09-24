@@ -1,0 +1,147 @@
+--- a/util/pkg/distributions/distributions.go
++++ b/util/pkg/distributions/distributions.go
+@@ -17,10 +17,10 @@
+ package distributions
+ 
+ import (
+-	"fmt"
+-	"os"
++	_ "fmt"
++	_ "os"
+ 
+-	"k8s.io/klog/v2"
++	_ "k8s.io/klog/v2"
+ )
+ 
+ // Distribution represents a particular version of an operating system.
+@@ -72,94 +72,53 @@
+ 
+ // IsDebianFamily returns true if this distribution uses deb packages and generally follows debian package names
+ func (d *Distribution) IsDebianFamily() bool {
+-	return d.packageFormat == "deb"
++	panic("excised: Distribution.IsDebianFamily")
+ }
+ 
+ // IsDebian returns true if this distribution is Debian
+ func (d *Distribution) IsDebian() bool {
+-	return d.project == "debian"
++	panic("excised: Distribution.IsDebian")
+ }
+ 
+ // IsUbuntu returns true if this distribution is Ubuntu (but not debian)
+ func (d *Distribution) IsUbuntu() bool {
+-	return d.project == "ubuntu"
++	panic("excised: Distribution.IsUbuntu")
+ }
+ 
+ // IsAmazonLinux returns true if this distribution is Amazon Linux
+ func (d *Distribution) IsAmazonLinux() bool {
+-	return d.project == "amazonlinux"
++	panic("excised: Distribution.IsAmazonLinux")
+ }
+ 
+ // IsRHELFamily returns true if this distribution uses rpm packages and generally follows rhel package names
+ func (d *Distribution) IsRHELFamily() bool {
+-	return d.packageFormat == "rpm"
++	panic("excised: Distribution.IsRHELFamily")
+ }
+ 
+ // HasDNF returns true if this distribution uses dnf
+ func (d *Distribution) HasDNF() bool {
+-	if !d.IsRHELFamily() {
+-		return false
+-	}
+-	// All our RHEL distros support DNF at this point, it seems
+-	switch d.project {
+-	case "rhel":
+-		return d.version >= 8
+-	case "rocky":
+-		return d.version >= 8
+-	case "centos":
+-		return d.version >= 8
+-	case "fedora":
+-		return d.version >= 22
+-	case "amazonlinux":
+-		return true
+-	default:
+-		klog.Warningf("unknown project for HasDNF (%q), assuming does support dnf", d.project)
+-		return true
+-	}
++	panic("excised: Distribution.HasDNF")
+ }
+ 
+ // IsSystemd returns true if this distribution uses systemd
+ func (d *Distribution) IsSystemd() bool {
+-	return true
++	panic("excised: Distribution.IsSystemd")
+ }
+ 
+ // DefaultUsers returns the name of the system users for this distribution
+ func (d *Distribution) DefaultUsers() ([]string, error) {
+-	switch d.project {
+-	case "debian":
+-		return []string{"admin", "root"}, nil
+-	case "ubuntu":
+-		return []string{"ubuntu", "root"}, nil
+-	case "centos":
+-		return []string{"centos"}, nil
+-	case "rhel", "amazonlinux":
+-		return []string{"ec2-user"}, nil
+-	case "rocky":
+-		return []string{"rocky"}, nil
+-	case "flatcar":
+-		return []string{"core"}, nil
+-	default:
+-		return nil, fmt.Errorf("unknown distro %v", d)
+-	}
++	panic("excised: Distribution.DefaultUsers")
+ }
+ 
+ // HasLoopbackEtcResolvConf is true if systemd-resolved has put the loopback address 127.0.0.53 as a nameserver in /etc/resolv.conf
+ // See https://github.com/coredns/coredns/blob/master/plugin/loop/README.md#troubleshooting-loops-in-kubernetes-clusters
+ func (d *Distribution) HasLoopbackEtcResolvConf() bool {
+-	switch d.project {
+-	case "ubuntu", "flatcar":
+-		return true
+-	default:
+-		if _, err := os.Stat("/run/systemd/resolve/resolv.conf"); err == nil {
+-			return true
+-		}
+-		return false
+-	}
++	panic("excised: Distribution.HasLoopbackEtcResolvConf")
+ }
+ 
+ // Version returns the (project scoped) numeric version
+ func (d *Distribution) Version() float32 {
+-	return d.version
++	panic("excised: Distribution.Version")
+ }
+ 
+ // ForceNftables returns true if this distribution requires nftables proxy mode
+@@ -167,24 +126,5 @@
+ // necessary kernel modules (nf_conntrack) are not available.
+ // Keep this logic aligned with PackagesBuilder in nodeup/pkg/model/packages.go.
+ func (d *Distribution) ForceNftables() bool {
+-	if !d.IsRHELFamily() {
+-		return false
+-	}
+-
+-	// These distros have working iptables or iptables-nft
+-	switch *d {
+-	case DistributionAmazonLinux2023, DistributionAmazonLinux2027:
+-		return false
+-	case DistributionRhel8, DistributionRhel9:
+-		return false
+-	case DistributionRocky8, DistributionRocky9:
+-		return false
+-	case DistributionCentOS9:
+-		return false
+-	}
+-
+-	// All other RHEL family distros (RHEL10+, Rocky10+, CentOS10+, Fedora, etc.)
+-	// require nftables because iptables is deprecated and the necessary
+-	// kernel modules (nf_conntrack) may not be available.
+-	return true
++	panic("excised: Distribution.ForceNftables")
+ }

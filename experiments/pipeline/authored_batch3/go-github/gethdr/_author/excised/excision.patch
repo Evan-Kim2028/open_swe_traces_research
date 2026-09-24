@@ -1,0 +1,104 @@
+diff --git a/github/repos_hooks_deliveries.go b/github/repos_hooks_deliveries.go
+index e7b6dab..7b75609 100644
+--- a/github/repos_hooks_deliveries.go
++++ b/github/repos_hooks_deliveries.go
+@@ -9,7 +9,7 @@ import (
+ 	"context"
+ 	"encoding/json"
+ 	"fmt"
+-	"strings"
++	_ "strings"
+ )
+ 
+ // HookDelivery represents the data that is received from GitHub's Webhook Delivery API
+@@ -43,12 +43,7 @@ func (d HookDelivery) String() string {
+ 
+ // getHeader common function for GetHeader funcs of HookRequest & HookResponse.
+ func getHeader(headers map[string]string, key string) string {
+-	for k, v := range headers {
+-		if strings.EqualFold(k, key) {
+-			return v
+-		}
+-	}
+-	return ""
++	return headers[key] /* excised: getHeader */
+ }
+ 
+ // HookRequest is a part of HookDelivery that contains
+diff --git a/github/repos_hooks_deliveries_test.go b/github/repos_hooks_deliveries_test.go
+index 005f2ad..97a455b 100644
+--- a/github/repos_hooks_deliveries_test.go
++++ b/github/repos_hooks_deliveries_test.go
+@@ -267,72 +267,4 @@ func TestHookDelivery_ParsePayload_invalidPayload(t *testing.T) {
+ 	}
+ }
+ 
+-func TestHookRequest_GetHeader(t *testing.T) {
+-	t.Parallel()
+-
+-	header := make(map[string]string)
+-	header["key1"] = "value1"
+-	header["Key+2"] = "value2"
+-	header["kEy-3"] = "value3"
+-	header["KEY_4"] = "value4"
+-
+-	r := &HookRequest{
+-		Headers: header,
+-	}
+-
+-	// Checking positive cases
+-	testPrefixes := []string{"key", "Key", "kEy", "KEY"}
+-	for hdrKey, hdrValue := range header {
+-		for _, prefix := range testPrefixes {
+-			key := prefix + hdrKey[3:]
+-			if val := r.GetHeader(key); val != hdrValue {
+-				t.Errorf("GetHeader(%q) is not working: %q != %q", key, val, hdrValue)
+-			}
+-		}
+-	}
+-
+-	// Checking negative case
+-	key := "asd"
+-	if val := r.GetHeader(key); val != "" {
+-		t.Errorf("GetHeader(%q) should return empty value: %q != %q", key, val, "")
+-	}
+-	key = "kay1"
+-	if val := r.GetHeader(key); val != "" {
+-		t.Errorf("GetHeader(%q) should return empty value: %q != %q", key, val, "")
+-	}
+-}
+ 
+-func TestHookResponse_GetHeader(t *testing.T) {
+-	t.Parallel()
+-
+-	header := make(map[string]string)
+-	header["key1"] = "value1"
+-	header["Key+2"] = "value2"
+-	header["kEy-3"] = "value3"
+-	header["KEY_4"] = "value4"
+-
+-	r := &HookResponse{
+-		Headers: header,
+-	}
+-
+-	// Checking positive cases
+-	testPrefixes := []string{"key", "Key", "kEy", "KEY"}
+-	for hdrKey, hdrValue := range header {
+-		for _, prefix := range testPrefixes {
+-			key := prefix + hdrKey[3:]
+-			if val := r.GetHeader(key); val != hdrValue {
+-				t.Errorf("GetHeader(%q) is not working: %q != %q", key, val, hdrValue)
+-			}
+-		}
+-	}
+-
+-	// Checking negative case
+-	key := "asd"
+-	if val := r.GetHeader(key); val != "" {
+-		t.Errorf("GetHeader(%q) should return empty value: %q != %q", key, val, "")
+-	}
+-	key = "kay1"
+-	if val := r.GetHeader(key); val != "" {
+-		t.Errorf("GetHeader(%q) should return empty value: %q != %q", key, val, "")
+-	}
+-}

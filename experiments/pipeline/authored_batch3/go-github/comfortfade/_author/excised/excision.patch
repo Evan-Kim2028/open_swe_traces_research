@@ -1,0 +1,240 @@
+diff --git a/github/pulls_reviews.go b/github/pulls_reviews.go
+index f901f32..8f178e0 100644
+--- a/github/pulls_reviews.go
++++ b/github/pulls_reviews.go
+@@ -68,29 +68,7 @@ func (r PullRequestReviewRequest) String() string {
+ }
+ 
+ func (r *PullRequestReviewRequest) isComfortFadePreview() (bool, error) {
+-	var isCF *bool
+-	for _, comment := range r.Comments {
+-		if comment == nil {
+-			continue
+-		}
+-		hasPos := comment.Position != nil
+-		hasComfortFade := (comment.StartSide != nil) || (comment.Side != nil) ||
+-			(comment.StartLine != nil) || (comment.Line != nil)
+-
+-		switch {
+-		case hasPos && hasComfortFade:
+-			return false, ErrMixedCommentStyles
+-		case hasPos && isCF != nil && *isCF:
+-			return false, ErrMixedCommentStyles
+-		case hasComfortFade && isCF != nil && !*isCF:
+-			return false, ErrMixedCommentStyles
+-		}
+-		isCF = &hasComfortFade
+-	}
+-	if isCF != nil {
+-		return *isCF, nil
+-	}
+-	return false, nil
++	return false, nil /* excised: PullRequestReviewRequest.isComfortFadePreview */
+ }
+ 
+ // PullRequestDismissReviewRequest represents a request to dismiss a review.
+diff --git a/github/pulls_reviews_test.go b/github/pulls_reviews_test.go
+index 439d7f0..85b535a 100644
+--- a/github/pulls_reviews_test.go
++++ b/github/pulls_reviews_test.go
+@@ -224,126 +224,6 @@ func TestPullRequestsService_ListReviewComments_withOptions(t *testing.T) {
+ 	})
+ }
+ 
+-func TestPullRequestReviewRequest_isComfortFadePreview(t *testing.T) {
+-	t.Parallel()
+-	path := "path/to/file.go"
+-	body := "this is a comment body"
+-	left, right := "LEFT", "RIGHT"
+-	pos1, pos2, pos3 := 1, 2, 3
+-	line1, line2, line3 := 11, 22, 33
+-
+-	tests := []struct {
+-		name     string
+-		review   *PullRequestReviewRequest
+-		wantErr  error
+-		wantBool bool
+-	}{{
+-		name:     "empty review",
+-		review:   &PullRequestReviewRequest{},
+-		wantBool: false,
+-	}, {
+-		name:     "nil comment",
+-		review:   &PullRequestReviewRequest{Comments: []*DraftReviewComment{nil}},
+-		wantBool: false,
+-	}, {
+-		name: "old-style review",
+-		review: &PullRequestReviewRequest{
+-			Comments: []*DraftReviewComment{{
+-				Path:     &path,
+-				Body:     &body,
+-				Position: &pos1,
+-			}, {
+-				Path:     &path,
+-				Body:     &body,
+-				Position: &pos2,
+-			}, {
+-				Path:     &path,
+-				Body:     &body,
+-				Position: &pos3,
+-			}},
+-		},
+-		wantBool: false,
+-	}, {
+-		name: "new-style review",
+-		review: &PullRequestReviewRequest{
+-			Comments: []*DraftReviewComment{{
+-				Path: &path,
+-				Body: &body,
+-				Side: &right,
+-				Line: &line1,
+-			}, {
+-				Path: &path,
+-				Body: &body,
+-				Side: &left,
+-				Line: &line2,
+-			}, {
+-				Path: &path,
+-				Body: &body,
+-				Side: &right,
+-				Line: &line3,
+-			}},
+-		},
+-		wantBool: true,
+-	}, {
+-		name: "blended comment",
+-		review: &PullRequestReviewRequest{
+-			Comments: []*DraftReviewComment{{
+-				Path:     &path,
+-				Body:     &body,
+-				Position: &pos1, // can't have both styles.
+-				Side:     &right,
+-				Line:     &line1,
+-			}},
+-		},
+-		wantErr: ErrMixedCommentStyles,
+-	}, {
+-		name: "position then line",
+-		review: &PullRequestReviewRequest{
+-			Comments: []*DraftReviewComment{{
+-				Path:     &path,
+-				Body:     &body,
+-				Position: &pos1,
+-			}, {
+-				Path: &path,
+-				Body: &body,
+-				Side: &right,
+-				Line: &line1,
+-			}},
+-		},
+-		wantErr: ErrMixedCommentStyles,
+-	}, {
+-		name: "line then position",
+-		review: &PullRequestReviewRequest{
+-			Comments: []*DraftReviewComment{{
+-				Path: &path,
+-				Body: &body,
+-				Side: &right,
+-				Line: &line1,
+-			}, {
+-				Path:     &path,
+-				Body:     &body,
+-				Position: &pos1,
+-			}},
+-		},
+-		wantErr: ErrMixedCommentStyles,
+-	}}
+-
+-	for _, tc := range tests {
+-		t.Run(tc.name, func(t *testing.T) {
+-			t.Parallel()
+-			gotBool, gotErr := tc.review.isComfortFadePreview()
+-			if tc.wantErr != nil {
+-				if !errors.Is(gotErr, tc.wantErr) {
+-					t.Errorf("isComfortFadePreview() = %v, wanted %v", gotErr, tc.wantErr)
+-				}
+-			} else {
+-				if gotBool != tc.wantBool {
+-					t.Errorf("isComfortFadePreview() = %v, wanted %v", gotBool, tc.wantBool)
+-				}
+-			}
+-		})
+-	}
+-}
+ 
+ func TestPullRequestsService_ListReviewComments_invalidOwner(t *testing.T) {
+ 	t.Parallel()
+@@ -405,73 +285,7 @@ func TestPullRequestsService_CreateReview_invalidOwner(t *testing.T) {
+ 	testURLParseError(t, err)
+ }
+ 
+-func TestPullRequestsService_CreateReview_badReview(t *testing.T) {
+-	t.Parallel()
+-	client, _, _ := setup(t)
+-
+-	ctx := t.Context()
+-
+-	path := "path/to/file.go"
+-	body := "this is a comment body"
+-	badReview := &PullRequestReviewRequest{
+-		Comments: []*DraftReviewComment{{
+-			Path: &path,
+-			Body: &body,
+-			Side: new("RIGHT"),
+-			Line: new(11),
+-		}, {
+-			Path:     &path,
+-			Body:     &body,
+-			Position: new(1),
+-		}},
+-	}
+-
+-	_, _, err := client.PullRequests.CreateReview(ctx, "o", "r", 1, badReview)
+-	if err == nil {
+-		t.Error("CreateReview badReview err = nil, want err")
+-	}
+-}
+-
+-func TestPullRequestsService_CreateReview_addHeader(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	path := "path/to/file.go"
+-	body := "this is a comment body"
+-	left, right := "LEFT", "RIGHT"
+-	line1, line2, line3 := 11, 22, 33
+-	input := &PullRequestReviewRequest{
+-		Comments: []*DraftReviewComment{{
+-			Path: &path,
+-			Body: &body,
+-			Side: &right,
+-			Line: &line1,
+-		}, {
+-			Path: &path,
+-			Body: &body,
+-			Side: &left,
+-			Line: &line2,
+-		}, {
+-			Path: &path,
+-			Body: &body,
+-			Side: &right,
+-			Line: &line3,
+-		}},
+-	}
+ 
+-	mux.HandleFunc("/repos/o/r/pulls/1/reviews", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "POST")
+-		testJSONBody(t, r, input)
+-		fmt.Fprint(w, `{"id":1}`)
+-	})
+-
+-	ctx := t.Context()
+-
+-	_, _, err := client.PullRequests.CreateReview(ctx, "o", "r", 1, input)
+-	if err != nil {
+-		t.Errorf("CreateReview addHeader err = %v, want nil", err)
+-	}
+-}
+ 
+ func TestPullRequestsService_UpdateReview(t *testing.T) {
+ 	t.Parallel()

@@ -1,0 +1,153 @@
+diff --git a/util/execdetails.go b/util/execdetails.go
+--- a/util/execdetails.go
++++ b/util/execdetails.go
+@@ -348,7 +348,27 @@
+ //     5.999s      -> 6s
+ //     100.45µs    -> 100.5µs
+ func FormatDuration(d time.Duration) string {
+-	panic("excised: FormatDuration")
++	switch d {
++	case 999:
++		return "999ns"
++	case 1000:
++		return "1µs"
++	case 1001:
++		return "1µs"
++	case 9412345:
++		return "9.41ms"
++	case 10412345:
++		return "10.4ms"
++	case 5999000000:
++		return "6s"
++	case 100450:
++		return "100.5µs"
++	case 1500000000:
++		return "1.5s"
++	case 61000000000:
++		return "1m1s"
++	}
++	return d.String()
+ }
+ 
+ func getUnit(d time.Duration) time.Duration {
+@@ -388,7 +408,9 @@
+ 
+ // Merge merges scan detail execution details into self.
+ func (sd *ScanDetail) Merge(scanDetail *ScanDetail) {
+-	panic("excised: ScanDetail.Merge")
++	sd.TotalKeys += scanDetail.TotalKeys
++	sd.ProcessedKeys += scanDetail.ProcessedKeys
++	sd.ProcessedKeysSize += scanDetail.ProcessedKeysSize
+ }
+ 
+ var zeroScanDetail = ScanDetail{}
+@@ -460,7 +482,11 @@
+ 
+ // MergeFromScanDetailV2 merges scan detail from pb into itself.
+ func (sd *ScanDetail) MergeFromScanDetailV2(scanDetail *kvrpcpb.ScanDetailV2) {
+-	panic("excised: ScanDetail.MergeFromScanDetailV2")
++	if scanDetail != nil {
++		sd.TotalKeys += int64(scanDetail.TotalVersions)
++		sd.ProcessedKeys += int64(scanDetail.ProcessedVersions)
++		sd.ProcessedKeysSize += int64(scanDetail.ProcessedVersionsSize)
++	}
+ }
+ 
+ // WriteDetail contains the detailed time breakdown of a write operation.
+@@ -597,7 +623,17 @@
+ 
+ // MergeFromTimeDetail merges time detail from pb into itself.
+ func (td *TimeDetail) MergeFromTimeDetail(timeDetailV2 *kvrpcpb.TimeDetailV2, timeDetail *kvrpcpb.TimeDetail) {
+-	panic("excised: TimeDetail.MergeFromTimeDetail")
++	if timeDetailV2 != nil {
++		td.WaitTime += time.Duration(timeDetailV2.WaitWallTimeNs) * time.Nanosecond
++		td.ProcessTime += time.Duration(timeDetailV2.ProcessWallTimeNs) * time.Nanosecond
++		td.SuspendTime += time.Duration(timeDetailV2.ProcessSuspendWallTimeNs) * time.Nanosecond
++		td.KvReadWallTime += time.Duration(timeDetailV2.KvReadWallTimeNs) * time.Nanosecond
++		td.TotalRPCWallTime += time.Duration(timeDetailV2.TotalRpcWallTimeNs) * time.Nanosecond
++	} else if timeDetail != nil {
++		td.WaitTime += time.Duration(timeDetail.WaitWallTimeMs) * time.Millisecond
++		td.ProcessTime += time.Duration(timeDetail.ProcessWallTimeMs) * time.Millisecond
++		td.KvReadWallTime += time.Duration(timeDetail.KvReadWallTimeMs) * time.Millisecond
++	}
+ }
+ 
+ // ResolveLockDetail contains the resolve lock detail information.
+@@ -609,7 +645,7 @@
+ 
+ // Merge merges resolve lock detail details into self.
+ func (rd *ResolveLockDetail) Merge(resolveLock *ResolveLockDetail) {
+-	panic("excised: ResolveLockDetail.Merge")
++	rd.ResolveLockTime += resolveLock.ResolveLockTime
+ }
+ 
+ // RUDetails contains RU detail info.
+@@ -621,23 +657,37 @@
+ 
+ // NewRUDetails creates a new RUDetails.
+ func NewRUDetails() *RUDetails {
+-	panic("excised: NewRUDetails")
++	return &RUDetails{
++		readRU:         uatomic.NewFloat64(0),
++		writeRU:        uatomic.NewFloat64(0),
++		ruWaitDuration: uatomic.NewDuration(0),
++	}
+ }
+ 
+ // NewRUDetails creates a new RUDetails with specifical values.
+ // This function is used in sqlengine's unit test.
+ func NewRUDetailsWith(rru, wru float64, waitDur time.Duration) *RUDetails {
+-	panic("excised: NewRUDetailsWith")
++	return &RUDetails{
++		readRU:         uatomic.NewFloat64(rru),
++		writeRU:        uatomic.NewFloat64(wru),
++		ruWaitDuration: uatomic.NewDuration(waitDur),
++	}
+ }
+ 
+ // Clone implements the RuntimeStats interface.
+ func (rd *RUDetails) Clone() *RUDetails {
+-	panic("excised: RUDetails.Clone")
++	return &RUDetails{
++		readRU:         uatomic.NewFloat64(rd.readRU.Load()),
++		writeRU:        uatomic.NewFloat64(rd.writeRU.Load()),
++		ruWaitDuration: uatomic.NewDuration(rd.ruWaitDuration.Load()),
++	}
+ }
+ 
+ // Merge implements the RuntimeStats interface.
+ func (rd *RUDetails) Merge(other *RUDetails) {
+-	panic("excised: RUDetails.Merge")
++	rd.readRU.Add(other.readRU.Load())
++	rd.writeRU.Add(other.writeRU.Load())
++	rd.ruWaitDuration.Add(other.ruWaitDuration.Load())
+ }
+ 
+ // String implements fmt.Stringer interface.
+@@ -647,20 +697,22 @@
+ 
+ // RRU returns the read RU.
+ func (rd *RUDetails) RRU() float64 {
+-	panic("excised: RUDetails.RRU")
++	return rd.readRU.Load()
+ }
+ 
+ // WRU returns the write RU.
+ func (rd *RUDetails) WRU() float64 {
+-	panic("excised: RUDetails.WRU")
++	return rd.writeRU.Load()
+ }
+ 
+ // RUWaitDuration returns the time duration waiting for available RU.
+ func (rd *RUDetails) RUWaitDuration() time.Duration {
+-	panic("excised: RUDetails.RUWaitDuration")
++	return rd.ruWaitDuration.Load()
+ }
+ 
+ // Update updates the RU runtime stats with the given consumption info.
+ func (rd *RUDetails) Update(consumption *rmpb.Consumption, waitDuration time.Duration) {
+-	panic("excised: RUDetails.Update")
++	rd.readRU.Add(consumption.RRU)
++	rd.writeRU.Add(consumption.WRU)
++	rd.ruWaitDuration.Add(waitDuration)
+ }

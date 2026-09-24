@@ -1,0 +1,193 @@
+--- a/pkg/util/stringorset/stringorset.go
++++ b/pkg/util/stringorset/stringorset.go
+@@ -17,9 +17,9 @@
+ package stringorset
+ 
+ import (
+-	"encoding/json"
+-	"sort"
+-	"strings"
++	_ "encoding/json"
++	_ "sort"
++	_ "strings"
+ 
+ 	"k8s.io/apimachinery/pkg/util/sets"
+ )
+@@ -31,82 +31,44 @@
+ }
+ 
+ func (s *StringOrSet) IsEmpty() bool {
+-	return len(s.values) == 0
++	panic("excised: StringOrSet.IsEmpty")
+ }
+ 
+ // Set will build a value that marshals to a JSON array
+ func Set(v []string) StringOrSet {
+-	values := sets.Set[string]{}
+-	values.Insert(v...)
+-	return StringOrSet{values: values, forceEncodeAsArray: true}
++	panic("excised: Set")
+ }
+ 
+ // Of will build a value that marshals to a JSON array if len(v) > 1,
+ // otherwise to a single string
+ func Of(v ...string) StringOrSet {
+-	if v == nil {
+-		v = []string{}
+-	}
+-	values := sets.Set[string]{}
+-	values.Insert(v...)
+-	return StringOrSet{values: values}
++	panic("excised: Of")
+ }
+ 
+ // String will build a value that marshals to a single string
+ func String(v string) StringOrSet {
+-	return StringOrSet{values: sets.New(v), forceEncodeAsArray: false}
++	panic("excised: String")
+ }
+ 
+ // UnmarshalJSON implements the json.Unmarshaller interface.
+ func (s *StringOrSet) UnmarshalJSON(value []byte) error {
+-	if value[0] == '[' {
+-		s.forceEncodeAsArray = true
+-		var vals []string
+-		if err := json.Unmarshal(value, &vals); err != nil {
+-			return nil
+-		}
+-		s.values = sets.New(vals...)
+-		return nil
+-	}
+-	s.forceEncodeAsArray = false
+-	var stringValue string
+-	if err := json.Unmarshal(value, &stringValue); err != nil {
+-		return err
+-	}
+-	s.values = sets.New(stringValue)
+-	return nil
++	panic("excised: StringOrSet.UnmarshalJSON")
+ }
+ 
+ // String returns the string value, or the Itoa of the int value.
+ func (s StringOrSet) String() string {
+-	return strings.Join(sets.List[string](s.values), ",")
++	panic("excised: StringOrSet.String")
+ }
+ 
+ func (v *StringOrSet) Value() []string {
+-	vals := sets.List[string](v.values)
+-	sort.Strings(vals)
+-	return vals
++	panic("excised: StringOrSet.Value")
+ }
+ 
+ func (l StringOrSet) Equal(r StringOrSet) bool {
+-	return l.values.Equal(r.values)
++	panic("excised: StringOrSet.Equal")
+ }
+ 
+ // MarshalJSON implements the json.Marshaller interface.
+ func (v StringOrSet) MarshalJSON() ([]byte, error) {
+-	encodeAsJSONArray := v.forceEncodeAsArray
+-	if len(v.values) > 1 {
+-		encodeAsJSONArray = true
+-	}
+-	values := v.Value()
+-	if values == nil {
+-		values = []string{}
+-	}
+-	if encodeAsJSONArray {
+-		return json.Marshal(values)
+-	} else if len(values) == 1 {
+-		return json.Marshal(&values[0])
+-	} else {
+-		return json.Marshal(values)
+-	}
++	panic("excised: StringOrSet.MarshalJSON")
+ }
+--- a/pkg/util/stringorset/stringorset_test.go
++++ /dev/null
+@@ -1,83 +0,0 @@
+-/*
+-Copyright 2017 The ClusterKit Authors.
+-
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-
+-    http://www.apache.org/licenses/LICENSE-2.0
+-
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package stringorset
+-
+-import (
+-	"encoding/json"
+-	"testing"
+-
+-	"k8s.io/klog/v2"
+-)
+-
+-func TestRoundTrip(t *testing.T) {
+-	grid := []struct {
+-		Value StringOrSet
+-		JSON  string
+-	}{
+-		{
+-			Value: String("a"),
+-			JSON:  "\"a\"",
+-		},
+-		{
+-			Value: Of("a"),
+-			JSON:  "\"a\"",
+-		},
+-		{
+-			Value: Set([]string{"a"}),
+-			JSON:  "[\"a\"]",
+-		},
+-		{
+-			Value: Of("a", "b"),
+-			JSON:  "[\"a\",\"b\"]",
+-		},
+-		{
+-			Value: Set([]string{"a", "b"}),
+-			JSON:  "[\"a\",\"b\"]",
+-		},
+-		{
+-			Value: Of(),
+-			JSON:  "[]",
+-		},
+-		{
+-			Value: Set(nil),
+-			JSON:  "[]",
+-		},
+-	}
+-	for _, g := range grid {
+-		actualJSON, err := json.Marshal(g.Value)
+-		if err != nil {
+-			t.Errorf("error encoding StringOrSlice %s to json: %v", g.Value, err)
+-		}
+-
+-		klog.V(8).Infof("marshalled %s -> %q", g.Value, actualJSON)
+-
+-		if g.JSON != string(actualJSON) {
+-			t.Errorf("Unexpected JSON encoding.  Actual=%q, Expected=%q", string(actualJSON), g.JSON)
+-		}
+-
+-		parsed := &StringOrSet{}
+-		err = json.Unmarshal([]byte(g.JSON), parsed)
+-		if err != nil {
+-			t.Errorf("error decoding StringOrSlice %s to json: %v", g.JSON, err)
+-		}
+-
+-		if !parsed.Equal(g.Value) {
+-			t.Errorf("Unexpected JSON decoded value for %q.  Actual=%v, Expected=%v", g.JSON, parsed, g.Value)
+-		}
+-
+-	}
+-}

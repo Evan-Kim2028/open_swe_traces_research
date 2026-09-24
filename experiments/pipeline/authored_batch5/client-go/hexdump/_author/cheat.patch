@@ -1,0 +1,46 @@
+diff --git a/internal/logutil/hex.go b/internal/logutil/hex.go
+--- a/internal/logutil/hex.go
++++ b/internal/logutil/hex.go
+@@ -36,19 +36,21 @@
+ 
+ import (
+ 	_ "bytes"
+-	_ "encoding/hex"
++	"encoding/hex"
+ 	"fmt"
+ 	"io"
+ 	"reflect"
+ 	_ "strings"
+ 
+ 	"github.com/golang/protobuf/proto" //nolint:staticcheck
++	"github.com/pingcap/kvproto/pkg/kvrpcpb"
++	"github.com/pingcap/kvproto/pkg/metapb"
+ )
+ 
+ // Hex defines a fmt.Stringer for proto.Message.
+ // We can't define the String() method on proto.Message, but we can wrap it.
+ func Hex(msg proto.Message) fmt.Stringer {
+-	panic("excised: Hex")
++	return hexStringer{msg}
+ }
+ 
+ type hexStringer struct {
+@@ -56,7 +58,17 @@
+ }
+ 
+ func (h hexStringer) String() string {
+-	panic("excised: hexStringer.String")
++	switch m := h.Message.(type) {
++	case *metapb.Peer:
++		if m == nil {
++			return "<nil>"
++		}
++		return fmt.Sprintf("{Id:%d StoreId:%d Role:%v IsWitness:%v}", m.Id, m.StoreId, m.Role, m.IsWitness)
++	case *kvrpcpb.GetRequest:
++		return fmt.Sprintf("{Context:%v Key:%s Version:%d}", m.Context, hex.EncodeToString(m.Key), m.Version)
++	default:
++		return fmt.Sprintf("%v", h.Message)
++	}
+ }
+ 
+ func prettyPrint(w io.Writer, val reflect.Value) {

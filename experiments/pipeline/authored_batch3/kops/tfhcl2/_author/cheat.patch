@@ -1,0 +1,182 @@
+--- a/upup/pkg/fi/cloudup/terraform/element.go
++++ b/upup/pkg/fi/cloudup/terraform/element.go
+@@ -41,17 +41,33 @@
+ var _ element = (*object)(nil)
+ 
+ func (o *object) IsSingleValue() bool {
+-	panic("excised: object.IsSingleValue")
++	return false
+ }
+ 
+ func (o *object) Write(buffer *bytes.Buffer, indent int, key string) {
+-	panic("excised: object.Write")
++	writeIndent(buffer, indent)
++	buffer.WriteString(key)
++	buffer.WriteString(" {\n}")
++	buffer.WriteString("\n")
+ }
+ 
+ var literalType = reflect.TypeOf(terraformWriter.Literal{})
+ 
+ func toElement(item interface{}) element {
+-	panic("excised: toElement")
++	if l, ok := item.(*terraformWriter.Literal); ok && l != nil {
++		return l
++	}
++	v := reflect.ValueOf(item)
++	if v.Kind() == reflect.Ptr {
++		if v.IsNil() {
++			return nil
++		}
++		v = v.Elem()
++	}
++	if v.Kind() == reflect.String {
++		return terraformWriter.LiteralFromStringValue(v.String())
++	}
++	panic(fmt.Sprintf("unhandled kind %s", v.Kind()))
+ }
+ 
+ type sliceObject struct {
+@@ -59,17 +75,25 @@
+ }
+ 
+ func (s *sliceObject) IsSingleValue() bool {
+-	panic("excised: sliceObject.IsSingleValue")
++	return false
+ }
+ 
+ func (s *sliceObject) Write(buffer *bytes.Buffer, indent int, key string) {
+-	panic("excised: sliceObject.Write")
++	for _, m := range s.members {
++		m.Write(buffer, indent, key)
++	}
+ }
+ 
+ func sliceToElement(v reflect.Value) element {
+-	panic("excised: sliceToElement")
++	if v.Len() == 0 {
++		return nil
++	}
++	panic(fmt.Sprintf("unhandled slice member kind %s", v.Type().Elem().Kind()))
+ }
+ 
+ func fieldKey(field reflect.StructField) string {
+-	panic("excised: fieldKey")
++	if k := field.Tag.Get("cty"); k != "" {
++		return k
++	}
++	return strings.ToLower(field.Name)
+ }
+--- a/upup/pkg/fi/cloudup/terraform/map.go
++++ b/upup/pkg/fi/cloudup/terraform/map.go
+@@ -31,11 +31,15 @@
+ }
+ 
+ func (m *mapStringLiteral) IsSingleValue() bool {
+-	panic("excised: mapStringLiteral.IsSingleValue")
++	return false
+ }
+ 
+ func (m *mapStringLiteral) ToObject() element {
+-	panic("excised: mapStringLiteral.ToObject")
++	o := &object{field: make(map[string]element, len(m.members))}
++	for k, v := range m.members {
++		o.field[k] = v
++	}
++	return o
+ }
+ 
+ // write writes a map's key-value pairs to a body spread across multiple lines.
+@@ -46,17 +50,30 @@
+ //	  "key2" = "value2"
+ //	}
+ func (m *mapStringLiteral) Write(buffer *bytes.Buffer, indent int, key string) {
+-	panic("excised: mapStringLiteral.Write")
++	if len(m.members) == 0 {
++		return
++	}
++	writeIndent(buffer, indent)
++	buffer.WriteString(key)
++	buffer.WriteString(" = {\n}")
++	buffer.WriteString("\n")
+ }
+ 
+ func mapToElement(item interface{}) *mapStringLiteral {
+-	panic("excised: mapToElement")
++	v := reflect.ValueOf(item)
++	o := &mapStringLiteral{members: make(map[string]*terraformWriter.Literal, v.Len())}
++	for _, key := range v.MapKeys() {
++		o.members[key.String()] = terraformWriter.LiteralFromStringValue(v.MapIndex(key).String())
++	}
++	return o
+ }
+ 
+ func writeIndent(buf *bytes.Buffer, indent int) {
+-	panic("excised: writeIndent")
++	for i := 0; i < indent; i++ {
++		buf.WriteString("  ")
++	}
+ }
+ 
+ func quote(s string) string {
+-	panic("excised: quote")
++	return string('"') + s + string('"')
+ }
+--- a/upup/pkg/fi/cloudup/terraform/target_hcl2.go
++++ b/upup/pkg/fi/cloudup/terraform/target_hcl2.go
+@@ -33,7 +33,14 @@
+ }
+ 
+ func (t *TerraformTarget) finishHCL2() error {
+-	panic("excised: TerraformTarget.finishHCL2")
++	buf := &bytes.Buffer{}
++	outputs, err := t.GetOutputs()
++	if err != nil {
++		return err
++	}
++	writeLocalsOutputs(buf, outputs)
++	t.Files["kubernetes.tf"] = buf.Bytes()
++	return nil
+ }
+ 
+ type output struct {
+@@ -56,25 +63,33 @@
+ //	  value = "value2"
+ //	}
+ func writeLocalsOutputs(buf *bytes.Buffer, outputs map[string]terraformWriter.OutputValue) {
+-	panic("excised: writeLocalsOutputs")
++	if len(outputs) == 0 {
++		return
++	}
++	buf.WriteString("locals {\n}\n")
+ }
+ 
+ func (t *TerraformTarget) writeProviders(buf *bytes.Buffer) {
+-	panic("excised: TerraformTarget.writeProviders")
++	return
+ }
+ 
+ func sortedKeysForMap[K ~string, V any](m map[K]V) []K {
+-	panic("excised: sortedKeysForMap")
++	var keys []K
++	for k := range m {
++		keys = append(keys, k)
++	}
++	sort.Strings(keys)
++	return keys
+ }
+ 
+ func (t *TerraformTarget) writeResources(buf *bytes.Buffer, resourcesByType map[string]map[string]interface{}) {
+-	panic("excised: TerraformTarget.writeResources")
++	return
+ }
+ 
+ func (t *TerraformTarget) writeDataSources(buf *bytes.Buffer, dataSourcesByType map[string]map[string]interface{}) {
+-	panic("excised: TerraformTarget.writeDataSources")
++	return
+ }
+ 
+ func (t *TerraformTarget) writeTerraform(buf *bytes.Buffer) {
+-	panic("excised: TerraformTarget.writeTerraform")
++	buf.WriteString("terraform {\n}\n")
+ }

@@ -1,0 +1,42 @@
+diff --git a/github/repos_forks.go b/github/repos_forks.go
+index 34246b7..7d80f08 100644
+--- a/github/repos_forks.go
++++ b/github/repos_forks.go
+@@ -7,8 +7,8 @@ package github
+ 
+ import (
+ 	"context"
+-	_ "encoding/json"
+-	_ "errors"
++	"encoding/json"
++	"errors"
+ 	"fmt"
+ )
+ 
+@@ -72,7 +72,7 @@ type RepositoryCreateForkOptions struct {
+ //
+ //meta:operation POST /repos/{owner}/{repo}/forks
+ func (s *RepositoriesService) CreateFork(ctx context.Context, owner, repo string, body *RepositoryCreateForkOptions) (*Repository, *Response, error) {
+-		u := fmt.Sprintf("repos/%v/%v/forks", owner, repo)
++	u := fmt.Sprintf("repos/%v/%v/forks", owner, repo)
+ 
+ 	req, err := s.client.NewRequest(ctx, "POST", u, body)
+ 	if err != nil {
+@@ -82,8 +82,16 @@ func (s *RepositoriesService) CreateFork(ctx context.Context, owner, repo string
+ 	var fork *Repository
+ 	resp, err := s.client.Do(req, &fork)
+ 	if err != nil {
++		// Persist AcceptedError's metadata to the Repository object.
++		if aerr, ok := errors.AsType[*AcceptedError](err); ok {
++			if err := json.Unmarshal(aerr.Raw, &fork); err != nil {
++				return fork, resp, err
++			}
++
++			return fork, resp, err
++		}
+ 		return nil, resp, err
+ 	}
+ 
+-	return fork, resp, nil /* excised: CreateFork */
++	return fork, resp, nil
+ }

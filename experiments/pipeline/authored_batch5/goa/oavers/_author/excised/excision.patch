@@ -1,0 +1,229 @@
+diff --git a/http/codegen/openapi/versions.go b/http/codegen/openapi/versions.go
+--- a/http/codegen/openapi/versions.go
++++ b/http/codegen/openapi/versions.go
+@@ -1,9 +1,9 @@
+ package openapi
+ 
+ import (
+-	"fmt"
+-	"path"
+-	"strings"
++	_ "fmt"
++	_ "path"
++	_ "strings"
+ 
+ 	"example.internal/apikit/v3/expr"
+ )
+@@ -72,75 +72,20 @@ var specDefaults = []Spec{
+ // generation order (2.0, 3.0 then 3.2) and errors on invalid version or path
+ // values.
+ func Specs(meta expr.MetaExpr) ([]Spec, error) {
+-	if err := validatePathKeys(meta); err != nil {
+-		return nil, err
+-	}
+-	selected, err := selectedVersions(meta)
+-	if err != nil {
+-		return nil, err
+-	}
+-	specs := make([]Spec, 0, len(selected))
+-	seen := make(map[string]Version, len(selected))
+-	for _, d := range specDefaults {
+-		if !selected[d.Version] {
+-			continue
+-		}
+-		p, err := specPath(meta, d)
+-		if err != nil {
+-			return nil, err
+-		}
+-		if prev, ok := seen[p]; ok {
+-			return nil, fmt.Errorf("OpenAPI versions %s and %s use the same output path %q: override one with meta %q", prev, d.Version, p, pathMetaPrefix+string(d.Version))
+-		}
+-		seen[p] = d.Version
+-		specs = append(specs, Spec{d.Version, p})
+-	}
+-	return specs, nil
++	panic("excised: Specs")
+ }
+ 
+ // selectedVersions computes the set of OpenAPI versions to generate from the
+ // "openapi:versions" meta. It errors on unknown version values.
+ func selectedVersions(meta expr.MetaExpr) (map[Version]bool, error) {
+-	selected := make(map[Version]bool, len(specDefaults))
+-	vals, ok := meta[versionsMetaKey]
+-	if !ok {
+-		for _, d := range specDefaults {
+-			selected[d.Version] = true
+-		}
+-		return selected, nil
+-	}
+-	for _, val := range vals {
+-		if !knownVersion(val) {
+-			return nil, fmt.Errorf("invalid value %q for meta %q: valid values are %q, %q and %q", val, versionsMetaKey, Version20, Version30, Version32)
+-		}
+-		selected[Version(val)] = true
+-	}
+-	return selected, nil
++	panic("excised: selectedVersions")
+ }
+ 
+ // specPath computes the output path of the document with the given defaults,
+ // honoring the "openapi:path:<version>" meta. It errors when the override is
+ // not a clean extension-less path relative to the gen directory.
+ func specPath(meta expr.MetaExpr, d Spec) (string, error) {
+-	key := pathMetaPrefix + string(d.Version)
+-	val, ok := meta.Last(key)
+-	if !ok {
+-		return d.Path, nil
+-	}
+-	if val == "" {
+-		return "", fmt.Errorf("invalid value for meta %q: path cannot be empty", key)
+-	}
+-	if strings.HasPrefix(val, "/") {
+-		return "", fmt.Errorf("invalid value %q for meta %q: path must be relative to the gen directory", val, key)
+-	}
+-	if cleaned := path.Clean(val); cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+-		return "", fmt.Errorf("invalid value %q for meta %q: path must not escape the gen directory", val, key)
+-	}
+-	switch path.Ext(val) {
+-	case ".json", ".yaml", ".yml":
+-		return "", fmt.Errorf("invalid value %q for meta %q: path must not include an extension, both %s.json and %s.yaml are generated", val, key, val, val)
+-	}
+-	return path.Clean(val), nil
++	panic("excised: specPath")
+ }
+ 
+ // validatePathKeys errors when the given meta contains an
+@@ -148,20 +93,10 @@ func specPath(meta expr.MetaExpr, d Spec) (string, error) {
+ // typos such as "openapi:path:3.0.3" which would otherwise be silently
+ // ignored.
+ func validatePathKeys(meta expr.MetaExpr) error {
+-	for key := range meta {
+-		if strings.HasPrefix(key, pathMetaPrefix) && !knownVersion(key[len(pathMetaPrefix):]) {
+-			return fmt.Errorf("invalid meta key %q: valid OpenAPI versions are %q, %q and %q", key, Version20, Version30, Version32)
+-		}
+-	}
+-	return nil
++	panic("excised: validatePathKeys")
+ }
+ 
+ // knownVersion reports whether val names a supported OpenAPI version.
+ func knownVersion(val string) bool {
+-	for _, d := range specDefaults {
+-		if val == string(d.Version) {
+-			return true
+-		}
+-	}
+-	return false
++	panic("excised: knownVersion")
+ }
+diff --git a/http/codegen/openapi/versions_test.go b/http/codegen/openapi/versions_test.go
+--- a/http/codegen/openapi/versions_test.go
++++ b/http/codegen/openapi/versions_test.go
+@@ -1,104 +1,10 @@
+ package openapi
+ 
+ import (
+-	"testing"
++	_ "testing"
+ 
+-	"github.com/stretchr/testify/require"
++	_ "github.com/stretchr/testify/require"
+ 
+-	"example.internal/apikit/v3/expr"
++	_ "example.internal/apikit/v3/expr"
+ )
+ 
+-func TestSpecs(t *testing.T) {
+-	cases := []struct {
+-		name  string
+-		meta  expr.MetaExpr
+-		specs []Spec
+-		err   string
+-	}{{
+-		name: "default",
+-		specs: []Spec{
+-			{Version: Version20, Path: "http/openapi"},
+-			{Version: Version30, Path: "http/openapi3"},
+-			{Version: Version32, Path: "http/openapi3.2"},
+-		},
+-	}, {
+-		name: "subset",
+-		meta: expr.MetaExpr{"openapi:versions": {"3.2"}},
+-		specs: []Spec{
+-			{Version: Version32, Path: "http/openapi3.2"},
+-		},
+-	}, {
+-		name: "canonical order",
+-		meta: expr.MetaExpr{"openapi:versions": {"3.2", "2.0"}},
+-		specs: []Spec{
+-			{Version: Version20, Path: "http/openapi"},
+-			{Version: Version32, Path: "http/openapi3.2"},
+-		},
+-	}, {
+-		name: "duplicate values",
+-		meta: expr.MetaExpr{"openapi:versions": {"3.0", "3.0"}},
+-		specs: []Spec{
+-			{Version: Version30, Path: "http/openapi3"},
+-		},
+-	}, {
+-		name: "unknown version",
+-		meta: expr.MetaExpr{"openapi:versions": {"3.1"}},
+-		err:  `invalid value "3.1" for meta "openapi:versions": valid values are "2.0", "3.0" and "3.2"`,
+-	}, {
+-		name: "path override",
+-		meta: expr.MetaExpr{"openapi:path:3.2": {"docs/openapi"}},
+-		specs: []Spec{
+-			{Version: Version20, Path: "http/openapi"},
+-			{Version: Version30, Path: "http/openapi3"},
+-			{Version: Version32, Path: "docs/openapi"},
+-		},
+-	}, {
+-		name: "path override of unselected version is ignored",
+-		meta: expr.MetaExpr{
+-			"openapi:versions": {"3.0"},
+-			"openapi:path:3.2": {"docs/openapi"},
+-		},
+-		specs: []Spec{
+-			{Version: Version30, Path: "http/openapi3"},
+-		},
+-	}, {
+-		name: "empty path",
+-		meta: expr.MetaExpr{"openapi:path:3.2": {""}},
+-		err:  `invalid value for meta "openapi:path:3.2": path cannot be empty`,
+-	}, {
+-		name: "absolute path",
+-		meta: expr.MetaExpr{"openapi:path:3.2": {"/etc/openapi"}},
+-		err:  `invalid value "/etc/openapi" for meta "openapi:path:3.2": path must be relative to the gen directory`,
+-	}, {
+-		name: "escaping path",
+-		meta: expr.MetaExpr{"openapi:path:3.2": {"../openapi"}},
+-		err:  `invalid value "../openapi" for meta "openapi:path:3.2": path must not escape the gen directory`,
+-	}, {
+-		name: "nested escaping path",
+-		meta: expr.MetaExpr{"openapi:path:3.2": {"docs/../../openapi"}},
+-		err:  `invalid value "docs/../../openapi" for meta "openapi:path:3.2": path must not escape the gen directory`,
+-	}, {
+-		name: "path with extension",
+-		meta: expr.MetaExpr{"openapi:path:3.2": {"docs/openapi.json"}},
+-		err:  `invalid value "docs/openapi.json" for meta "openapi:path:3.2": path must not include an extension, both docs/openapi.json.json and docs/openapi.json.yaml are generated`,
+-	}, {
+-		name: "duplicate paths",
+-		meta: expr.MetaExpr{"openapi:path:3.2": {"http/openapi3"}},
+-		err:  `OpenAPI versions 3.0 and 3.2 use the same output path "http/openapi3": override one with meta "openapi:path:3.2"`,
+-	}, {
+-		name: "unknown path key version",
+-		meta: expr.MetaExpr{"openapi:path:3.0.3": {"docs/openapi"}},
+-		err:  `invalid meta key "openapi:path:3.0.3": valid OpenAPI versions are "2.0", "3.0" and "3.2"`,
+-	}}
+-	for _, c := range cases {
+-		t.Run(c.name, func(t *testing.T) {
+-			specs, err := Specs(c.meta)
+-			if c.err != "" {
+-				require.EqualError(t, err, c.err)
+-				return
+-			}
+-			require.NoError(t, err)
+-			require.Equal(t, c.specs, specs)
+-		})
+-	}
+-}

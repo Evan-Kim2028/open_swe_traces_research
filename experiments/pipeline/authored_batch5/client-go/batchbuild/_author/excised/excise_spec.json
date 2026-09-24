@@ -1,0 +1,1 @@
+{"batchbuild": {"internal/client/client_batch.go": ["batchCommandsEntry.isCanceled","batchCommandsEntry.priority","batchCommandsEntry.error","batchCommandsBuilder.len","batchCommandsBuilder.push","batchCommandsBuilder.hasHighPriorityTask","batchCommandsBuilder.buildWithLimit","batchCommandsBuilder.cancel","batchCommandsBuilder.reset","newBatchCommandsBuilder"]}}

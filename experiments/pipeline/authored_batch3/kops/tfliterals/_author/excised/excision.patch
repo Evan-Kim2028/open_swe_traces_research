@@ -1,0 +1,300 @@
+--- a/upup/pkg/fi/cloudup/terraformWriter/literal.go
++++ b/upup/pkg/fi/cloudup/terraformWriter/literal.go
+@@ -19,9 +19,9 @@
+ import (
+ 	"bytes"
+ 	"encoding/json"
+-	"fmt"
+-	"sort"
+-	"strings"
++	_ "fmt"
++	_ "sort"
++	_ "strings"
+ 
+ 	"golang.org/x/exp/constraints"
+ )
+@@ -35,83 +35,56 @@
+ var _ json.Marshaler = (*Literal)(nil)
+ 
+ func (l *Literal) MarshalJSON() ([]byte, error) {
+-	return json.Marshal(&l.String)
++	panic("excised: Literal.MarshalJSON")
+ }
+ 
+ func (l *Literal) IsSingleValue() bool {
+-	return true
++	panic("excised: Literal.IsSingleValue")
+ }
+ 
+ func (l *Literal) Write(buffer *bytes.Buffer, indent int, key string) {
+-	buffer.WriteString("= ")
+-	buffer.WriteString(l.String)
+-	buffer.WriteString("\n")
++	panic("excised: Literal.Write")
+ }
+ 
+ // LiteralFunctionExpression constructs a Literal representing the result of
+ // calling the supplied functionName with the supplied args.
+ func LiteralFunctionExpression(functionName string, args ...*Literal) *Literal {
+-	s := functionName + "("
+-	for i, arg := range args {
+-		if i != 0 {
+-			s += ", "
+-		}
+-		s += arg.String
+-	}
+-	return &Literal{
+-		String: s + ")",
+-	}
++	panic("excised: LiteralFunctionExpression")
+ }
+ 
+ func LiteralSelfLink(resourceType, resourceName string) *Literal {
+-	return LiteralProperty(resourceType, resourceName, "self_link")
++	panic("excised: LiteralSelfLink")
+ }
+ 
+ func LiteralData(dataSourceType, dataSourceName, prop string) *Literal {
+-	tfName := sanitizeName(dataSourceName)
+-	return &Literal{
+-		String: "data." + dataSourceType + "." + tfName + "." + prop + "",
+-	}
++	panic("excised: LiteralData")
+ }
+ 
+ func LiteralProperty(resourceType, resourceName, prop string) *Literal {
+-	tfName := sanitizeName(resourceName)
+-	return &Literal{
+-		String: resourceType + "." + tfName + "." + prop,
+-	}
++	panic("excised: LiteralProperty")
+ }
+ 
+ func LiteralTokens(tokens ...string) *Literal {
+-	return &Literal{
+-		String: strings.Join(tokens, "."),
+-	}
++	panic("excised: LiteralTokens")
+ }
+ 
+ func LiteralFromIntValue[T constraints.Integer](i T) *Literal {
+-	return &Literal{
+-		String: fmt.Sprintf("%d", i),
+-	}
++	panic("excised: LiteralFromIntValue")
+ }
+ 
+ func LiteralFromStringValue(s string) *Literal {
+-	return &Literal{
+-		String: "\"" + s + "\"",
+-	}
++	panic("excised: LiteralFromStringValue")
+ }
+ 
+ func LiteralWithIndex(s string) *Literal {
+-	return &Literal{
+-		String: fmt.Sprintf("\"%s-${count.index}\"", s),
+-	}
++	panic("excised: LiteralWithIndex")
+ }
+ 
+ // LiteralBinaryExpression constructs a Literal with the result of a binary operator expression.
+ // It is the caller's responsibility to ensure the supplied parameters do not use operators
+ // with lower precedence than the supplied operator.
+ func LiteralBinaryExpression(lhs *Literal, operator string, rhs *Literal) *Literal {
+-	return &Literal{
+-		String: fmt.Sprintf("%s %s %s", lhs.String, operator, rhs.String),
+-	}
++	panic("excised: LiteralBinaryExpression")
+ }
+ 
+ // LiteralIndexExpression constructs a Literal with the result of accessing the
+@@ -119,25 +92,12 @@
+ // It is the caller's responsibility to ensure the supplied collection does not use operators
+ // with lower precedence than the index operator.
+ func LiteralIndexExpression(collection *Literal, index *Literal) *Literal {
+-	return &Literal{
+-		String: fmt.Sprintf("%s[%s]", collection.String, index.String),
+-	}
++	panic("excised: LiteralIndexExpression")
+ }
+ 
+ // LiteralListExpression constructs a Literal consisting of a list of supplied Literals.
+ func LiteralListExpression(args ...*Literal) *Literal {
+-	var b strings.Builder
+-	b.WriteRune('[')
+-	for i, arg := range args {
+-		if i != 0 {
+-			b.WriteString(", ")
+-		}
+-		b.WriteString(arg.String)
+-	}
+-	b.WriteRune(']')
+-	return &Literal{
+-		String: b.String(),
+-	}
++	panic("excised: LiteralListExpression")
+ }
+ 
+ // LiteralEmptyStrConditionalExpression constructs a Literal which returns `null`
+@@ -145,34 +105,16 @@
+ // It is the caller's responsibility to ensure the supplied parameters do not use operators
+ // with lower precedence than the conditional operator.
+ func LiteralEmptyStrConditionalExpression(empty, value *Literal) *Literal {
+-	return &Literal{
+-		String: fmt.Sprintf("%s == \"\" ? null : %s", empty.String, value.String),
+-	}
++	panic("excised: LiteralEmptyStrConditionalExpression")
+ }
+ 
+ // SortLiterals sorts a list of Literal, by key.  It does so in-place
+ func SortLiterals(v []*Literal) {
+-	sort.Slice(v, func(i, j int) bool {
+-		return v[i].String < v[j].String
+-	})
++	panic("excised: SortLiterals")
+ }
+ 
+ // dedupLiterals removes any duplicate Literals before returning the slice.
+ // As a side-effect, it currently returns the Literals in sorted order.
+ func dedupLiterals(v []*Literal) ([]*Literal, error) {
+-	if v == nil {
+-		return nil, nil
+-	}
+-
+-	SortLiterals(v)
+-
+-	var deduped []*Literal
+-	for i, p := range v {
+-		if i != 0 && v[i-1].String == v[i].String {
+-			continue
+-		}
+-		deduped = append(deduped, p)
+-	}
+-
+-	return deduped, nil
++	panic("excised: dedupLiterals")
+ }
+--- a/upup/pkg/fi/cloudup/terraformWriter/writer_test.go
++++ /dev/null
+@@ -1,120 +0,0 @@
+-/*
+-Copyright 2021 The ClusterKit Authors.
+-
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-
+-    http://www.apache.org/licenses/LICENSE-2.0
+-
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package terraformWriter
+-
+-import (
+-	"testing"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-)
+-
+-func TestGetOutputs(t *testing.T) {
+-	cases := []struct {
+-		name        string
+-		values      map[string]*terraformOutputVariable
+-		expected    map[string]OutputValue
+-		errExpected bool
+-	}{
+-		{
+-			name: "empty map",
+-		},
+-		{
+-			name: "single output",
+-			values: map[string]*terraformOutputVariable{
+-				"keyOne": {
+-					Key:   "key1",
+-					Value: LiteralFromStringValue("value1"),
+-				},
+-			},
+-			expected: map[string]OutputValue{
+-				"key1": {
+-					Value: LiteralFromStringValue("value1"),
+-				},
+-			},
+-		},
+-		{
+-			name: "list output",
+-			values: map[string]*terraformOutputVariable{
+-				"keyOne": {
+-					Key: "key1",
+-					ValueArray: []*Literal{
+-						LiteralFromStringValue("value2"),
+-						LiteralFromStringValue("value1"),
+-					},
+-				},
+-			},
+-			expected: map[string]OutputValue{
+-				"key1": {
+-					ValueArray: []*Literal{
+-						LiteralFromStringValue("value1"),
+-						LiteralFromStringValue("value2"),
+-					},
+-				},
+-			},
+-		},
+-		{
+-			name: "duplicate names",
+-			values: map[string]*terraformOutputVariable{
+-				"key.1": {
+-					Key:   "key.1",
+-					Value: LiteralFromStringValue("value1"),
+-				},
+-				"key-1": {
+-					Key:   "key-1",
+-					Value: LiteralFromStringValue("value2"),
+-				},
+-			},
+-			errExpected: true,
+-		},
+-		{
+-			name: "duplicate values",
+-			values: map[string]*terraformOutputVariable{
+-				"keyOne": {
+-					Key: "key1",
+-					ValueArray: []*Literal{
+-						LiteralFromStringValue("value1"),
+-						LiteralFromStringValue("value1"),
+-						LiteralFromStringValue("value2"),
+-					},
+-				},
+-			},
+-			expected: map[string]OutputValue{
+-				"key1": {
+-					ValueArray: []*Literal{
+-						LiteralFromStringValue("value1"),
+-						LiteralFromStringValue("value2"),
+-					},
+-				},
+-			},
+-		},
+-	}
+-	for _, tc := range cases {
+-		t.Run(tc.name, func(t *testing.T) {
+-			target := TerraformWriter{
+-				outputs: tc.values,
+-			}
+-			actual, err := target.GetOutputs()
+-			if tc.errExpected {
+-				assert.Error(t, err)
+-				return
+-			}
+-			require.NoError(t, err)
+-			assert.ObjectsAreEqual(tc.expected, actual)
+-		})
+-	}
+-}

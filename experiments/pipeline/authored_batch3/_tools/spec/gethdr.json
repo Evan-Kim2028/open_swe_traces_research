@@ -1,0 +1,19 @@
+{
+  "impl": {
+    "github/repos_hooks_deliveries.go": {
+      "getHeader": "return headers[key]"
+    }
+  },
+  "deltests": {
+    "github/repos_hooks_deliveries_test.go": [
+      "TestHookRequest_GetHeader",
+      "TestHookResponse_GetHeader"
+    ]
+  },
+  "testre": "GetHeader",
+  "unimport": {
+    "github/repos_hooks_deliveries.go": [
+      "strings"
+    ]
+  }
+}

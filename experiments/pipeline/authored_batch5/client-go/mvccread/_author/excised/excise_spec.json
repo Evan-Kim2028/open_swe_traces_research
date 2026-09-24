@@ -1,0 +1,1 @@
+{"mvccread": {"internal/mockstore/mockkv/mvcc.go": ["mvccLock.lockErr","mvccLock.check","mvccEntry.Less","mvccEntry.Get","regionContains"]}}

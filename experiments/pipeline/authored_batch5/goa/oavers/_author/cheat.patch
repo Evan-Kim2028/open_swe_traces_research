@@ -1,0 +1,29 @@
+diff --git a/http/codegen/openapi/versions.go b/http/codegen/openapi/versions.go
+--- a/http/codegen/openapi/versions.go
++++ b/http/codegen/openapi/versions.go
+@@ -72,7 +72,15 @@ var specDefaults = []Spec{
+ // generation order (2.0, 3.0 then 3.2) and errors on invalid version or path
+ // values.
+ func Specs(meta expr.MetaExpr) ([]Spec, error) {
+-	panic("excised: Specs")
++	specs := make([]Spec, 0, len(specDefaults))
++	for _, d := range specDefaults {
++		p := d.Path
++		if v, ok := meta.Last(pathMetaPrefix + string(d.Version)); ok {
++			p = v
++		}
++		specs = append(specs, Spec{d.Version, p})
++	}
++	return specs, nil
+ }
+ 
+ // selectedVersions computes the set of OpenAPI versions to generate from the
+@@ -93,7 +101,7 @@ func specPath(meta expr.MetaExpr, d Spec) (string, error) {
+ // typos such as "openapi:path:3.0.3" which would otherwise be silently
+ // ignored.
+ func validatePathKeys(meta expr.MetaExpr) error {
+-	panic("excised: validatePathKeys")
++	return nil
+ }
+ 
+ // knownVersion reports whether val names a supported OpenAPI version.

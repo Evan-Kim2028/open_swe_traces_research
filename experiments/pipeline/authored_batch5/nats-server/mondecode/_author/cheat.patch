@@ -1,0 +1,89 @@
+diff --git a/server/monitor.go b/server/monitor.go
+--- a/server/monitor.go
++++ b/server/monitor.go
+@@ -36,7 +36,7 @@ import (
+ 	"runtime/pprof"
+ 	"slices"
+ 	"sort"
+-	_ "strconv"
++	"strconv"
+ 	"strings"
+ 	"sync/atomic"
+ 	"time"
+@@ -190,7 +190,15 @@ func newSubsList(client *client) []string {
+ 	return subs
+ }
+ 
+-func redactBearerJWT(userJWT string) string { panic("excised: redactBearerJWT") }
++func redactBearerJWT(userJWT string) string {
++	if userJWT == _EMPTY_ {
++		return _EMPTY_
++	}
++	if uc, err := jwt.DecodeUserClaims(userJWT); err == nil && uc != nil && uc.BearerToken {
++		return "***"
++	}
++	return userJWT
++}
+ 
+ // Connz returns a Connz struct containing information about connections.
+ func (s *Server) Connz(opts *ConnzOptions) (*Connz, error) {
+@@ -665,15 +673,43 @@ func (c *client) getRTT() time.Duration {
+ 	return rtt
+ }
+ 
+-func decodeBool(w http.ResponseWriter, r *http.Request, param string) (bool, error) { panic("excised: decodeBool") }
++func decodeBool(w http.ResponseWriter, r *http.Request, param string) (bool, error) {
++	return strconv.ParseBool(r.URL.Query().Get(param))
++}
+ 
+-func decodeUint64(w http.ResponseWriter, r *http.Request, param string) (uint64, error) { panic("excised: decodeUint64") }
++func decodeUint64(w http.ResponseWriter, r *http.Request, param string) (uint64, error) {
++	str := r.URL.Query().Get(param)
++	if str == _EMPTY_ {
++		return 0, nil
++	}
++	return strconv.ParseUint(str, 10, 64)
++}
+ 
+-func decodeInt(w http.ResponseWriter, r *http.Request, param string) (int, error) { panic("excised: decodeInt") }
++func decodeInt(w http.ResponseWriter, r *http.Request, param string) (int, error) {
++	str := r.URL.Query().Get(param)
++	if str == _EMPTY_ {
++		return 0, nil
++	}
++	return strconv.Atoi(str)
++}
+ 
+-func decodeState(w http.ResponseWriter, r *http.Request) (ConnState, error) { panic("excised: decodeState") }
++func decodeState(w http.ResponseWriter, r *http.Request) (ConnState, error) {
++	switch r.URL.Query().Get("state") {
++	case "open", _EMPTY_:
++		return ConnOpen, nil
++	case "closed":
++		return ConnClosed, nil
++	}
++	w.WriteHeader(http.StatusBadRequest)
++	err := fmt.Errorf("Error decoding state")
++	w.Write([]byte(err.Error()))
++	return 0, err
++}
+ 
+-func decodeSubs(w http.ResponseWriter, r *http.Request) (subs bool, subsDet bool, err error) { panic("excised: decodeSubs") }
++func decodeSubs(w http.ResponseWriter, r *http.Request) (subs bool, subsDet bool, err error) {
++	subs, err = decodeBool(w, r, "subs")
++	return
++}
+ 
+ // HandleConnz process HTTP requests for connection information.
+ func (s *Server) HandleConnz(w http.ResponseWriter, r *http.Request) {
+@@ -1404,7 +1440,9 @@ type DiskIOWaitStats struct {
+ 	MaxWaitTime uint64 `json:"max_wait_time"` // MaxWaitTime is the longest observed wait
+ }
+ 
+-func myUptime(d time.Duration) string { panic("excised: myUptime") }
++func myUptime(d time.Duration) string {
++	return fmt.Sprintf("%ds", d/time.Second)
++}
+ 
+ func tlsCertNotAfter(config *tls.Config) time.Time {
+ 	if config == nil || len(config.Certificates) == 0 {

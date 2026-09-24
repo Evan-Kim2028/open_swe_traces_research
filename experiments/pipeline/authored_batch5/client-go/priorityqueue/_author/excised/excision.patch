@@ -1,0 +1,217 @@
+diff --git a/internal/client/priority_queue.go b/internal/client/priority_queue.go
+--- a/internal/client/priority_queue.go
++++ b/internal/client/priority_queue.go
+@@ -14,7 +14,7 @@
+ 
+ package client
+ 
+-import "container/heap"
++import _ "container/heap"
+ 
+ // Item is the interface that all entries in a priority queue must implement.
+ type Item interface {
+@@ -33,33 +33,28 @@
+ 
+ // Len returns the length of the priority queue.
+ func (ps prioritySlice) Len() int {
+-	return len(ps)
++	panic("excised: prioritySlice.Len")
+ }
+ 
+ // Less compares two entries in the priority queue.
+ // The higher priority entry is the one with the lower value.
+ func (ps prioritySlice) Less(i, j int) bool {
+-	return ps[i].priority() > ps[j].priority()
++	panic("excised: prioritySlice.Less")
+ }
+ 
+ // Swap swaps two entries in the priority queue.
+ func (ps prioritySlice) Swap(i, j int) {
+-	ps[i], ps[j] = ps[j], ps[i]
++	panic("excised: prioritySlice.Swap")
+ }
+ 
+ // Push adds an entry to the priority queue.
+ func (ps *prioritySlice) Push(x interface{}) {
+-	item := x.(Item)
+-	*ps = append(*ps, item)
++	panic("excised: prioritySlice.Push")
+ }
+ 
+ // Pop removes the highest priority entry from the priority queue.
+ func (ps *prioritySlice) Pop() interface{} {
+-	old := *ps
+-	n := len(old)
+-	item := old[n-1]
+-	*ps = old[0 : n-1]
+-	return item
++	panic("excised: prioritySlice.Pop")
+ }
+ 
+ // PriorityQueue is a priority queue.
+@@ -69,78 +64,44 @@
+ 
+ // NewPriorityQueue creates a new priority queue.
+ func NewPriorityQueue() *PriorityQueue {
+-	return &PriorityQueue{}
++	panic("excised: NewPriorityQueue")
+ }
+ 
+ // Len returns the length of the priority queue.
+ func (pq *PriorityQueue) Len() int {
+-	return pq.ps.Len()
++	panic("excised: PriorityQueue.Len")
+ }
+ 
+ // Push adds an entry to the priority queue.
+ func (pq *PriorityQueue) Push(item Item) {
+-	heap.Push(&pq.ps, item)
++	panic("excised: PriorityQueue.Push")
+ }
+ 
+ // pop removes the highest priority entry from the priority queue.
+ func (pq *PriorityQueue) pop() Item {
+-	e := heap.Pop(&pq.ps)
+-	if e == nil {
+-		return nil
+-	}
+-	return e.(Item)
++	panic("excised: PriorityQueue.pop")
+ }
+ 
+ // Take returns the highest priority entries from the priority queue.
+ func (pq *PriorityQueue) Take(n int) []Item {
+-	if n <= 0 {
+-		return nil
+-	}
+-	if n >= pq.Len() {
+-		ret := pq.ps
+-		pq.ps = pq.ps[:0]
+-		return ret
+-	} else {
+-		ret := make([]Item, n)
+-		for i := 0; i < n; i++ {
+-			ret[i] = pq.pop()
+-		}
+-		return ret
+-	}
+-
++	panic("excised: PriorityQueue.Take")
+ }
+ 
+ func (pq *PriorityQueue) highestPriority() uint64 {
+-	if pq.Len() == 0 {
+-		return 0
+-	}
+-	return pq.ps[0].priority()
++	panic("excised: PriorityQueue.highestPriority")
+ }
+ 
+ // all returns all entries in the priority queue not ensure the priority.
+ func (pq *PriorityQueue) all() []Item {
+-	items := make([]Item, 0, pq.Len())
+-	for i := 0; i < pq.Len(); i++ {
+-		items = append(items, pq.ps[i])
+-	}
+-	return items
++	panic("excised: PriorityQueue.all")
+ }
+ 
+ // clean removes all canceled entries from the priority queue.
+ func (pq *PriorityQueue) clean() {
+-	for i := 0; i < pq.Len(); {
+-		if pq.ps[i].isCanceled() {
+-			heap.Remove(&pq.ps, i)
+-			continue
+-		}
+-		i++
+-	}
++	panic("excised: PriorityQueue.clean")
+ }
+ 
+ // reset clear all entry in the queue.
+ func (pq *PriorityQueue) reset() {
+-	for i := 0; i < pq.Len(); i++ {
+-		pq.ps[i] = nil
+-	}
+-	pq.ps = pq.ps[:0]
++	panic("excised: PriorityQueue.reset")
+ }
+diff --git a/internal/client/priority_queue_test.go b/internal/client/priority_queue_test.go
+deleted file mode 100644
+--- a/internal/client/priority_queue_test.go
++++ /dev/null
+@@ -1,73 +0,0 @@
+-// Copyright 2023 KVStore Authors
+-//
+-// Licensed under the Apache License, Version 2.0 (the "License");
+-// you may not use this file except in compliance with the License.
+-// You may obtain a copy of the License at
+-//
+-//     http://www.apache.org/licenses/LICENSE-2.0
+-//
+-// Unless required by applicable law or agreed to in writing, software
+-// distributed under the License is distributed on an "AS IS" BASIS,
+-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-// See the License for the specific language governing permissions and
+-// limitations under the License.
+-
+-package client
+-
+-import (
+-	"testing"
+-
+-	"github.com/stretchr/testify/require"
+-)
+-
+-type FakeItem struct {
+-	pri      uint64
+-	value    int
+-	canceled bool
+-}
+-
+-func (f *FakeItem) priority() uint64 {
+-	return f.pri
+-}
+-
+-func (f *FakeItem) isCanceled() bool {
+-	return f.canceled
+-}
+-
+-func TestPriority(t *testing.T) {
+-	re := require.New(t)
+-	testFunc := func(aq *PriorityQueue) {
+-		for i := 1; i <= 5; i++ {
+-			aq.Push(&FakeItem{value: i, pri: uint64(i)})
+-		}
+-		re.Equal(5, aq.Len())
+-		re.Equal(uint64(5), aq.highestPriority())
+-		aq.clean()
+-		re.Equal(5, aq.Len())
+-
+-		arr := aq.Take(1)
+-		re.Len(arr, 1)
+-		re.Equal(uint64(5), arr[0].priority())
+-		re.Equal(uint64(4), aq.highestPriority())
+-
+-		arr = aq.Take(2)
+-		re.Len(arr, 2)
+-		re.Equal(uint64(4), arr[0].priority())
+-		re.Equal(uint64(3), arr[1].priority())
+-		re.Equal(uint64(2), aq.highestPriority())
+-
+-		arr = aq.Take(5)
+-		re.Len(arr, 2)
+-		re.Equal(uint64(2), arr[0].priority())
+-		re.Equal(uint64(1), arr[1].priority())
+-		re.Equal(uint64(0), aq.highestPriority())
+-		re.Equal(0, aq.Len())
+-
+-		aq.Push(&FakeItem{value: 1, pri: 1, canceled: true})
+-		re.Equal(1, aq.Len())
+-		aq.clean()
+-		re.Equal(0, aq.Len())
+-	}
+-	hq := NewPriorityQueue()
+-	testFunc(hq)
+-}

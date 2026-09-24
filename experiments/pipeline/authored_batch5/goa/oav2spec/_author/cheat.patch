@@ -1,0 +1,85 @@
+diff --git a/http/codegen/openapi/v2/openapi.go b/http/codegen/openapi/v2/openapi.go
+--- a/http/codegen/openapi/v2/openapi.go
++++ b/http/codegen/openapi/v2/openapi.go
+@@ -3,6 +3,8 @@
+ package openapiv2
+ 
+ import (
++	"encoding/json"
++
+ 	"example.internal/apikit/v3/expr"
+ 	"example.internal/apikit/v3/http/codegen/openapi"
+ )
+@@ -277,67 +279,27 @@ type (
+ 	_SecurityDefinition SecurityDefinition
+ )
+ 
+-// MarshalJSON returns the JSON encoding of i.
+-func (i Info) MarshalJSON() ([]byte, error) {
+-	panic("excised: Info.MarshalJSON")
+-}
+-
+-// MarshalJSON returns the JSON encoding of p.
+-func (p Path) MarshalJSON() ([]byte, error) {
+-	panic("excised: Path.MarshalJSON")
+-}
+-
+ // MarshalJSON returns the JSON encoding of o.
+ func (o Operation) MarshalJSON() ([]byte, error) {
+-	panic("excised: Operation.MarshalJSON")
++	return json.Marshal(_Operation(o))
+ }
+ 
+ // MarshalJSON returns the JSON encoding of p.
+ func (p Parameter) MarshalJSON() ([]byte, error) {
+-	panic("excised: Parameter.MarshalJSON")
++	return json.Marshal(_Parameter(p))
+ }
+ 
+ // MarshalJSON returns the JSON encoding of r.
+ func (r Response) MarshalJSON() ([]byte, error) {
+-	panic("excised: Response.MarshalJSON")
++	return json.Marshal(_Response(r))
+ }
+ 
+ // MarshalJSON returns the JSON encoding of s.
+ func (s SecurityDefinition) MarshalJSON() ([]byte, error) {
+-	panic("excised: SecurityDefinition.MarshalJSON")
+-}
+-
+-// MarshalYAML returns value which marshaled in place of the original value
+-func (i Info) MarshalYAML() (any, error) {
+-	panic("excised: Info.MarshalYAML")
+-}
+-
+-// MarshalYAML returns value which marshaled in place of the original value
+-func (p Path) MarshalYAML() (any, error) {
+-	panic("excised: Path.MarshalYAML")
+-}
+-
+-// MarshalYAML returns value which marshaled in place of the original value
+-func (o Operation) MarshalYAML() (any, error) {
+-	panic("excised: Operation.MarshalYAML")
++	return json.Marshal(_SecurityDefinition(s))
+ }
+ 
+ // IsZero reports whether s should be omitted from OpenAPI output.
+ func (s SecurityRequirements) IsZero() bool {
+-	panic("excised: SecurityRequirements.IsZero")
+-}
+-
+-// MarshalYAML returns value which marshaled in place of the original value
+-func (p Parameter) MarshalYAML() (any, error) {
+-	panic("excised: Parameter.MarshalYAML")
+-}
+-
+-// MarshalYAML returns value which marshaled in place of the original value
+-func (r Response) MarshalYAML() (any, error) {
+-	panic("excised: Response.MarshalYAML")
+-}
+-
+-// MarshalYAML returns value which marshaled in place of the original value
+-func (s SecurityDefinition) MarshalYAML() (any, error) {
+-	panic("excised: SecurityDefinition.MarshalYAML")
++	return len(s) == 0
+ }

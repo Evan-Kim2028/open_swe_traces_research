@@ -1,0 +1,393 @@
+diff --git a/plumbing/transport/negotiate.go b/plumbing/transport/negotiate.go
+index 88666d8..8f3de44 100644
+--- a/plumbing/transport/negotiate.go
++++ b/plumbing/transport/negotiate.go
+@@ -2,19 +2,19 @@ package transport
+ 
+ import (
+ 	"context"
+-	_ "errors"
+-	_ "fmt"
++	"errors"
++	"fmt"
+ 	"io"
+-	_ "slices"
++	"slices"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+-	_ "example.internal/gitkit/v6/plumbing/format/config"
+-	_ "example.internal/gitkit/v6/plumbing/format/pktline"
++	"example.internal/gitkit/v6/plumbing/format/config"
++	"example.internal/gitkit/v6/plumbing/format/pktline"
+ 	"example.internal/gitkit/v6/plumbing/protocol/capability"
+ 	"example.internal/gitkit/v6/plumbing/protocol/packp"
+ 	"example.internal/gitkit/v6/storage"
+-	_ "example.internal/gitkit/v6/utils/ioutil"
+-	_ "example.internal/gitkit/v6/x/storage"
++	"example.internal/gitkit/v6/utils/ioutil"
++	xstorage "example.internal/gitkit/v6/x/storage"
+ )
+ 
+ const (
+@@ -25,7 +25,18 @@ const (
+ )
+ 
+ func nextFlush(statelessRPC bool, count int) int {
+-	panic("excised: nextFlush")
++	if statelessRPC {
++		if count < largeFlush {
++			return count << 1
++		}
++		return count * 11 / 10
++	}
++
++	if count < pipeSafeFlush {
++		return count << 1
++	}
++
++	return count + pipeSafeFlush
+ }
+ 
+ func applyServerACKs(
+@@ -37,7 +48,26 @@ func applyServerACKs(
+ 	gotReady *bool,
+ 	inVein *int,
+ ) {
+-	panic("excised: applyServerACKs")
++	for _, ack := range acks {
++		if !*gotContinue && ack.Status > 0 {
++			*gotContinue = true
++		}
++
++		switch ack.Status {
++		case packp.ACKContinue:
++			*inVein = 0
++		case packp.ACKReady:
++			*gotReady = true
++			*inVein = 0
++		case packp.ACKCommon:
++			_, alreadyCommon := common[ack.Hash]
++			common[ack.Hash] = struct{}{}
++			if statelessRPC && !alreadyCommon {
++				*statelessCommon = append(*statelessCommon, ack.Hash)
++				*inVein = 0
++			}
++		}
++	}
+ }
+ 
+ // NegotiatePack performs the pack negotiation phase of the fetch operation.
+@@ -50,11 +80,230 @@ func NegotiatePack(
+ 	writer io.WriteCloser,
+ 	req *FetchRequest,
+ ) (shallowInfo *packp.ShallowUpdate, err error) {
+-	panic("excised: NegotiatePack")
++	reader = ioutil.NewContextReader(ctx, reader)
++	writer = ioutil.NewContextWriteCloser(ctx, writer)
++
++	upreq := &packp.UploadRequest{}
++	multiAck := caps.Supports(capability.MultiACK)
++	multiAckDetailed := caps.Supports(capability.MultiACKDetailed)
++	if multiAckDetailed {
++		upreq.Capabilities.Set(capability.MultiACKDetailed)
++	} else if multiAck {
++		upreq.Capabilities.Set(capability.MultiACK)
++	}
++
++	if req.Progress != nil {
++		if caps.Supports(capability.Sideband64k) {
++			upreq.Capabilities.Set(capability.Sideband64k)
++		} else if caps.Supports(capability.Sideband) {
++			upreq.Capabilities.Set(capability.Sideband)
++		}
++	} else if caps.Supports(capability.NoProgress) {
++		upreq.Capabilities.Set(capability.NoProgress)
++	}
++
++	if caps.Supports(capability.ObjectFormat) {
++		var clientFormat, serverFormat config.ObjectFormat
++		if capValues := caps.Get(capability.ObjectFormat); len(capValues) > 0 {
++			of := config.ObjectFormat(capValues[0])
++			switch of {
++			case config.SHA1, config.SHA256:
++				serverFormat = of
++			}
++		}
++
++		cfg, err := st.Config()
++		if err == nil {
++			clientFormat = cfg.Extensions.ObjectFormat
++		}
++
++		if clientFormat == config.UnsetObjectFormat && serverFormat == config.SHA256 {
++			ref, err := st.Reference(plumbing.HEAD)
++			if err == nil && ref.Target().String() == "refs/heads/.invalid" {
++				if setter, ok := st.(xstorage.ObjectFormatSetter); ok {
++					err := setter.SetObjectFormat(serverFormat)
++					if err != nil {
++						return nil, fmt.Errorf("unable to set object format: %w", err)
++					}
++					clientFormat = serverFormat
++				}
++			}
++		}
++
++		if clientFormat == config.UnsetObjectFormat {
++			clientFormat = config.SHA1
++		}
++
++		if serverFormat != clientFormat {
++			return nil, fmt.Errorf("mismatched algorithms: client %s; server %s", clientFormat, serverFormat)
++		}
++
++		upreq.Capabilities.Set(capability.ObjectFormat, clientFormat.String())
++	}
++
++	if caps.Supports(capability.OFSDelta) {
++		upreq.Capabilities.Set(capability.OFSDelta)
++	}
++
++	if caps.Supports(capability.Agent) {
++		upreq.Capabilities.Set(capability.Agent, capability.DefaultAgent())
++	}
++
++	if req.IncludeTags && caps.Supports(capability.IncludeTag) {
++		upreq.Capabilities.Set(capability.IncludeTag)
++	}
++
++	if req.Filter != "" {
++		if caps.Supports(capability.Filter) {
++			upreq.Filter = req.Filter
++			upreq.Capabilities.Set(capability.Filter)
++		} else {
++			return nil, ErrFilterNotSupported
++		}
++	}
++
++	upreq.Wants = req.Wants
++
++	if req.Depth > 0 {
++		if !caps.Supports(capability.Shallow) {
++			return nil, ErrShallowNotSupported
++		}
++		upreq.Depth = packp.DepthRequest{Deepen: req.Depth}
++		upreq.Shallows, err = st.Shallow()
++		if err != nil {
++			return nil, err
++		}
++	}
++
++	if isSubset(req.Wants, req.Haves) && len(upreq.Shallows) == 0 {
++		if err := pktline.WriteFlush(writer); err != nil {
++			return nil, err
++		}
++		if err := writer.Close(); err != nil && !errors.Is(err, io.EOF) {
++			return nil, fmt.Errorf("closing writer: %w", err)
++		}
++		return nil, ErrNoChange
++	}
++
++	common := map[plumbing.Hash]struct{}{}
++	var statelessCommon []plumbing.Hash
++	var inVein int
++	var done bool
++	var gotContinue bool
++	var gotReady bool
++	var sendDoneAfterReady bool
++	firstRound := true
++	flushAt := initialFlush
++
++	for !done {
++		var uphav packp.UploadHaves
++		if statelessRPC && !sendDoneAfterReady {
++			uphav.Haves = append(uphav.Haves, statelessCommon...)
++		}
++
++		batchSize := 0
++		if !sendDoneAfterReady {
++			batchSize = flushAt
++			if gotContinue {
++				remaining := maxInVein - inVein
++				if remaining <= 0 {
++					batchSize = 0
++				} else if batchSize > remaining {
++					batchSize = remaining
++				}
++			}
++		}
++
++		for i := 0; i < batchSize && len(req.Haves) > 0; i++ {
++			uphav.Haves = append(uphav.Haves, req.Haves[len(req.Haves)-1])
++			req.Haves = req.Haves[:len(req.Haves)-1]
++			inVein++
++		}
++
++		done = sendDoneAfterReady || len(req.Haves) == 0 || (gotContinue && inVein >= maxInVein)
++		uphav.Done = done
++
++		if isSubset(req.Wants, uphav.Haves) && len(upreq.Shallows) == 0 {
++			if err := pktline.WriteFlush(writer); err != nil {
++				return nil, err
++			}
++			if err := writer.Close(); err != nil && !errors.Is(err, io.EOF) {
++				return nil, fmt.Errorf("closing writer: %w", err)
++			}
++			return nil, ErrNoChange
++		}
++
++		if firstRound || statelessRPC {
++			if err := upreq.Encode(writer); err != nil {
++				return nil, fmt.Errorf("sending upload-request: %w", err)
++			}
++		}
++
++		readc := make(chan error)
++		if !statelessRPC {
++			go func() { readc <- readShallows(statelessRPC, reader, req, &shallowInfo, firstRound) }()
++		}
++
++		if err := uphav.Encode(writer); err != nil {
++			return nil, fmt.Errorf("sending upload-haves: %w", err)
++		}
++
++		if statelessRPC {
++			if err := writer.Close(); err != nil {
++				return nil, fmt.Errorf("closing writer: %w", err)
++			}
++			if err := readShallows(statelessRPC, reader, req, &shallowInfo, firstRound); err != nil {
++				return nil, err
++			}
++		} else {
++			if err := <-readc; err != nil {
++				return nil, err
++			}
++		}
++
++		go func() {
++			defer close(readc)
++			if done || len(uphav.Haves) > 0 {
++				var srvrs packp.ServerResponse
++				if err := srvrs.Decode(reader); err != nil {
++					readc <- fmt.Errorf("decoding server-response: %w", err)
++					return
++				}
++				applyServerACKs(statelessRPC, srvrs.ACKs, common, &statelessCommon, &gotContinue, &gotReady, &inVein)
++			}
++			readc <- nil
++		}()
++
++		if err := <-readc; err != nil {
++			return nil, err
++		}
++		if sendDoneAfterReady {
++			break
++		}
++		if gotReady {
++			sendDoneAfterReady = true
++		}
++
++		firstRound = false
++		flushAt = nextFlush(statelessRPC, flushAt)
++	}
++
++	if !statelessRPC {
++		if err := writer.Close(); err != nil && !errors.Is(err, io.EOF) {
++			return nil, fmt.Errorf("closing writer: %w", err)
++		}
++	}
++
++	return shallowInfo, nil
+ }
+ 
+ func isSubset(needle, haystack []plumbing.Hash) bool {
+-	panic("excised: isSubset")
++	for _, h := range needle {
++		if !slices.Contains(haystack, h) {
++			return false
++		}
++	}
++	return true
+ }
+ 
+ func readShallows(
+@@ -64,7 +313,16 @@ func readShallows(
+ 	shallowInfo **packp.ShallowUpdate,
+ 	firstRound bool,
+ ) error {
+-	panic("excised: readShallows")
++	if (firstRound || statelessRPC) && req.Depth > 0 {
++		var shupd packp.ShallowUpdate
++		if err := shupd.Decode(r); err != nil {
++			return fmt.Errorf("decoding shallow-update: %w", err)
++		}
++		if *shallowInfo == nil {
++			*shallowInfo = &shupd
++		}
++	}
++	return nil
+ }
+ 
+ // ReconcileObjectFormatV2 aligns the storer's object format with the Protocol
+@@ -77,5 +335,61 @@ func readShallows(
+ // fetch-pack.c, including the case where the server omits object-format (it
+ // only speaks sha1) but the client repository uses another algorithm.
+ func ReconcileObjectFormatV2(st storage.Storer, caps capability.List) error {
+-	panic("excised: ReconcileObjectFormatV2")
++	var clientFormat config.ObjectFormat
++	if cfg, err := st.Config(); err == nil && cfg != nil {
++		clientFormat = cfg.Extensions.ObjectFormat
++	}
++
++	advertised := caps.Get(capability.ObjectFormat)
++	if len(advertised) == 0 {
++		// The server advertised no object-format, so it only speaks sha1.
++		// Upstream errors when the client repo uses a different algorithm
++		// rather than letting it fail later on a checksum mismatch.
++		if clientFormat != config.UnsetObjectFormat && clientFormat != config.SHA1 {
++			return fmt.Errorf("the server does not support algorithm '%s'", clientFormat)
++		}
++		return nil
++	}
++
++	var serverFormat config.ObjectFormat
++	switch v := config.ObjectFormat(advertised[0]); v {
++	case config.SHA1, config.SHA256:
++		serverFormat = v
++	case config.UnsetObjectFormat:
++		// An empty value carries no algorithm; treat it exactly as an absent
++		// object-format (the server only speaks sha1). Apply the same guard as
++		// the len(advertised)==0 branch so a client repo on a different
++		// algorithm is rejected rather than slipping past to fail later on a
++		// checksum mismatch.
++		if clientFormat != config.UnsetObjectFormat && clientFormat != config.SHA1 {
++			return fmt.Errorf("the server does not support algorithm '%s'", clientFormat)
++		}
++		return nil
++	default:
++		// An algorithm gitkit does not speak. Fail fast rather than proceed
++		// with the wrong hash format, matching NegotiatePack's v0/v1 handling.
++		return fmt.Errorf("server advertised unsupported object-format %q", v)
++	}
++
++	// Adopt the server format on a fresh clone: unset client + sha256 server,
++	// with HEAD still at the clone placeholder.
++	if clientFormat == config.UnsetObjectFormat && serverFormat == config.SHA256 {
++		if ref, err := st.Reference(plumbing.HEAD); err == nil && ref.Target().String() == "refs/heads/.invalid" {
++			if setter, ok := st.(xstorage.ObjectFormatSetter); ok {
++				if err := setter.SetObjectFormat(serverFormat); err != nil {
++					return fmt.Errorf("unable to set object format: %w", err)
++				}
++				clientFormat = serverFormat
++			}
++		}
++	}
++
++	if clientFormat == config.UnsetObjectFormat {
++		clientFormat = config.SHA1
++	}
++
++	if serverFormat != clientFormat {
++		return fmt.Errorf("mismatched algorithms: client %s; server %s", clientFormat, serverFormat)
++	}
++	return nil
+ }

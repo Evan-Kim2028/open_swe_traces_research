@@ -1,0 +1,631 @@
+diff --git a/plumbing/format/index/encoder.go b/plumbing/format/index/encoder.go
+index 2055a15..7653231 100644
+--- a/plumbing/format/index/encoder.go
++++ b/plumbing/format/index/encoder.go
+@@ -1,15 +1,15 @@
+ package index
+ 
+ import (
+-	"bytes"
++	_ "bytes"
+ 	"errors"
+-	"fmt"
++	_ "fmt"
+ 	"io"
+-	"sort"
++	_ "sort"
+ 	"time"
+ 
+ 	"example.internal/gitkit/v6/plumbing/hash"
+-	"example.internal/gitkit/v6/utils/binary"
++	_ "example.internal/gitkit/v6/utils/binary"
+ )
+ 
+ var (
+@@ -31,236 +31,58 @@ type Encoder struct {
+ 
+ // NewEncoder returns a new encoder that writes to w.
+ func NewEncoder(w io.Writer, h hash.Hash, opts ...Option) *Encoder {
+-	var cfg options
+-	for _, o := range opts {
+-		o(&cfg)
+-	}
+-
+-	e := &Encoder{
+-		hash:     h,
+-		skipHash: cfg.skipHash,
+-	}
+-
+-	if e.skipHash {
+-		e.w = w
+-	} else {
+-		h.Reset()
+-		e.w = io.MultiWriter(w, h)
+-	}
+-
+-	return e
++	panic("excised: NewEncoder")
+ }
+ 
+ // Encode writes the Index to the stream of the encoder.
+ func (e *Encoder) Encode(idx *Index) error {
+-	return e.encode(idx, true)
++	panic("excised: Encoder.Encode")
+ }
+ 
+ func (e *Encoder) encode(idx *Index, footer bool) error {
+-	// TODO: support extensions
+-	if idx.Version > EncodeVersionSupported {
+-		return ErrUnsupportedVersion
+-	}
+-
+-	if err := e.encodeHeader(idx); err != nil {
+-		return err
+-	}
+-
+-	if err := e.encodeEntries(idx); err != nil {
+-		return err
+-	}
+-
+-	if footer {
+-		return e.encodeFooter()
+-	}
+-	return nil
++	panic("excised: Encoder.encode")
+ }
+ 
+ func (e *Encoder) encodeHeader(idx *Index) error {
+-	return binary.Write(e.w,
+-		indexSignature,
+-		idx.Version,
+-		uint32(len(idx.Entries)),
+-	)
++	panic("excised: Encoder.encodeHeader")
+ }
+ 
+ func (e *Encoder) encodeEntries(idx *Index) error {
+-	sort.Sort(byNameAndStage(idx.Entries))
+-
+-	for _, entry := range idx.Entries {
+-		if err := e.encodeEntry(idx, entry); err != nil {
+-			return err
+-		}
+-		entryLength := entryHeaderLength + e.hash.Size()
+-		if entry.IntentToAdd || entry.SkipWorktree {
+-			entryLength += 2
+-		}
+-
+-		wrote := entryLength + len(entry.Name)
+-		if err := e.padEntry(idx, wrote); err != nil {
+-			return err
+-		}
+-	}
+-
+-	return nil
++	panic("excised: Encoder.encodeEntries")
+ }
+ 
+ func (e *Encoder) encodeEntry(idx *Index, entry *Entry) error {
+-	sec, nsec, err := e.timeToUint32(&entry.CreatedAt)
+-	if err != nil {
+-		return err
+-	}
+-
+-	msec, mnsec, err := e.timeToUint32(&entry.ModifiedAt)
+-	if err != nil {
+-		return err
+-	}
+-
+-	flags := uint16(entry.Stage&0x3) << 12
+-	if l := len(entry.Name); l < nameMask {
+-		flags |= uint16(l)
+-	} else {
+-		flags |= nameMask
+-	}
+-
+-	flagsFlow := []any{flags}
+-
+-	flow := make([]any, 0, 11+len(flagsFlow))
+-	flow = append(flow,
+-		sec, nsec,
+-		msec, mnsec,
+-		entry.Dev,
+-		entry.Inode,
+-		entry.Mode,
+-		entry.UID,
+-		entry.GID,
+-		entry.Size,
+-		entry.Hash.Bytes(),
+-	)
+-
+-	if entry.IntentToAdd || entry.SkipWorktree {
+-		var extendedFlags uint16
+-
+-		if entry.IntentToAdd {
+-			extendedFlags |= intentToAddMask
+-		}
+-		if entry.SkipWorktree {
+-			extendedFlags |= skipWorkTreeMask
+-		}
+-
+-		flagsFlow = []any{flags | entryExtended, extendedFlags}
+-	}
+-
+-	flow = append(flow, flagsFlow...)
+-
+-	if err := binary.Write(e.w, flow...); err != nil {
+-		return err
+-	}
+-
+-	switch idx.Version {
+-	case 2, 3:
+-		err = e.encodeEntryName(entry)
+-	case 4:
+-		err = e.encodeEntryNameV4(entry)
+-	default:
+-		err = ErrUnsupportedVersion
+-	}
+-
+-	return err
++	panic("excised: Encoder.encodeEntry")
+ }
+ 
+ func (e *Encoder) encodeEntryName(entry *Entry) error {
+-	return binary.Write(e.w, []byte(entry.Name))
++	panic("excised: Encoder.encodeEntryName")
+ }
+ 
+ func (e *Encoder) encodeEntryNameV4(entry *Entry) error {
+-	// V4 prefix compression: find the longest common prefix between the
+-	// previous entry's name and the current one. The strip length tells
+-	// the decoder how many bytes to remove from the end of the previous
+-	// name, and the suffix is the remainder of the current name.
+-	prefix := 0
+-	if e.lastEntry != nil {
+-		prefix = commonPrefixLen(e.lastEntry.Name, entry.Name)
+-	}
+-	stripLen := 0
+-	if e.lastEntry != nil {
+-		stripLen = len(e.lastEntry.Name) - prefix
+-	}
+-
+-	e.lastEntry = entry
+-
+-	if err := binary.WriteVariableWidthInt(e.w, int64(stripLen)); err != nil {
+-		return err
+-	}
+-
+-	suffix := entry.Name[prefix:]
+-	return binary.Write(e.w, append([]byte(suffix), '\x00'))
++	panic("excised: Encoder.encodeEntryNameV4")
+ }
+ 
+ // commonPrefixLen returns the length of the longest common byte prefix
+ // between a and b.
+ func commonPrefixLen(a, b string) int {
+-	n := min(len(b), len(a))
+-	for i := range n {
+-		if a[i] != b[i] {
+-			return i
+-		}
+-	}
+-	return n
++	panic("excised: commonPrefixLen")
+ }
+ 
+ func (e *Encoder) encodeRawExtension(signature string, data []byte) error {
+-	if len(signature) != 4 {
+-		return fmt.Errorf("invalid signature length")
+-	}
+-
+-	_, err := e.w.Write([]byte(signature))
+-	if err != nil {
+-		return err
+-	}
+-
+-	err = binary.WriteUint32(e.w, uint32(len(data)))
+-	if err != nil {
+-		return err
+-	}
+-
+-	_, err = e.w.Write(data)
+-	if err != nil {
+-		return err
+-	}
+-
+-	return nil
++	panic("excised: Encoder.encodeRawExtension")
+ }
+ 
+ func (e *Encoder) timeToUint32(t *time.Time) (uint32, uint32, error) {
+-	if t.IsZero() {
+-		return 0, 0, nil
+-	}
+-
+-	if t.Unix() < 0 || t.UnixNano() < 0 {
+-		return 0, 0, ErrInvalidTimestamp
+-	}
+-
+-	return uint32(t.Unix()), uint32(t.Nanosecond()), nil
++	panic("excised: Encoder.timeToUint32")
+ }
+ 
+ func (e *Encoder) padEntry(idx *Index, wrote int) error {
+-	if idx.Version == 4 {
+-		return nil
+-	}
+-
+-	padLen := 8 - wrote%8
+-
+-	_, err := e.w.Write(bytes.Repeat([]byte{'\x00'}, padLen))
+-	return err
++	panic("excised: Encoder.padEntry")
+ }
+ 
+ func (e *Encoder) encodeFooter() error {
+-	if e.skipHash {
+-		_, err := e.w.Write(make([]byte, e.hash.Size()))
+-		return err
+-	}
+-	return binary.Write(e.w, e.hash.Sum(nil))
++	panic("excised: Encoder.encodeFooter")
+ }
+ 
+ type byNameAndStage []*Entry
+@@ -268,8 +90,5 @@ type byNameAndStage []*Entry
+ func (l byNameAndStage) Len() int      { return len(l) }
+ func (l byNameAndStage) Swap(i, j int) { l[i], l[j] = l[j], l[i] }
+ func (l byNameAndStage) Less(i, j int) bool {
+-	if l[i].Name == l[j].Name {
+-		return l[i].Stage < l[j].Stage
+-	}
+-	return l[i].Name < l[j].Name
++	panic("excised: byNameAndStage.Less")
+ }
+diff --git a/plumbing/format/index/encoder_test.go b/plumbing/format/index/encoder_test.go
+deleted file mode 100644
+index f01f5bb..0000000
+--- a/plumbing/format/index/encoder_test.go
++++ /dev/null
+@@ -1,341 +0,0 @@
+-package index
+-
+-import (
+-	"bytes"
+-	"crypto"
+-	"strings"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	"example.internal/gitkit/v6/plumbing"
+-)
+-
+-func TestEncode(t *testing.T) {
+-	t.Parallel()
+-	idx := &Index{
+-		Version: 2,
+-		Entries: []*Entry{{
+-			CreatedAt:  time.Now(),
+-			ModifiedAt: time.Now(),
+-			Dev:        4242,
+-			Inode:      424242,
+-			UID:        84,
+-			GID:        8484,
+-			Size:       42,
+-			Stage:      TheirMode,
+-			Hash:       plumbing.NewHash("e25b29c8946e0e192fae2edc1dabf7be71e8ecf3"),
+-			Name:       "foo",
+-		}, {
+-			CreatedAt:  time.Now(),
+-			ModifiedAt: time.Now(),
+-			Name:       "bar",
+-			Size:       82,
+-		}, {
+-			CreatedAt:  time.Now(),
+-			ModifiedAt: time.Now(),
+-			Name:       strings.Repeat(" ", 20),
+-			Size:       82,
+-		}},
+-	}
+-
+-	buf := bytes.NewBuffer(nil)
+-	e := NewEncoder(buf, crypto.SHA1.New())
+-	err := e.Encode(idx)
+-	assert.NoError(t, err)
+-
+-	output := &Index{}
+-	d := NewDecoder(buf, crypto.SHA1.New())
+-	err = d.Decode(output)
+-	assert.NoError(t, err)
+-
+-	assert.EqualExportedValues(t, idx, output)
+-
+-	assert.Equal(t, strings.Repeat(" ", 20), output.Entries[0].Name)
+-	assert.Equal(t, "bar", output.Entries[1].Name)
+-	assert.Equal(t, "foo", output.Entries[2].Name)
+-}
+-
+-func TestEncodeLongName(t *testing.T) {
+-	t.Parallel()
+-
+-	// Entry names >= 4095 bytes overflow the 12-bit length field in V2/V3
+-	// flags, which stores nameMask (0xFFF). The decoder must scan for the
+-	// NUL terminator to find the real length rather than trusting the field.
+-	longName := strings.Repeat("a", 5000)
+-	idx := &Index{
+-		Version: 2,
+-		Entries: []*Entry{
+-			{
+-				CreatedAt:  time.Now(),
+-				ModifiedAt: time.Now(),
+-				Name:       longName,
+-				Size:       1,
+-			},
+-			{
+-				CreatedAt:  time.Now(),
+-				ModifiedAt: time.Now(),
+-				Name:       "short",
+-				Size:       2,
+-			},
+-		},
+-	}
+-
+-	buf := bytes.NewBuffer(nil)
+-	err := NewEncoder(buf, crypto.SHA1.New()).Encode(idx)
+-	require.NoError(t, err)
+-
+-	output := &Index{}
+-	err = NewDecoder(buf, crypto.SHA1.New()).Decode(output)
+-	require.NoError(t, err)
+-
+-	require.Len(t, output.Entries, 2)
+-	assert.Equal(t, longName, output.Entries[0].Name)
+-	assert.Equal(t, "short", output.Entries[1].Name)
+-	assert.Equal(t, uint32(1), output.Entries[0].Size)
+-	assert.Equal(t, uint32(2), output.Entries[1].Size)
+-}
+-
+-func TestEncodeSortedByNameThenStage(t *testing.T) {
+-	t.Parallel()
+-	idx := &Index{
+-		Version: 2,
+-		Entries: []*Entry{{
+-			CreatedAt:  time.Now(),
+-			ModifiedAt: time.Now(),
+-			Name:       "foo",
+-			Stage:      TheirMode,
+-		}, {
+-			CreatedAt:  time.Now(),
+-			ModifiedAt: time.Now(),
+-			Name:       "foo",
+-			Stage:      OurMode,
+-		}, {
+-			CreatedAt:  time.Now(),
+-			ModifiedAt: time.Now(),
+-			Name:       "foo",
+-			Stage:      AncestorMode,
+-		}, {
+-			CreatedAt:  time.Now(),
+-			ModifiedAt: time.Now(),
+-			Name:       "bar",
+-			Stage:      Merged,
+-		}, {
+-			CreatedAt:  time.Now(),
+-			ModifiedAt: time.Now(),
+-			Name:       "baz",
+-			Stage:      OurMode,
+-		}},
+-	}
+-
+-	buf := bytes.NewBuffer(nil)
+-	e := NewEncoder(buf, crypto.SHA1.New())
+-	err := e.Encode(idx)
+-	assert.NoError(t, err)
+-
+-	output := &Index{}
+-	d := NewDecoder(buf, crypto.SHA1.New())
+-	err = d.Decode(output)
+-	assert.NoError(t, err)
+-
+-	require.Len(t, output.Entries, 5)
+-	assert.Equal(t, "bar", output.Entries[0].Name)
+-	assert.Equal(t, Merged, output.Entries[0].Stage)
+-
+-	assert.Equal(t, "baz", output.Entries[1].Name)
+-	assert.Equal(t, OurMode, output.Entries[1].Stage)
+-
+-	assert.Equal(t, "foo", output.Entries[2].Name)
+-	assert.Equal(t, AncestorMode, output.Entries[2].Stage)
+-
+-	assert.Equal(t, "foo", output.Entries[3].Name)
+-	assert.Equal(t, OurMode, output.Entries[3].Stage)
+-
+-	assert.Equal(t, "foo", output.Entries[4].Name)
+-	assert.Equal(t, TheirMode, output.Entries[4].Stage)
+-}
+-
+-func TestEncodeV4(t *testing.T) {
+-	t.Parallel()
+-	idx := &Index{
+-		Version: 4,
+-		Entries: []*Entry{{
+-			CreatedAt:  time.Now(),
+-			ModifiedAt: time.Now(),
+-			Dev:        4242,
+-			Inode:      424242,
+-			UID:        84,
+-			GID:        8484,
+-			Size:       42,
+-			Stage:      TheirMode,
+-			Hash:       plumbing.NewHash("e25b29c8946e0e192fae2edc1dabf7be71e8ecf3"),
+-			Name:       "foo",
+-		}, {
+-			CreatedAt:  time.Now(),
+-			ModifiedAt: time.Now(),
+-			Name:       "bar",
+-			Size:       82,
+-		}, {
+-			CreatedAt:  time.Now(),
+-			ModifiedAt: time.Now(),
+-			Name:       strings.Repeat(" ", 20),
+-			Size:       82,
+-		}, {
+-			CreatedAt:  time.Now(),
+-			ModifiedAt: time.Now(),
+-			Name:       "baz/bar",
+-			Size:       82,
+-		}, {
+-			CreatedAt:  time.Now(),
+-			ModifiedAt: time.Now(),
+-			Name:       "baz/bar/bar",
+-			Size:       82,
+-		}},
+-	}
+-
+-	buf := bytes.NewBuffer(nil)
+-	e := NewEncoder(buf, crypto.SHA1.New())
+-	err := e.Encode(idx)
+-	require.NoError(t, err)
+-
+-	output := &Index{}
+-	d := NewDecoder(buf, crypto.SHA1.New())
+-	err = d.Decode(output)
+-	require.NoError(t, err)
+-
+-	assert.EqualExportedValues(t, idx, output)
+-
+-	assert.Equal(t, strings.Repeat(" ", 20), output.Entries[0].Name)
+-	assert.Equal(t, "bar", output.Entries[1].Name)
+-	assert.Equal(t, "baz/bar", output.Entries[2].Name)
+-	assert.Equal(t, "baz/bar/bar", output.Entries[3].Name)
+-	assert.Equal(t, "foo", output.Entries[4].Name)
+-}
+-
+-func TestEncodeUnsupportedVersion(t *testing.T) {
+-	t.Parallel()
+-	idx := &Index{Version: 5}
+-
+-	buf := bytes.NewBuffer(nil)
+-	e := NewEncoder(buf, crypto.SHA1.New())
+-	err := e.Encode(idx)
+-	assert.Equal(t, ErrUnsupportedVersion, err)
+-}
+-
+-func TestEncodeWithIntentToAddUnsupportedVersion(t *testing.T) {
+-	t.Parallel()
+-	idx := &Index{
+-		Version: 3,
+-		Entries: []*Entry{{IntentToAdd: true}},
+-	}
+-
+-	buf := bytes.NewBuffer(nil)
+-	e := NewEncoder(buf, crypto.SHA1.New())
+-	err := e.Encode(idx)
+-	assert.NoError(t, err)
+-
+-	output := &Index{}
+-	d := NewDecoder(buf, crypto.SHA1.New())
+-	err = d.Decode(output)
+-	assert.NoError(t, err)
+-
+-	assert.EqualExportedValues(t, idx, output)
+-	assert.Equal(t, true, output.Entries[0].IntentToAdd)
+-}
+-
+-func TestEncodeWithSkipWorktreeUnsupportedVersion(t *testing.T) {
+-	t.Parallel()
+-	idx := &Index{
+-		Version: 3,
+-		Entries: []*Entry{{SkipWorktree: true}},
+-	}
+-
+-	buf := bytes.NewBuffer(nil)
+-	e := NewEncoder(buf, crypto.SHA1.New())
+-	err := e.Encode(idx)
+-	assert.NoError(t, err)
+-
+-	output := &Index{}
+-	d := NewDecoder(buf, crypto.SHA1.New())
+-	err = d.Decode(output)
+-	assert.NoError(t, err)
+-
+-	assert.EqualExportedValues(t, idx, output)
+-	assert.Equal(t, true, output.Entries[0].SkipWorktree)
+-}
+-
+-func TestEncodeSkipHash(t *testing.T) {
+-	t.Parallel()
+-
+-	tests := []struct {
+-		name string
+-		hash crypto.Hash
+-	}{
+-		{"SHA1", crypto.SHA1},
+-		{"SHA256", crypto.SHA256},
+-	}
+-
+-	for _, tc := range tests {
+-		t.Run(tc.name, func(t *testing.T) {
+-			t.Parallel()
+-
+-			hashSize := tc.hash.New().Size()
+-
+-			var h1, h2 plumbing.Hash
+-			h1.ResetBySize(hashSize)
+-			h2.ResetBySize(hashSize)
+-			copy(h1.Bytes(), []byte{0xe2, 0x5b, 0x29})
+-			copy(h2.Bytes(), []byte{0x00})
+-
+-			idx := &Index{
+-				Version: 2,
+-				Entries: []*Entry{{
+-					CreatedAt:  time.Now(),
+-					ModifiedAt: time.Now(),
+-					Dev:        4242,
+-					Inode:      424242,
+-					UID:        84,
+-					GID:        8484,
+-					Size:       42,
+-					Stage:      TheirMode,
+-					Hash:       h1,
+-					Name:       "foo",
+-				}, {
+-					CreatedAt:  time.Now(),
+-					ModifiedAt: time.Now(),
+-					Name:       "bar",
+-					Hash:       h2,
+-					Size:       82,
+-				}},
+-			}
+-
+-			buf := bytes.NewBuffer(nil)
+-			e := NewEncoder(buf, tc.hash.New(), WithSkipHash())
+-			err := e.Encode(idx)
+-			require.NoError(t, err)
+-
+-			raw := buf.Bytes()
+-
+-			checksum := raw[len(raw)-hashSize:]
+-			assert.Equal(t, make([]byte, hashSize), checksum)
+-
+-			// A normal decoder accepts the null checksum, matching git's
+-			// index.skipHash read behaviour.
+-			output := &Index{}
+-			d := NewDecoder(bytes.NewReader(raw), tc.hash.New())
+-			err = d.Decode(output)
+-			require.NoError(t, err)
+-			assert.EqualExportedValues(t, idx, output)
+-
+-			// A skipHash decoder must accept it and recover the entries.
+-			output = &Index{}
+-			d = NewDecoder(bytes.NewReader(raw), tc.hash.New(), WithSkipHash())
+-			err = d.Decode(output)
+-			require.NoError(t, err)
+-
+-			assert.EqualExportedValues(t, idx, output)
+-		})
+-	}
+-}

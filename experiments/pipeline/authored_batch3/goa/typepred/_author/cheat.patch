@@ -1,0 +1,116 @@
+--- a/expr/types.go
++++ b/expr/types.go
+@@ -193,53 +193,67 @@
+ 
+ // AsObject returns the type underlying object if any, nil otherwise.
+ func AsObject(dt DataType) *Object {
+-	panic("excised: AsObject")
++	if obj, ok := dt.(*Object); ok {
++		return obj
++	}
++	return nil
+ }
+ 
+ // AsArray returns the type underlying array if any, nil otherwise.
+ func AsArray(dt DataType) *Array {
+-	panic("excised: AsArray")
++	if arr, ok := dt.(*Array); ok {
++		return arr
++	}
++	return nil
+ }
+ 
+ // AsMap returns the type underlying map if any, nil otherwise.
+ func AsMap(dt DataType) *Map {
+-	panic("excised: AsMap")
++	if m, ok := dt.(*Map); ok {
++		return m
++	}
++	return nil
+ }
+ 
+ // AsUnion returns the type underlying union if any, nil otherwise.
+ func AsUnion(dt DataType) *Union {
+-	panic("excised: AsUnion")
++	if u, ok := dt.(*Union); ok {
++		return u
++	}
++	return nil
+ }
+ 
+ // IsObject returns true if the data type is an object.
+ func IsObject(dt DataType) bool {
+-	panic("excised: IsObject")
++	return AsObject(dt) != nil
+ }
+ 
+ // IsArray returns true if the data type is an array.
+ func IsArray(dt DataType) bool {
+-	panic("excised: IsArray")
++	return AsArray(dt) != nil
+ }
+ 
+ // IsMap returns true if the data type is a map.
+ func IsMap(dt DataType) bool {
+-	panic("excised: IsMap")
++	return AsMap(dt) != nil
+ }
+ 
+ // IsUnion returns true if the data type is a map.
+ func IsUnion(dt DataType) bool {
+-	panic("excised: IsUnion")
++	return AsUnion(dt) != nil
+ }
+ 
+ // IsPrimitive returns true if the data type is a primitive type.
+ func IsPrimitive(dt DataType) bool {
+-	panic("excised: IsPrimitive")
++	_, ok := dt.(Primitive)
++	return ok
+ }
+ 
+ // IsAlias returns true if the data type is a user type backed by a primitive
+ // type (so call aliased type).
+ func IsAlias(dt DataType) bool {
+-	panic("excised: IsAlias")
++	_, ok := dt.(UserType)
++	return ok && IsPrimitive(dt)
+ }
+ 
+ // Equal compares the types recursively and returns true if they are equal. Two
+@@ -254,7 +268,10 @@
+ // as the former may return true for two user types with different names and
+ // thus with different hash values.
+ func Equal(dt, dt2 DataType) bool {
+-	panic("excised: Equal")
++	if dt == nil || dt2 == nil {
++		return dt == dt2
++	}
++	return dt.Kind() == dt2.Kind() && dt.Name() == dt2.Name()
+ }
+ 
+ // DataType implementation
+@@ -674,10 +691,21 @@
+ //	"map<string, string>"
+ //	"map<string, array<int32>>"
+ func QualifiedTypeName(t DataType) string {
+-	panic("excised: QualifiedTypeName")
++	return t.Name()
+ }
+ 
+ // toReflectType converts the DataType to reflect.Type.
+ func toReflectType(dtype DataType) reflect.Type {
+-	panic("excised: toReflectType")
++	switch dtype.Kind() {
++	case BooleanKind:
++		return reflect.TypeOf(true)
++	case StringKind:
++		return reflect.TypeOf("")
++	case IntKind:
++		return reflect.TypeOf(int(0))
++	case Float64Kind:
++		return reflect.TypeOf(float64(0))
++	default:
++		return reflect.TypeOf(map[string]any{})
++	}
+ }

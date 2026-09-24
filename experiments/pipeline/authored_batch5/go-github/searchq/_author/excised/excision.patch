@@ -1,0 +1,272 @@
+diff --git a/github/search.go b/github/search.go
+index a25e401..15b03cb 100644
+--- a/github/search.go
++++ b/github/search.go
+@@ -8,8 +8,8 @@ package github
+ import (
+ 	"context"
+ 	"fmt"
+-	"strconv"
+-	"strings"
++	_ "strconv"
++	_ "strings"
+ 
+ 	qs "github.com/google/go-querystring/query"
+ )
+@@ -310,14 +310,11 @@ func (s *SearchService) Labels(ctx context.Context, repoID int64, query string,
+ // If searchParameters.Query includes multiple condition, it MUST NOT include "+" as condition separator.
+ // For example, querying with "language:c++" and "leveldb", then searchParameters.Query should be "language:c++ leveldb" but not "language:c+++leveldb".
+ func (s *SearchService) search(ctx context.Context, searchType string, parameters *searchParameters, opts *SearchOptions, result any) (*Response, error) {
+-	params, err := qs.Values(opts)
++		params, err := qs.Values(opts)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+ 
+-	if parameters.RepositoryID != nil {
+-		params.Set("repository_id", strconv.FormatInt(*parameters.RepositoryID, 10))
+-	}
+ 	params.Set("q", parameters.Query)
+ 	u := fmt.Sprintf("search/%v?%v", searchType, params.Encode())
+ 
+@@ -325,25 +322,6 @@ func (s *SearchService) search(ctx context.Context, searchType string, parameter
+ 	if err != nil {
+ 		return nil, err
+ 	}
+-	var acceptHeaders []string
+-	switch searchType {
+-	case "commits":
+-		// Accept header for search commits preview endpoint
+-		acceptHeaders = append(acceptHeaders, mediaTypeCommitSearchPreview)
+-	case "topics", "repositories":
+-		// Accept header for search repositories based on topics preview endpoint
+-		acceptHeaders = append(acceptHeaders, mediaTypeTopicsPreview)
+-	case "issues":
+-		// Accept header for search issues based on reactions preview endpoint
+-		acceptHeaders = append(acceptHeaders, mediaTypeReactionsPreview)
+-	}
+-	// https://docs.github.com/rest/search?apiVersion=2022-11-28#search-repositories
+-	// Accept header defaults to "application/vnd.github.v3+json"
+-	// We change it here to fetch back text-match metadata
+-	if opts != nil && opts.TextMatch {
+-		acceptHeaders = append(acceptHeaders, "application/vnd.github.v3.text-match+json")
+-	}
+-	req.Header.Set("Accept", strings.Join(acceptHeaders, ", "))
+ 
+-	return s.client.Do(req, result)
++	return s.client.Do(req, result) /* excised: search */
+ }
+diff --git a/github/search_test.go b/github/search_test.go
+index 8c9c257..3927bee 100644
+--- a/github/search_test.go
++++ b/github/search_test.go
+@@ -8,7 +8,7 @@ package github
+ import (
+ 	"fmt"
+ 	"net/http"
+-	"strings"
++	_ "strings"
+ 	"testing"
+ 
+ 	"github.com/google/go-cmp/cmp"
+@@ -69,85 +69,6 @@ func TestSearchService_Repositories_coverage(t *testing.T) {
+ 	})
+ }
+ 
+-func TestSearchService_RepositoriesTextMatch(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/search/repositories", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "GET")
+-		textMatchResponse := `
+-			{
+-				"total_count": 1,
+-				"incomplete_results": false,
+-				"items": [
+-					{
+-						"name":"gopher1"
+-					}
+-				]
+-			}
+-		`
+-		list := strings.Split(r.Header.Get("Accept"), ",")
+-		aMap := make(map[string]struct{})
+-		for _, s := range list {
+-			aMap[strings.TrimSpace(s)] = struct{}{}
+-		}
+-		if _, ok := aMap["application/vnd.github.v3.text-match+json"]; ok {
+-			textMatchResponse = `
+-					{
+-						"total_count": 1,
+-						"incomplete_results": false,
+-						"items": [
+-							{
+-								"name":"gopher1",
+-								"text_matches": [
+-									{
+-										"fragment": "I'm afraid my friend what you have found\nIs a gopher who lives to feed",
+-										"matches": [
+-											{
+-												"text": "gopher",
+-												"indices": [
+-													14,
+-													21
+-											]
+-											}
+-									  ]
+-								  }
+-							  ]
+-							}
+-						]
+-					}
+-				`
+-		}
+-
+-		fmt.Fprint(w, textMatchResponse)
+-	})
+-
+-	opts := &SearchOptions{Sort: "forks", Order: "desc", ListOptions: ListOptions{Page: 2, PerPage: 2}, TextMatch: true}
+-	ctx := t.Context()
+-	result, _, err := client.Search.Repositories(ctx, "blah", opts)
+-	if err != nil {
+-		t.Errorf("Search.Repositories returned error: %v", err)
+-	}
+-
+-	wantedRepoResult := &Repository{
+-		Name: new("gopher1"),
+-		TextMatches: []*TextMatch{
+-			{
+-				Fragment: new("I'm afraid my friend what you have found\nIs a gopher who lives to feed"),
+-				Matches:  []*Match{{Text: new("gopher"), Indices: []int{14, 21}}},
+-			},
+-		},
+-	}
+-
+-	want := &RepositoriesSearchResult{
+-		Total:             new(1),
+-		IncompleteResults: new(false),
+-		Repositories:      []*Repository{wantedRepoResult},
+-	}
+-	if !cmp.Equal(result, want) {
+-		t.Errorf("Search.Repo returned %+v, want %+v", result, want)
+-	}
+-}
+ 
+ func TestSearchService_Topics(t *testing.T) {
+ 	t.Parallel()
+@@ -568,114 +489,7 @@ func TestSearchService_Code_coverage(t *testing.T) {
+ 	})
+ }
+ 
+-func TestSearchService_CodeTextMatch(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/search/code", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "GET")
+ 
+-		textMatchResponse := `
+-		{
+-			"total_count": 1,
+-			"incomplete_results": false,
+-			"items": [
+-				{
+-					"name":"gopher1",
+-					"text_matches": [
+-						{
+-							"fragment": "I'm afraid my friend what you have found\nIs a gopher who lives to feed",
+-							"matches": [
+-								{
+-									"text": "gopher",
+-									"indices": [
+-										14,
+-										21
+-							  	]
+-								}
+-						  ]
+-					  }
+-				  ]
+-				}
+-			]
+-		}
+-    `
+-
+-		fmt.Fprint(w, textMatchResponse)
+-	})
+-
+-	opts := &SearchOptions{Sort: "forks", Order: "desc", ListOptions: ListOptions{Page: 2, PerPage: 2}, TextMatch: true}
+-	ctx := t.Context()
+-	result, _, err := client.Search.Code(ctx, "blah", opts)
+-	if err != nil {
+-		t.Errorf("Search.Code returned error: %v", err)
+-	}
+-
+-	wantedCodeResult := &CodeResult{
+-		Name: new("gopher1"),
+-		TextMatches: []*TextMatch{
+-			{
+-				Fragment: new("I'm afraid my friend what you have found\nIs a gopher who lives to feed"),
+-				Matches:  []*Match{{Text: new("gopher"), Indices: []int{14, 21}}},
+-			},
+-		},
+-	}
+-
+-	want := &CodeSearchResult{
+-		Total:             new(1),
+-		IncompleteResults: new(false),
+-		CodeResults:       []*CodeResult{wantedCodeResult},
+-	}
+-	if !cmp.Equal(result, want) {
+-		t.Errorf("Search.Code returned %+v, want %+v", result, want)
+-	}
+-}
+-
+-func TestSearchService_Labels(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/search/labels", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "GET")
+-		testFormValues(t, r, values{
+-			"repository_id": "1234",
+-			"q":             "blah",
+-			"sort":          "updated",
+-			"order":         "desc",
+-			"page":          "2",
+-			"per_page":      "2",
+-		})
+-
+-		fmt.Fprint(w, `{"total_count": 4, "incomplete_results": false, "items": [{"id": 1234, "name":"bug", "description": "some text"},{"id": 4567, "name":"feature"}]}`)
+-	})
+-
+-	opts := &SearchOptions{Sort: "updated", Order: "desc", ListOptions: ListOptions{Page: 2, PerPage: 2}}
+-	ctx := t.Context()
+-	result, _, err := client.Search.Labels(ctx, 1234, "blah", opts)
+-	if err != nil {
+-		t.Errorf("Search.Labels returned error: %v", err)
+-	}
+-
+-	want := &LabelsSearchResult{
+-		Total:             new(4),
+-		IncompleteResults: new(false),
+-		Labels: []*LabelResult{
+-			{ID: new(int64(1234)), Name: new("bug"), Description: new("some text")},
+-			{ID: new(int64(4567)), Name: new("feature")},
+-		},
+-	}
+-	if !cmp.Equal(result, want) {
+-		t.Errorf("Search.Labels returned %+v, want %+v", result, want)
+-	}
+-	const methodName = "Labels"
+-	testNewRequestAndDoFailure(t, methodName, client, func() (*Response, error) {
+-		got, resp, err := client.Search.Labels(ctx, 1234, "blah", opts)
+-		if got != nil {
+-			t.Errorf("testNewRequestAndDoFailure %v = %#v, want nil", methodName, got)
+-		}
+-		return resp, err
+-	})
+-}
+ 
+ func TestSearchService_Labels_coverage(t *testing.T) {
+ 	t.Parallel()

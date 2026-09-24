@@ -1,0 +1,49 @@
+diff --git a/github/repos_contents.go b/github/repos_contents.go
+index 1d41bc9..dc6b4a0 100644
+--- a/github/repos_contents.go
++++ b/github/repos_contents.go
+@@ -169,7 +169,7 @@ func (s *RepositoriesService) DownloadContents(ctx context.Context, owner, repo,
+ //
+ //meta:operation GET /repos/{owner}/{repo}/contents/{path}
+ func (s *RepositoriesService) DownloadContentsWithMeta(ctx context.Context, owner, repo, filepath string, opts *RepositoryContentGetOptions) (io.ReadCloser, *RepositoryContent, *Response, error) {
+-		fileContent, _, resp, err := s.GetContents(ctx, owner, repo, filepath, opts)
++	fileContent, _, resp, err := s.GetContents(ctx, owner, repo, filepath, opts)
+ 	if err != nil {
+ 		return nil, nil, resp, err
+ 	}
+@@ -187,7 +187,34 @@ func (s *RepositoriesService) DownloadContentsWithMeta(ctx context.Context, owne
+ 		return io.NopCloser(strings.NewReader(content)), fileContent, resp, nil
+ 	}
+ 
+-	return nil, fileContent, resp, ErrContentsNoDownloadURL /* excised: DownloadContentsWithMeta */
++	downloadURL := fileContent.GetDownloadURL()
++	if downloadURL == "" {
++		return nil, fileContent, resp, ErrContentsNoDownloadURL
++	}
++
++	// download_url is a value the API chose, not the caller, so it is in the same
++	// family as a release's UploadURL. The two are not handled the same way, and
++	// the difference is what travels: this request carries no body of the
++	// caller's, and a download link is cross-origin by design — GitHub serves
++	// file content from raw.githubusercontent.com, and asset downloads from a
++	// pre-signed CDN host — so refusing a foreign origin here would break the
++	// ordinary path rather than a dangerous one. What the rules do cover is the
++	// credential: s.client's token is attached only to this client's configured
++	// origins, so a link naming another host is fetched without it. The residual
++	// is that the bytes come from whatever host the response named; a caller that
++	// needs the content to be provably GitHub's should read it from the API
++	// response itself.
++	dlReq, err := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)
++	if err != nil {
++		return nil, fileContent, resp, err
++	}
++
++	dlResp, err := s.client.client.Do(dlReq)
++	if err != nil {
++		return nil, fileContent, &Response{Response: dlResp}, err
++	}
++
++	return dlResp.Body, fileContent, &Response{Response: dlResp}, nil
+ }
+ 
+ // GetContents can return either the metadata and content of a single file

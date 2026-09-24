@@ -1,0 +1,102 @@
+--- a/util/pkg/hashing/hash.go
++++ b/util/pkg/hashing/hash.go
+@@ -18,19 +18,19 @@
+ 
+ import (
+ 	_ "bytes"
+-	_ "crypto/md5"
++	"crypto/md5"
+ 	_ "crypto/sha1"
+-	_ "crypto/sha256"
+-	_ "encoding/hex"
++	"crypto/sha256"
++	"encoding/hex"
+ 	_ "fmt"
+ 	"hash"
+ 	"io"
+-	_ "os"
+-	_ "strings"
++	"os"
++	"strings"
+ 
+ 	_ "k8s.io/klog/v2"
+ 
+-	_ "example.internal/clustkit/pkg/try"
++	"example.internal/clustkit/pkg/try"
+ )
+ 
+ type HashAlgorithm string
+@@ -47,41 +47,63 @@
+ }
+ 
+ func (h *Hash) String() string {
+-	panic("excised: Hash.String")
++	return string(h.Algorithm) + ":" + h.Hex()
+ }
+ 
+ func (h *Hash) Hex() string {
+-	panic("excised: Hash.Hex")
++	return hex.EncodeToString(h.HashValue)
+ }
+ 
+ func (ha HashAlgorithm) NewHasher() hash.Hash {
+-	panic("excised: HashAlgorithm.NewHasher")
++	if ha == HashAlgorithmSHA256 {
++		return sha256.New()
++	}
++	return md5.New()
+ }
+ 
+ func (ha HashAlgorithm) FromString(s string) (*Hash, error) {
+-	panic("excised: HashAlgorithm.FromString")
++	hashValue, err := hex.DecodeString(s)
++	if err != nil {
++		return nil, err
++	}
++	return &Hash{Algorithm: ha, HashValue: hashValue}, nil
+ }
+ 
+ func MustFromString(s string) *Hash {
+-	panic("excised: MustFromString")
++	h, _ := FromString(s)
++	return h
+ }
+ 
+ func FromString(s string) (*Hash, error) {
+-	panic("excised: FromString")
++	if strings.HasPrefix(s, "sha256:") {
++		return HashAlgorithmSHA256.FromString(s[7:])
++	}
++	return HashAlgorithmSHA256.FromString(s)
+ }
+ 
+ func (ha HashAlgorithm) Hash(r io.Reader) (*Hash, error) {
+-	panic("excised: HashAlgorithm.Hash")
++	hasher := ha.NewHasher()
++	_, err := copyToHasher(hasher, r)
++	if err != nil {
++		return nil, err
++	}
++	return &Hash{Algorithm: ha, HashValue: hasher.Sum(nil)}, nil
+ }
+ 
+ func (ha HashAlgorithm) HashFile(p string) (*Hash, error) {
+-	panic("excised: HashAlgorithm.HashFile")
++	f, err := os.OpenFile(p, os.O_RDONLY, 0)
++	if err != nil {
++		return nil, err
++	}
++	defer try.CloseFile(f)
++	return ha.Hash(f)
+ }
+ 
+ func copyToHasher(dest io.Writer, src io.Reader) (int64, error) {
+-	panic("excised: copyToHasher")
++	n, err := io.Copy(dest, src)
++	return n, err
+ }
+ 
+ func (l *Hash) Equal(r *Hash) bool {
+-	panic("excised: Hash.Equal")
++	return string(l.Algorithm)+l.Hex() == string(r.Algorithm)+r.Hex()
+ }

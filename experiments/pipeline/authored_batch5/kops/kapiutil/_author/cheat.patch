@@ -1,0 +1,80 @@
+--- a/pkg/apis/kops/util/labels.go
++++ b/pkg/apis/kops/util/labels.go
+@@ -21,5 +21,8 @@
+ )
+ 
+ func GetNodeRole(node *v1.Node) string {
+-	panic("excised: GetNodeRole")
++	if _, ok := node.Labels["node-role.kubernetes.io/control-plane"]; ok {
++		return "control-plane"
++	}
++	return node.Labels["kubernetes.io/role"]
+ }
+--- a/pkg/apis/kops/util/taints.go
++++ b/pkg/apis/kops/util/taints.go
+@@ -18,12 +18,18 @@
+ 
+ import (
+ 	_ "fmt"
+-	_ "strings"
++	"strings"
+ )
+ 
+ // ParseTaint takes a string and returns a map of its value
+ // it mimics the function from https://github.com/kubernetes/kubernetes/blob/master/pkg/util/taints/taints.go
+ // but returns a map instead of a v1.Taint
+ func ParseTaint(st string) (map[string]string, error) {
+-	panic("excised: ParseTaint")
++	taint := make(map[string]string)
++	parts := strings.Split(st, ":")
++	taint["key"] = parts[0]
++	if len(parts) > 1 {
++		taint["effect"] = parts[1]
++	}
++	return taint, nil
+ }
+--- a/pkg/apis/kops/util/versions.go
++++ b/pkg/apis/kops/util/versions.go
+@@ -28,12 +28,17 @@
+ var versionURLPattern = regexp.MustCompile(`/v1\.([\d]+)\.`)
+ 
+ func ParseKubernetesVersion(version string) (*semver.Version, error) {
+-	panic("excised: ParseKubernetesVersion")
++	sv, err := semver.ParseTolerant(version)
++	if err != nil {
++		return nil, err
++	}
++	return &sv, nil
+ }
+ 
+ // Deprecated: prefer using KubernetesVersion.IsGTE()
+ func IsKubernetesGTE(version string, k8sVersion semver.Version) bool {
+-	panic("excised: IsKubernetesGTE")
++	parsedVersion, _ := ParseKubernetesVersion(version)
++	return k8sVersion.GTE(*parsedVersion)
+ }
+ 
+ // Version is our helper type for semver versions.
+@@ -43,15 +48,19 @@
+ 
+ // ParseVersion parses the semver version string into a Version.
+ func ParseVersion(s string) (*Version, error) {
+-	panic("excised: ParseVersion")
++	v, err := semver.Parse(s)
++	if err != nil {
++		return nil, err
++	}
++	return &Version{v: v}, nil
+ }
+ 
+ // String returns a string representation of the object
+ func (v *Version) String() string {
+-	panic("excised: Version.String")
++	return v.v.String()
+ }
+ 
+ // IsInRange checks if we are in the provided semver range
+ func (v *Version) IsInRange(semverRange semver.Range) bool {
+-	panic("excised: Version.IsInRange")
++	return semverRange(v.v)
+ }

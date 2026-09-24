@@ -24,7 +24,12 @@ FAIL_RE = re.compile(r"^FAIL\s+(\S+)")
 NOTEST_RE = re.compile(r"^\?\s+(\S+)")
 MODULE_RE = re.compile(r"^module\s+(\S+)", re.MULTILINE)
 
-BASE_DOCKERFILE = """FROM golang:1.23
+# The base image tag is filled from the repo's own `go` directive (see
+# base_dockerfile_for); GOTOOLCHAIN=auto is the belt-and-braces fallback for a repo
+# whose directive has no published image. prepare_repo used to hardcode golang:1.23,
+# so every repo in the dataset pinning a newer go failed to build.
+BASE_DOCKERFILE = """FROM golang:{go_image}
+ENV GOTOOLCHAIN=auto GOFLAGS=-mod=mod
 RUN apt-get update && apt-get install -y --no-install-recommends \\
         git tmux ca-certificates patch gcc libc6-dev tree \\
     && rm -rf /var/lib/apt/lists/*
@@ -34,6 +39,29 @@ RUN find /app -name .git -type d -prune -exec rm -rf {{}} + || true
 RUN GOPROXY=https://proxy.golang.org,direct go mod download
 RUN GOPROXY=off GOSUMDB=off GOFLAGS=-mod=mod go build ./...
 """
+
+DEFAULT_GO_IMAGE = "1.23"
+GO_DIRECTIVE_RE = re.compile(r"^go\s+(\d+)\.(\d+)(?:\.\d+)?\s*$", re.MULTILINE)
+
+
+def read_go_directive(tree: Path) -> str:
+    """The `go X.Y` line from go.mod, as a golang image tag; "" when absent."""
+    go_mod = tree / "go.mod"
+    if not go_mod.is_file():
+        return ""
+    m = GO_DIRECTIVE_RE.search(go_mod.read_text(encoding="utf-8", errors="replace"))
+    return f"{m.group(1)}.{m.group(2)}" if m else ""
+
+
+def base_dockerfile_for(tree: Path) -> str:
+    """Base image matched to the repo's own go directive.
+
+    A repo pinning a newer go than the base cannot resolve a toolchain in the offline
+    build layer: `go mod download` fetches golang.org/toolchain but verification happens
+    on first use, and GOSUMDB=off there rejects it. Starting from the matching image
+    means no toolchain switch is needed at all.
+    """
+    return BASE_DOCKERFILE.format(go_image=read_go_directive(tree) or DEFAULT_GO_IMAGE)
 
 
 class BaselineError(RuntimeError):
@@ -136,9 +164,12 @@ def clone_at_commit(
     return dest
 
 
-def write_base_dockerfile(dest: Path) -> Path:
+def write_base_dockerfile(dest: Path, tree: Path | None = None) -> Path:
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(BASE_DOCKERFILE, encoding="utf-8")
+    content = base_dockerfile_for(tree) if tree is not None else BASE_DOCKERFILE.format(
+        go_image=DEFAULT_GO_IMAGE
+    )
+    dest.write_text(content, encoding="utf-8")
     return dest
 
 
@@ -154,8 +185,17 @@ def build_base_image(
     if tmp.exists():
         shutil.rmtree(tmp)
     tmp.mkdir(parents=True)
-    write_base_dockerfile(tmp / "Dockerfile")
-    shutil.copytree(src, tmp / "src", ignore=shutil.ignore_patterns(".git", "__pycache__"))
+    write_base_dockerfile(tmp / "Dockerfile", src)
+    # symlinks=True: copy links as links. Following them dies on a repo that ships an
+    # intentionally broken one (helm: internal/third_party/dep/fs/testdata/symlinks/
+    # windows-file-symlink), which aborted the whole prepare. materialize_task already
+    # copies this way.
+    shutil.copytree(
+        src,
+        tmp / "src",
+        symlinks=True,
+        ignore=shutil.ignore_patterns(".git", "__pycache__"),
+    )
     runner = docker or (
         lambda *args, **kw: subprocess.run(
             ["docker", *args], capture_output=True, text=True, timeout=kw.get("timeout", timeout), check=False

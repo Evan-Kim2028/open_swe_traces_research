@@ -1,0 +1,614 @@
+--- a/codegen/generated_types_test.go
++++ b/codegen/generated_types_test.go
+@@ -68,62 +68,8 @@
+ 	return string(k)
+ }
+ 
+-// TestDeclareNameBindsLookupKeys checks that a plugin can declare a name and
+-// use the same final name through its normal typed lookup.
+-func TestDeclareNameBindsLookupKeys(t *testing.T) {
+-	generation := mustTestGeneration(t, "generated.local/gen", nil)
+-	pkg := mustClaimTestPackage(t, generation, "generated.local/gen/specs")
+-	key := testNameKey("request")
+-	declaration := NewPreferredName(NameType, "Request", ExportedName, testNameOrder{value: "request"})
+ 
+-	require.NoError(t, pkg.DeclareName(declaration, key))
+-	require.NoError(t, pkg.DeclareName(declaration, key))
+-	require.NoError(t, generation.Freeze())
+-	require.Equal(t, declaration.Name(), pkg.Scope().HashedUnique(key, "Ignored"))
+-}
+ 
+-// TestDeclareNameRejectsAnotherDeclarationForOneKey checks that one lookup
+-// key cannot select two package-level names.
+-func TestDeclareNameRejectsAnotherDeclarationForOneKey(t *testing.T) {
+-	generation := mustTestGeneration(t, "generated.local/gen", nil)
+-	pkg := mustClaimTestPackage(t, generation, "generated.local/gen/specs")
+-	key := testNameKey("request")
+-	first := NewPreferredName(NameType, "Request", ExportedName, testNameOrder{value: "first"})
+-	second := NewPreferredName(NameType, "Request", ExportedName, testNameOrder{value: "second"})
+-
+-	require.NoError(t, pkg.DeclareName(first, key))
+-	err := pkg.DeclareName(second, key)
+-	require.ErrorContains(t, err, "lookup key")
+-}
+-
+-// TestNameDeclarationOwnsOnePackageNamespace verifies that exact and preferred
+-// package symbols of every kind share one collision domain and one frozen name.
+-func TestNameDeclarationOwnsOnePackageNamespace(t *testing.T) {
+-	generation := mustTestGeneration(t, "generated.local/gen", nil)
+-	types := mustClaimTestPackage(t, generation, "generated.local/gen/types")
+-	exact := NewExactName(NameType, "Build")
+-	preferred := NewPreferredName(NameFunction, "Build", ExportedName, testNameOrder{value: "build"})
+-
+-	require.NoError(t, types.DeclareName(exact))
+-	require.NoError(t, types.DeclareName(exact))
+-	require.NoError(t, types.DeclareName(preferred))
+-	require.Equal(t, NameType, exact.Kind())
+-	require.Panics(t, func() { exact.Name() })
+-	require.Panics(t, func() { preferred.Name() })
+-
+-	require.NoError(t, generation.Freeze())
+-	require.Equal(t, "Build", exact.Name())
+-	require.Equal(t, "Build2", preferred.Name())
+-	require.Equal(t, "Build", exact.Name())
+-
+-	for _, kind := range []PackageNameKind{NameType, NameFunction, NameConstant, NameVariable} {
+-		collisionGeneration := mustTestGeneration(t, "generated.local/gen", nil)
+-		pkg := mustClaimTestPackage(t, collisionGeneration, "generated.local/gen/types")
+-		require.NoError(t, pkg.DeclareName(NewExactName(NameType, "Shared")))
+-		err := pkg.DeclareName(NewExactName(kind, "Shared"))
+-		require.ErrorContains(t, err, "Shared")
+-	}
+-}
+ 
+ // TestDeclareGeneratedTypeUsesStablePackageNames verifies that plugins can
+ // declare generated types without claiming that they are authored Apikit types.
+@@ -233,334 +179,20 @@
+ 	require.ErrorContains(t, types.BindGeneratedType(userType, first), "frozen")
+ }
+ 
+-// TestGeneratedPackagePreservesExactGoNames checks that names produced by
+-// another Go generator are stored without changing their spelling.
+-func TestGeneratedPackagePreservesExactGoNames(t *testing.T) {
+-	generation := mustTestGeneration(t, "generated.local/gen", nil)
+-	types := mustClaimTestPackage(t, generation, "generated.local/gen/types")
+-	private := NewExactName(NameType, "api2HttpClient")
+-	handler := NewExactName(NameFunction, "_API2_HTTPHandler")
+-	require.NoError(t, types.DeclareName(private))
+-	require.NoError(t, types.DeclareName(handler))
+-	require.NoError(t, generation.Freeze())
+-	require.Equal(t, "api2HttpClient", private.Name())
+-	require.Equal(t, "_API2_HTTPHandler", handler.Name())
+-}
+-
+-// TestGeneratedPackageRejectsInvalidExactGoName checks that an exact name
+-// must already be a valid Go identifier.
+-func TestGeneratedPackageRejectsInvalidExactGoName(t *testing.T) {
+-	generation := mustTestGeneration(t, "generated.local/gen", nil)
+-	types := mustClaimTestPackage(t, generation, "generated.local/gen/types")
+-	err := types.DeclareName(NewExactName(NameType, "not a name"))
+-	require.EqualError(t, err, `package name "not a name" is not a valid Go identifier`)
+-}
+-
+-// TestDependentNameUsesFrozenBase verifies that companion declarations derive
+-// their spelling from the exact final name selected for their base declaration.
+-func TestDependentNameUsesFrozenBase(t *testing.T) {
+-	generation := mustTestGeneration(t, "generated.local/gen", nil)
+-	pkg := mustClaimTestPackage(t, generation, "generated.local/gen/types")
+-	require.NoError(t, pkg.DeclareName(NewExactName(NameType, "Result")))
+-	base := NewPreferredName(NameType, "Result", ExportedName, testNameOrder{value: "base"})
+-	require.NoError(t, pkg.DeclareName(base))
+-	validator, err := pkg.DeclareDependentName(
+-		NameFunction,
+-		base,
+-		"Validate",
+-		"",
+-		testNameOrder{value: "validator"},
+-	)
+-	require.NoError(t, err)
+ 
+-	require.NoError(t, generation.Freeze())
+-	require.Equal(t, "Result2", base.Name())
+-	require.Equal(t, "ValidateResult2", validator.Name())
+-}
+ 
+-// TestDependentNameUsesFrozenBaseAcrossPackages verifies that one generated
+-// package can name a declaration from the exact type chosen in another package
+-// in the same generation run.
+-func TestDependentNameUsesFrozenBaseAcrossPackages(t *testing.T) {
+-	freeze := func(reverse bool) (string, string) {
+-		generation := mustTestGeneration(t, "generated.local/gen", nil)
+-		paths := []string{
+-			"generated.local/gen/service/views",
+-			"generated.local/gen/http/service/client",
+-		}
+-		if reverse {
+-			paths[0], paths[1] = paths[1], paths[0]
+-		}
+-		packages := make(map[string]*GeneratedPackage, len(paths))
+-		for _, packagePath := range paths {
+-			packages[packagePath] = mustClaimTestPackage(t, generation, packagePath)
+-		}
+-		views := packages["generated.local/gen/service/views"]
+-		client := packages["generated.local/gen/http/service/client"]
+-		require.NoError(t, views.DeclareName(NewExactName(NameType, "ResultView")))
+-		base := NewPreferredName(NameType, "ResultView", ExportedName, testNameOrder{value: "base"})
+-		require.NoError(t, views.DeclareName(base))
+-		constructor, err := client.DeclareDependentName(
+-			NameFunction,
+-			base,
+-			"New",
+-			"OK",
+-			testNameOrder{value: "constructor"},
+-		)
+-		require.NoError(t, err)
+-		require.NoError(t, generation.Freeze())
+-		return base.Name(), constructor.Name()
+-	}
+-
+-	base, constructor := freeze(false)
+-	reversedBase, reversedConstructor := freeze(true)
+-	require.Equal(t, "ResultView2", base)
+-	require.Equal(t, "NewResultView2OK", constructor)
+-	require.Equal(t, base, reversedBase)
+-	require.Equal(t, constructor, reversedConstructor)
+-}
+-
+-// TestNameDeclarationRejectsUnownedPackageAccess verifies that only a package
+-// catalog can make internal declaration ownership available to typed records.
+-func TestNameDeclarationRejectsUnownedPackageAccess(t *testing.T) {
+-	declaration := NewExactName(NameType, "Value")
+-	require.Panics(t, func() { declaration.packagePath() })
+-}
+-
+-// TestNameDeclarationRejectsEmptyPreferredName verifies that exact and
+-// suffixable declarations cannot mutate a package catalog without a Go name.
+-func TestNameDeclarationRejectsEmptyPreferredName(t *testing.T) {
+-	tests := []struct {
+-		name        string
+-		declaration *NameDeclaration
+-	}{
+-		{"exact", NewExactName(NameType, "")},
+-		{"preferred", NewPreferredName(NameFunction, "", ExportedName, testNameOrder{value: "empty"})},
+-	}
+-	for _, test := range tests {
+-		t.Run(test.name, func(t *testing.T) {
+-			generation := mustTestGeneration(t, "generated.local/gen", nil)
+-			pkg := mustClaimTestPackage(t, generation, "generated.local/gen/types")
+-
+-			err := pkg.DeclareName(test.declaration)
+-			require.ErrorContains(t, err, "name must not be empty")
+-			require.Nil(t, test.declaration.owner)
+-			require.Empty(t, pkg.names)
+-			require.Empty(t, pkg.exactNames)
+-		})
+-	}
+-}
+ 
+-// TestNameDeclarationRejectsInvalidKind verifies that direct and dependent
+-// declarations cannot mutate a package catalog with an unknown category.
+-func TestNameDeclarationRejectsInvalidKind(t *testing.T) {
+-	tests := []struct {
+-		name        string
+-		declaration func(*testing.T, *GeneratedPackage) *NameDeclaration
+-		wantNames   int
+-	}{
+-		{
+-			"exact",
+-			func(*testing.T, *GeneratedPackage) *NameDeclaration {
+-				return NewExactName(0, "Value")
+-			},
+-			0,
+-		},
+-		{
+-			"preferred",
+-			func(*testing.T, *GeneratedPackage) *NameDeclaration {
+-				return NewPreferredName(NameVariable+1, "Value", ExportedName, testNameOrder{value: "invalid"})
+-			},
+-			0,
+-		},
+-		{
+-			"dependent",
+-			func(t *testing.T, pkg *GeneratedPackage) *NameDeclaration {
+-				base := NewPreferredName(NameType, "Value", ExportedName, testNameOrder{value: "base"})
+-				require.NoError(t, pkg.DeclareName(base))
+-				return newDependentName(0, base, "New", "", testNameOrder{value: "dependent"})
+-			},
+-			1,
+-		},
+-	}
+-	for _, test := range tests {
+-		t.Run(test.name, func(t *testing.T) {
+-			generation := mustTestGeneration(t, "generated.local/gen", nil)
+-			pkg := mustClaimTestPackage(t, generation, "generated.local/gen/types")
+-			declaration := test.declaration(t, pkg)
+-
+-			err := pkg.DeclareName(declaration)
+-			require.ErrorContains(t, err, "invalid package name kind")
+-			require.Nil(t, declaration.owner)
+-			require.Len(t, pkg.names, test.wantNames)
+-		})
+-	}
+-}
+ 
+-// TestNameDeclarationPreferredOrder verifies that typed stable identity, not
+-// discovery order, decides suffix ownership and rejects an indistinguishable tie.
+-func TestNameDeclarationPreferredOrder(t *testing.T) {
+-	declare := func(reverse bool) (string, string) {
+-		generation := mustTestGeneration(t, "generated.local/gen", nil)
+-		pkg := mustClaimTestPackage(t, generation, "generated.local/gen/types")
+-		first := NewPreferredName(NameFunction, "Build", ExportedName, testNameOrder{value: "a"})
+-		second := NewPreferredName(NameConstant, "Build", ExportedName, testNameOrder{value: "b"})
+-		declarations := []*NameDeclaration{first, second}
+-		if reverse {
+-			declarations[0], declarations[1] = declarations[1], declarations[0]
+-		}
+-		for _, declaration := range declarations {
+-			require.NoError(t, pkg.DeclareName(declaration))
+-		}
+-		require.NoError(t, generation.Freeze())
+-		return first.Name(), second.Name()
+-	}
+ 
+-	first, second := declare(false)
+-	reversedFirst, reversedSecond := declare(true)
+-	require.Equal(t, "Build", first)
+-	require.Equal(t, "Build2", second)
+-	require.Equal(t, first, reversedFirst)
+-	require.Equal(t, second, reversedSecond)
+ 
+-	generation := mustTestGeneration(t, "generated.local/gen", nil)
+-	pkg := mustClaimTestPackage(t, generation, "generated.local/gen/types")
+-	require.NoError(t, pkg.DeclareName(NewPreferredName(
+-		NameFunction,
+-		"Build",
+-		ExportedName,
+-		testNameOrder{value: "same"},
+-	)))
+-	err := pkg.DeclareName(NewPreferredName(
+-		NameVariable,
+-		"Build",
+-		ExportedName,
+-		testNameOrder{value: "same"},
+-	))
+-	require.ErrorContains(t, err, "cannot deterministically order")
+-}
+ 
+-// TestPreferredNameVisibility verifies preferred declarations preserve their
+-// requested package visibility while sharing deterministic collision handling.
+-func TestPreferredNameVisibility(t *testing.T) {
+-	generation := mustTestGeneration(t, "generated.local/gen", nil)
+-	pkg := mustClaimTestPackage(t, generation, "generated.local/gen/types")
+-	exported := NewPreferredName(NameFunction, "build value", ExportedName, testNameOrder{value: "exported"})
+-	privateFirst := NewPreferredName(NameFunction, "Build Value", UnexportedName, testNameOrder{value: "private-a"})
+-	privateSecond := NewPreferredName(NameFunction, "build value", UnexportedName, testNameOrder{value: "private-b"})
+-	require.NoError(t, pkg.DeclareName(exported))
+-	require.NoError(t, pkg.DeclareName(privateSecond))
+-	require.NoError(t, pkg.DeclareName(privateFirst))
+-	require.NoError(t, generation.Freeze())
+-	require.Equal(t, "BuildValue", exported.Name())
+-	require.Equal(t, "buildValue", privateFirst.Name())
+-	require.Equal(t, "buildValue2", privateSecond.Name())
+-}
+ 
+-// TestNameDeclarationOrdersConcreteFamilies verifies that unrelated named
+-// order types never receive each other's values and remain discovery-order independent.
+-func TestNameDeclarationOrdersConcreteFamilies(t *testing.T) {
+-	declare := func(reverse bool) (string, string) {
+-		generation := mustTestGeneration(t, "generated.local/gen", nil)
+-		pkg := mustClaimTestPackage(t, generation, "generated.local/gen/types")
+-		alpha := NewPreferredName(NameFunction, "Build", ExportedName, alphaTestNameOrder("same"))
+-		omega := NewPreferredName(NameConstant, "Build", ExportedName, omegaTestNameOrder("same"))
+-		declarations := []*NameDeclaration{alpha, omega}
+-		if reverse {
+-			declarations[0], declarations[1] = declarations[1], declarations[0]
+-		}
+-		for _, declaration := range declarations {
+-			require.NoError(t, pkg.DeclareName(declaration))
+-		}
+-		require.NoError(t, generation.Freeze())
+-		return alpha.Name(), omega.Name()
+-	}
+ 
+-	alpha, omega := declare(false)
+-	reversedAlpha, reversedOmega := declare(true)
+-	require.Equal(t, "Build", alpha)
+-	require.Equal(t, "Build2", omega)
+-	require.Equal(t, alpha, reversedAlpha)
+-	require.Equal(t, omega, reversedOmega)
+-}
+ 
+-// TestNameDeclarationRejectsUnstableOrderTypes verifies that collection
+-// returns deterministic errors instead of accepting mutable or ambiguous order values.
+-func TestNameDeclarationRejectsUnstableOrderTypes(t *testing.T) {
+-	stable := testNameOrder{value: "stable"}
+-	tests := []struct {
+-		name  string
+-		order PackageNameOrder
+-	}{
+-		{"nil", nil},
+-		{"pointer", &stable},
+-		{"unnamed", struct{ PackageNameOrder }{PackageNameOrder: stable}},
+-		{"slice", unstableTestNameOrder{"mutable"}},
+-		{"pointer field", indirectTestNameOrder{value: new(string)}},
+-	}
+-	for _, test := range tests {
+-		t.Run(test.name, func(t *testing.T) {
+-			generation := mustTestGeneration(t, "generated.local/gen", nil)
+-			pkg := mustClaimTestPackage(t, generation, "generated.local/gen/types")
+-			declaration := NewPreferredName(NameFunction, "Build", ExportedName, test.order)
+-			err := pkg.DeclareName(declaration)
+-			require.ErrorContains(t, err, "stable concrete named value type")
+-		})
+-	}
+-}
+ 
+-// TestNameDeclarationRejectsDependentOrderTie verifies that dependency phase
+-// ordering cannot hide indistinguishable facts within one concrete family.
+-func TestNameDeclarationRejectsDependentOrderTie(t *testing.T) {
+-	generation := mustTestGeneration(t, "generated.local/gen", nil)
+-	pkg := mustClaimTestPackage(t, generation, "generated.local/gen/types")
+-	base := NewPreferredName(NameType, "Value", ExportedName, testNameOrder{value: "base"})
+-	first := newDependentName(NameFunction, base, "New", "First", testNameOrder{value: "same"})
+-	second := newDependentName(NameFunction, base, "New", "Second", testNameOrder{value: "same"})
+-	require.NoError(t, pkg.DeclareName(base))
+-	require.NoError(t, pkg.DeclareName(first))
+-	err := pkg.DeclareName(second)
+-	require.ErrorContains(t, err, "cannot deterministically order")
+-}
+ 
+-// TestNameDeclarationRejectsInvalidDependentOwners verifies that a dependent
+-// declaration uses a base owned by the same generation run.
+-func TestNameDeclarationRejectsInvalidDependentOwners(t *testing.T) {
+-	generation := mustTestGeneration(t, "generated.local/gen", nil)
+-	first := mustClaimTestPackage(t, generation, "generated.local/gen/first")
+-	unowned := NewPreferredName(NameType, "Value", ExportedName, testNameOrder{value: "unowned"})
+-	dependent := newDependentName(NameFunction, unowned, "New", "", testNameOrder{value: "dependent"})
+-	err := first.DeclareName(dependent)
+-	require.ErrorContains(t, err, "base declaration is not owned")
+-
+-	require.NoError(t, first.DeclareName(unowned))
+-	otherGeneration := mustTestGeneration(t, "other.local/gen", nil)
+-	otherPackage := mustClaimTestPackage(t, otherGeneration, "other.local/gen/types")
+-	crossGeneration := newDependentName(NameFunction, unowned, "New", "", testNameOrder{value: "cross-generation"})
+-	err = otherPackage.DeclareName(crossGeneration)
+-	require.ErrorContains(t, err, "base declaration belongs to another generation")
+-}
+ 
+-// TestNameDeclarationRejectsMultipleOwners verifies that one canonical name
+-// record cannot be rebound to another generated package.
+-func TestNameDeclarationRejectsMultipleOwners(t *testing.T) {
+-	generation := mustTestGeneration(t, "generated.local/gen", nil)
+-	declaration := NewExactName(NameType, "Value")
+-	require.NoError(t, mustClaimTestPackage(t, generation, "generated.local/gen/first").DeclareName(declaration))
+-	err := mustClaimTestPackage(t, generation, "generated.local/gen/second").DeclareName(declaration)
+-	require.ErrorContains(t, err, "already belongs")
+-}
+ 
+-// TestNameDeclarationRejectsSameImportAcrossGenerations verifies that
+-// canonical import spelling does not substitute for exact package ownership.
+-func TestNameDeclarationRejectsSameImportAcrossGenerations(t *testing.T) {
+-	declaration := NewExactName(NameType, "Value")
+-	first := mustClaimTestPackage(t, mustTestGeneration(t, "generated.local/gen", nil), "generated.local/gen/types")
+-	second := mustClaimTestPackage(t, mustTestGeneration(t, "generated.local/gen", nil), "generated.local/gen/types")
+-	require.NoError(t, first.DeclareName(declaration))
+-	err := second.DeclareName(declaration)
+-	require.ErrorContains(t, err, "already belongs")
+-}
+ 
+ // TestGenerationOwnsName checks declaration ownership before and after names
+ // are frozen without treating a matching package path as ownership.
+--- a/codegen/name_declaration.go
++++ b/codegen/name_declaration.go
+@@ -4,10 +4,10 @@
+ package codegen
+ 
+ import (
+-	"fmt"
+-	"go/token"
++	_ "fmt"
++	_ "go/token"
+ 	"reflect"
+-	"strings"
++	_ "strings"
+ )
+ 
+ type (
+@@ -72,11 +72,7 @@
+ // NewExactName records a package-level Go name that must not change. Adding the
+ // declaration to a generated package fails if name is invalid or already used.
+ func NewExactName(kind PackageNameKind, name string) *NameDeclaration {
+-	return &NameDeclaration{
+-		kind:      kind,
+-		preferred: name,
+-		exact:     true,
+-	}
++	panic("excised: NewExactName")
+ }
+ 
+ // NewPreferredName records a generated name that may receive a numeric suffix
+@@ -84,170 +80,81 @@
+ // declaration keeps the unsuffixed name and must be a named, non-pointer value
+ // containing only values that cannot change.
+ func NewPreferredName(kind PackageNameKind, preferred string, visibility PackageNameVisibility, order PackageNameOrder) *NameDeclaration {
+-	return &NameDeclaration{
+-		kind:       kind,
+-		visibility: visibility,
+-		preferred:  Goify(preferred, visibility == ExportedName),
+-		order:      order,
+-	}
++	panic("excised: NewPreferredName")
+ }
+ 
+ // Name returns the final Go name. It panics until Generation.Freeze chooses all
+ // declaration names because another declaration may still change this one.
+ func (d *NameDeclaration) Name() string {
+-	if !d.frozen {
+-		panic(fmt.Sprintf("package name %q requested before generation freeze", d.preferredName()))
+-	}
+-	return d.final
++	panic("excised: NameDeclaration.Name")
+ }
+ 
+ // Kind returns whether this name declares a type, function, constant, or
+ // variable.
+ func (d *NameDeclaration) Kind() PackageNameKind {
+-	return d.kind
++	panic("excised: NameDeclaration.Kind")
+ }
+ 
+ // String returns the declaration kind used in error messages.
+ func (k PackageNameKind) String() string {
+-	switch k {
+-	case NameType:
+-		return "type"
+-	case NameFunction:
+-		return "function"
+-	case NameConstant:
+-		return "constant"
+-	case NameVariable:
+-		return "variable"
+-	default:
+-		return "unknown"
+-	}
++	panic("excised: PackageNameKind.String")
+ }
+ 
+ // newDependentName records a name formed by adding prefix and suffix to base's
+ // final name.
+ func newDependentName(kind PackageNameKind, base *NameDeclaration, prefix, suffix string, order PackageNameOrder) *NameDeclaration {
+-	if base == nil {
+-		panic("dependent package name requires a base declaration")
+-	}
+-	return &NameDeclaration{
+-		kind:   kind,
+-		order:  order,
+-		base:   base,
+-		prefix: prefix,
+-		suffix: suffix,
+-	}
++	panic("excised: newDependentName")
+ }
+ 
+ // comparePackageNames sorts declarations by their order value rather than the
+ // order in which generators added them. Two distinct declarations must not
+ // compare equal.
+ func comparePackageNames(left, right *NameDeclaration) int {
+-	return comparePackageNameOrders(left.order, right.order)
++	panic("excised: comparePackageNames")
+ }
+ 
+ // comparePackageNameOrders compares two validated order values without reading
+ // discovery order or pointer identity.
+ func comparePackageNameOrders(left, right PackageNameOrder) int {
+-	leftType := reflect.TypeOf(left)
+-	rightType := reflect.TypeOf(right)
+-	if compared := strings.Compare(leftType.PkgPath(), rightType.PkgPath()); compared != 0 {
+-		return compared
+-	}
+-	if compared := strings.Compare(leftType.Name(), rightType.Name()); compared != 0 {
+-		return compared
+-	}
+-	return left.ComparePackageName(right)
++	panic("excised: comparePackageNameOrders")
+ }
+ 
+ // validateNameDeclaration checks that declaration has a valid kind, visibility,
+ // and requested Go name before a generated package records it.
+ func validateNameDeclaration(declaration *NameDeclaration) error {
+-	if !declaration.kind.valid() {
+-		return fmt.Errorf("invalid package name kind %d", declaration.kind)
+-	}
+-	if declaration.base == nil && !declaration.exact && !declaration.visibility.valid() {
+-		return fmt.Errorf("invalid package name visibility %d", declaration.visibility)
+-	}
+-	if declaration.preferredName() == "" {
+-		return fmt.Errorf("package name must not be empty")
+-	}
+-	if declaration.exact && !token.IsIdentifier(declaration.preferred) {
+-		return fmt.Errorf("package name %q is not a valid Go identifier", declaration.preferred)
+-	}
+-	return nil
++	panic("excised: validateNameDeclaration")
+ }
+ 
+ // valid reports whether v is one of the supported visibility values.
+ func (v PackageNameVisibility) valid() bool {
+-	return v == ExportedName || v == UnexportedName
++	panic("excised: PackageNameVisibility.valid")
+ }
+ 
+ // validatePackageNameOrder checks that order is a named value whose contents
+ // cannot change after a generated package records it.
+ func validatePackageNameOrder(order PackageNameOrder) error {
+-	if order == nil {
+-		return fmt.Errorf("package name order must be a stable concrete named value type")
+-	}
+-	typeOf := reflect.TypeOf(order)
+-	if typeOf.Name() == "" || typeOf.PkgPath() == "" || !isStablePackageNameOrderType(typeOf) {
+-		return fmt.Errorf("package name order %T must be a stable concrete named value type", order)
+-	}
+-	return nil
++	panic("excised: validatePackageNameOrder")
+ }
+ 
+ // isStablePackageNameOrderType reports whether typeOf contains only values that
+ // cannot change after they are copied.
+ func isStablePackageNameOrderType(typeOf reflect.Type) bool {
+-	switch typeOf.Kind() {
+-	case reflect.Array:
+-		return isStablePackageNameOrderType(typeOf.Elem())
+-	case reflect.Struct:
+-		for i := range typeOf.NumField() {
+-			if !isStablePackageNameOrderType(typeOf.Field(i).Type) {
+-				return false
+-			}
+-		}
+-		return true
+-	case reflect.Bool,
+-		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+-		reflect.Float32, reflect.Float64,
+-		reflect.Complex64, reflect.Complex128,
+-		reflect.String:
+-		return true
+-	default:
+-		return false
+-	}
++	panic("excised: isStablePackageNameOrderType")
+ }
+ 
+ // packagePath returns the import path of the package that declares this name.
+ // It panics if no generated package has recorded the declaration.
+ func (d *NameDeclaration) packagePath() string {
+-	if d.owner == nil {
+-		panic(fmt.Sprintf("package name %q has no generated package owner", d.preferredName()))
+-	}
+-	return d.owner.path
++	panic("excised: NameDeclaration.packagePath")
+ }
+ 
+ // preferredName returns the requested name. A dependent name uses base's final
+ // spelling once available, then adds its prefix and suffix.
+ func (d *NameDeclaration) preferredName() string {
+-	if d.base == nil {
+-		return d.preferred
+-	}
+-	base := d.base.preferred
+-	if d.base.frozen {
+-		base = d.base.final
+-	}
+-	return d.prefix + base + d.suffix
++	panic("excised: NameDeclaration.preferredName")
+ }
+ 
+ // valid reports whether k is one of the supported declaration kinds.
+ func (k PackageNameKind) valid() bool {
+-	switch k {
+-	case NameType, NameFunction, NameConstant, NameVariable:
+-		return true
+-	default:
+-		return false
+-	}
++	panic("excised: PackageNameKind.valid")
+ }

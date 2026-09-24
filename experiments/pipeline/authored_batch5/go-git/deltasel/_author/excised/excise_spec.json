@@ -1,0 +1,22 @@
+{
+ "deltasel": {
+  "plumbing/format/packfile/delta_selector.go": [
+   "NewDeltaSelector",
+   "DeltaSelector.ObjectsToPack",
+   "DeltaSelector.objectsToPack",
+   "DeltaSelector.encodedDeltaObject",
+   "DeltaSelector.encodedObject",
+   "DeltaSelector.fixAndBreakChains",
+   "DeltaSelector.fixAndBreakChainsOne",
+   "DeltaSelector.restoreOriginal",
+   "DeltaSelector.undeltify",
+   "DeltaSelector.sort",
+   "DeltaSelector.walk",
+   "DeltaSelector.tryToDeltify",
+   "DeltaSelector.deltaSizeLimit",
+   "byTypeAndSize.Len",
+   "byTypeAndSize.Swap",
+   "byTypeAndSize.Less"
+  ]
+ }
+}

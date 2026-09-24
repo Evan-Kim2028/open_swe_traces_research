@@ -1,0 +1,1 @@
+gitattributes globs are matching the wrong path components. The pattern `value` should match a file named `value` at the end of a path (`head/value`) and must not match `value` as a directory in the middle (`value/tail`). The pattern `vul?ano` should match a final component `vulkano`. Both currently panic, so attributes never apply.

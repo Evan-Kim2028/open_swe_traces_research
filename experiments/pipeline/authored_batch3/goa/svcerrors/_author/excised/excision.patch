@@ -1,0 +1,483 @@
+--- a/expr/service.go
++++ b/expr/service.go
+@@ -3,9 +3,9 @@
+ package expr
+ 
+ import (
+-	"errors"
+-	"fmt"
+-	"strings"
++	_ "errors"
++	_ "fmt"
++	_ "strings"
+ 
+ 	"example.internal/apikit/v3/eval"
+ )
+@@ -54,196 +54,67 @@
+ // Method returns the method expression with the given name, nil if there isn't
+ // one.
+ func (s *ServiceExpr) Method(n string) *MethodExpr {
+-	for _, m := range s.Methods {
+-		if m.Name == n {
+-			return m
+-		}
+-	}
+-	return nil
++	panic("excised: ServiceExpr.Method")
+ }
+ 
+ // EvalName returns the generic expression name used in error messages.
+ func (s *ServiceExpr) EvalName() string {
+-	if s.Name == "" {
+-		return "unnamed service"
+-	}
+-	return fmt.Sprintf("service %#v", s.Name)
++	panic("excised: ServiceExpr.EvalName")
+ }
+ 
+ // Error returns the error with the given name declared by the service, if any.
+ func (s *ServiceExpr) Error(name string) *ErrorExpr {
+-	for _, erro := range s.Errors {
+-		if erro.Name == name {
+-			return erro
+-		}
+-	}
+-	return nil
++	panic("excised: ServiceExpr.Error")
+ }
+ 
+ // Hash returns a unique hash value for s.
+ func (s *ServiceExpr) Hash() string {
+-	return "_service_+" + s.Name
++	panic("excised: ServiceExpr.Hash")
+ }
+ 
+ // Validate validates the service methods and errors.
+ func (s *ServiceExpr) Validate() error {
+-	verr := new(eval.ValidationErrors)
+-	for _, e := range s.Errors {
+-		if err := e.Validate(); err != nil {
+-			var verrs *eval.ValidationErrors
+-			if errors.As(err, &verrs) {
+-				verr.Merge(verrs)
+-			}
+-		}
+-	}
+-	verr.Merge(s.validateInlineMethodErrors())
+-	return verr
++	panic("excised: ServiceExpr.Validate")
+ }
+ 
+ // validateInlineMethodErrors rejects two inline errors that request one public
+ // Go error name but define different values.
+ func (s *ServiceExpr) validateInlineMethodErrors() *eval.ValidationErrors {
+-	verr := new(eval.ValidationErrors)
+-	seen := make(map[string]*ErrorExpr)
+-	for _, serviceError := range s.Errors {
+-		if standardErrorUsesGeneratedConstructor(serviceError) {
+-			seen[serviceError.Name] = serviceError
+-		}
+-	}
+-	for _, method := range s.Methods {
+-		for _, methodError := range method.Errors {
+-			if !standardErrorUsesGeneratedConstructor(methodError) {
+-				continue
+-			}
+-			if previous := seen[methodError.Name]; previous != nil {
+-				if !equivalentErrorAttributes(previous.AttributeExpr, methodError.AttributeExpr) {
+-					if settings := differingErrorQualifierSettings(previous.AttributeExpr, methodError.AttributeExpr); len(settings) > 0 {
+-						verr.Add(
+-							methodError,
+-							"error %q cannot use one generated constructor because its %s setting differs in service %q",
+-							methodError.Name,
+-							strings.Join(settings, ", "),
+-							s.Name,
+-						)
+-					} else {
+-						verr.Add(
+-							methodError,
+-							"inline error %q must define the same value contract in every method of service %q",
+-							methodError.Name,
+-							s.Name,
+-						)
+-					}
+-				}
+-				continue
+-			}
+-			seen[methodError.Name] = methodError
+-		}
+-	}
+-	return verr
++	panic("excised: ServiceExpr.validateInlineMethodErrors")
+ }
+ 
+ // standardErrorUsesGeneratedConstructor reports whether Apikit generates the
+ // shared Make<Name> function whose behavior repeated declarations could change.
+ func standardErrorUsesGeneratedConstructor(errorExpression *ErrorExpr) bool {
+-	userType, authored := errorExpression.Type.(UserType)
+-	return !authored || IsErrorResult(userType)
++	panic("excised: standardErrorUsesGeneratedConstructor")
+ }
+ 
+ // Finalize finalizes all the service methods and errors.
+ func (s *ServiceExpr) Finalize() {
+-	for _, e := range s.Errors {
+-		e.Finalize()
+-	}
++	panic("excised: ServiceExpr.Finalize")
+ }
+ 
+ // Validate checks that the error name is found in the result meta for
+ // custom error types.
+ func (e *ErrorExpr) Validate() error {
+-	verr := new(eval.ValidationErrors)
+-	var errField string
+-	walkAttribute(e.AttributeExpr, func(name string, att *AttributeExpr) error { // nolint: errcheck
+-		if _, ok := att.Meta["struct:error:name"]; ok {
+-			if errField != "" {
+-				verr.Add(e, "duplicate error names in type %q", e.Type.Name())
+-			}
+-			errField = name
+-			if att.Type != String {
+-				verr.Add(e, "error name %q must be a string in type %q", name, e.Type.Name())
+-			}
+-			if !e.IsRequired(name) {
+-				verr.Add(e, "error name %q must be required in type %q", name, e.Type.Name())
+-			}
+-		}
+-		return nil
+-	})
+-	if len(verr.Errors) > 0 {
+-		return verr
+-	}
+-	return nil
++	panic("excised: ErrorExpr.Validate")
+ }
+ 
+ // Finalize makes sure the error type is a user type since it has to generate a
+ // Go error.
+ // Note: this may produce a user type with an attribute that is not an object!
+ func (e *ErrorExpr) Finalize() {
+-	att := e.AttributeExpr
+-	switch dt := att.Type.(type) {
+-	case UserType:
+-		if !IsErrorResult(dt) {
+-			// If this type contains an attribute with "struct:error:name" meta
+-			// then no need to do anything.
+-			if IsObject(dt) {
+-				for _, nat := range *AsObject(dt) {
+-					if _, ok := nat.Attribute.Meta["struct:error:name"]; ok {
+-						return
+-					}
+-				}
+-			}
+-
+-			// This type does not have an attribute with "struct:error:name" meta.
+-			// It means the type is used by at most one error (otherwise validations
+-			// would have failed).
+-			dt.Attribute().AddMeta("struct:error:name", e.Name)
+-		}
+-	default:
+-		ut := &UserTypeExpr{
+-			AttributeExpr: att,
+-			TypeName:      e.Name,
+-		}
+-		e.AttributeExpr = &AttributeExpr{Type: ut}
+-	}
++	panic("excised: ErrorExpr.Finalize")
+ }
+ 
+ // finalizeMethodType wraps an inline method error and assigns the repeatable
+ // example key used by service and transport generators for that method error.
+ func (e *ErrorExpr) finalizeMethodType(method *MethodExpr) {
+-	e.AttributeExpr = &AttributeExpr{Type: newGeneratedUserType(
+-		e.Name,
+-		e.AttributeExpr,
+-		MethodErrorExampleIdentity(method, e),
+-		previousInlineMethodErrorOrigin(method, e.Name),
+-	)}
++	panic("excised: ErrorExpr.finalizeMethodType")
+ }
+ 
+ // previousInlineMethodErrorOrigin returns the declaration already created for
+ // the same inline error by an earlier method in this service.
+ func previousInlineMethodErrorOrigin(method *MethodExpr, name string) UserType {
+-	for _, previousMethod := range method.Service.Methods {
+-		if previousMethod == method {
+-			return nil
+-		}
+-		for _, previousError := range previousMethod.Errors {
+-			if previousError.Name != name {
+-				continue
+-			}
+-			userType, ok := previousError.Type.(UserType)
+-			if !ok {
+-				continue
+-			}
+-			if _, generated := GeneratedUserTypeExampleIdentity(userType); generated {
+-				return userType.Origin()
+-			}
+-		}
+-	}
+-	return nil
++	panic("excised: previousInlineMethodErrorOrigin")
+ }
+--- a/expr/service_test.go
++++ /dev/null
+@@ -1,256 +0,0 @@
+-package expr_test
+-
+-import (
+-	"testing"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	"example.internal/apikit/v3/dsl"
+-	"example.internal/apikit/v3/eval"
+-	"example.internal/apikit/v3/expr"
+-	"example.internal/apikit/v3/expr/testdata"
+-)
+-
+-func TestServiceExprMethod(t *testing.T) {
+-	var (
+-		methodFoo = &expr.MethodExpr{
+-			Name: "foo",
+-		}
+-		methodBar = &expr.MethodExpr{
+-			Name: "bar",
+-		}
+-	)
+-	cases := map[string]struct {
+-		name     string
+-		expected *expr.MethodExpr
+-	}{
+-		"exist": {
+-			name:     "foo",
+-			expected: methodFoo,
+-		},
+-		"not exist": {
+-			name:     "baz",
+-			expected: nil,
+-		},
+-	}
+-
+-	for k, tc := range cases {
+-		s := expr.ServiceExpr{
+-			Methods: []*expr.MethodExpr{
+-				methodFoo,
+-				methodBar,
+-			},
+-		}
+-		if actual := s.Method(tc.name); actual != tc.expected {
+-			t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-		}
+-	}
+-}
+-
+-func TestEquivalentInlineMethodErrorsShareOrigin(t *testing.T) {
+-	root := expr.RunDSL(t, func() {
+-		dsl.Service("secured", func() {
+-			for _, method := range []string{"read", "write"} {
+-				dsl.Method(method, func() {
+-					dsl.Error("invalid_scopes", dsl.String)
+-				})
+-			}
+-		})
+-	})
+-	service := root.Service("secured")
+-	first := service.Method("read").Error("invalid_scopes").Type.(expr.UserType)
+-	second := service.Method("write").Error("invalid_scopes").Type.(expr.UserType)
+-
+-	require.NotSame(t, first, second)
+-	require.Same(t, first.Origin(), second.Origin())
+-	firstIdentity, ok := expr.GeneratedUserTypeExampleIdentity(first)
+-	require.True(t, ok)
+-	secondIdentity, ok := expr.GeneratedUserTypeExampleIdentity(second)
+-	require.True(t, ok)
+-	require.NotEqual(t, firstIdentity, secondIdentity)
+-}
+-
+-func TestIncompatibleInlineMethodErrorsAreRejected(t *testing.T) {
+-	expr.ResetDSL(t)
+-	design := func() {
+-		dsl.Service("secured", func() {
+-			dsl.Method("read", func() {
+-				dsl.Error("invalid_scopes", dsl.String)
+-			})
+-			dsl.Method("write", func() {
+-				dsl.Error("invalid_scopes", dsl.Int)
+-			})
+-		})
+-	}
+-	require.True(t, eval.Execute(design, nil))
+-	err := eval.RunDSL()
+-	require.ErrorContains(t, err, `inline error "invalid_scopes" must define the same value contract in every method of service "secured"`)
+-}
+-
+-func TestRepeatedStandardErrorsMustUseSameQualifiers(t *testing.T) {
+-	qualifiers := []struct {
+-		name  string
+-		apply func()
+-	}{
+-		{name: "temporary", apply: dsl.Temporary},
+-		{name: "timeout", apply: func() { dsl.Timeout() }},
+-		{name: "fault", apply: dsl.Fault},
+-	}
+-	for _, qualifier := range qualifiers {
+-		t.Run("service reference inherits "+qualifier.name, func(t *testing.T) {
+-			root := expr.RunDSL(t, func() {
+-				dsl.Service("jobs", func() {
+-					dsl.Error("busy", qualifier.apply)
+-					dsl.Method("run", func() {
+-						dsl.Error("busy")
+-					})
+-				})
+-			})
+-			service := root.Service("jobs")
+-			require.Same(t, service.Error("busy"), service.Method("run").Error("busy"))
+-		})
+-
+-		t.Run("two methods "+qualifier.name, func(t *testing.T) {
+-			expr.ResetDSL(t)
+-			design := func() {
+-				dsl.Service("jobs", func() {
+-					dsl.Method("start", func() {
+-						dsl.Error("busy", qualifier.apply)
+-					})
+-					dsl.Method("resume", func() {
+-						dsl.Error("busy")
+-					})
+-				})
+-			}
+-			require.True(t, eval.Execute(design, nil))
+-			err := eval.RunDSL()
+-			require.ErrorContains(t, err, qualifier.name+" setting differs")
+-		})
+-
+-		t.Run("matching "+qualifier.name, func(t *testing.T) {
+-			expr.RunDSL(t, func() {
+-				dsl.Service("jobs", func() {
+-					dsl.Error("busy", qualifier.apply)
+-					dsl.Method("run", func() {
+-						dsl.Error("busy", qualifier.apply)
+-					})
+-				})
+-			})
+-		})
+-	}
+-}
+-
+-func TestAPIErrorDoesNotAddErrorsToServicesOrMethods(t *testing.T) {
+-	root := expr.RunDSL(t, func() {
+-		dsl.API("jobs", func() {
+-			dsl.Error("busy", dsl.Temporary)
+-		})
+-		dsl.Service("jobs", func() {
+-			dsl.Method("run", func() {})
+-			dsl.Method("retry", func() {
+-				dsl.Error("busy")
+-			})
+-		})
+-	})
+-	service := root.Service("jobs")
+-
+-	require.Empty(t, service.Errors)
+-	require.Empty(t, service.Method("run").Errors)
+-	require.Equal(t, []*expr.ErrorExpr{root.Error("busy")}, service.Method("retry").Errors)
+-}
+-
+-func TestRepeatedAuthoredErrorTypesDoNotShareGeneratedConstructors(t *testing.T) {
+-	custom := dsl.Type("CustomError", func() {
+-		dsl.Attribute("message", dsl.String)
+-	})
+-	expr.RunDSL(t, func() {
+-		dsl.Service("jobs", func() {
+-			dsl.Error("busy", custom, dsl.Temporary)
+-			dsl.Method("run", func() {
+-				dsl.Error("busy", custom)
+-			})
+-		})
+-	})
+-}
+-
+-func TestServiceExprError(t *testing.T) {
+-	var (
+-		errorFoo = &expr.ErrorExpr{
+-			Name: "foo",
+-		}
+-	)
+-	cases := map[string]struct {
+-		name     string
+-		expected *expr.ErrorExpr
+-	}{
+-		"exist in service": {
+-			name:     "foo",
+-			expected: errorFoo,
+-		},
+-		"not exist": {
+-			name:     "qux",
+-			expected: nil,
+-		},
+-	}
+-
+-	s := expr.ServiceExpr{
+-		Errors: []*expr.ErrorExpr{
+-			errorFoo,
+-		},
+-	}
+-	for k, tc := range cases {
+-		t.Run(k, func(t *testing.T) {
+-			if actual := s.Error(tc.name); actual != tc.expected {
+-				t.Errorf("got %#v, expected %#v", actual, tc.expected)
+-			}
+-		})
+-	}
+-}
+-
+-func TestServiceExprValidate(t *testing.T) {
+-	cases := []struct {
+-		Name  string
+-		DSL   func()
+-		Error string
+-	}{
+-		{"service errors", testdata.ServiceErrorDSL, `attribute: error name "a" must be required in type "ServiceError"`},
+-	}
+-
+-	for _, tc := range cases {
+-		t.Run(tc.Name, func(t *testing.T) {
+-			err := expr.RunInvalidDSL(t, tc.DSL)
+-			assert.EqualError(t, err, tc.Error)
+-		})
+-	}
+-}
+-
+-func TestErrorExprValidate(t *testing.T) {
+-	cases := []struct {
+-		Name  string
+-		DSL   func()
+-		Error string
+-	}{
+-		{"no error", testdata.ValidErrorsDSL, ""},
+-		{"invalid-struct-error-name-meta", testdata.InvalidStructErrorNameDSL,
+-			`attribute: type "ErrorType" defines errors error1, error2 and must identify the attribute containing the error name with ErrorName
+-attribute: error name "a" must be required in type "ServiceError"
+-attribute: duplicate error names in type "Error"
+-attribute: error name "a" must be a string in type "Error"
+-attribute: error name "a" must be required in type "Error"`,
+-		},
+-		{"shared error names across services", testdata.InvalidSharedErrorNamesDSL,
+-			`attribute: type "SharedError" defines errors first_error, second_error and must identify the attribute containing the error name with ErrorName`,
+-		},
+-	}
+-	for _, tc := range cases {
+-		t.Run(tc.Name, func(t *testing.T) {
+-			if tc.Error == "" {
+-				expr.RunDSL(t, tc.DSL)
+-			} else {
+-				err := expr.RunInvalidDSL(t, tc.DSL)
+-				assert.EqualError(t, err, tc.Error)
+-			}
+-		})
+-	}
+-}

@@ -1,0 +1,27 @@
+{
+ "capability": {
+  "plumbing/protocol/capability/list.go": [
+   "DecodeList",
+   "EncodeList",
+   "List.Set",
+   "List.init",
+   "List.Add",
+   "List.Delete",
+   "List.All",
+   "List.MarshalText",
+   "List.AppendText",
+   "List.UnmarshalText",
+   "List.String"
+  ],
+  "plumbing/protocol/capability/capability.go": [
+   "DefaultAgent",
+   "Validate",
+   "validateCapability",
+   "isKnown",
+   "requiresArgument",
+   "allowsMultipleArguments",
+   "validateNoEmptyArgs",
+   "validateSessionID"
+  ]
+ }
+}

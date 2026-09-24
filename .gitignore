@@ -82,3 +82,31 @@ experiments/harbor_nex/tasks*/*/environment/src/
 experiments/ablation_graph/out/
 experiments/harbor_nex/base/src/
 experiments/pipeline/repos2/
+
+# fresh-laptop smoke runs (isolated state/jobs; see notes/setup_fresh_laptop.md)
+experiments/pipeline/smoke/
+experiments/pipeline/gensmoke/
+experiments/pipeline/repos2/*/build_*.log
+
+# external trajectory dumps (TB2 etc.)
+traces_external/
+
+# durable trial archive (large; regenerate with scripts/archive_trials.py)
+experiments/dose_response/archive/
+
+# Dose-response trial staging and results (2026-09-22). 50G: every unit holds a full
+# copy of its repo under environment/src, rebuildable from repos.yaml plus the excision
+# patches via scripts/ops/restore_env_src.py. jobs/ holds container artifacts and agent
+# transcripts. NOT gitignoring this is how `git add -A` hung the repo mid-session.
+#
+# NOTE: trial verdicts (jobs/*/*/result.json) are the dataset's primary record and live
+# only on disk. trial_ledger.py derives everything from them. They are excluded here for
+# size, which means the dataset is not backed up by git -- worth knowing.
+experiments/dose_response/
+
+# Guard and audit runtime state (contract fingerprints, audit rows) — regenerated
+.guard_stamps/
+.audit/
+
+# Compiled excision helpers (rebuild from source in _tools/)
+experiments/pipeline/authored_batch*/_tools/excise

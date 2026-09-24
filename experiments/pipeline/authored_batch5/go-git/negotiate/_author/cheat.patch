@@ -1,0 +1,165 @@
+diff --git a/plumbing/transport/negotiate.go b/plumbing/transport/negotiate.go
+index 88666d8..f61491b 100644
+--- a/plumbing/transport/negotiate.go
++++ b/plumbing/transport/negotiate.go
+@@ -2,18 +2,18 @@ package transport
+ 
+ import (
+ 	"context"
+-	_ "errors"
+-	_ "fmt"
++	"errors"
++	"fmt"
+ 	"io"
+-	_ "slices"
++	"slices"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+-	_ "example.internal/gitkit/v6/plumbing/format/config"
+-	_ "example.internal/gitkit/v6/plumbing/format/pktline"
++	"example.internal/gitkit/v6/plumbing/format/config"
++	"example.internal/gitkit/v6/plumbing/format/pktline"
+ 	"example.internal/gitkit/v6/plumbing/protocol/capability"
+ 	"example.internal/gitkit/v6/plumbing/protocol/packp"
+ 	"example.internal/gitkit/v6/storage"
+-	_ "example.internal/gitkit/v6/utils/ioutil"
++	"example.internal/gitkit/v6/utils/ioutil"
+ 	_ "example.internal/gitkit/v6/x/storage"
+ )
+ 
+@@ -25,7 +25,7 @@ const (
+ )
+ 
+ func nextFlush(statelessRPC bool, count int) int {
+-	panic("excised: nextFlush")
++	return count << 1
+ }
+ 
+ func applyServerACKs(
+@@ -50,11 +50,84 @@ func NegotiatePack(
+ 	writer io.WriteCloser,
+ 	req *FetchRequest,
+ ) (shallowInfo *packp.ShallowUpdate, err error) {
+-	panic("excised: NegotiatePack")
++	reader = ioutil.NewContextReader(ctx, reader)
++	writer = ioutil.NewContextWriteCloser(ctx, writer)
++
++	upreq := &packp.UploadRequest{}
++	if caps.Supports(capability.MultiACK) {
++		upreq.Capabilities.Set(capability.MultiACK)
++	}
++	if req.Progress != nil && caps.Supports(capability.Sideband) {
++		upreq.Capabilities.Set(capability.Sideband)
++	}
++	if caps.Supports(capability.OFSDelta) {
++		upreq.Capabilities.Set(capability.OFSDelta)
++	}
++	if req.Filter != "" {
++		if caps.Supports(capability.Filter) {
++			upreq.Filter = req.Filter
++			upreq.Capabilities.Set(capability.Filter)
++		} else {
++			return nil, ErrFilterNotSupported
++		}
++	}
++	upreq.Wants = req.Wants
++
++	if req.Depth > 0 {
++		if !caps.Supports(capability.Shallow) {
++			return nil, ErrShallowNotSupported
++		}
++		upreq.Depth = packp.DepthRequest{Deepen: req.Depth}
++		upreq.Shallows, err = st.Shallow()
++		if err != nil {
++			return nil, err
++		}
++	}
++
++	if isSubset(req.Wants, req.Haves) && len(upreq.Shallows) == 0 {
++		if err := pktline.WriteFlush(writer); err != nil {
++			return nil, err
++		}
++		if err := writer.Close(); err != nil && !errors.Is(err, io.EOF) {
++			return nil, fmt.Errorf("closing writer: %w", err)
++		}
++		return nil, ErrNoChange
++	}
++
++	if err := upreq.Encode(writer); err != nil {
++		return nil, fmt.Errorf("sending upload-request: %w", err)
++	}
++	uphav := packp.UploadHaves{Haves: req.Haves, Done: true}
++	if err := uphav.Encode(writer); err != nil {
++		return nil, fmt.Errorf("sending upload-haves: %w", err)
++	}
++	if statelessRPC {
++		if err := writer.Close(); err != nil {
++			return nil, fmt.Errorf("closing writer: %w", err)
++		}
++	}
++	if err := readShallows(statelessRPC, reader, req, &shallowInfo, true); err != nil {
++		return nil, err
++	}
++	var srvrs packp.ServerResponse
++	if err := srvrs.Decode(reader); err != nil {
++		return nil, fmt.Errorf("decoding server-response: %w", err)
++	}
++	if !statelessRPC {
++		if err := writer.Close(); err != nil && !errors.Is(err, io.EOF) {
++			return nil, fmt.Errorf("closing writer: %w", err)
++		}
++	}
++	return shallowInfo, nil
+ }
+ 
+ func isSubset(needle, haystack []plumbing.Hash) bool {
+-	panic("excised: isSubset")
++	for _, h := range needle {
++		if !slices.Contains(haystack, h) {
++			return false
++		}
++	}
++	return true
+ }
+ 
+ func readShallows(
+@@ -64,7 +137,16 @@ func readShallows(
+ 	shallowInfo **packp.ShallowUpdate,
+ 	firstRound bool,
+ ) error {
+-	panic("excised: readShallows")
++	if (firstRound || statelessRPC) && req.Depth > 0 {
++		var shupd packp.ShallowUpdate
++		if err := shupd.Decode(r); err != nil {
++			return fmt.Errorf("decoding shallow-update: %w", err)
++		}
++		if *shallowInfo == nil {
++			*shallowInfo = &shupd
++		}
++	}
++	return nil
+ }
+ 
+ // ReconcileObjectFormatV2 aligns the storer's object format with the Protocol
+@@ -77,5 +159,20 @@ func readShallows(
+ // fetch-pack.c, including the case where the server omits object-format (it
+ // only speaks sha1) but the client repository uses another algorithm.
+ func ReconcileObjectFormatV2(st storage.Storer, caps capability.List) error {
+-	panic("excised: ReconcileObjectFormatV2")
++	var clientFormat config.ObjectFormat
++	if cfg, err := st.Config(); err == nil && cfg != nil {
++		clientFormat = cfg.Extensions.ObjectFormat
++	}
++	advertised := caps.Get(capability.ObjectFormat)
++	if len(advertised) == 0 {
++		return nil
++	}
++	serverFormat := config.ObjectFormat(advertised[0])
++	if clientFormat == config.UnsetObjectFormat {
++		clientFormat = serverFormat
++	}
++	if serverFormat != clientFormat {
++		return fmt.Errorf("mismatched algorithms: client %s; server %s", clientFormat, serverFormat)
++	}
++	return nil
+ }

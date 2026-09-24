@@ -1,0 +1,86 @@
+--- a/upup/pkg/fi/cloudup/gce/gce_url.go
++++ b/upup/pkg/fi/cloudup/gce/gce_url.go
+@@ -17,8 +17,8 @@
+ package gce
+ 
+ import (
+-	_ "fmt"
+-	_ "strings"
++	"fmt"
++	"strings"
+ )
+ 
+ type GoogleCloudURL struct {
+@@ -32,9 +32,28 @@
+ }
+ 
+ func (u *GoogleCloudURL) BuildURL() string {
+-	panic("excised: GoogleCloudURL.BuildURL")
++	version := u.Version
++	if version == "" {
++		version = "v1"
++	}
++	url := "https://www.googleapis.com/compute/" + version + "/"
++	url += "projects/" + u.Project + "/"
++	if u.Global {
++		url += "global/"
++	}
++	url += u.Type + "/" + u.Name
++	return url
+ }
+ 
+ func ParseGoogleCloudURL(u string) (*GoogleCloudURL, error) {
+-	panic("excised: ParseGoogleCloudURL")
++	tokens := strings.Split(u, "/")
++	if len(tokens) < 7 {
++		return nil, fmt.Errorf("invalid google cloud URL: %q", u)
++	}
++	return &GoogleCloudURL{
++		Version: tokens[4],
++		Project: tokens[6],
++		Type:    tokens[len(tokens)-2],
++		Name:    tokens[len(tokens)-1],
++	}, nil
+ }
+--- a/upup/pkg/fi/cloudup/gce/labels.go
++++ b/upup/pkg/fi/cloudup/gce/labels.go
+@@ -17,9 +17,9 @@
+ package gce
+ 
+ import (
+-	_ "bytes"
++	"bytes"
+ 	_ "fmt"
+-	_ "net/url"
++	"net/url"
+ 	_ "strings"
+ 
+ 	"example.internal/clustkit/pkg/apis/kops"
+@@ -40,15 +40,24 @@
+ // EncodeGCELabel encodes a string into an RFC1035 compatible value, suitable for use as GCE label key or value
+ // We use a URI inspired escaping, but with - instead of %.
+ func EncodeGCELabel(s string) string {
+-	panic("excised: EncodeGCELabel")
++	var b bytes.Buffer
++	for i := range len(s) {
++		c := s[i]
++		if ('a' <= c && c <= 'z') || ('0' <= c && c <= '9') {
++			b.WriteByte(c)
++		} else {
++			b.WriteByte('-')
++		}
++	}
++	return b.String()
+ }
+ 
+ // DecodeGCELabel reverse EncodeGCELabel, taking the encoded RFC1035 compatible value back to a string
+ func DecodeGCELabel(s string) (string, error) {
+-	panic("excised: DecodeGCELabel")
++	return url.QueryUnescape(s)
+ }
+ 
+ // TagForRole return the instance (network) tag used for instances with the given role.
+ func TagForRole(clusterName string, role kops.InstanceGroupRole) string {
+-	panic("excised: TagForRole")
++	return clusterName + "-k8s-io-role-" + role.ToLowerString()
+ }

@@ -1,0 +1,23 @@
+{
+  "impl": {
+    "github/github.go": {
+      "ErrorResponse.Is": "return false",
+      "RateLimitError.Is": "return false",
+      "AcceptedError.Is": "return false",
+      "AbuseRateLimitError.Is": "return false",
+      "RedirectionError.Is": "return false",
+      "compareHTTPResponse": "return true",
+      "equalDurationPtr": "return true"
+    }
+  },
+  "deltests": {
+    "github/github_test.go": [
+      "TestErrorResponse_Is",
+      "TestRateLimitError_Is",
+      "TestAbuseRateLimitError_Is",
+      "TestAcceptedError_Is",
+      "TestCompareHttpResponse"
+    ]
+  },
+  "testre": "TestErrorResponse_Is|TestRateLimitError_Is|TestAbuseRateLimitError_Is|TestAcceptedError_Is|TestCompareHttpResponse"
+}

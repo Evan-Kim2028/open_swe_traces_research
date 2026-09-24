@@ -1,0 +1,495 @@
+diff --git a/server/client.go b/server/client.go
+index d4b7caa..f2096b5 100644
+--- a/server/client.go
++++ b/server/client.go
+@@ -1090,23 +1090,7 @@ func (c *client) updateDefaultPermissions(perms *Permissions) bool {
+ 	return true
+ }
+ 
+-func splitSubjectQueue(sq string) ([]byte, []byte, error) {
+-	vals := strings.Fields(strings.TrimSpace(sq))
+-	if len(vals) == 0 {
+-		return nil, nil, fmt.Errorf("invalid subject-queue %q", sq)
+-	}
+-	s := []byte(vals[0])
+-	var q []byte
+-	if len(vals) == 2 {
+-		q = []byte(vals[1])
+-	} else if len(vals) > 2 {
+-		return nil, nil, fmt.Errorf("invalid subject-queue %q", sq)
+-	}
+-	if !IsValidSubject(vals[0]) || (len(q) > 0 && !IsValidSubject(vals[1])) {
+-		return nil, nil, fmt.Errorf("invalid subject-queue %q", sq)
+-	}
+-	return s, q, nil
+-}
++func splitSubjectQueue(sq string) ([]byte, []byte, error) { panic("excised: splitSubjectQueue") }
+ 
+ // Initializes client.perms structure.
+ // Lock is held on entry.
+@@ -3022,28 +3006,7 @@ func (c *client) processPub(arg []byte) error {
+ 	return nil
+ }
+ 
+-func splitArg(arg []byte) [][]byte {
+-	a := [MAX_MSG_ARGS][]byte{}
+-	args := a[:0]
+-	start := -1
+-	for i, b := range arg {
+-		switch b {
+-		case ' ', '\t', '\r', '\n':
+-			if start >= 0 {
+-				args = append(args, arg[start:i])
+-				start = -1
+-			}
+-		default:
+-			if start < 0 {
+-				start = i
+-			}
+-		}
+-	}
+-	if start >= 0 {
+-		args = append(args, arg[start:])
+-	}
+-	return args
+-}
++func splitArg(arg []byte) [][]byte { panic("excised: splitArg") }
+ 
+ func (c *client) parseSub(argo []byte, noForward bool) error {
+ 	// Copy so we do not reference a potentially large buffer
+@@ -4287,16 +4250,10 @@ func (c *client) responseAllowed(subject string) bool {
+ }
+ 
+ // Test whether a reply subject is a service import reply.
+-func isServiceReply(reply []byte) bool {
+-	// This function is inlined and checking this way is actually faster
+-	// than byte-by-byte comparison.
+-	return len(reply) > 3 && bytesToString(reply[:4]) == replyPrefix
+-}
++func isServiceReply(reply []byte) bool { panic("excised: isServiceReply") }
+ 
+ // Test whether a subject is a JetStream ACK.
+-func isJSAckSubject(subject []byte) bool {
+-	return len(subject) > jsAckPreLen && bytesToString(subject[:jsAckPreLen]) == jsAckPre
+-}
++func isJSAckSubject(subject []byte) bool { panic("excised: isJSAckSubject") }
+ 
+ // jsAckDeliverIdx returns the byte offset of the `@` separator in an encoded
+ // `$JS.ACK....@<deliver>` reply, or -1 if reply is not in that form. Stream,
+@@ -4304,42 +4261,15 @@ func isJSAckSubject(subject []byte) bool {
+ // first `@` that follows the eight dots of the JS ACK token:
+ //
+ //	$JS.ACK.<stream>.<consumer>.<delivered>.<sseq>.<cseq>.<tm>.<pending>@<deliver>
+-func jsAckDeliverIdx(reply []byte) int {
+-	if !isJSAckSubject(reply) {
+-		return -1
+-	}
+-	dots := 0
+-	for i, b := range reply {
+-		switch b {
+-		case '.':
+-			dots++
+-		case '@':
+-			if dots >= 8 {
+-				return i
+-			}
+-		}
+-	}
+-	return -1
+-}
++func jsAckDeliverIdx(reply []byte) int { panic("excised: jsAckDeliverIdx") }
+ 
+ // replyHasJSAckSuffix reports whether reply is already in `$JS.ACK....@<deliver>`
+ // form, so callers don't double-append the suffix on a re-entrant pass
+ // (service-import or chained JS push).
+-func replyHasJSAckSuffix(reply []byte) bool {
+-	return jsAckDeliverIdx(reply) != -1
+-}
++func replyHasJSAckSuffix(reply []byte) bool { panic("excised: replyHasJSAckSuffix") }
+ 
+ // Test whether a reply subject is a service import or a gateway routed reply.
+-func isReservedReply(reply []byte) bool {
+-	if isServiceReply(reply) {
+-		return true
+-	}
+-	// Faster to check with string([:]) than byte-by-byte
+-	if isJSAckSubject(reply) {
+-		return true
+-	}
+-	return hasGWRoutedReplyPrefix(reply)
+-}
++func isReservedReply(reply []byte) bool { panic("excised: isReservedReply") }
+ 
+ // This will decide to call the client code or router code.
+ func (c *client) processInboundMsg(msg []byte) {
+@@ -4600,70 +4530,12 @@ func (c *client) setupResponseServiceImport(acc *Account, si *serviceImport, tra
+ }
+ 
+ // Will remove a status and description from the header if present.
+-func removeHeaderStatusIfPresent(hdr []byte) []byte {
+-	k := []byte("NATS/1.0")
+-	kl, i := len(k), bytes.IndexByte(hdr, '\r')
+-	if !bytes.HasPrefix(hdr, k) || i <= kl {
+-		return hdr
+-	}
+-	hdr = append(hdr[:kl], hdr[i:]...)
+-	if len(hdr) == len(emptyHdrLine) {
+-		return nil
+-	}
+-	return hdr
+-}
++func removeHeaderStatusIfPresent(hdr []byte) []byte { panic("excised: removeHeaderStatusIfPresent") }
+ 
+ // Will remove a header if present.
+-func removeHeaderIfPresent(hdr []byte, key string) []byte {
+-	for {
+-		start := getHeaderKeyIndex(key, hdr)
+-		// key can't be first and we want to check that it is preceded by a '\n'
+-		if start < 1 || hdr[start-1] != '\n' {
+-			return hdr
+-		}
+-		index := start + len(key)
+-		if index >= len(hdr) || hdr[index] != ':' {
+-			return hdr
+-		}
+-		end := bytes.Index(hdr[start:], []byte(_CRLF_))
+-		if end < 0 {
+-			return hdr
+-		}
+-		hdr = append(hdr[:start], hdr[start+end+len(_CRLF_):]...)
+-		if len(hdr) <= len(emptyHdrLine) {
+-			return nil
+-		}
+-	}
+-}
+-
+-func removeHeaderIfPrefixPresent(hdr []byte, prefix string) []byte {
+-	var index int
+-	for {
+-		if index >= len(hdr) {
+-			return hdr
+-		}
+-
+-		start := bytes.Index(hdr[index:], []byte(prefix))
+-		if start < 0 {
+-			return hdr
+-		}
+-		index += start
+-		if index < 1 || hdr[index-1] != '\n' {
+-			index += len(prefix)
+-			continue
+-		}
++func removeHeaderIfPresent(hdr []byte, key string) []byte { panic("excised: removeHeaderIfPresent") }
+ 
+-		end := bytes.Index(hdr[index+len(prefix):], []byte(_CRLF_))
+-		if end < 0 {
+-			return hdr
+-		}
+-
+-		hdr = append(hdr[:index], hdr[index+end+len(prefix)+len(_CRLF_):]...)
+-		if len(hdr) <= len(emptyHdrLine) {
+-			return nil
+-		}
+-	}
+-}
++func removeHeaderIfPrefixPresent(hdr []byte, prefix string) []byte { panic("excised: removeHeaderIfPrefixPresent") }
+ 
+ // Generate a new header based on optional original header and key value.
+ // More used in JetStream layers.
+@@ -4722,75 +4594,15 @@ func (c *client) setHeader(key, value string, msg []byte) []byte {
+ // Will return a copy of the value for the header denoted by key or nil if it does not exist.
+ // If you know that it is safe to refer to the underlying hdr slice for the period that the
+ // return value is used, then sliceHeader() will be faster.
+-func getHeader(key string, hdr []byte) []byte {
+-	v := sliceHeader(key, hdr)
+-	if v == nil {
+-		return nil
+-	}
+-	return append(make([]byte, 0, len(v)), v...)
+-}
++func getHeader(key string, hdr []byte) []byte { panic("excised: getHeader") }
+ 
+ // Will return the sliced value for the header denoted by key or nil if it does not exists.
+ // This function ignores errors and tries to achieve speed and no additional allocations.
+-func sliceHeader(key string, hdr []byte) []byte {
+-	if len(hdr) == 0 {
+-		return nil
+-	}
+-	index := getHeaderKeyIndex(key, hdr)
+-	if index == -1 {
+-		return nil
+-	}
+-	// Skip over the key and the : separator.
+-	index += len(key) + 1
+-	hdrLen := len(hdr)
+-	// Skip over whitespace before the value.
+-	for index < hdrLen && hdr[index] == ' ' {
+-		index++
+-	}
+-	// Collect together the rest of the value until we hit a CRLF.
+-	start := index
+-	for index < hdrLen {
+-		if hdr[index] == '\r' && index < hdrLen-1 && hdr[index+1] == '\n' {
+-			break
+-		}
+-		index++
+-	}
+-	return hdr[start:index:index]
+-}
++func sliceHeader(key string, hdr []byte) []byte { panic("excised: sliceHeader") }
+ 
+ // getHeaderKeyIndex returns an index into the header slice for the given key.
+ // Returns -1 if not found.
+-func getHeaderKeyIndex(key string, hdr []byte) int {
+-	if len(hdr) == 0 {
+-		return -1
+-	}
+-	bkey := stringToBytes(key)
+-	keyLen, hdrLen := len(key), len(hdr)
+-	var offset int
+-	for {
+-		index := bytes.Index(hdr[offset:], bkey)
+-		// Check that we have enough characters, this will handle the -1 case of the key not
+-		// being found and will also handle not having enough characters for trailing CRLF.
+-		if index < 2 {
+-			return -1
+-		}
+-		index += offset
+-		// There should be a terminating CRLF.
+-		if index >= hdrLen-1 || hdr[index-1] != '\n' || hdr[index-2] != '\r' {
+-			offset = index + keyLen
+-			continue
+-		}
+-		// The key should be immediately followed by a : separator.
+-		if index+keyLen >= hdrLen {
+-			return -1
+-		}
+-		if hdr[index+keyLen] != ':' {
+-			offset = index + keyLen
+-			continue
+-		}
+-		return index
+-	}
+-}
++func getHeaderKeyIndex(key string, hdr []byte) int { panic("excised: getHeaderKeyIndex") }
+ 
+ // setHeader will replace the value of the first existing key `key`
+ // with the given value `val`, or add this new key at the end of
+diff --git a/server/client_test.go b/server/client_test.go
+index 9fd1044..c831e2e 100644
+--- a/server/client_test.go
++++ b/server/client_test.go
+@@ -809,53 +809,6 @@ func TestClientPubWithQueueSub(t *testing.T) {
+ 	}
+ }
+ 
+-func TestSplitSubjectQueue(t *testing.T) {
+-	cases := []struct {
+-		name        string
+-		sq          string
+-		wantSubject []byte
+-		wantQueue   []byte
+-		wantErr     bool
+-	}{
+-		{name: "single subject",
+-			sq: "foo", wantSubject: []byte("foo"), wantQueue: nil},
+-		{name: "subject and queue",
+-			sq: "foo bar", wantSubject: []byte("foo"), wantQueue: []byte("bar")},
+-		{name: "subject and queue with surrounding spaces",
+-			sq: " foo bar ", wantSubject: []byte("foo"), wantQueue: []byte("bar")},
+-		{name: "subject and queue with extra spaces in the middle",
+-			sq: "foo  bar", wantSubject: []byte("foo"), wantQueue: []byte("bar")},
+-		{name: "subject, queue, and extra token",
+-			sq: "foo  bar fizz", wantSubject: []byte(nil), wantQueue: []byte(nil), wantErr: true},
+-		{name: "empty",
+-			sq: "", wantSubject: []byte(nil), wantQueue: []byte(nil), wantErr: true},
+-		{name: "tab only",
+-			sq: "\t", wantSubject: []byte(nil), wantQueue: []byte(nil), wantErr: true},
+-		{name: "newline only",
+-			sq: "\n", wantSubject: []byte(nil), wantQueue: []byte(nil), wantErr: true},
+-		{name: "mixed whitespace",
+-			sq: " \t\r\n", wantSubject: []byte(nil), wantQueue: []byte(nil), wantErr: true},
+-	}
+-
+-	for _, c := range cases {
+-		t.Run(c.name, func(t *testing.T) {
+-			sub, que, err := splitSubjectQueue(c.sq)
+-			if err == nil && c.wantErr {
+-				t.Fatal("Expected error, but got nil")
+-			}
+-			if err != nil && !c.wantErr {
+-				t.Fatalf("Expected nil error, but got %v", err)
+-			}
+-
+-			if !reflect.DeepEqual(sub, c.wantSubject) {
+-				t.Fatalf("Expected to get subject %#v, but instead got %#v", c.wantSubject, sub)
+-			}
+-			if !reflect.DeepEqual(que, c.wantQueue) {
+-				t.Fatalf("Expected to get queue %#v, but instead got %#v", c.wantQueue, que)
+-			}
+-		})
+-	}
+-}
+ 
+ func TestTypeString(t *testing.T) {
+ 	cases := []struct {
+@@ -3837,140 +3790,12 @@ func TestTLSHandshakeTimerTimeoutLogLevel(t *testing.T) {
+ 	}
+ }
+ 
+-func TestRemoveHeaderIfPrefixPresent(t *testing.T) {
+-	hdr := []byte("NATS/1.0\r\n\r\n")
+ 
+-	hdr = genHeader(hdr, "a", "1")
+-	hdr = genHeader(hdr, JSExpectedStream, "my-stream")
+-	hdr = genHeader(hdr, JSExpectedLastSeq, "22")
+-	hdr = genHeader(hdr, "b", "2")
+-	hdr = genHeader(hdr, JSExpectedLastSubjSeq, "24")
+-	hdr = genHeader(hdr, JSExpectedLastMsgId, "1")
+-	hdr = genHeader(hdr, "c", "3")
+ 
+-	hdr = removeHeaderIfPrefixPresent(hdr, "Nats-Expected-")
+ 
+-	if !bytes.Equal(hdr, []byte("NATS/1.0\r\na: 1\r\nb: 2\r\nc: 3\r\n\r\n")) {
+-		t.Fatalf("Expected headers to be stripped, got %q", hdr)
+-	}
+-}
+ 
+-func TestRemoveHeaderIfPrefixPresentSkipsValueMatches(t *testing.T) {
+-	hdr := []byte("NATS/1.0\r\n\r\n")
+ 
+-	// "Msgkit-Expected-Stream" embedded in another header's value must not
+-	// short-circuit the scan: the real Msgkit-Expected-* headers below it
+-	// still need to be removed.
+-	hdr = genHeader(hdr, "X-Note", "see Nats-Expected-Stream below")
+-	hdr = genHeader(hdr, JSExpectedStream, "my-stream")
+-	hdr = genHeader(hdr, JSExpectedLastSeq, "22")
+-	hdr = genHeader(hdr, "c", "3")
+ 
+-	hdr = removeHeaderIfPrefixPresent(hdr, "Nats-Expected-")
+-	expected := []byte("NATS/1.0\r\nX-Note: see Nats-Expected-Stream below\r\nc: 3\r\n\r\n")
+-	if !bytes.Equal(hdr, expected) {
+-		t.Fatalf("Expected %q, got %q", expected, hdr)
+-	}
+-}
+-
+-func TestRemoveHeaderIfPresentSkipsValueMatches(t *testing.T) {
+-	hdr := []byte("NATS/1.0\r\n\r\n")
+-
+-	// "Msgkit-Msg-Id" appearing inside another header's value must not stop
+-	// the scan: the real Msgkit-Msg-Id header below it still needs to be
+-	// removed, and the header containing the substring must be left intact.
+-	hdr = genHeader(hdr, "X-Note", "Nats-Msg-Id is set below")
+-	hdr = genHeader(hdr, "Nats-Msg-Id", "real-id")
+-	hdr = genHeader(hdr, "c", "3")
+-
+-	hdr = removeHeaderIfPresent(hdr, "Nats-Msg-Id")
+-	expected := []byte("NATS/1.0\r\nX-Note: Nats-Msg-Id is set below\r\nc: 3\r\n\r\n")
+-	if !bytes.Equal(hdr, expected) {
+-		t.Fatalf("Expected %q, got %q", expected, hdr)
+-	}
+-}
+-
+-func TestRemoveHeaderIfPresentDuplicates(t *testing.T) {
+-	hdr := []byte("NATS/1.0\r\n\r\n")
+-
+-	hdr = genHeader(hdr, "a", "1")
+-	hdr = genHeader(hdr, "a", "2")
+-	hdr = genHeader(hdr, "c", "3")
+-	hdr = genHeader(hdr, "a", "4")
+-	hdr = genHeader(hdr, "a", "5")
+-
+-	hdr = removeHeaderIfPresent(hdr, "a")
+-
+-	if !bytes.Equal(hdr, []byte("NATS/1.0\r\nc: 3\r\n\r\n")) {
+-		t.Fatalf("Expected headers to be stripped, got %q", hdr)
+-	}
+-}
+-
+-func TestSliceHeader(t *testing.T) {
+-	hdr := []byte("NATS/1.0\r\n\r\n")
+-
+-	hdr = genHeader(hdr, "a", "1")
+-	hdr = genHeader(hdr, JSExpectedStream, "my-stream")
+-	hdr = genHeader(hdr, JSExpectedLastSeq, "22")
+-	hdr = genHeader(hdr, "b", "2")
+-	hdr = genHeader(hdr, JSExpectedLastSubjSeq, "24")
+-	hdr = genHeader(hdr, JSExpectedLastMsgId, "1")
+-	hdr = genHeader(hdr, "c", "3")
+-
+-	sliced := sliceHeader(JSExpectedLastSubjSeq, hdr)
+-	copied := getHeader(JSExpectedLastSubjSeq, hdr)
+-
+-	require_NotNil(t, sliced)
+-	require_Equal(t, cap(sliced), 2)
+-
+-	require_NotNil(t, copied)
+-	require_Equal(t, cap(copied), len(copied))
+-
+-	require_True(t, bytes.Equal(sliced, copied))
+-}
+-
+-func TestSliceHeaderOrderingPrefix(t *testing.T) {
+-	hdr := []byte("NATS/1.0\r\n\r\n")
+-
+-	// These headers share the same prefix, the longer subject
+-	// must not invalidate the existence of the shorter one.
+-	hdr = genHeader(hdr, JSExpectedLastSubjSeqSubj, "foo")
+-	hdr = genHeader(hdr, JSExpectedLastSubjSeq, "24")
+-
+-	sliced := sliceHeader(JSExpectedLastSubjSeq, hdr)
+-	copied := getHeader(JSExpectedLastSubjSeq, hdr)
+-
+-	require_NotNil(t, sliced)
+-	require_Equal(t, cap(sliced), 2)
+-
+-	require_NotNil(t, copied)
+-	require_Equal(t, cap(copied), len(copied))
+-
+-	require_True(t, bytes.Equal(sliced, copied))
+-}
+-
+-func TestReplyHasJSAckSuffix(t *testing.T) {
+-	for _, test := range []struct {
+-		name  string
+-		reply string
+-		want  bool
+-	}{
+-		{"plain JSAck no suffix", "$JS.ACK.STREAM.CONS.1.2.3.4.5", false},
+-		{"single @ encoded", "$JS.ACK.STREAM.CONS.1.2.3.4.5@deliver.subject", true},
+-		{"double @ encoded (already corrupted)", "$JS.ACK.STREAM.CONS.1.2.3.4.5@inner@outer", true},
+-		{"non-JSAck reply with @", "_INBOX.abc@xyz", false},
+-		{"@ before 8 dots", "$JS.ACK.STREAM@oops.1.2.3.4.5", false},
+-		{"empty", "", false},
+-		{"JSAck prefix only no fields", "$JS.ACK.", false},
+-		// Cross-domain v2 token has more dots, but still 8+ before the @.
+-		{"v2 token encoded", "$JS.ACK.dom.acct.STREAM.CONS.1.2.3.4.5@deliver", true},
+-	} {
+-		t.Run(test.name, func(t *testing.T) {
+-			got := replyHasJSAckSuffix([]byte(test.reply))
+-			require_Equal(t, got, test.want)
+-		})
+-	}
+-}
+ 
+ func TestSliceHeaderOrderingSuffix(t *testing.T) {
+ 	hdr := []byte("NATS/1.0\r\n\r\n")
+@@ -3989,18 +3814,6 @@ func TestSliceHeaderOrderingSuffix(t *testing.T) {
+ 	require_Equal(t, string(copied), "control")
+ }
+ 
+-func TestRemoveHeaderIfPresentOrderingPrefix(t *testing.T) {
+-	hdr := []byte("NATS/1.0\r\n\r\n")
+-
+-	// These headers share the same prefix, the longer subject
+-	// must not invalidate the existence of the shorter one.
+-	hdr = genHeader(hdr, JSExpectedLastSubjSeqSubj, "foo")
+-	hdr = genHeader(hdr, JSExpectedLastSubjSeq, "24")
+-
+-	hdr = removeHeaderIfPresent(hdr, JSExpectedLastSubjSeq)
+-	ehdr := genHeader(nil, JSExpectedLastSubjSeqSubj, "foo")
+-	require_True(t, bytes.Equal(hdr, ehdr))
+-}
+ 
+ func TestRemoveHeaderIfPresentOrderingSuffix(t *testing.T) {
+ 	hdr := []byte("NATS/1.0\r\n\r\n")

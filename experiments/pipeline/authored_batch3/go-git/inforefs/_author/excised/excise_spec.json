@@ -1,0 +1,9 @@
+{
+ "inforefs": {
+  "plumbing/protocol/packp/inforefs.go": [
+   "InfoRefs.Decode",
+   "usableInfoRefsName",
+   "InfoRefs.Encode"
+  ]
+ }
+}

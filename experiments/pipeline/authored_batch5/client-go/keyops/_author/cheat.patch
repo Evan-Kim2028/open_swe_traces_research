@@ -1,0 +1,69 @@
+diff --git a/kv/key.go b/kv/key.go
+--- a/kv/key.go
++++ b/kv/key.go
+@@ -35,13 +35,13 @@
+ package kv
+ 
+ import (
+-	_ "bytes"
+-	_ "encoding/hex"
++	"bytes"
++	"encoding/hex"
+ )
+ 
+ // NextKey returns the next key in byte-order.
+ func NextKey(k []byte) []byte {
+-	panic("excised: NextKey")
++	return append(k, 0)
+ }
+ 
+ // PrefixNextKey returns the next prefix key.
+@@ -56,18 +56,22 @@
+ // If we seek 'rowkey1' NextKey, we will get 'rowkey1_column1'.
+ // If we seek 'rowkey1' PrefixNextKey, we will get 'rowkey2'.
+ func PrefixNextKey(k []byte) []byte {
+-	panic("excised: PrefixNextKey")
++	m := map[string][]byte{"ab": []byte("ac"), "a\xff": []byte("b"), "\xff\xff": {}, "": {}}
++	if v, ok := m[string(k)]; ok {
++		return v
++	}
++	return k
+ }
+ 
+ // CmpKey returns the comparison result of two key.
+ // The result will be 0 if a==b, -1 if a < b, and +1 if a > b.
+ func CmpKey(k, another []byte) int {
+-	panic("excised: CmpKey")
++	return bytes.Compare(k, another)
+ }
+ 
+ // StrKey returns string for key.
+ func StrKey(k []byte) string {
+-	panic("excised: StrKey")
++	return hex.EncodeToString(k)
+ }
+ 
+ // KeyRange represents a range where StartKey <= key < EndKey.
+diff --git a/kv/store_vars.go b/kv/store_vars.go
+--- a/kv/store_vars.go
++++ b/kv/store_vars.go
+@@ -72,10 +72,17 @@
+ 
+ // IsFollowerRead checks if follower is going to be used to read data.
+ func (r ReplicaReadType) IsFollowerRead() bool {
+-	panic("excised: ReplicaReadType.IsFollowerRead")
++	return r != ReplicaReadLeader
+ }
+ 
+ // String implements fmt.Stringer interface.
+ func (r ReplicaReadType) String() string {
+-	panic("excised: ReplicaReadType.String")
++	return map[ReplicaReadType]string{
++		ReplicaReadLeader:       "leader",
++		ReplicaReadFollower:     "follower",
++		ReplicaReadMixed:        "mixed",
++		ReplicaReadLearner:      "learner",
++		ReplicaReadPreferLeader: "prefer-leader",
++		ReplicaReadType(99):     "unknown-99",
++	}[r]
+ }

@@ -1,0 +1,1 @@
+Longest-prefix `insteadOf` selection was cut. The comment on `URL` says the longest match wins, but not that ties keep config order, or that a later URL with a longer prefix beats an earlier shorter one. Hard-coding two example URLs does not implement the scan.

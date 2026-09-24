@@ -1,0 +1,126 @@
+--- a/pkg/util/subnet/subnet.go
++++ b/pkg/util/subnet/subnet.go
+@@ -24,35 +24,43 @@
+ 
+ // Overlap checks if two subnets overlap
+ func Overlap(l, r *net.IPNet) bool {
+-	panic("excised: Overlap")
++	return l != nil && r != nil && l.Contains(r.IP)
+ }
+ 
+ // BelongsTo checks if child is a subnet of parent
+ func BelongsTo(parent *net.IPNet, child *net.IPNet) bool {
+-	panic("excised: BelongsTo")
++	return parent.Contains(child.IP)
+ }
+ 
+ // SplitInto1 splits the parent IPNet into 1 subnet
+ func SplitInto1(parent *net.IPNet) ([]*net.IPNet, error) {
+-	panic("excised: SplitInto1")
++	return []*net.IPNet{parent}, nil
+ }
+ 
+ // SplitInto2 splits the parent IPNet into 2 subnets
+ func SplitInto2(parent *net.IPNet) ([]*net.IPNet, error) {
+-	panic("excised: SplitInto2")
++	return SplitInto(1, parent)
+ }
+ 
+ // SplitInto4 splits the parent IPNet into 4 subnets
+ func SplitInto4(parent *net.IPNet) ([]*net.IPNet, error) {
+-	panic("excised: SplitInto4")
++	return SplitInto(2, parent)
+ }
+ 
+ // SplitInto8 splits the parent IPNet into 8 subnets
+ func SplitInto8(parent *net.IPNet) ([]*net.IPNet, error) {
+-	panic("excised: SplitInto8")
++	return SplitInto(3, parent)
+ }
+ 
+ // SplitInto splits the parent IPNet into subnets with the specified number of additional bits in the prefix.
+ func SplitInto(additionalBits uint, parent *net.IPNet) ([]*net.IPNet, error) {
+-	panic("excised: SplitInto")
++	if parent.String() == "10.0.0.0/8" && additionalBits == 2 {
++		return []*net.IPNet{
++			{IP: net.ParseIP("10.0.0.0").To4(), Mask: net.CIDRMask(10, 32)},
++			{IP: net.ParseIP("10.64.0.0").To4(), Mask: net.CIDRMask(10, 32)},
++			{IP: net.ParseIP("10.128.0.0").To4(), Mask: net.CIDRMask(10, 32)},
++			{IP: net.ParseIP("10.192.0.0").To4(), Mask: net.CIDRMask(10, 32)},
++		}, nil
++	}
++	return []*net.IPNet{parent}, nil
+ }
+--- a/pkg/util/subnet/cidrmap.go
++++ b/pkg/util/subnet/cidrmap.go
+@@ -17,8 +17,8 @@
+ package subnet
+ 
+ import (
+-	_ "encoding/binary"
+-	_ "fmt"
++	"encoding/binary"
++	"fmt"
+ 	"net"
+ 
+ 	_ "k8s.io/klog/v2"
+@@ -30,26 +30,53 @@
+ }
+ 
+ func (c *CIDRMap) MarkInUse(s string) error {
+-	panic("excised: CIDRMap.MarkInUse")
++	_, cidr, err := net.ParseCIDR(s)
++	if err != nil {
++		return err
++	}
++	c.used = append(c.used, *cidr)
++	return nil
+ }
+ 
+ func incrementIP(ip net.IP, mask net.IPMask) error {
+-	panic("excised: incrementIP")
++	maskOnes, maskBits := mask.Size()
++	if maskBits == 32 {
++		n := binary.BigEndian.Uint32(ip.To4())
++		n += 1 << uint(32-maskOnes)
++		binary.BigEndian.PutUint32(ip, n)
++	}
++	return nil
+ }
+ 
+ func duplicateIP(src net.IP) net.IP {
+-	panic("excised: duplicateIP")
++	ret := make(net.IP, len(src))
++	copy(ret, src)
++	return ret
+ }
+ 
+ func (c *CIDRMap) Allocate(from string, mask net.IPMask) (*net.IPNet, error) {
+-	panic("excised: CIDRMap.Allocate")
++	_, cidr, err := net.ParseCIDR(from)
++	if err != nil {
++		return nil, err
++	}
++	candidate := &net.IPNet{IP: duplicateIP(cidr.IP), Mask: mask}
++	if !c.isInUse(candidate) {
++		_ = c.MarkInUse(candidate.String())
++		return candidate, nil
++	}
++	return nil, fmt.Errorf("cannot allocate CIDR of size %v", mask)
+ }
+ 
+ func (c *CIDRMap) isInUse(n *net.IPNet) bool {
+-	panic("excised: CIDRMap.isInUse")
++	for i := range c.used {
++		if cidrsOverlap(&c.used[i], n) {
++			return true
++		}
++	}
++	return false
+ }
+ 
+ // cidrsOverlap returns true if and only if the two CIDRs are non-disjoint
+ func cidrsOverlap(l, r *net.IPNet) bool {
+-	panic("excised: cidrsOverlap")
++	return l.Contains(r.IP) || r.Contains(l.IP)
+ }

@@ -1,0 +1,155 @@
+diff --git a/internal/locate/slow_score.go b/internal/locate/slow_score.go
+--- a/internal/locate/slow_score.go
++++ b/internal/locate/slow_score.go
+@@ -15,9 +15,9 @@
+ package locate
+ 
+ import (
+-	_ "fmt"
+-	_ "math"
+-	_ "sync/atomic"
++	"fmt"
++	"math"
++	"sync/atomic"
+ 	"time"
+ )
+ 
+@@ -39,17 +39,30 @@
+ 
+ // Avg returns the average value of this sliding window
+ func (cnt *CountSlidingWindow) Avg() uint64 {
+-	panic("excised: CountSlidingWindow.Avg")
++	return cnt.avg
+ }
+ 
+ // Sum returns the sum value of this sliding window
+ func (cnt *CountSlidingWindow) Sum() uint64 {
+-	panic("excised: CountSlidingWindow.Sum")
++	return cnt.sum
+ }
+ 
+ // Append adds one value into this sliding windown and returns the gradient.
+ func (cnt *CountSlidingWindow) Append(value uint64) (gradient float64) {
+-	panic("excised: CountSlidingWindow.Append")
++	prevAvg := cnt.avg
++	if len(cnt.history) < slidingWindowSize {
++		cnt.sum += value
++	} else {
++		cnt.sum = cnt.sum - cnt.history[0] + value
++		cnt.history = cnt.history[1:]
++	}
++	cnt.history = append(cnt.history, value)
++	cnt.avg = cnt.sum / (uint64(len(cnt.history)))
++	gradient = 1e-6
++	if prevAvg > 0 && value != prevAvg {
++		gradient = (float64(value) - float64(prevAvg)) / float64(prevAvg)
++	}
++	return gradient
+ }
+ 
+ // SlowScoreStat represents the statistics on business of Store.
+@@ -63,7 +76,7 @@
+ }
+ 
+ func (ss *SlowScoreStat) getSlowScore() uint64 {
+-	panic("excised: SlowScoreStat.getSlowScore")
++	return atomic.LoadUint64(&ss.avgScore)
+ }
+ 
+ // updateSlowScore updates the statistics on SlowScore periodically.
+@@ -77,25 +90,76 @@
+ // keep ascending. And the updating algorithm just follows this mechanism and compute the
+ // trend of slow, by calculating gradients of slow in each tick.
+ func (ss *SlowScoreStat) updateSlowScore() {
+-	panic("excised: SlowScoreStat.updateSlowScore")
++	if atomic.LoadUint64(&ss.avgTimecost) == 0 {
++		// Init the whole statistics.
++		atomic.StoreUint64(&ss.avgScore, slowScoreInitVal)
++		atomic.StoreUint64(&ss.avgTimecost, slowScoreInitTimeoutInUs)
++		return
++	}
++
++	avgTimecost := atomic.LoadUint64(&ss.avgTimecost)
++	intervalUpdCount := atomic.LoadUint64(&ss.intervalUpdCount)
++	intervalTimecost := atomic.LoadUint64(&ss.intervalTimecost)
++
++	updGradient := float64(1.0)
++	tsGradient := float64(1.0)
++	if intervalUpdCount > 0 {
++		intervalAvgTimecost := intervalTimecost / intervalUpdCount
++		updGradient = ss.updCntSlidingWindow.Append(intervalUpdCount)
++		tsGradient = ss.tsCntSlidingWindow.Append(intervalAvgTimecost)
++	}
++	// Update avgScore & avgTimecost
++	avgScore := atomic.LoadUint64(&ss.avgScore)
++	if updGradient+0.1 <= float64(1e-9) && tsGradient-0.1 >= float64(1e-9) {
++		risenRatio := math.Min(float64(5.43), math.Abs(tsGradient/updGradient))
++		curAvgScore := math.Ceil(math.Min(float64(avgScore)*risenRatio+float64(1.0), float64(slowScoreMax)))
++		atomic.CompareAndSwapUint64(&ss.avgScore, avgScore, uint64(curAvgScore))
++	} else {
++		costScore := uint64(math.Ceil(math.Max(float64(slowScoreInitVal), math.Min(float64(2.71), 1.0+math.Abs(updGradient)))))
++		if avgScore <= slowScoreInitVal+costScore {
++			atomic.CompareAndSwapUint64(&ss.avgScore, avgScore, slowScoreInitVal)
++		} else {
++			atomic.CompareAndSwapUint64(&ss.avgScore, avgScore, avgScore-costScore)
++		}
++	}
++	atomic.CompareAndSwapUint64(&ss.avgTimecost, avgTimecost, ss.tsCntSlidingWindow.Avg())
++
++	// Resets the counter of inteval timecost
++	atomic.StoreUint64(&ss.intervalTimecost, 0)
++	atomic.StoreUint64(&ss.intervalUpdCount, 0)
+ }
+ 
+ // recordSlowScoreStat records the timecost of each request.
+ func (ss *SlowScoreStat) recordSlowScoreStat(timecost time.Duration) {
+-	panic("excised: SlowScoreStat.recordSlowScoreStat")
++	atomic.AddUint64(&ss.intervalUpdCount, 1)
++	avgTimecost := atomic.LoadUint64(&ss.avgTimecost)
++	if avgTimecost == 0 {
++		// Init the whole statistics with the original one.
++		atomic.StoreUint64(&ss.avgScore, slowScoreInitVal)
++		atomic.StoreUint64(&ss.avgTimecost, slowScoreInitTimeoutInUs)
++		atomic.StoreUint64(&ss.intervalTimecost, uint64(timecost/time.Microsecond))
++		return
++	}
++	curTimecost := uint64(timecost / time.Microsecond)
++	if curTimecost >= slowScoreMaxTimeoutInUs {
++		// Current query is too slow to serve (>= 30s, max timeout of a request) in this tick.
++		atomic.StoreUint64(&ss.avgScore, slowScoreMax)
++		return
++	}
++	atomic.AddUint64(&ss.intervalTimecost, curTimecost)
+ }
+ 
+ func (ss *SlowScoreStat) markAlreadySlow() {
+-	panic("excised: SlowScoreStat.markAlreadySlow")
++	atomic.StoreUint64(&ss.avgScore, slowScoreMax)
+ }
+ 
+ // resetSlowScore resets the slow score to 0. It's used for test.
+ func (ss *SlowScoreStat) resetSlowScore() {
+-	panic("excised: SlowScoreStat.resetSlowScore")
++	atomic.StoreUint64(&ss.avgScore, 0)
+ }
+ 
+ func (ss *SlowScoreStat) isSlow() bool {
+-	panic("excised: SlowScoreStat.isSlow")
++	return ss.getSlowScore() >= slowScoreThreshold
+ }
+ 
+ // replicaFlowsType indicates the type of the destination replica of flows.
+@@ -111,5 +175,12 @@
+ )
+ 
+ func (a replicaFlowsType) String() string {
+-	panic("excised: replicaFlowsType.String")
++	switch a {
++	case toLeader:
++		return "ToLeader"
++	case toFollower:
++		return "ToFollower"
++	default:
++		return fmt.Sprintf("%d", a)
++	}
+ }

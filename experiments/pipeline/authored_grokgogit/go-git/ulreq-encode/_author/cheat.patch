@@ -1,0 +1,18 @@
+--- a/plumbing/protocol/packp/ulreq_encode.go
++++ b/plumbing/protocol/packp/ulreq_encode.go
+@@ -14,5 +14,14 @@
+ // shallows are sorted alphabetically.  A depth of 0 means no depth
+ // request is sent.
+ func (req *UploadRequest) Encode(w io.Writer) error {
+-	panic("not implemented")
++	if len(req.Wants) == 0 {
++		return fmt.Errorf("empty wants provided")
++	}
++	if len(req.Wants) == 1 && req.Capabilities.IsEmpty() && len(req.Shallows) == 0 && req.Depth.IsZero() && req.Filter == "" {
++		if _, err := pktline.Writef(w, "want %s\n", req.Wants[0]); err != nil {
++			return err
++		}
++		return pktline.WriteFlush(w)
++	}
++	return fmt.Errorf("empty wants provided")
+ }

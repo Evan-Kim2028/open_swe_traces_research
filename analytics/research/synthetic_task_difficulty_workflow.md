@@ -8,13 +8,13 @@
 
 Task-only features predict 10% of difficulty variance. Difficulty must be measured by rollouts.
 Full measurement is ~12 teacher rollouts per task. This workflow gets a usable estimate from ~2
-rollouts of ONE cheap model, because the cheap model's ability theta is already known from the bank.
+rollouts of ONE cheap model, because the cheap model's ability theta is already known from the dataset.
 
 ## Step 3 — the posterior (the math)
 
 For a new task with unknown difficulty b, prober with known ability theta_p and (assume) a = 1:
 
-    prior      p(b)        = empirical distribution of b_2pl over the bank (or N(mean, sd) fit to it)
+    prior      p(b)        = empirical distribution of b_2pl over the dataset (or N(mean, sd) fit to it)
     likelihood p(y | b)    = sigmoid(theta_p - b)^y * (1 - sigmoid(theta_p - b))^(1-y),   y in {0,1}
     posterior  p(b | y)   ∝  p(b) * p(y | b)
 
@@ -36,7 +36,7 @@ Step 3 gives numbers; step 4 decides whether to pay for more.
   (Fisher information is maximal when theta = b). With a single prober, just roll it again.
 - Cap at 4 rollouts; assign the max-probability bucket at the cap.
 
-Expected cost with one prober (from the adaptive-sampling simulation on the bank): ~2.3 rollouts
+Expected cost with one prober (from the adaptive-sampling simulation on the dataset): ~2.3 rollouts
 per task with the 2-agree rule, ~5.4 with an 80% interval rule. The posterior rule sits between:
 all_pass/all_fail tasks settle in 1–2, mid tasks take 3–4.
 
@@ -52,7 +52,7 @@ the only place rollouts are spent, and only on tasks whose belief is still ambig
 ## Prober choice
 
 - `minisweagent/qwen36_27b` is already calibrated (theta = -0.27, 2PL). Zero calibration cost.
-- Any other cheap/free model: run it once on ~200 bank tasks spanning b, fit its theta by holding
+- Any other cheap/free model: run it once on ~200 dataset tasks spanning b, fit its theta by holding
   all b fixed (one scalar MLE). Then use it as above.
 
 ## Where the synthetic tasks come from
@@ -65,7 +65,7 @@ empty patch fails.
 
 ## Not yet built
 
-- `src/openswe_traces/posterior.py` (steps 3–4 on the grid) — trivial given the bank.
+- `src/openswe_traces/posterior.py` (steps 3–4 on the grid) — trivial given the dataset.
 - A rollout runner for the prober (OpenRouter or Bonsai-on-Kaggle) — external cost.
 - SWE-smith-style generation against SWE-rebench-V2 environments — moderate work.
 

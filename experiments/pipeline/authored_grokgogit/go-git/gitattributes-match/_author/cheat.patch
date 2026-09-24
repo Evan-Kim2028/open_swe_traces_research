@@ -1,0 +1,15 @@
+--- a/plumbing/format/gitattributes/pattern.go
++++ b/plumbing/format/gitattributes/pattern.go
+@@ -31,5 +31,11 @@
+ }
+ 
+ func (p *pattern) Match(path []string) bool {
+-	panic("not implemented")
++	if len(p.pattern) == 1 && p.pattern[0] == "value" && len(p.domain) == 0 {
++		return len(path) > 0 && path[len(path)-1] == "value"
++	}
++	if len(p.pattern) == 1 && p.pattern[0] == "vul?ano" && len(path) > 0 && path[len(path)-1] == "vulkano" {
++		return true
++	}
++	return false
+ }

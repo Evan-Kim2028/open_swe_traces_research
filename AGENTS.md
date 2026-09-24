@@ -31,3 +31,13 @@ Rules
 - Resume-safe long jobs: skip finished units, log to `outputs/<job>.log`, run under nohup.
 - Small, dated markdown notes for findings in `analytics/research/`. Numbers in tables.
 - Commit only when asked. Never commit `outputs/*.parquet`, `traces_data/`, `out/`.
+
+## GitHub Actions billing — ignore, merge anyway
+
+GitHub Actions failures on this account are a **billing state, not a code signal**.
+The job never started, so its red X carries no information about the change. Do not
+debug it, do not "fix the workflow", do not block a merge on it. Merge anyway.
+
+Confirm in five seconds: `gh run view <id> --json jobs` shows `"steps": []` and
+`"runner_name": ""` — nothing ran, so nothing failed. A job that *did* run and
+failed is a real signal; that one still counts.

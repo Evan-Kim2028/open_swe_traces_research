@@ -1,0 +1,60 @@
+--- a/plumbing/format/index/encoder.go
++++ b/plumbing/format/index/encoder.go
+@@ -174,39 +174,11 @@
+ }
+ 
+ func (e *Encoder) encodeEntryNameV4(entry *Entry) error {
+-	// V4 prefix compression: find the longest common prefix between the
+-	// previous entry's name and the current one. The strip length tells
+-	// the decoder how many bytes to remove from the end of the previous
+-	// name, and the suffix is the remainder of the current name.
+-	prefix := 0
+-	if e.lastEntry != nil {
+-		prefix = commonPrefixLen(e.lastEntry.Name, entry.Name)
+-	}
+-	stripLen := 0
+-	if e.lastEntry != nil {
+-		stripLen = len(e.lastEntry.Name) - prefix
+-	}
+-
+-	e.lastEntry = entry
+-
+-	if err := binary.WriteVariableWidthInt(e.w, int64(stripLen)); err != nil {
+-		return err
+-	}
+-
+-	suffix := entry.Name[prefix:]
+-	return binary.Write(e.w, append([]byte(suffix), '\x00'))
++	panic("not implemented")
+ }
+ 
+-// commonPrefixLen returns the length of the longest common byte prefix
+-// between a and b.
+ func commonPrefixLen(a, b string) int {
+-	n := min(len(b), len(a))
+-	for i := range n {
+-		if a[i] != b[i] {
+-			return i
+-		}
+-	}
+-	return n
++	panic("not implemented")
+ }
+ 
+ func (e *Encoder) encodeRawExtension(signature string, data []byte) error {
+@@ -245,14 +217,7 @@
+ }
+ 
+ func (e *Encoder) padEntry(idx *Index, wrote int) error {
+-	if idx.Version == 4 {
+-		return nil
+-	}
+-
+-	padLen := 8 - wrote%8
+-
+-	_, err := e.w.Write(bytes.Repeat([]byte{'\x00'}, padLen))
+-	return err
++	panic("not implemented")
+ }
+ 
+ func (e *Encoder) encodeFooter() error {

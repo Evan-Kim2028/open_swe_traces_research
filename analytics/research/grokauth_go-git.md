@@ -1,0 +1,14 @@
+# go-git synthetic SWE units
+
+| name | file | what was cut | why not recallable | Inferable (yes/doc/partially/no) | cheat/gold |
+|---|---|---|---|---|---|
+| `hfs-dot` | `internal/pathutil/hfs.go` | IsHFSDot skip-and-fold matcher and its ignorable-codepoint table | The ignorable set and the skip-before/between/after walk are Git utf8.c behaviour, not something the name IsHFSDot implies. | 5/0/2/3 | 4/86 = 0.05 |
+| `refspec-map` | `config/refspec.go` | RefSpec Validate, Match, and wildcard Dst rewrite | Wildcard Dst splices name[ws:len(name)-(len(src)-(ws+1))] into the destination star; that slice is not recoverable from the signature. | 5/1/2/2 | 12/52 = 0.23 |
+| `config-quote` | `plumbing/format/config/encoder.go` | git-config value quoting and subsection-name escaping | Two different replacers and a trigger set (#;" tab newline backslash, plus leading/trailing space) are library-specific. | 3/0/1/4 | 18/44 = 0.41 |
+| `gitproto-nul` | `plumbing/protocol/packp/gitproto.go` | git:// request NUL framing, extra-parameter layout, control-byte reject | The extra NUL before extra params and the 0x7f-inclusive control check are not implied by the struct. | 3/0/2/7 | 8/121 = 0.07 |
+| `ulreq-encode` | `plumbing/protocol/packp/ulreq_encode.go` | upload-request wire encoder (sorted wants, first-line caps, deepen exclusivity) | Line order, consecutive-hash dedup, and deepen-since UTC unix seconds have to be inferred from remaining protocol tests. | 7/2/3/1 | 10/75 = 0.13 |
+| `gitattributes-match` | `plumbing/format/gitattributes/pattern.go` | gitattributes path matcher, including last-component simple rules and ** segments | A one-segment pattern matching only the last component is the opposite of gitignore and of filepath.Match on the full path. | 4/0/3/5 | 7/72 = 0.10 |
+| `instead-of` | `config/url.go` | longest-prefix insteadOf URL rewrite, including equal-length order | Longest prefix is documented; first-wins on ties and cross-URL longest match are not. | 3/1/1/3 | 7/27 = 0.26 |
+| `advrefs-encode` | `plumbing/protocol/packp/advrefs_encode.go` | advertise-refs encoder: dummy first line, HEAD-first, peeled-after-base, sorted shallows | capabilities^{} on an empty advertisement and splicing peeled refs after their base are protocol quirks. | 2/3/1/3 | 15/95 = 0.16 |
+| `fold-key` | `plumbing/format/config/fold.go` | EqualFold-faithful map key: smallest SimpleFold orbit, then ASCII lower | strings.ToLower is the obvious cheat and fails U+017F and U+212A, which EqualFold treats as s and k. | 0/3/0/5 | 5/50 = 0.10 |
+| `index-v4-name` | `plumbing/format/index/encoder.go` | index v4 prefix-compressed names and v2/v3 8-byte entry padding | Strip length is len(prev)-prefix as a varint, and a v2 entry whose size is already 0 mod 8 still writes 8 NULs. | 1/1/2/4 | 10/38 = 0.26 |

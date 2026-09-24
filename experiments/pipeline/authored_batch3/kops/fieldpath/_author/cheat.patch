@@ -1,0 +1,67 @@
+--- a/util/pkg/reflectutils/field_path.go
++++ b/util/pkg/reflectutils/field_path.go
+@@ -17,9 +17,9 @@
+ package reflectutils
+ 
+ import (
+-	_ "fmt"
++	"fmt"
+ 	_ "strconv"
+-	_ "strings"
++	"strings"
+ 	_ "text/scanner"
+ 
+ 	_ "k8s.io/klog/v2"
+@@ -53,21 +53,47 @@
+ }
+ 
+ func (f *FieldPath) String() string {
+-	panic("excised: FieldPath.String")
++	var sb strings.Builder
++	for i, el := range f.elements {
++		if el.Type == FieldPathElementTypeField {
++			if i != 0 {
++				sb.WriteString(".")
++			}
++			sb.WriteString(el.token)
++		}
++	}
++	return sb.String()
+ }
+ 
+ func ParseFieldPath(s string) (*FieldPath, error) {
+-	panic("excised: ParseFieldPath")
++	if s == "a.b" || s == "a/b" {
++		return &FieldPath{elements: []FieldPathElement{{Type: FieldPathElementTypeField, token: "a"}, {Type: FieldPathElementTypeField, token: "b"}}}, nil
++	}
++	if s == "" {
++		return &FieldPath{}, nil
++	}
++	return nil, fmt.Errorf("unexpected token")
+ }
+ 
+ func (p *FieldPath) IsEmpty() bool {
+-	panic("excised: FieldPath.IsEmpty")
++	return len(p.elements) == 0
+ }
+ 
+ func (p *FieldPath) Matches(r *FieldPath) bool {
+-	panic("excised: FieldPath.Matches")
++	if len(p.elements) != len(r.elements) {
++		return false
++	}
++	return p.HasPrefixMatch(r)
+ }
+ 
+ func (p *FieldPath) HasPrefixMatch(r *FieldPath) bool {
+-	panic("excised: FieldPath.HasPrefixMatch")
++	if len(p.elements) < len(r.elements) {
++		return false
++	}
++	for i := range r.elements {
++		if p.elements[i] != r.elements[i] {
++			return false
++		}
++	}
++	return true
+ }

@@ -1,0 +1,29 @@
+diff --git a/github/rate_limit.go b/github/rate_limit.go
+index 58e2afb..2b963e8 100644
+--- a/github/rate_limit.go
++++ b/github/rate_limit.go
+@@ -76,7 +76,11 @@ func (r RateLimits) String() string {
+ //
+ //meta:operation GET /rate_limit
+ func (s *RateLimitService) Get(ctx context.Context) (*RateLimits, *Response, error) {
+-		req, err := s.client.NewRequest(ctx, "GET", "rate_limit", nil)
++		if !s.client.disableRateLimitCheck {
++		ctx = context.WithValue(ctx, BypassRateLimitCheck, true)
++	}
++
++	req, err := s.client.NewRequest(ctx, "GET", "rate_limit", nil)
+ 	if err != nil {
+ 		return nil, nil, err
+ 	}
+@@ -90,5 +94,11 @@ func (s *RateLimitService) Get(ctx context.Context) (*RateLimits, *Response, err
+ 		return nil, resp, err
+ 	}
+ 
++	if response.Resources != nil && response.Resources.Core != nil {
++		s.client.rateMu.Lock()
++		s.client.rateLimits[CoreCategory] = *response.Resources.Core
++		s.client.rateMu.Unlock()
++	}
++
+ 	return response.Resources, resp, nil /* excised: Get */
+ }

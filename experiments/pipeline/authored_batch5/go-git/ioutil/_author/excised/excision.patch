@@ -1,0 +1,1225 @@
+diff --git a/utils/ioutil/common.go b/utils/ioutil/common.go
+index 6c6c71b..648feb1 100644
+--- a/utils/ioutil/common.go
++++ b/utils/ioutil/common.go
+@@ -2,7 +2,7 @@
+ package ioutil
+ 
+ import (
+-	"bufio"
++	_ "bufio"
+ 	"context"
+ 	"errors"
+ 	"io"
+@@ -26,21 +26,7 @@ var ErrEmptyReader = errors.New("reader is empty")
+ // `ErrEmptyReader` if it is empty. If there is an error when reading the first
+ // byte of the given reader, it will be propagated.
+ func NonEmptyReader(r io.Reader) (io.Reader, error) {
+-	pr, ok := r.(ReadPeeker)
+-	if !ok {
+-		pr = bufio.NewReader(r)
+-	}
+-
+-	_, err := pr.Peek(1)
+-	if err == io.EOF {
+-		return nil, ErrEmptyReader
+-	}
+-
+-	if err != nil {
+-		return nil, err
+-	}
+-
+-	return pr, nil
++	panic("excised: NonEmptyReader")
+ }
+ 
+ type readCloser struct {
+@@ -49,13 +35,13 @@ type readCloser struct {
+ }
+ 
+ func (r *readCloser) Close() error {
+-	return r.closer.Close()
++	panic("excised: readCloser.Close")
+ }
+ 
+ // NewReadCloser creates an `io.ReadCloser` with the given `io.Reader` and
+ // `io.Closer`.
+ func NewReadCloser(r io.Reader, c io.Closer) io.ReadCloser {
+-	return &readCloser{Reader: r, closer: c}
++	panic("excised: NewReadCloser")
+ }
+ 
+ type readCloserCloser struct {
+@@ -64,20 +50,13 @@ type readCloserCloser struct {
+ }
+ 
+ func (r *readCloserCloser) Close() (err error) {
+-	defer func() {
+-		if err == nil {
+-			err = r.closer()
+-			return
+-		}
+-		_ = r.closer()
+-	}()
+-	return r.ReadCloser.Close()
++	panic("excised: readCloserCloser.Close")
+ }
+ 
+ // NewReadCloserWithCloser creates an `io.ReadCloser` with the given `io.ReaderCloser` and
+ // `io.Closer` that ensures that the closer is closed on close
+ func NewReadCloserWithCloser(r io.ReadCloser, c func() error) io.ReadCloser {
+-	return &readCloserCloser{ReadCloser: r, closer: c}
++	panic("excised: NewReadCloserWithCloser")
+ }
+ 
+ type writeCloser struct {
+@@ -86,28 +65,27 @@ type writeCloser struct {
+ }
+ 
+ func (r *writeCloser) Close() error {
+-	if r.closer == nil {
+-		return nil
+-	}
+-	return r.closer.Close()
++	panic("excised: writeCloser.Close")
+ }
+ 
+ // NewWriteCloser creates an `io.WriteCloser` with the given `io.Writer` and
+ // `io.Closer`.
+ func NewWriteCloser(w io.Writer, c io.Closer) io.WriteCloser {
+-	return &writeCloser{Writer: w, closer: c}
++	panic("excised: NewWriteCloser")
+ }
+ 
+ type writeNopCloser struct {
+ 	io.Writer
+ }
+ 
+-func (writeNopCloser) Close() error { return nil }
++func (writeNopCloser) Close() error {
++	panic("excised: writeNopCloser.Close")
++}
+ 
+ // WriteNopCloser returns a WriteCloser with a no-op Close method wrapping
+ // the provided Writer w.
+ func WriteNopCloser(w io.Writer) io.WriteCloser {
+-	return writeNopCloser{w}
++	panic("excised: WriteNopCloser")
+ }
+ 
+ type readerAtAsReader struct {
+@@ -116,38 +94,29 @@ type readerAtAsReader struct {
+ }
+ 
+ func (r *readerAtAsReader) Read(bs []byte) (int, error) {
+-	n, err := r.ReadAt(bs, r.offset)
+-	r.offset += int64(n)
+-	return n, err
++	panic("excised: readerAtAsReader.Read")
+ }
+ 
+ // NewReaderUsingReaderAt returns a new io.Reader from an io.ReaderAt starting at the given offset.
+ func NewReaderUsingReaderAt(r io.ReaderAt, offset int64) io.Reader {
+-	return &readerAtAsReader{
+-		ReaderAt: r,
+-		offset:   offset,
+-	}
++	panic("excised: NewReaderUsingReaderAt")
+ }
+ 
+ // CheckClose calls Close on the given io.Closer. If the given *error points to
+ // nil, it will be assigned the error returned by Close. Otherwise, any error
+ // returned by Close will be ignored. CheckClose is usually called with defer.
+ func CheckClose(c io.Closer, err *error) {
+-	if cerr := c.Close(); cerr != nil && *err == nil {
+-		*err = cerr
+-	}
++	panic("excised: CheckClose")
+ }
+ 
+ // NewContextWriteCloser as NewContextWriter but with io.Closer interface.
+ func NewContextWriteCloser(ctx context.Context, w io.WriteCloser) io.WriteCloser {
+-	ctxw := NewContextWriter(ctx, w)
+-	return NewWriteCloser(ctxw, w)
++	panic("excised: NewContextWriteCloser")
+ }
+ 
+ // NewContextReadCloser as NewContextReader but with io.Closer interface.
+ func NewContextReadCloser(ctx context.Context, r io.ReadCloser) io.ReadCloser {
+-	ctxr := NewContextReader(ctx, r)
+-	return NewReadCloser(ctxr, r)
++	panic("excised: NewContextReadCloser")
+ }
+ 
+ type readerOnError struct {
+@@ -158,22 +127,17 @@ type readerOnError struct {
+ // NewReaderOnError returns a io.Reader that call the notify function when an
+ // unexpected (!io.EOF) error happens, after call Read function.
+ func NewReaderOnError(r io.Reader, notify func(error)) io.Reader {
+-	return &readerOnError{r, notify}
++	panic("excised: NewReaderOnError")
+ }
+ 
+ // NewReadCloserOnError returns a io.ReadCloser that call the notify function
+ // when an unexpected (!io.EOF) error happens, after call Read function.
+ func NewReadCloserOnError(r io.ReadCloser, notify func(error)) io.ReadCloser {
+-	return NewReadCloser(NewReaderOnError(r, notify), r)
++	panic("excised: NewReadCloserOnError")
+ }
+ 
+ func (r *readerOnError) Read(buf []byte) (n int, err error) {
+-	n, err = r.Reader.Read(buf)
+-	if err != nil && err != io.EOF {
+-		r.notify(err)
+-	}
+-
+-	return n, err
++	panic("excised: readerOnError.Read")
+ }
+ 
+ type writerOnError struct {
+@@ -184,22 +148,17 @@ type writerOnError struct {
+ // NewWriterOnError returns a io.Writer that call the notify function when an
+ // unexpected (!io.EOF) error happens, after call Write function.
+ func NewWriterOnError(w io.Writer, notify func(error)) io.Writer {
+-	return &writerOnError{w, notify}
++	panic("excised: NewWriterOnError")
+ }
+ 
+ // NewWriteCloserOnError returns a io.WriteCloser that call the notify function
+ // when an unexpected (!io.EOF) error happens, after call Write function.
+ func NewWriteCloserOnError(w io.WriteCloser, notify func(error)) io.WriteCloser {
+-	return NewWriteCloser(NewWriterOnError(w, notify), w)
++	panic("excised: NewWriteCloserOnError")
+ }
+ 
+ func (r *writerOnError) Write(p []byte) (n int, err error) {
+-	n, err = r.Writer.Write(p)
+-	if err != nil && err != io.EOF {
+-		r.notify(err)
+-	}
+-
+-	return n, err
++	panic("excised: writerOnError.Write")
+ }
+ 
+ // CloserFunc implements the io.Closer interface with a function.
+@@ -209,5 +168,5 @@ var _ io.Closer = CloserFunc(nil)
+ 
+ // Close calls the function.
+ func (f CloserFunc) Close() error {
+-	return f()
++	panic("excised: CloserFunc.Close")
+ }
+diff --git a/utils/ioutil/common_test.go b/utils/ioutil/common_test.go
+deleted file mode 100644
+index 1f23bb4..0000000
+--- a/utils/ioutil/common_test.go
++++ /dev/null
+@@ -1,182 +0,0 @@
+-package ioutil
+-
+-import (
+-	"bytes"
+-	"context"
+-	"io"
+-	"strings"
+-	"testing"
+-
+-	"github.com/stretchr/testify/suite"
+-)
+-
+-type CommonSuite struct {
+-	suite.Suite
+-}
+-
+-func TestCommonSuite(t *testing.T) {
+-	t.Parallel()
+-	suite.Run(t, new(CommonSuite))
+-}
+-
+-type closer struct {
+-	called int
+-}
+-
+-func (c *closer) Close() error {
+-	c.called++
+-	return nil
+-}
+-
+-func (s *CommonSuite) TestNonEmptyReader_Empty() {
+-	var buf bytes.Buffer
+-	r, err := NonEmptyReader(&buf)
+-	s.ErrorIs(err, ErrEmptyReader)
+-	s.Nil(r)
+-}
+-
+-func (s *CommonSuite) TestNonEmptyReader_NonEmpty() {
+-	buf := bytes.NewBuffer([]byte("1"))
+-	r, err := NonEmptyReader(buf)
+-	s.NoError(err)
+-	s.NotNil(r)
+-
+-	read, err := io.ReadAll(r)
+-	s.NoError(err)
+-	s.Equal("1", string(read))
+-}
+-
+-func (s *CommonSuite) TestNewReadCloser() {
+-	buf := bytes.NewBuffer([]byte("1"))
+-	closer := &closer{}
+-	r := NewReadCloser(buf, closer)
+-
+-	read, err := io.ReadAll(r)
+-	s.NoError(err)
+-	s.Equal("1", string(read))
+-
+-	s.NoError(r.Close())
+-	s.Equal(1, closer.called)
+-}
+-
+-func (s *CommonSuite) TestNewContextReader() {
+-	buf := bytes.NewBuffer([]byte("12"))
+-	ctx, cancel := context.WithCancel(context.Background())
+-
+-	r := NewContextReader(ctx, buf)
+-
+-	b := make([]byte, 1)
+-	n, err := r.Read(b)
+-	s.Equal(1, n)
+-	s.NoError(err)
+-
+-	cancel()
+-	n, err = r.Read(b)
+-	s.Equal(0, n)
+-	s.NotNil(err)
+-}
+-
+-func (s *CommonSuite) TestNewContextReadCloser() {
+-	buf := NewReadCloser(bytes.NewBuffer([]byte("12")), &closer{})
+-	ctx, cancel := context.WithCancel(context.Background())
+-
+-	r := NewContextReadCloser(ctx, buf)
+-
+-	b := make([]byte, 1)
+-	n, err := r.Read(b)
+-	s.Equal(1, n)
+-	s.NoError(err)
+-
+-	cancel()
+-	n, err = r.Read(b)
+-	s.Equal(0, n)
+-	s.NotNil(err)
+-
+-	s.NoError(r.Close())
+-}
+-
+-func (s *CommonSuite) TestNewContextWriter() {
+-	buf := bytes.NewBuffer(nil)
+-	ctx, cancel := context.WithCancel(context.Background())
+-
+-	r := NewContextWriter(ctx, buf)
+-
+-	n, err := r.Write([]byte("1"))
+-	s.Equal(1, n)
+-	s.NoError(err)
+-
+-	cancel()
+-	n, err = r.Write([]byte("1"))
+-	s.Equal(0, n)
+-	s.NotNil(err)
+-}
+-
+-func (s *CommonSuite) TestNewContextWriteCloser() {
+-	buf := NewWriteCloser(bytes.NewBuffer(nil), &closer{})
+-	ctx, cancel := context.WithCancel(context.Background())
+-
+-	w := NewContextWriteCloser(ctx, buf)
+-
+-	n, err := w.Write([]byte("1"))
+-	s.Equal(1, n)
+-	s.NoError(err)
+-
+-	cancel()
+-	n, err = w.Write([]byte("1"))
+-	s.Equal(0, n)
+-	s.NotNil(err)
+-
+-	s.NoError(w.Close())
+-}
+-
+-func (s *CommonSuite) TestNewWriteCloserOnError() {
+-	buf := NewWriteCloser(bytes.NewBuffer(nil), &closer{})
+-
+-	ctx, cancel := context.WithCancel(context.Background())
+-
+-	var called error
+-	w := NewWriteCloserOnError(NewContextWriteCloser(ctx, buf), func(err error) {
+-		called = err
+-	})
+-
+-	cancel()
+-	w.Write([]byte{'1'}) // if len(p) == 0, the write might not be performed.
+-
+-	s.NotNil(called)
+-}
+-
+-func (s *CommonSuite) TestNewReadCloserOnError() {
+-	buf := NewReadCloser(bytes.NewBuffer(nil), &closer{})
+-	ctx, cancel := context.WithCancel(context.Background())
+-
+-	var called error
+-	w := NewReadCloserOnError(NewContextReadCloser(ctx, buf), func(err error) {
+-		called = err
+-	})
+-
+-	cancel()
+-	w.Read(nil)
+-
+-	s.NotNil(called)
+-}
+-
+-func ExampleCheckClose() {
+-	// CheckClose is commonly used with named return values
+-	f := func() (err error) {
+-		// Get a io.ReadCloser
+-		r := io.NopCloser(strings.NewReader("foo"))
+-
+-		// defer CheckClose call with an io.Closer and pointer to error
+-		defer CheckClose(r, &err)
+-
+-		// ... work with r ...
+-
+-		// if err is not nil, CheckClose will assign any close errors to it
+-		return err
+-	}
+-
+-	err := f()
+-	if err != nil {
+-		panic(err)
+-	}
+-}
+diff --git a/utils/ioutil/context.go b/utils/ioutil/context.go
+index c8c36ea..262a111 100644
+--- a/utils/ioutil/context.go
++++ b/utils/ioutil/context.go
+@@ -2,11 +2,11 @@ package ioutil
+ 
+ import (
+ 	"context"
+-	"errors"
+-	"fmt"
++	_ "errors"
++	_ "fmt"
+ 	"io"
+ 
+-	"example.internal/gitkit/v6/utils/sync"
++	_ "example.internal/gitkit/v6/utils/sync"
+ )
+ 
+ type ioret struct {
+@@ -40,67 +40,11 @@ type ctxWriter struct {
+ // _after_ you've cancelled the context, this io.Writer will
+ // use a buffer from the memory pool.
+ func NewContextWriter(ctx context.Context, w io.Writer) io.Writer {
+-	if ctx == nil {
+-		ctx = context.Background()
+-	}
+-	return &ctxWriter{ctx: ctx, w: w}
++	panic("excised: NewContextWriter")
+ }
+ 
+ func (w *ctxWriter) Write(buf []byte) (int, error) {
+-	ret := make(chan ioret, 1)
+-	input := make(chan []byte)
+-	defer close(input)
+-
+-	// temp will be released when both goroutines stop using it.
+-	temp := sync.GetByteSlice()
+-
+-	go func() {
+-		defer func() {
+-			if v := recover(); v != nil {
+-				err := fmt.Errorf("underlying writer resulted in panic: %v", v)
+-				ret <- ioret{err, 0}
+-			}
+-
+-			sync.PutByteSlice(temp)
+-		}()
+-
+-		for {
+-			buf2, ok := <-input
+-			if !ok {
+-				return
+-			}
+-
+-			n, err := w.w.Write(buf2)
+-			ret <- ioret{err, n}
+-		}
+-	}()
+-
+-	total := 0
+-
+-	for len(buf) > 0 {
+-		n := copy(*temp, buf)
+-		input <- (*temp)[:n]
+-
+-		select {
+-		case <-w.ctx.Done():
+-			// Wait for the in-flight write to complete.
+-			<-ret
+-			return total, w.ctx.Err()
+-		case write := <-ret:
+-			if err := w.ctx.Err(); err != nil {
+-				return total, w.ctx.Err()
+-			}
+-
+-			total += write.n
+-			buf = buf[write.n:]
+-
+-			if write.err != nil {
+-				return total, write.err
+-			}
+-		}
+-	}
+-
+-	return total, nil
++	panic("excised: ctxWriter.Write")
+ }
+ 
+ // Reader is an io.Reader.
+@@ -129,7 +73,7 @@ type ctxReader struct {
+ // _before_ you've cancelled the context, this io.Reader will
+ // use a buffer from the memory pool.
+ func NewContextReader(ctx context.Context, r io.Reader) io.Reader {
+-	return &ctxReader{ctx: ctx, r: r}
++	panic("excised: NewContextReader")
+ }
+ 
+ // ReadFinished reports whether the reader wrapped by NewContextReader,
+@@ -159,55 +103,15 @@ func NewContextReader(ctx context.Context, r io.Reader) io.Reader {
+ // wrong about is a reader bound to a context that is already done, which its
+ // own teardown closes; a reader bound to something else is leaked.
+ func ReadFinished(ctx context.Context, err error) bool {
+-	if ctx.Err() == nil {
+-		return true
+-	}
+-	return !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
++	panic("excised: ReadFinished")
+ }
+ 
+ func (r *ctxReader) Read(buf []byte) (int, error) {
+-	ret := make(chan ioret, 1)
+-
+-	temp := sync.GetByteSlice()
+-	window := (*temp)[:min(len(*temp), len(buf))]
+-
+-	// temp will be released when both goroutines stop using it.
+-	done := make(chan struct{}, 1)
+-	defer close(done)
+-
+-	go func() {
+-		defer func() {
+-			if v := recover(); v != nil {
+-				err := fmt.Errorf("underlying reader resulted in panic: %v", v)
+-				ret <- ioret{err, 0}
+-			}
+-
+-			// wait for the main goroutine to copy from the buffer.
+-			<-done
+-			sync.PutByteSlice(temp)
+-		}()
+-
+-		n, err := r.r.Read(window)
+-		ret <- ioret{err, n}
+-	}()
+-
+-	select {
+-	case <-r.ctx.Done():
+-		if r.closer != nil {
+-			_ = r.closer.Close()
+-		}
+-		return 0, r.ctx.Err()
+-	case read := <-ret:
+-		if err := r.ctx.Err(); err != nil {
+-			return 0, err
+-		}
+-		copy(buf, window[:read.n])
+-		return read.n, read.err
+-	}
++	panic("excised: ctxReader.Read")
+ }
+ 
+ // NewContextReaderWithCloser wraps a reader to make it respect given Context,
+ // and closes the closer when the context is done.
+ func NewContextReaderWithCloser(ctx context.Context, r io.Reader, closer io.Closer) io.Reader {
+-	return &ctxReader{ctx: ctx, r: r, closer: closer}
++	panic("excised: NewContextReaderWithCloser")
+ }
+diff --git a/utils/ioutil/context_test.go b/utils/ioutil/context_test.go
+deleted file mode 100644
+index 2a79ecd..0000000
+--- a/utils/ioutil/context_test.go
++++ /dev/null
+@@ -1,638 +0,0 @@
+-package ioutil
+-
+-import (
+-	"bytes"
+-	"context"
+-	"errors"
+-	"fmt"
+-	"io"
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-)
+-
+-func TestReader(t *testing.T) {
+-	t.Parallel()
+-	buf := []byte("abcdef")
+-	buf2 := make([]byte, 3)
+-	r := NewContextReader(context.Background(), bytes.NewReader(buf))
+-
+-	// read first half
+-	n, err := r.Read(buf2)
+-	if n != 3 {
+-		t.Error("n should be 3")
+-	}
+-	if err != nil {
+-		t.Error("should have no error")
+-	}
+-	if string(buf2) != string(buf[:3]) {
+-		t.Error("incorrect contents")
+-	}
+-
+-	// read second half
+-	n, err = r.Read(buf2)
+-	if n != 3 {
+-		t.Error("n should be 3")
+-	}
+-	if err != nil {
+-		t.Error("should have no error")
+-	}
+-	if string(buf2) != string(buf[3:6]) {
+-		t.Error("incorrect contents")
+-	}
+-
+-	// read more.
+-	n, err = r.Read(buf2)
+-	if n != 0 {
+-		t.Error("n should be 0", n)
+-	}
+-	if err != io.EOF {
+-		t.Error("should be EOF", err)
+-	}
+-}
+-
+-func TestWriter(t *testing.T) {
+-	t.Parallel()
+-	var buf bytes.Buffer
+-	w := NewContextWriter(context.Background(), &buf)
+-
+-	// write three
+-	n, err := w.Write([]byte("abc"))
+-	if n != 3 {
+-		t.Error("n should be 3")
+-	}
+-	if err != nil {
+-		t.Error("should have no error")
+-	}
+-	if buf.String() != "abc" {
+-		t.Error("incorrect contents")
+-	}
+-
+-	// write three more
+-	n, err = w.Write([]byte("def"))
+-	if n != 3 {
+-		t.Error("n should be 3")
+-	}
+-	if err != nil {
+-		t.Error("should have no error")
+-	}
+-	if buf.String() != "abcdef" {
+-		t.Error("incorrect contents")
+-	}
+-}
+-
+-func TestReaderCancel(t *testing.T) {
+-	t.Parallel()
+-	ctx, cancel := context.WithCancel(context.Background())
+-	piper, pipew := io.Pipe()
+-	r := NewContextReader(ctx, piper)
+-
+-	buf := make([]byte, 10)
+-	done := make(chan ioret)
+-
+-	go func() {
+-		n, err := r.Read(buf)
+-		done <- ioret{err, n}
+-	}()
+-
+-	pipew.Write([]byte("abcdefghij"))
+-
+-	select {
+-	case ret := <-done:
+-		if ret.n != 10 {
+-			t.Error("ret.n should be 10", ret.n)
+-		}
+-		if ret.err != nil {
+-			t.Error("ret.err should be nil", ret.err)
+-		}
+-		if string(buf) != "abcdefghij" {
+-			t.Error("read contents differ")
+-		}
+-	case <-time.After(20 * time.Millisecond):
+-		t.Fatal("failed to read")
+-	}
+-
+-	go func() {
+-		n, err := r.Read(buf)
+-		done <- ioret{err, n}
+-	}()
+-
+-	cancel()
+-
+-	select {
+-	case ret := <-done:
+-		if ret.n != 0 {
+-			t.Error("ret.n should be 0", ret.n)
+-		}
+-		if ret.err == nil {
+-			t.Error("ret.err should be ctx error", ret.err)
+-		}
+-	case <-time.After(20 * time.Millisecond):
+-		t.Fatal("failed to stop reading after cancel")
+-	}
+-}
+-
+-func TestWriterCancel(t *testing.T) {
+-	t.Parallel()
+-	ctx, cancel := context.WithCancel(context.Background())
+-	piper, pipew := io.Pipe()
+-	w := NewContextWriter(ctx, pipew)
+-
+-	buf := make([]byte, 10)
+-	done := make(chan ioret)
+-
+-	go func() {
+-		n, err := w.Write([]byte("abcdefghij"))
+-		done <- ioret{err, n}
+-	}()
+-
+-	piper.Read(buf)
+-
+-	select {
+-	case ret := <-done:
+-		if ret.n != 10 {
+-			t.Error("ret.n should be 10", ret.n)
+-		}
+-		if ret.err != nil {
+-			t.Error("ret.err should be nil", ret.err)
+-		}
+-		if string(buf) != "abcdefghij" {
+-			t.Error("write contents differ")
+-		}
+-	case <-time.After(20 * time.Millisecond):
+-		t.Fatal("failed to write")
+-	}
+-
+-	go func() {
+-		n, err := w.Write([]byte("abcdefghij"))
+-		done <- ioret{err, n}
+-	}()
+-
+-	cancel()
+-
+-	// Write waits for the in-flight underlying write to complete before
+-	// returning on context cancel — otherwise the inner goroutine would
+-	// still be touching the underlying writer after Write returns.
+-	// Unblock pipew by reading from the other end.
+-	go func() { _, _ = piper.Read(buf) }()
+-
+-	select {
+-	case ret := <-done:
+-		if !errors.Is(ret.err, context.Canceled) {
+-			t.Error("ret.err should be ctx error", ret.err)
+-		}
+-	case <-time.After(time.Second):
+-		t.Fatal("failed to stop writing after cancel")
+-	}
+-}
+-
+-func TestReadPostCancel(t *testing.T) {
+-	t.Parallel()
+-	ctx, cancel := context.WithCancel(context.Background())
+-	piper, _ := io.Pipe()
+-	r := NewContextReader(ctx, piper)
+-
+-	buf := make([]byte, 10)
+-	done := make(chan ioret)
+-
+-	go func() {
+-		n, err := r.Read(buf)
+-		done <- ioret{err, n}
+-	}()
+-
+-	cancel()
+-
+-	select {
+-	case ret := <-done:
+-		if ret.n != 0 {
+-			t.Error("ret.n should be 0", ret.n)
+-		}
+-		if ret.err == nil {
+-			t.Error("ret.err should be ctx error", ret.err)
+-		}
+-	case <-time.After(20 * time.Millisecond):
+-		t.Fatal("failed to stop reading after cancel")
+-	}
+-}
+-
+-func TestWritePostCancel(t *testing.T) {
+-	t.Parallel()
+-	ctx, cancel := context.WithCancel(context.Background())
+-	piper, pipew := io.Pipe()
+-	w := NewContextWriter(ctx, pipew)
+-
+-	buf := []byte("abcdefghij")
+-	buf2 := make([]byte, 10)
+-	done := make(chan ioret)
+-
+-	go func() {
+-		n, err := w.Write(buf)
+-		done <- ioret{err, n}
+-	}()
+-
+-	piper.Read(buf2)
+-
+-	select {
+-	case ret := <-done:
+-		if ret.n != 10 {
+-			t.Error("ret.n should be 10", ret.n)
+-		}
+-		if ret.err != nil {
+-			t.Error("ret.err should be nil", ret.err)
+-		}
+-		if string(buf2) != "abcdefghij" {
+-			t.Error("write contents differ")
+-		}
+-	case <-time.After(20 * time.Millisecond):
+-		t.Fatal("failed to write")
+-	}
+-
+-	go func() {
+-		n, err := w.Write(buf)
+-		done <- ioret{err, n}
+-	}()
+-
+-	cancel()
+-
+-	// Write waits for the in-flight underlying write to complete before
+-	// returning on context cancel. Drain pipew so the inner goroutine can
+-	// finish.
+-	go func() { _, _ = piper.Read(buf2) }()
+-
+-	select {
+-	case ret := <-done:
+-		if !errors.Is(ret.err, context.Canceled) {
+-			t.Error("ret.err should be ctx error", ret.err)
+-		}
+-	case <-time.After(time.Second):
+-		t.Fatal("failed to stop writing after cancel")
+-	}
+-}
+-
+-func TestReadUnderlyingPanics(t *testing.T) {
+-	t.Parallel()
+-
+-	r := NewContextReader(context.Background(), nil)
+-
+-	done := make(chan struct{}, 1)
+-
+-	go func() {
+-		n, err := r.Read([]byte{})
+-		assert.Error(t, err)
+-		assert.Equal(t, 0, n)
+-
+-		done <- struct{}{}
+-	}()
+-
+-	select {
+-	case <-done:
+-	case <-time.After(time.Second):
+-		t.Error("test timed out")
+-	}
+-}
+-
+-func TestWriteUnderlyingPanics(t *testing.T) {
+-	t.Parallel()
+-
+-	r := NewContextWriter(context.Background(), nil)
+-
+-	done := make(chan struct{}, 1)
+-
+-	go func() {
+-		n, err := r.Write([]byte{'a'})
+-		assert.Error(t, err)
+-		assert.Equal(t, 0, n)
+-
+-		done <- struct{}{}
+-	}()
+-
+-	select {
+-	case <-done:
+-	case <-time.After(time.Second):
+-		t.Error("test timed out")
+-	}
+-}
+-
+-// blockingWriter blocks each Write call until release is signalled.
+-type blockingWriter struct {
+-	release chan struct{}
+-	started chan struct{}
+-}
+-
+-func (b *blockingWriter) Write(p []byte) (int, error) {
+-	select {
+-	case b.started <- struct{}{}:
+-	default:
+-	}
+-	<-b.release
+-	return len(p), nil
+-}
+-
+-func TestWriterCancelWaitsForInFlightWrite(t *testing.T) {
+-	t.Parallel()
+-
+-	ctx, cancel := context.WithCancel(context.Background())
+-	defer cancel()
+-
+-	bw := &blockingWriter{
+-		release: make(chan struct{}),
+-		started: make(chan struct{}, 1),
+-	}
+-	w := NewContextWriter(ctx, bw)
+-
+-	done := make(chan struct{})
+-	go func() {
+-		_, _ = w.Write([]byte("hello"))
+-		close(done)
+-	}()
+-
+-	<-bw.started
+-	cancel()
+-
+-	select {
+-	case <-done:
+-		t.Fatal("Write returned before the in-flight underlying write completed")
+-	case <-time.After(20 * time.Millisecond):
+-	}
+-
+-	close(bw.release)
+-	select {
+-	case <-done:
+-	case <-time.After(time.Second):
+-		t.Fatal("Write did not return after underlying write completed")
+-	}
+-}
+-
+-// panicOnReleaseWriter blocks each Write until release is signalled, then
+-// panics — modelling an underlying writer that fails while the context is
+-// already cancelled.
+-type panicOnReleaseWriter struct {
+-	release chan struct{}
+-	started chan struct{}
+-}
+-
+-func (p *panicOnReleaseWriter) Write(_ []byte) (int, error) {
+-	select {
+-	case p.started <- struct{}{}:
+-	default:
+-	}
+-	<-p.release
+-	panic("underlying write failed")
+-}
+-
+-// On cancel, Write drains the in-flight result before returning. If that
+-// in-flight write panics, the recover path must still deliver a result so the
+-// drain cannot block forever.
+-func TestWriterCancelPanicDoesNotDeadlock(t *testing.T) {
+-	t.Parallel()
+-
+-	ctx, cancel := context.WithCancel(context.Background())
+-	defer cancel()
+-
+-	pw := &panicOnReleaseWriter{
+-		release: make(chan struct{}),
+-		started: make(chan struct{}, 1),
+-	}
+-	w := NewContextWriter(ctx, pw)
+-
+-	done := make(chan struct{})
+-	go func() {
+-		_, _ = w.Write([]byte("hello"))
+-		close(done)
+-	}()
+-
+-	<-pw.started
+-	cancel()
+-
+-	select {
+-	case <-done:
+-		t.Fatal("Write returned before the in-flight underlying write completed")
+-	case <-time.After(20 * time.Millisecond):
+-	}
+-
+-	close(pw.release) // the in-flight write now panics
+-
+-	select {
+-	case <-done:
+-	case <-time.After(time.Second):
+-		t.Fatal("Write deadlocked draining a panicking in-flight write on cancel")
+-	}
+-}
+-
+-// An already-cancelled context must make Write return ctx.Err() promptly,
+-// without hanging, when the underlying write completes on its own.
+-func TestWriterPreCancelledContextReturnsPromptly(t *testing.T) {
+-	t.Parallel()
+-
+-	ctx, cancel := context.WithCancel(context.Background())
+-	cancel()
+-
+-	var buf bytes.Buffer
+-	w := NewContextWriter(ctx, &buf)
+-
+-	done := make(chan ioret, 1)
+-	go func() {
+-		n, err := w.Write([]byte("hello"))
+-		done <- ioret{err, n}
+-	}()
+-
+-	select {
+-	case ret := <-done:
+-		if !errors.Is(ret.err, context.Canceled) {
+-			t.Errorf("err should be context.Canceled, got %v", ret.err)
+-		}
+-	case <-time.After(time.Second):
+-		t.Fatal("Write did not return for an already-cancelled context")
+-	}
+-}
+-
+-// multiChunkWriter lets the first chunk through, then blocks every later chunk
+-// on release, signalling once the second chunk has started.
+-type multiChunkWriter struct {
+-	secondStarted chan struct{}
+-	release       chan struct{}
+-	calls         int
+-}
+-
+-func (w *multiChunkWriter) Write(b []byte) (int, error) {
+-	w.calls++
+-	if w.calls >= 2 {
+-		if w.calls == 2 {
+-			close(w.secondStarted)
+-		}
+-		<-w.release
+-	}
+-	return len(b), nil
+-}
+-
+-// A buffer larger than the 32KiB pool slice forces several underlying writes.
+-// Cancelling while a later chunk is in flight must not deadlock: Write waits
+-// for that chunk, then returns ctx.Err() once it is unblocked.
+-func TestWriterCancelMultiChunkDoesNotDeadlock(t *testing.T) {
+-	t.Parallel()
+-
+-	ctx, cancel := context.WithCancel(context.Background())
+-	defer cancel()
+-
+-	mw := &multiChunkWriter{
+-		secondStarted: make(chan struct{}),
+-		release:       make(chan struct{}),
+-	}
+-	w := NewContextWriter(ctx, mw)
+-
+-	done := make(chan ioret, 1)
+-	go func() {
+-		n, err := w.Write(bytes.Repeat([]byte("x"), 80*1024))
+-		done <- ioret{err, n}
+-	}()
+-
+-	<-mw.secondStarted // first chunk done, second chunk now blocked
+-	cancel()
+-
+-	select {
+-	case <-done:
+-		t.Fatal("Write returned before the in-flight chunk completed")
+-	case <-time.After(20 * time.Millisecond):
+-	}
+-
+-	close(mw.release)
+-
+-	select {
+-	case ret := <-done:
+-		if !errors.Is(ret.err, context.Canceled) {
+-			t.Errorf("err should be context.Canceled, got %v", ret.err)
+-		}
+-	case <-time.After(time.Second):
+-		t.Fatal("Write deadlocked on cancel during a multi-chunk write")
+-	}
+-}
+-
+-// Racing cancellation against a completing underlying write must never
+-// deadlock, regardless of which side wins. Run under -race to also exercise
+-// the synchronisation between the inner goroutine and Write.
+-func TestWriterCancelRaceNoDeadlock(t *testing.T) {
+-	t.Parallel()
+-
+-	for range 200 {
+-		ctx, cancel := context.WithCancel(context.Background())
+-		w := NewContextWriter(ctx, io.Discard)
+-
+-		done := make(chan struct{})
+-		go func() {
+-			_, _ = w.Write(bytes.Repeat([]byte("x"), 4096))
+-			close(done)
+-		}()
+-		go cancel()
+-
+-		select {
+-		case <-done:
+-		case <-time.After(2 * time.Second):
+-			t.Fatal("Write deadlocked under concurrent cancellation")
+-		}
+-	}
+-}
+-
+-func TestReadFinished(t *testing.T) {
+-	t.Parallel()
+-
+-	cancelled, cancel := context.WithCancel(context.Background())
+-	cancel()
+-
+-	tests := []struct {
+-		name string
+-		ctx  context.Context
+-		err  error
+-		want bool
+-	}{
+-		{
+-			name: "success on a live context",
+-			ctx:  context.Background(),
+-			err:  nil,
+-			want: true,
+-		},
+-		{
+-			name: "ordinary error on a live context",
+-			ctx:  context.Background(),
+-			err:  io.ErrUnexpectedEOF,
+-			want: true,
+-		},
+-		{
+-			// A deadline belonging to something else. The read finished, so
+-			// the reader has to be closed.
+-			name: "foreign deadline on a live context",
+-			ctx:  context.Background(),
+-			err:  context.DeadlineExceeded,
+-			want: true,
+-		},
+-		{
+-			name: "cancellation from this context",
+-			ctx:  cancelled,
+-			err:  context.Canceled,
+-			want: false,
+-		},
+-		{
+-			name: "wrapped cancellation from this context",
+-			ctx:  cancelled,
+-			err:  fmt.Errorf("negotiate: %w", context.Canceled),
+-			want: false,
+-		},
+-		{
+-			// A deadline reported by a context that is done is taken for
+-			// that context's own, whoever it belonged to. The answer is
+-			// inexact in this one direction, and errs towards not closing.
+-			name: "deadline on a cancelled context",
+-			ctx:  cancelled,
+-			err:  context.DeadlineExceeded,
+-			want: false,
+-		},
+-		{
+-			// Cancelled just after a read that had already finished.
+-			name: "ordinary error on a cancelled context",
+-			ctx:  cancelled,
+-			err:  io.ErrUnexpectedEOF,
+-			want: true,
+-		},
+-		{
+-			name: "success on a cancelled context",
+-			ctx:  cancelled,
+-			err:  nil,
+-			want: true,
+-		},
+-	}
+-
+-	for _, tt := range tests {
+-		t.Run(tt.name, func(t *testing.T) {
+-			t.Parallel()
+-			assert.Equal(t, tt.want, ReadFinished(tt.ctx, tt.err))
+-		})
+-	}
+-}
+-
+-func BenchmarkContextReader(b *testing.B) {
+-	data := bytes.Repeat([]byte{'0'}, 10000)
+-
+-	ctx := context.Background()
+-
+-	for b.Loop() {
+-		r := bytes.NewReader(data)
+-
+-		ctxr := NewContextReader(ctx, r)
+-
+-		n, _ := ctxr.Read(data)
+-		b.SetBytes(int64(n))
+-	}
+-}
+-
+-func BenchmarkContextWriter(b *testing.B) {
+-	data := bytes.Repeat([]byte{'0'}, 10000)
+-
+-	ctx := context.Background()
+-
+-	for b.Loop() {
+-		ctxw := NewContextWriter(ctx, io.Discard)
+-
+-		n, _ := ctxw.Write(data)
+-		b.SetBytes(int64(n))
+-	}
+-}
+diff --git a/utils/ioutil/sync.go b/utils/ioutil/sync.go
+index 0cb426b..5fe66c7 100644
+--- a/utils/ioutil/sync.go
++++ b/utils/ioutil/sync.go
+@@ -3,16 +3,12 @@ package ioutil
+ import (
+ 	"io"
+ 
+-	"example.internal/gitkit/v6/utils/sync"
++	_ "example.internal/gitkit/v6/utils/sync"
+ )
+ 
+ // CopyBufferPool calls io.CopyBuffer and uses a buffer from sync.GetByteSlice,
+ // to reduce the complexity when using it while avoiding the allocation
+ // of a new buffer per call.
+ func CopyBufferPool(dst io.Writer, src io.Reader) (n int64, err error) {
+-	buf := sync.GetByteSlice()
+-	n, err = io.CopyBuffer(dst, src, *buf)
+-	sync.PutByteSlice(buf)
+-
+-	return n, err
++	panic("excised: CopyBufferPool")
+ }

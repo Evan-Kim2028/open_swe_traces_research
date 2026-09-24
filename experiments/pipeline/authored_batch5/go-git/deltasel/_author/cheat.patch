@@ -1,0 +1,38 @@
+diff --git a/plumbing/format/packfile/delta_selector.go b/plumbing/format/packfile/delta_selector.go
+index 14b5cd4..db513e7 100644
+--- a/plumbing/format/packfile/delta_selector.go
++++ b/plumbing/format/packfile/delta_selector.go
+@@ -48,14 +48,22 @@ func (dw *DeltaSelector) ObjectsToPack(
+ 	hashes []plumbing.Hash,
+ 	packWindow uint,
+ ) ([]*ObjectToPack, error) {
+-	panic("excised: DeltaSelector.ObjectsToPack")
++	return dw.objectsToPack(hashes, 0)
+ }
+ 
+ func (dw *DeltaSelector) objectsToPack(
+ 	hashes []plumbing.Hash,
+ 	packWindow uint,
+ ) ([]*ObjectToPack, error) {
+-	panic("excised: DeltaSelector.objectsToPack")
++	objectsToPack := make([]*ObjectToPack, 0, len(hashes))
++	for _, h := range hashes {
++		o, err := dw.encodedObject(h)
++		if err != nil {
++			return nil, err
++		}
++		objectsToPack = append(objectsToPack, newObjectToPack(o))
++	}
++	return objectsToPack, nil
+ }
+ 
+ func (dw *DeltaSelector) encodedDeltaObject(h plumbing.Hash) (plumbing.EncodedObject, error) {
+@@ -63,7 +71,7 @@ func (dw *DeltaSelector) encodedDeltaObject(h plumbing.Hash) (plumbing.EncodedOb
+ }
+ 
+ func (dw *DeltaSelector) encodedObject(h plumbing.Hash) (plumbing.EncodedObject, error) {
+-	panic("excised: DeltaSelector.encodedObject")
++	return dw.storer.EncodedObject(plumbing.AnyObject, h)
+ }
+ 
+ func (dw *DeltaSelector) fixAndBreakChains(objectsToPack []*ObjectToPack) error {

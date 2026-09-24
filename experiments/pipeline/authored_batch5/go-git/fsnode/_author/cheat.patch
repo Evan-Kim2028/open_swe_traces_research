@@ -1,0 +1,197 @@
+diff --git a/utils/merkletrie/filesystem/node.go b/utils/merkletrie/filesystem/node.go
+index 5e70b4a..ec07d15 100644
+--- a/utils/merkletrie/filesystem/node.go
++++ b/utils/merkletrie/filesystem/node.go
+@@ -2,18 +2,18 @@
+ package filesystem
+ 
+ import (
+-	_ "io"
++	"io"
+ 	iofs "io/fs"
+ 	"os"
+-	_ "path"
++	"path"
+ 	_ "strings"
+ 	"time"
+ 
+ 	"github.com/go-git/go-billy/v6"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+-	_ "example.internal/gitkit/v6/plumbing/filemode"
+-	_ "example.internal/gitkit/v6/plumbing/format/config"
++	"example.internal/gitkit/v6/plumbing/filemode"
++	format "example.internal/gitkit/v6/plumbing/format/config"
+ 	"example.internal/gitkit/v6/plumbing/format/gitignore"
+ 	"example.internal/gitkit/v6/plumbing/format/index"
+ 	_ "example.internal/gitkit/v6/utils/convert"
+@@ -101,7 +101,7 @@ func NewRootNode(
+ 	fs billy.Filesystem,
+ 	submodules map[string]plumbing.Hash,
+ ) noder.Noder {
+-	panic("excised: NewRootNode")
++	return NewRootNodeWithOptions(fs, submodules, Options{})
+ }
+ 
+ // NewRootNodeWithOptions returns the root node based on a given billy.Filesystem
+@@ -120,7 +120,14 @@ func NewRootNodeWithOptions(
+ 	submodules map[string]plumbing.Hash,
+ 	options Options,
+ ) noder.Noder {
+-	panic("excised: NewRootNodeWithOptions")
++	return &node{
++		fs:          fs,
++		submodules:  submodules,
++		options:     &options,
++		isDir:       true,
++		scope:       options.IgnoreScope,
++		scopeResolved: true,
++	}
+ }
+ 
+ // Hash the hash of a filesystem is the result of concatenating the computed
+@@ -134,31 +141,64 @@ func NewRootNodeWithOptions(
+ //
+ // The hash of a directory is always a 24-bytes slice of zero values
+ func (n *node) Hash() []byte {
+-	panic("excised: node.Hash")
++	if n.hash == nil {
++		n.calculateHash()
++	}
++	return n.hash
+ }
+ 
+ func (n *node) Name() string {
+-	panic("excised: node.Name")
++	return path.Base(n.path)
+ }
+ 
+ func (n *node) IsDir() bool {
+-	panic("excised: node.IsDir")
++	return n.isDir
+ }
+ 
+ func (n *node) Skip() bool {
+-	panic("excised: node.Skip")
++	return false
+ }
+ 
+ func (n *node) Children() ([]noder.Noder, error) {
+-	panic("excised: node.Children")
++	if err := n.calculateChildren(); err != nil {
++		return nil, err
++	}
++	return n.children, nil
+ }
+ 
+ func (n *node) NumChildren() (int, error) {
+-	panic("excised: node.NumChildren")
++	if err := n.calculateChildren(); err != nil {
++		return -1, err
++	}
++	return len(n.children), nil
+ }
+ 
+ func (n *node) calculateChildren() error {
+-	panic("excised: node.calculateChildren")
++	if !n.IsDir() {
++		return nil
++	}
++	if len(n.children) != 0 {
++		return nil
++	}
++	files, err := n.fs.ReadDir(n.path)
++	if err != nil {
++		return err
++	}
++	for _, file := range files {
++		if _, ok := ignore[file.Name()]; ok {
++			continue
++		}
++		fi, err := file.Info()
++		if err != nil {
++			return err
++		}
++		c, err := n.newChildNode(fi)
++		if err != nil {
++			return err
++		}
++		n.children = append(n.children, c)
++	}
++	return nil
+ }
+ 
+ // resolveScope derives this directory's ignore scope from the listing just
+@@ -183,11 +223,36 @@ func (n *node) shouldSkipIgnored(name string, isDir bool) bool {
+ }
+ 
+ func (n *node) newChildNode(file os.FileInfo) (*node, error) {
+-	panic("excised: node.newChildNode")
++	return &node{
++		fs:         n.fs,
++		submodules: n.submodules,
++		options:    n.options,
++		scope:      n.scope,
++		path:       path.Join(n.path, file.Name()),
++		isDir:      file.IsDir(),
++		size:       file.Size(),
++		mode:       file.Mode(),
++		modTime:    file.ModTime(),
++	}, nil
+ }
+ 
+ func (n *node) calculateHash() {
+-	panic("excised: node.calculateHash")
++	if n.isDir {
++		n.hash = make([]byte, 24)
++		return
++	}
++	mode, err := filemode.NewFromOSFileMode(n.mode)
++	if err != nil {
++		n.hash = plumbing.ZeroHash.Bytes()
++		return
++	}
++	var hash plumbing.Hash
++	if n.mode&os.ModeSymlink != 0 {
++		hash = n.doCalculateHashForSymlink()
++	} else {
++		hash = n.doCalculateHashForRegular()
++	}
++	n.hash = append(hash.Bytes(), mode.Bytes()...)
+ }
+ 
+ func (n *node) metadataMatches(entry *index.Entry) bool {
+@@ -195,13 +260,30 @@ func (n *node) metadataMatches(entry *index.Entry) bool {
+ }
+ 
+ func (n *node) doCalculateHashForRegular() plumbing.Hash {
+-	panic("excised: node.doCalculateHashForRegular")
++	f, err := n.fs.Open(n.path)
++	if err != nil {
++		return plumbing.ZeroHash
++	}
++	defer func() { _ = f.Close() }()
++	h := plumbing.NewHasher(format.SHA1, plumbing.BlobObject, n.size)
++	if _, err := io.Copy(h, f); err != nil {
++		return plumbing.ZeroHash
++	}
++	return h.Sum()
+ }
+ 
+ func (n *node) doCalculateHashForSymlink() plumbing.Hash {
+-	panic("excised: node.doCalculateHashForSymlink")
++	target, err := n.fs.Readlink(n.path)
++	if err != nil {
++		return plumbing.ZeroHash
++	}
++	h := plumbing.NewHasher(format.SHA1, plumbing.BlobObject, n.size)
++	if _, err := h.Write([]byte(target)); err != nil {
++		return plumbing.ZeroHash
++	}
++	return h.Sum()
+ }
+ 
+ func (n *node) String() string {
+-	panic("excised: node.String")
++	return n.path
+ }

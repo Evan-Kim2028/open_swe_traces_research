@@ -47,3 +47,7 @@ dev = [
 
 [tool.ruff]
 line-length = 100
+
+[tool.pytest.ini_options]
+# analytics/worktree_salvage keeps copies of old tests that import retired modules.
+testpaths = ["tests"]

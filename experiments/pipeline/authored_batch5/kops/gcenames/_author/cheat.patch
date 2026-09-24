@@ -1,0 +1,121 @@
+--- a/upup/pkg/fi/cloudup/gce/utils.go
++++ b/upup/pkg/fi/cloudup/gce/utils.go
+@@ -18,37 +18,47 @@
+ 
+ import (
+ 	_ "errors"
+-	_ "fmt"
+-	_ "strings"
++	"fmt"
++	"strings"
+ 
+ 	_ "example.internal/clustkit/pkg/truncate"
+-	_ "example.internal/clustkit/upup/pkg/fi"
+-	_ "google.golang.org/api/googleapi"
++	"example.internal/clustkit/upup/pkg/fi"
++	"google.golang.org/api/googleapi"
+ 	_ "k8s.io/klog/v2"
+ )
+ 
+ func IsNotFound(err error) bool {
+-	panic("excised: IsNotFound")
++	apiErr, ok := err.(*googleapi.Error)
++	return ok && apiErr.Code == 404
+ }
+ 
+ func IsNotReady(err error) bool {
+-	panic("excised: IsNotReady")
++	apiErr, ok := err.(*googleapi.Error)
++	return ok && apiErr.Code == 503
+ }
+ 
+ // ClusterPrefixedName returns a cluster-prefixed name, with a maxLength
+ func ClusterPrefixedName(objectName string, clusterName string, maxLength int) string {
+-	panic("excised: ClusterPrefixedName")
++	s := strings.ReplaceAll(clusterName, ".", "-") + "-" + objectName
++	if len(s) > maxLength {
++		s = s[:maxLength]
++	}
++	return s
+ }
+ 
+ // ClusterSuffixedName returns a cluster-suffixed name, with a maxLength
+ func ClusterSuffixedName(objectName string, clusterName string, maxLength int) string {
+-	panic("excised: ClusterSuffixedName")
++	s := objectName + "-" + strings.ReplaceAll(clusterName, ".", "-")
++	if len(s) > maxLength {
++		s = s[:maxLength]
++	}
++	return s
+ }
+ 
+ // SafeClusterName returns a safe cluster name
+ // Deprecated: prefer ClusterSuffixedName
+ func SafeClusterName(clusterName string) string {
+-	panic("excised: SafeClusterName")
++	return strings.ReplaceAll(clusterName, ".", "-")
+ }
+ 
+ type Label struct {
+@@ -58,28 +68,36 @@
+ 
+ // LabelForCluster returns the GCE label we use for resources for this cluster.
+ func LabelForCluster(clusterName string) Label {
+-	panic("excised: LabelForCluster")
++	return Label{Key: gceLabelNameKubernetesCluster, Value: SafeClusterName(clusterName)}
+ }
+ 
+ // SafeTruncatedClusterName returns a safe and truncated cluster name
+ func SafeTruncatedClusterName(clusterName string, maxLength int) string {
+-	panic("excised: SafeTruncatedClusterName")
++	s := strings.ReplaceAll(clusterName, ".", "-")
++	if len(s) > maxLength {
++		s = s[:maxLength]
++	}
++	return s
+ }
+ 
+ // SafeObjectName returns the object name and cluster name escaped for GCE
+ func SafeObjectName(name string, clusterName string) string {
+-	panic("excised: SafeObjectName")
++	return SafeClusterName(name + "-" + clusterName)
+ }
+ 
+ // ServiceAccountName returns the cluster-suffixed service-account name
+ func ServiceAccountName(name string, clusterName string) string {
+-	panic("excised: ServiceAccountName")
++	return ClusterSuffixedName(name, clusterName, 30)
+ }
+ 
+ // LastComponent returns the last component of a URL, i.e. anything after the last slash
+ // If there is no slash, returns the whole string
+ func LastComponent(s string) string {
+-	panic("excised: LastComponent")
++	i := strings.LastIndex(s, "/")
++	if i != -1 {
++		return s[i+1:]
++	}
++	return s
+ }
+ 
+ // SSHUsernameForImage returns the username under which SSH public keys are registered in the
+@@ -90,10 +108,17 @@
+ // images we use the image's built-in "ubuntu" user instead. Other images keep "admin" so that SSH
+ // access to existing non-Ubuntu clusters is unchanged.
+ func SSHUsernameForImage(image string) string {
+-	panic("excised: SSHUsernameForImage")
++	if strings.Contains(strings.ToLower(image), "ubuntu") {
++		return "ubuntu"
++	}
++	return fi.SecretNameSSHPrimary
+ }
+ 
+ // ZoneToRegion maps a GCE zone name to a GCE region name, returning an error if it cannot be mapped
+ func ZoneToRegion(zone string) (string, error) {
+-	panic("excised: ZoneToRegion")
++	i := strings.LastIndex(zone, "-")
++	if i == -1 {
++		return "", fmt.Errorf("invalid GCE Zone: %v", zone)
++	}
++	return zone[:i], nil
+ }

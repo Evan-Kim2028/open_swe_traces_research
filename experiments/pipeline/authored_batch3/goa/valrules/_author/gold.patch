@@ -1,0 +1,133 @@
+--- a/expr/attribute.go
++++ b/expr/attribute.go
+@@ -843,33 +843,124 @@
+ 
+ // Validate validates the validation expression.
+ func (v *ValidationExpr) Validate(ctx string, parent eval.Expression) *eval.ValidationErrors {
+-	panic("excised: ValidationExpr.Validate")
++	verr := new(eval.ValidationErrors)
++	hasMin, hasMax := v.Minimum != nil, v.Maximum != nil
++	hasExclusiveMin, hasExclusiveMax := v.ExclusiveMinimum != nil, v.ExclusiveMaximum != nil
++	if hasMin && hasExclusiveMin {
++		verr.Add(parent, "%sboth minimum and exclusive minimum are defined", ctx)
++	}
++	if hasMax && hasExclusiveMax {
++		verr.Add(parent, "%sboth maximum and exclusive maximum are defined", ctx)
++	}
++	if hasMin && hasMax && *v.Minimum > *v.Maximum {
++		verr.Add(parent, "%sminimum is greater than maximum", ctx)
++	}
++	if hasMin && hasExclusiveMax && *v.Minimum >= *v.ExclusiveMaximum {
++		verr.Add(parent, "%sminimum is greater than or equal to exclusive maximum", ctx)
++	}
++	if hasExclusiveMin && hasExclusiveMax && *v.ExclusiveMinimum > *v.ExclusiveMaximum {
++		verr.Add(parent, "%sexclusive minimum is greater than exclusive maximum", ctx)
++	}
++	if hasExclusiveMin && hasMax && *v.ExclusiveMinimum >= *v.Maximum {
++		verr.Add(parent, "%sexclusive minimum is greater than or equal to maximum", ctx)
++	}
++	if v.MinLength != nil && v.MaxLength != nil && *v.MinLength > *v.MaxLength {
++		verr.Add(parent, "%smin length is greater than max length", ctx)
++	}
++	return verr
+ }
+ 
+ // Merge merges other into v.
+ func (v *ValidationExpr) Merge(other *ValidationExpr) {
+-	panic("excised: ValidationExpr.Merge")
++	if v.Values == nil {
++		v.Values = other.Values
++	}
++	if v.Format == "" {
++		v.Format = other.Format
++	}
++	if v.Pattern == "" {
++		v.Pattern = other.Pattern
++	}
++	if v.ExclusiveMinimum == nil || (other.ExclusiveMinimum != nil && *v.ExclusiveMinimum > *other.ExclusiveMinimum) {
++		v.ExclusiveMinimum = other.ExclusiveMinimum
++	}
++	if v.Minimum == nil || (other.Minimum != nil && *v.Minimum > *other.Minimum) {
++		v.Minimum = other.Minimum
++	}
++	if v.ExclusiveMaximum == nil || (other.ExclusiveMaximum != nil && *v.ExclusiveMaximum > *other.ExclusiveMaximum) {
++		v.ExclusiveMaximum = other.ExclusiveMaximum
++	}
++	if v.Maximum == nil || (other.Maximum != nil && *v.Maximum < *other.Maximum) {
++		v.Maximum = other.Maximum
++	}
++	if v.MinLength == nil || (other.MinLength != nil && *v.MinLength > *other.MinLength) {
++		v.MinLength = other.MinLength
++	}
++	if v.MaxLength == nil || (other.MaxLength != nil && *v.MaxLength < *other.MaxLength) {
++		v.MaxLength = other.MaxLength
++	}
++	v.AddRequired(other.Required...)
+ }
+ 
+ // AddRequired merges the required fields into v.
+ func (v *ValidationExpr) AddRequired(required ...string) {
+-	panic("excised: ValidationExpr.AddRequired")
++	for _, r := range required {
++		found := slices.Contains(v.Required, r)
++		if !found {
++			v.Required = append(v.Required, r)
++		}
++	}
+ }
+ 
+ // RemoveRequired removes the given field from the list of required fields.
+ func (v *ValidationExpr) RemoveRequired(required string) {
+-	panic("excised: ValidationExpr.RemoveRequired")
++	for i, r := range v.Required {
++		if required == r {
++			v.Required = append(v.Required[:i], v.Required[i+1:]...)
++			break
++		}
++	}
+ }
+ 
+ // HasRequiredOnly returns true if the validation only has the Required field
+ // with a non-zero value.
+ func (v *ValidationExpr) HasRequiredOnly() bool {
+-	panic("excised: ValidationExpr.HasRequiredOnly")
++	if len(v.Values) > 0 {
++		return false
++	}
++	if v.Format != "" || v.Pattern != "" {
++		return false
++	}
++	if (v.ExclusiveMinimum != nil) ||
++		(v.Minimum != nil) ||
++		(v.ExclusiveMaximum != nil) ||
++		(v.Maximum != nil) ||
++		(v.MinLength != nil) ||
++		(v.MaxLength != nil) {
++		return false
++	}
++	return true
+ }
+ 
+ // Dup makes a shallow dup of the validation.
+ func (v *ValidationExpr) Dup() *ValidationExpr {
+-	panic("excised: ValidationExpr.Dup")
++	var req []string
++	if len(v.Required) > 0 {
++		req = make([]string, len(v.Required))
++		copy(req, v.Required)
++	}
++	return &ValidationExpr{
++		Values:           v.Values,
++		Format:           v.Format,
++		Pattern:          v.Pattern,
++		ExclusiveMinimum: v.ExclusiveMinimum,
++		Minimum:          v.Minimum,
++		ExclusiveMaximum: v.ExclusiveMaximum,
++		Maximum:          v.Maximum,
++		MinLength:        v.MinLength,
++		MaxLength:        v.MaxLength,
++		Required:         req,
++	}
+ }
+ 
+ // Debug dumps the validation to STDOUT in a apikit developer friendly way.

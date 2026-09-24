@@ -136,7 +136,7 @@ Grok ran, to block (a) in advance. No post-hoc widening after a Grok miss.
 
 ## 5. IRT view
 
-Bank (`irt_summary.md`): 36,015 tasks, 7 combos, `P = sigmoid(a (θ − b))`.
+Dataset (`irt_summary.md`): 36,015 tasks, 7 combos, `P = sigmoid(a (θ − b))`.
 θ_2pl: minisweagent/qwen38_27b **+0.180** … openhands/qwen35_122b **−1.050**.
 b cuts (quantile-matched to pass-rate buckets): all_pass ≤ **−1.213**, easy ≤
 **−0.517**, mid ≤ **+0.191**, hard ≤ **+0.894**, all_fail above that.
@@ -145,12 +145,12 @@ Median b_2pl **+0.112**. Spearman(b_2pl, −solve_rate) +0.9507.
 Pass-rate → b (same cuts): solve_rate 1.0 → all_pass (b ≤ −1.213); ~0.5 → near
 median b +0.112 (mid); 0 → all_fail (b > +0.894).
 
-**Abilities (synthetic, not bank-refit):**
+**Abilities (synthetic, not dataset-refit):**
 
 | solver | scored n | rate | link |
 |---|---:|---:|---|
 | Grok 4.6 xhigh | 25/25 | 1.000 | stronger than every task attempted |
-| Nex-N2.5-Pro free | 5/6 (plus 12× d) | 0.833 scored; 0.278 of 18 trials | cheaper prober; not bank-calibrated |
+| Nex-N2.5-Pro free | 5/6 (plus 12× d) | 0.833 scored; 0.278 of 18 trials | cheaper prober; not dataset-calibrated |
 | 7 teachers | 280,116 rollouts | 0.318–0.538 | θ in [−1.050, +0.180] |
 
 **Shared tasks** (Grok and Nex both scored):
@@ -162,15 +162,15 @@ median b +0.112 (mid); 0 → all_fail (b > +0.894).
 | newrequest | pass | pass | 1.00 | all_pass, b ≤ −1.213 |
 | iserrnotfound | pass | fail | 0.50 | mid, b ∈ (−0.517, +0.191] (median +0.112) |
 
-Grok-only tasks (rungs 2–8 + two-repo): rate 1.0 **for Grok** is not a bank
+Grok-only tasks (rungs 2–8 + two-repo): rate 1.0 **for Grok** is not a dataset
 all_pass. `irt_summary.md` §3: when strong combos dominate, the pass-rate
 bucket reads easier than b (2,456 instances, 72.0% strong-combo share). Mapping
 those 19 tasks to b ≤ −1.213 would repeat that bias.
 
 **Where Grok’s θ sits vs the 7 teachers:** lower bound θ_Grok > b_IsErrNotFound
-≈ +0.112, hence **above median bank b**, and Grok’s 25/25 on constructions the
+≈ +0.112, hence **above median dataset b**, and Grok’s 25/25 on constructions the
 teachers never saw is **above the strongest teacher θ +0.180** as a rank
-statement, not a fitted magnitude (no overlapping bank items; 1PL location is
+statement, not a fitted magnitude (no overlapping dataset items; 1PL location is
 prior-anchored). Nex: θ_Nex > −1.213 (passed all_pass-mapped daily + two 1-hop
 bugs) and θ_Nex < b_IsErrNotFound ≈ +0.112, which covers almost the whole
 teacher band; 429s block a tighter place. Nex is **not** the calibrated cheap
@@ -228,7 +228,7 @@ patch passes, empty patch fails, instruction `ok` (no leaked symbol/file).
 
 ## 7. Next steps
 
-**Weaker solver, mid data:** run the bank-calibrated cheap prober
+**Weaker solver, mid data:** run the dataset-calibrated cheap prober
 `minisweagent/qwen36_27b` (θ_2pl = −0.605) or paid Nex on **rung 3**
 (`client-go-dualexpo`: hops 5, two-site, sparse) and **rung 5**
 (`client-go-extractphysical`: decoy + guard). Daily is too easy (Nex 3/3).

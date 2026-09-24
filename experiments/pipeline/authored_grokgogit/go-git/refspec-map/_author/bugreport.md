@@ -1,0 +1,1 @@
+Fetch mapping is wrong. `refs/heads/master:refs/remotes/origin/master` should match only `refs/heads/master` and rewrite it to `refs/remotes/origin/master`. The plus-star form `+refs/heads/*:refs/remotes/origin/*` should be accepted as valid. Right now those mappings panic or produce empty names, so a fetch of master never updates `origin/master`.

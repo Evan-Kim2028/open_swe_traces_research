@@ -1,0 +1,15 @@
+{
+  "impl": {
+    "github/github.go": {
+      "parseBoolResponse": "if err == nil {\n\t\treturn true, nil\n\t}\n\treturn false, err"
+    }
+  },
+  "deltests": {
+    "github/github_test.go": [
+      "TestParseBooleanResponse_true",
+      "TestParseBooleanResponse_false",
+      "TestParseBooleanResponse_error"
+    ]
+  },
+  "testre": "TestParseBooleanResponse"
+}

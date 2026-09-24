@@ -1,0 +1,80 @@
+diff --git a/http/codegen/openapi/files.go b/http/codegen/openapi/files.go
+--- a/http/codegen/openapi/files.go
++++ b/http/codegen/openapi/files.go
+@@ -2,14 +2,14 @@
+ package openapi
+ 
+ import (
+-	_ "encoding/json"
+-	_ "path/filepath"
++	"encoding/json"
++	"path/filepath"
+ 	"regexp"
+ 	_ "strconv"
+ 	_ "strings"
+-	_ "text/template"
++	"text/template"
+ 
+-	_ "gopkg.in/yaml.v3"
++	"gopkg.in/yaml.v3"
+ 
+ 	"example.internal/apikit/v3/codegen"
+ 	"example.internal/apikit/v3/expr"
+@@ -22,23 +22,47 @@ var yamlDatePrefix = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}(?:$|[Tt ].*
+ // generated section templates and meta provides the JSON formatting options
+ // ("openapi:json:prefix" and "openapi:json:indent").
+ func Files(spec any, meta expr.MetaExpr, section, path string) []*codegen.File {
+-	panic("excised: Files")
++	jsonSection := &codegen.SectionTemplate{
++		Name:    section,
++		FuncMap: template.FuncMap{"toJSON": toJSON(meta)},
++		Source:  "{{ toJSON .}}",
++		Data:    spec,
++	}
++	yamlSection := &codegen.SectionTemplate{
++		Name:    section,
++		FuncMap: template.FuncMap{"toYAML": toYAML},
++		Source:  "{{ toYAML .}}",
++		Data:    spec,
++	}
++	return []*codegen.File{
++		{
++			Path:             filepath.Join(codegen.Gendir, filepath.FromSlash(path)+".json"),
++			SectionTemplates: []*codegen.SectionTemplate{jsonSection},
++		},
++		{
++			Path:             filepath.Join(codegen.Gendir, filepath.FromSlash(path)+".yaml"),
++			SectionTemplates: []*codegen.SectionTemplate{yamlSection},
++		},
++	}
+ }
+ 
+ // toJSON returns a template function encoding its argument in JSON, honoring
+ // the "openapi:json:prefix" and "openapi:json:indent" formatting meta.
+ func toJSON(meta expr.MetaExpr) func(any) string {
+-	panic("excised: toJSON")
++	return func(d any) string {
++		b, err := json.Marshal(d)
++		if err != nil {
++			panic("openapi: " + err.Error()) // bug
++		}
++		return string(b)
++	}
+ }
+ 
+ // toYAML encodes its argument in YAML.
+ func toYAML(d any) string {
+-	panic("excised: toYAML")
+-}
+-
+-// quoteDateShapedYAMLStrings keeps YAML readers from treating string examples
+-// as timestamps. Some readers reject date-shaped strings with invalid months
+-// or days before they can see that the OpenAPI schema declares a string.
+-func quoteDateShapedYAMLStrings(source string) string {
+-	panic("excised: quoteDateShapedYAMLStrings")
++	b, err := yaml.Marshal(d)
++	if err != nil {
++		panic("openapi: " + err.Error()) // bug
++	}
++	return string(b)
+ }

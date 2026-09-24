@@ -1,0 +1,59 @@
+--- a/pkg/pki/sshkey.go
++++ b/pkg/pki/sshkey.go
+@@ -32,26 +32,51 @@
+ 
+ // parseSSHPublicKey parses the SSH public key string
+ func parseSSHPublicKey(publicKey string) (ssh.PublicKey, error) {
+-	panic("excised: parseSSHPublicKey")
++	tokens := strings.Fields(publicKey)
++	if len(tokens) < 2 {
++		return nil, fmt.Errorf("error parsing SSH public key: %q", publicKey)
++	}
++	sshPublicKeyBytes, err := base64.StdEncoding.DecodeString(tokens[1])
++	if err != nil {
++		return nil, fmt.Errorf("error decoding SSH public key: %q err: %s", publicKey, err)
++	}
++	return ssh.ParsePublicKey(sshPublicKeyBytes)
+ }
+ 
+ // colonSeparatedHex formats the byte slice SSH-fingerprint style: hex bytes separated by colons
+ func colonSeparatedHex(data []byte) string {
+-	panic("excised: colonSeparatedHex")
++	var colonSeparated bytes.Buffer
++	for i, b := range data {
++		if i != 0 {
++			colonSeparated.WriteByte(':')
++		}
++		fmt.Fprintf(&colonSeparated, "%x", b)
++	}
++	return colonSeparated.String()
+ }
+ 
+ // ComputeAWSKeyFingerprint computes the AWS-specific fingerprint of the SSH public key
+ func ComputeAWSKeyFingerprint(publicKey string) (string, error) {
+-	panic("excised: ComputeAWSKeyFingerprint")
++	sshPublicKey, err := parseSSHPublicKey(publicKey)
++	if err != nil {
++		return "", err
++	}
++	h := md5.Sum(sshPublicKey.Marshal())
++	return colonSeparatedHex(h[:]), nil
+ }
+ 
+ // ComputeOpenSSHKeyFingerprint computes the OpenSSH fingerprint of the SSH public key
+ func ComputeOpenSSHKeyFingerprint(publicKey string) (string, error) {
+-	panic("excised: ComputeOpenSSHKeyFingerprint")
++	sshPublicKey, err := parseSSHPublicKey(publicKey)
++	if err != nil {
++		return "", err
++	}
++	h := md5.Sum(sshPublicKey.Marshal())
++	return colonSeparatedHex(h[:]), nil
+ }
+ 
+ // rsaToDER gets the DER encoding of the SSH public key
+ // Annoyingly, the ssh code wraps the actual crypto keys, so we have to use reflection tricks
+ func rsaToDER(pubkey ssh.PublicKey) ([]byte, error) {
+-	panic("excised: rsaToDER")
++	return x509.MarshalPKIXPublicKey(pubkey)
+ }

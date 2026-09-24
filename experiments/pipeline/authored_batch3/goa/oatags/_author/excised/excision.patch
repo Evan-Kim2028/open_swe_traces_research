@@ -1,0 +1,340 @@
+--- a/http/codegen/openapi/extensions.go
++++ b/http/codegen/openapi/extensions.go
+@@ -1,9 +1,9 @@
+ package openapi
+ 
+ import (
+-	"encoding/json"
+-	"maps"
+-	"strings"
++	_ "encoding/json"
++	_ "maps"
++	_ "strings"
+ 
+ 	"example.internal/apikit/v3/expr"
+ )
+@@ -11,60 +11,17 @@
+ // ExtensionsFromExpr generates openapi extensions from the given meta
+ // expression.
+ func ExtensionsFromExpr(mdata expr.MetaExpr) map[string]any {
+-	swag := extensionsFromExprWithPrefix(mdata, "swagger:extension:")
+-	open := extensionsFromExprWithPrefix(mdata, "openapi:extension:")
+-	if swag == nil {
+-		return open
+-	}
+-	if open == nil {
+-		return swag
+-	}
+-	maps.Copy(swag, open)
+-	return swag
++	panic("excised: ExtensionsFromExpr")
+ }
+ 
+ // ExtensionsFromMethod returns the OpenAPI extensions authored as method
+ // metadata and advertises the method's idempotency contract when present.
+ func ExtensionsFromMethod(method *expr.MethodExpr) map[string]any {
+-	extensions := ExtensionsFromExpr(method.Meta)
+-	if !method.Idempotent {
+-		return extensions
+-	}
+-	if extensions == nil {
+-		extensions = make(map[string]any)
+-	}
+-	extensions["x-goa-idempotent"] = true
+-	return extensions
++	panic("excised: ExtensionsFromMethod")
+ }
+ 
+ // extensionsFromExprWithPrefix generates openapi extensions from
+ // the given meta expression with keys starting the given prefix.
+ func extensionsFromExprWithPrefix(mdata expr.MetaExpr, prefix string) map[string]any {
+-	if !strings.HasSuffix(prefix, ":") {
+-		prefix += ":"
+-	}
+-	extensions := make(map[string]any)
+-	for key, value := range mdata {
+-		if !strings.HasPrefix(key, prefix) {
+-			continue
+-		}
+-		name := key[len(prefix):]
+-		if strings.Contains(name, ":") {
+-			continue
+-		}
+-		if !strings.HasPrefix(name, "x-") {
+-			continue
+-		}
+-		val := value[0]
+-		ival := any(val)
+-		if err := json.Unmarshal([]byte(val), &ival); err != nil {
+-			extensions[name] = val
+-			continue
+-		}
+-		extensions[name] = ival
+-	}
+-	if len(extensions) == 0 {
+-		return nil
+-	}
+-	return extensions
++	panic("excised: extensionsFromExprWithPrefix")
+ }
+--- a/http/codegen/openapi/extensions_test.go
++++ /dev/null
+@@ -1,23 +0,0 @@
+-package openapi
+-
+-import (
+-	"testing"
+-
+-	"github.com/stretchr/testify/assert"
+-
+-	"example.internal/apikit/v3/expr"
+-)
+-
+-func TestExtensionsFromMethod(t *testing.T) {
+-	method := &expr.MethodExpr{
+-		Idempotent: true,
+-		Meta: expr.MetaExpr{
+-			"openapi:extension:x-example": {"value"},
+-		},
+-	}
+-
+-	extensions := ExtensionsFromMethod(method)
+-
+-	assert.Equal(t, true, extensions["x-goa-idempotent"])
+-	assert.Equal(t, "value", extensions["x-example"])
+-}
+--- a/http/codegen/openapi/marshal.go
++++ b/http/codegen/openapi/marshal.go
+@@ -1,51 +1,21 @@
+ package openapi
+ 
+ import (
+-	"bytes"
+-	"encoding/json"
+-	"maps"
++	_ "bytes"
++	_ "encoding/json"
++	_ "maps"
+ 
+-	"gopkg.in/yaml.v3"
++	_ "gopkg.in/yaml.v3"
+ )
+ 
+ // MarshalJSON produces the JSON resulting from encoding an object composed of
+ // the fields in v (which must me a struct) and the keys in extensions.
+ func MarshalJSON(v any, extensions map[string]any) ([]byte, error) {
+-	marshaled, err := json.Marshal(v)
+-	if err != nil {
+-		return nil, err
+-	}
+-	if len(extensions) == 0 {
+-		return marshaled, nil
+-	}
+-	decoder := json.NewDecoder(bytes.NewReader(marshaled))
+-	decoder.UseNumber()
+-	var unmarshaled map[string]any
+-	if err := decoder.Decode(&unmarshaled); err != nil {
+-		return nil, err
+-	}
+-	maps.Copy(unmarshaled, extensions)
+-	merged, err := json.Marshal(unmarshaled)
+-	if err != nil {
+-		return nil, err
+-	}
+-	return merged, nil
++	panic("excised: MarshalJSON")
+ }
+ 
+ // MarshalYAML produces the JSON resulting from encoding an object composed of
+ // the fields in v (which must me a struct) and the keys in extensions.
+ func MarshalYAML(v any, extensions map[string]any) (any, error) {
+-	if len(extensions) == 0 {
+-		return v, nil
+-	}
+-	marshaled, err := yaml.Marshal(v)
+-	if err != nil {
+-		return nil, err
+-	}
+-	var unmarshaled map[string]any
+-	if err := yaml.Unmarshal(marshaled, &unmarshaled); err != nil {
+-		return nil, err
+-	}
+-	maps.Copy(unmarshaled, extensions)
+-	return unmarshaled, nil
++	panic("excised: MarshalYAML")
+ }
+--- a/http/codegen/openapi/marshal_test.go
++++ /dev/null
+@@ -1,30 +0,0 @@
+-// This file verifies that adding OpenAPI extensions does not change values in
+-// the object being encoded.
+-package openapi
+-
+-import (
+-	"bytes"
+-	"encoding/json"
+-	"testing"
+-
+-	"github.com/stretchr/testify/require"
+-)
+-
+-type (
+-	marshalExample struct {
+-		Value int64 `json:"value"`
+-	}
+-)
+-
+-func TestMarshalJSONPreservesLargeIntegers(t *testing.T) {
+-	const value int64 = 9007199254740993
+-
+-	encoded, err := MarshalJSON(marshalExample{Value: value}, map[string]any{"x-test": true})
+-	require.NoError(t, err)
+-
+-	decoder := json.NewDecoder(bytes.NewReader(encoded))
+-	decoder.UseNumber()
+-	var decoded map[string]any
+-	require.NoError(t, decoder.Decode(&decoded))
+-	require.Equal(t, json.Number("9007199254740993"), decoded["value"])
+-}
+--- a/http/codegen/openapi/tags.go
++++ b/http/codegen/openapi/tags.go
+@@ -1,8 +1,8 @@
+ package openapi
+ 
+ import (
+-	"sort"
+-	"strings"
++	_ "sort"
++	_ "strings"
+ 
+ 	"example.internal/apikit/v3/expr"
+ )
+@@ -32,78 +32,19 @@
+ // 3.2 (summary, parent, kind) are only extracted when ver is Version32 as
+ // earlier specification versions do not define them.
+ func TagsFromExpr(mdata expr.MetaExpr, ver Version) []*Tag {
+-	return parseTags(mdata, ver == Version32)
++	panic("excised: TagsFromExpr")
+ }
+ 
+ // TagNamesFromExpr computes the names of the OpenAPI tags specified in the
+ // given metadata expressions.
+ func TagNamesFromExpr(mdata expr.MetaExpr) (tagNames []string) {
+-	for _, tag := range parseTags(mdata, false) {
+-		tagNames = append(tagNames, tag.Name)
+-	}
+-	return
++	panic("excised: TagNamesFromExpr")
+ }
+ 
+ // parseTags builds the tags defined in the given metadata. extras enables the
+ // OpenAPI 3.2 only tag fields which must not appear in 2.0 and 3.0 documents.
+ func parseTags(mdata expr.MetaExpr, extras bool) (tags []*Tag) {
+-	keys := make([]string, 0, len(mdata))
+-	for k := range mdata {
+-		keys = append(keys, k)
+-	}
+-	sort.Strings(keys)
+-	for _, key := range keys {
+-		chunks := strings.SplitN(key, ":", 4)
+-		if len(chunks) < 3 {
+-			continue
+-		}
+-		if (chunks[0] != "swagger" && chunks[0] != "openapi") || chunks[1] != "tag" {
+-			continue
+-		}
+-
+-		name := chunks[2]
+-		var tag *Tag
+-		for _, t := range tags {
+-			if t.Name == name {
+-				tag = t
+-				break
+-			}
+-		}
+-		if tag == nil {
+-			tag = &Tag{Name: chunks[2]}
+-			tags = append(tags, tag)
+-		}
+-		if len(chunks) == 4 {
+-			switch {
+-			case chunks[3] == "desc":
+-				tag.Description = mdata[key][0]
+-			case chunks[3] == "url":
+-				if tag.ExternalDocs == nil {
+-					tag.ExternalDocs = &ExternalDocs{}
+-				}
+-				tag.ExternalDocs.URL = mdata[key][0]
+-			case chunks[3] == "url:desc":
+-				if tag.ExternalDocs == nil {
+-					tag.ExternalDocs = &ExternalDocs{}
+-				}
+-				tag.ExternalDocs.Description = mdata[key][0]
+-			case extras && chunks[3] == "summary":
+-				tag.Summary = mdata[key][0]
+-			case extras && chunks[3] == "parent":
+-				tag.Parent = mdata[key][0]
+-			case extras && chunks[3] == "kind":
+-				tag.Kind = mdata[key][0]
+-			default:
+-				idx := strings.Index(key, "extension:")
+-				if idx == -1 {
+-					continue
+-				}
+-				tag.Extensions = extensionsFromExprWithPrefix(mdata, key[:idx+10])
+-			}
+-		}
+-	}
+-
+-	return tags
++	panic("excised: parseTags")
+ }
+ 
+ type _tag Tag
+--- a/http/codegen/openapi/tags_test.go
++++ /dev/null
+@@ -1,44 +0,0 @@
+-package openapi
+-
+-import (
+-	"testing"
+-
+-	"github.com/stretchr/testify/require"
+-
+-	"example.internal/apikit/v3/expr"
+-)
+-
+-func TestTagsFromExpr(t *testing.T) {
+-	meta := expr.MetaExpr{
+-		"openapi:tag:Users":         {"Users"},
+-		"openapi:tag:Users:desc":    {"User management"},
+-		"openapi:tag:Users:summary": {"Users"},
+-		"openapi:tag:Users:parent":  {"Accounts"},
+-		"openapi:tag:Users:kind":    {"nav"},
+-		"openapi:tag:Users:url":     {"https://example.com/users"},
+-	}
+-
+-	t.Run("3.0 ignores 3.2 tag fields", func(t *testing.T) {
+-		tags := TagsFromExpr(meta, Version30)
+-		require.Len(t, tags, 1)
+-		tag := tags[0]
+-		require.Equal(t, "Users", tag.Name)
+-		require.Equal(t, "User management", tag.Description)
+-		require.NotNil(t, tag.ExternalDocs)
+-		require.Equal(t, "https://example.com/users", tag.ExternalDocs.URL)
+-		require.Empty(t, tag.Summary)
+-		require.Empty(t, tag.Parent)
+-		require.Empty(t, tag.Kind)
+-	})
+-
+-	t.Run("3.2 extracts 3.2 tag fields", func(t *testing.T) {
+-		tags := TagsFromExpr(meta, Version32)
+-		require.Len(t, tags, 1)
+-		tag := tags[0]
+-		require.Equal(t, "Users", tag.Name)
+-		require.Equal(t, "User management", tag.Description)
+-		require.Equal(t, "Users", tag.Summary)
+-		require.Equal(t, "Accounts", tag.Parent)
+-		require.Equal(t, "nav", tag.Kind)
+-	})
+-}

@@ -1,0 +1,1 @@
+{"ruinfo": {"internal/resourcecontrol/resource_control.go": ["MakeRequestInfo","RequestInfo.IsWrite","RequestInfo.WriteBytes","RequestInfo.ReplicaNumber","RequestInfo.Bypass","RequestInfo.StoreID","MakeResponseInfo","getKVCPU","ResponseInfo.ReadBytes","ResponseInfo.KVCPU","ResponseInfo.Succeed"]}}

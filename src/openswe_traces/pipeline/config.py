@@ -23,6 +23,8 @@ class RepoSpec:
     commit: str
     language: str = "go"
     module: str = ""
+    # repos.yaml `src:` — the prepared tree the unit's patches were authored against.
+    src: str = ""
 
 
 @dataclass(frozen=True)
@@ -132,6 +134,7 @@ def _repos(raw: Any) -> tuple[RepoSpec, ...]:
                 commit=commit,
                 language=str(row.get("language") or "go"),
                 module=str(row.get("module") or ""),
+                src=str(row.get("src") or ""),
             )
         )
     return tuple(out)

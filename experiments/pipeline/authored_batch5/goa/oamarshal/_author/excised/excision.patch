@@ -1,0 +1,702 @@
+diff --git a/http/codegen/openapi/marshal.go b/http/codegen/openapi/marshal.go
+--- a/http/codegen/openapi/marshal.go
++++ b/http/codegen/openapi/marshal.go
+@@ -1,51 +1,21 @@
+ package openapi
+ 
+ import (
+-	"bytes"
+-	"encoding/json"
+-	"maps"
++	_ "bytes"
++	_ "encoding/json"
++	_ "maps"
+ 
+-	"gopkg.in/yaml.v3"
++	_ "gopkg.in/yaml.v3"
+ )
+ 
+ // MarshalJSON produces the JSON resulting from encoding an object composed of
+ // the fields in v (which must me a struct) and the keys in extensions.
+ func MarshalJSON(v any, extensions map[string]any) ([]byte, error) {
+-	marshaled, err := json.Marshal(v)
+-	if err != nil {
+-		return nil, err
+-	}
+-	if len(extensions) == 0 {
+-		return marshaled, nil
+-	}
+-	decoder := json.NewDecoder(bytes.NewReader(marshaled))
+-	decoder.UseNumber()
+-	var unmarshaled map[string]any
+-	if err := decoder.Decode(&unmarshaled); err != nil {
+-		return nil, err
+-	}
+-	maps.Copy(unmarshaled, extensions)
+-	merged, err := json.Marshal(unmarshaled)
+-	if err != nil {
+-		return nil, err
+-	}
+-	return merged, nil
++	panic("excised: MarshalJSON")
+ }
+ 
+ // MarshalYAML produces the JSON resulting from encoding an object composed of
+ // the fields in v (which must me a struct) and the keys in extensions.
+ func MarshalYAML(v any, extensions map[string]any) (any, error) {
+-	if len(extensions) == 0 {
+-		return v, nil
+-	}
+-	marshaled, err := yaml.Marshal(v)
+-	if err != nil {
+-		return nil, err
+-	}
+-	var unmarshaled map[string]any
+-	if err := yaml.Unmarshal(marshaled, &unmarshaled); err != nil {
+-		return nil, err
+-	}
+-	maps.Copy(unmarshaled, extensions)
+-	return unmarshaled, nil
++	panic("excised: MarshalYAML")
+ }
+diff --git a/http/codegen/openapi/marshal_test.go b/http/codegen/openapi/marshal_test.go
+--- a/http/codegen/openapi/marshal_test.go
++++ b/http/codegen/openapi/marshal_test.go
+@@ -3,11 +3,11 @@
+ package openapi
+ 
+ import (
+-	"bytes"
+-	"encoding/json"
+-	"testing"
++	_ "bytes"
++	_ "encoding/json"
++	_ "testing"
+ 
+-	"github.com/stretchr/testify/require"
++	_ "github.com/stretchr/testify/require"
+ )
+ 
+ type (
+@@ -16,15 +16,3 @@ type (
+ 	}
+ )
+ 
+-func TestMarshalJSONPreservesLargeIntegers(t *testing.T) {
+-	const value int64 = 9007199254740993
+-
+-	encoded, err := MarshalJSON(marshalExample{Value: value}, map[string]any{"x-test": true})
+-	require.NoError(t, err)
+-
+-	decoder := json.NewDecoder(bytes.NewReader(encoded))
+-	decoder.UseNumber()
+-	var decoded map[string]any
+-	require.NoError(t, decoder.Decode(&decoded))
+-	require.Equal(t, json.Number("9007199254740993"), decoded["value"])
+-}
+diff --git a/http/codegen/openapi/v2/build_isolation_test.go b/http/codegen/openapi/v2/build_isolation_test.go
+--- a/http/codegen/openapi/v2/build_isolation_test.go
++++ b/http/codegen/openapi/v2/build_isolation_test.go
+@@ -2,7 +2,7 @@
+ package openapiv2_test
+ 
+ import (
+-	"encoding/json"
++	_ "encoding/json"
+ 	"sync"
+ 	"testing"
+ 
+@@ -14,37 +14,6 @@ import (
+ 	openapiv2 "example.internal/apikit/v3/http/codegen/openapi/v2"
+ )
+ 
+-func TestBuildsKeepDefinitionsSeparate(t *testing.T) {
+-	firstRoot := expr.RunDSL(t, schemaBuildDSL("first"))
+-	secondRoot := expr.RunDSL(t, schemaBuildDSL("second"))
+-
+-	first, err := openapiv2.NewV2(
+-		firstRoot,
+-		firstRoot.API.Servers[0].Hosts[0],
+-	)
+-	require.NoError(t, err)
+-	firstJSON, err := json.Marshal(first)
+-	require.NoError(t, err)
+-
+-	second, err := openapiv2.NewV2(
+-		secondRoot,
+-		secondRoot.API.Servers[0].Hosts[0],
+-	)
+-	require.NoError(t, err)
+-
+-	firstDefinition := definitionWithProperty(first.Definitions, "first")
+-	require.NotNil(t, firstDefinition, "definitions: %#v", first.Definitions)
+-	require.Contains(t, firstDefinition.Properties, "first")
+-	require.NotContains(t, firstDefinition.Properties, "second")
+-	secondDefinition := definitionWithProperty(second.Definitions, "second")
+-	require.NotNil(t, secondDefinition, "definitions: %#v", second.Definitions)
+-	require.Contains(t, secondDefinition.Properties, "second")
+-	require.NotContains(t, secondDefinition.Properties, "first")
+-
+-	firstJSONAfterSecondBuild, err := json.Marshal(first)
+-	require.NoError(t, err)
+-	require.Equal(t, firstJSON, firstJSONAfterSecondBuild)
+-}
+ 
+ func TestBuildsAreSafeToRunTogether(t *testing.T) {
+ 	firstRoot := expr.RunDSL(t, schemaBuildDSL("first"))
+diff --git a/http/codegen/openapi/v2/builder_test.go b/http/codegen/openapi/v2/builder_test.go
+--- a/http/codegen/openapi/v2/builder_test.go
++++ b/http/codegen/openapi/v2/builder_test.go
+@@ -3,7 +3,7 @@
+ package openapiv2
+ 
+ import (
+-	"encoding/json"
++	_ "encoding/json"
+ 	"testing"
+ 
+ 	"github.com/stretchr/testify/require"
+@@ -11,7 +11,7 @@ import (
+ 	dsl "example.internal/apikit/v3/dsl"
+ 	"example.internal/apikit/v3/expr"
+ 	"example.internal/apikit/v3/http/codegen/openapi"
+-	"gopkg.in/yaml.v3"
++	_ "gopkg.in/yaml.v3"
+ )
+ 
+ func TestNewV2WithValues(t *testing.T) {
+@@ -86,81 +86,7 @@ func TestBuildPathFromFileServer(t *testing.T) {
+ 	}
+ }
+ 
+-func TestNoSecurityOverridesAPISecurity(t *testing.T) {
+-	root := codegen.RunDSL(t, noSecurityOverridesAPISecurityDSL)
+-	spec, err := NewV2(root, root.API.Servers[0].Hosts[0])
+-	require.NoError(t, err)
+-
+-	cases := map[string]struct {
+-		marshal   func(any) ([]byte, error)
+-		unmarshal func([]byte, any) error
+-	}{
+-		"json": {
+-			marshal:   json.Marshal,
+-			unmarshal: json.Unmarshal,
+-		},
+-		"yaml": {
+-			marshal:   yaml.Marshal,
+-			unmarshal: yaml.Unmarshal,
+-		},
+-	}
+-	for name, tc := range cases {
+-		t.Run(name, func(t *testing.T) {
+-			data, err := tc.marshal(spec)
+-			require.NoError(t, err)
+-
+-			var actual struct {
+-				Paths map[string]map[string]struct {
+-					Security []map[string][]string `json:"security" yaml:"security"`
+-				} `json:"paths" yaml:"paths"`
+-			}
+-			require.NoError(t, tc.unmarshal(data, &actual))
+-
+-			require.NotEmpty(t, actual.Paths["/secure"]["get"].Security, "secure operation has no security requirements")
+-			security := actual.Paths["/public"]["get"].Security
+-			require.NotNil(t, security, "NoSecurity operation omitted the operation security override")
+-			require.Empty(t, security, "NoSecurity operation security expected empty override")
+-		})
+-	}
+-}
+-
+-func TestNoSecurityOverridesServiceSecurity(t *testing.T) {
+-	root := codegen.RunDSL(t, noSecurityOverridesServiceSecurityDSL)
+-	spec, err := NewV2(root, root.API.Servers[0].Hosts[0])
+-	require.NoError(t, err)
+-
+-	cases := map[string]struct {
+-		marshal   func(any) ([]byte, error)
+-		unmarshal func([]byte, any) error
+-	}{
+-		"json": {
+-			marshal:   json.Marshal,
+-			unmarshal: json.Unmarshal,
+-		},
+-		"yaml": {
+-			marshal:   yaml.Marshal,
+-			unmarshal: yaml.Unmarshal,
+-		},
+-	}
+-	for name, tc := range cases {
+-		t.Run(name, func(t *testing.T) {
+-			data, err := tc.marshal(spec)
+-			require.NoError(t, err)
+ 
+-			var actual struct {
+-				Paths map[string]map[string]struct {
+-					Security []map[string][]string `json:"security" yaml:"security"`
+-				} `json:"paths" yaml:"paths"`
+-			}
+-			require.NoError(t, tc.unmarshal(data, &actual))
+-
+-			require.NotEmpty(t, actual.Paths["/service-secure"]["get"].Security, "secure operation has no security requirements")
+-			security := actual.Paths["/service-public"]["get"].Security
+-			require.NotNil(t, security, "NoSecurity operation omitted the operation security override")
+-			require.Empty(t, security, "NoSecurity operation security expected empty override")
+-		})
+-	}
+-}
+ 
+ func TestStreamingResponseStatusCodes(t *testing.T) {
+ 	root := codegen.RunDSL(t, streamingResponseStatusDSL)
+@@ -179,48 +105,6 @@ func TestStreamingResponseStatusCodes(t *testing.T) {
+ 	require.Contains(t, spec.Paths["/websocket"].(*Path).Get.Schemes, "ws")
+ }
+ 
+-func TestOperationSecurityMarshal(t *testing.T) {
+-	securityCases := map[string]struct {
+-		operation Operation
+-		expected  map[string]any
+-	}{
+-		"nil security is omitted": {
+-			operation: Operation{},
+-			expected:  map[string]any{},
+-		},
+-		"empty security is emitted": {
+-			operation: Operation{Security: SecurityRequirements{}},
+-			expected:  map[string]any{"security": []any{}},
+-		},
+-	}
+-	cases := map[string]struct {
+-		marshal   func(any) ([]byte, error)
+-		unmarshal func([]byte, any) error
+-	}{
+-		"json": {
+-			marshal:   json.Marshal,
+-			unmarshal: json.Unmarshal,
+-		},
+-		"yaml": {
+-			marshal:   yaml.Marshal,
+-			unmarshal: yaml.Unmarshal,
+-		},
+-	}
+-	for name, tc := range cases {
+-		t.Run(name, func(t *testing.T) {
+-			for securityName, securityTC := range securityCases {
+-				t.Run(securityName, func(t *testing.T) {
+-					data, err := tc.marshal(securityTC.operation)
+-					require.NoError(t, err)
+-
+-					var actual map[string]any
+-					require.NoError(t, tc.unmarshal(data, &actual))
+-					require.Equal(t, securityTC.expected, actual)
+-				})
+-			}
+-		})
+-	}
+-}
+ 
+ func TestSecurityDefinitionsIncludeVisibleOperationsOnly(t *testing.T) {
+ 	root := codegen.RunDSL(t, visibleSecuritySchemesDSL)
+diff --git a/http/codegen/openapi/v2/files_test.go b/http/codegen/openapi/v2/files_test.go
+--- a/http/codegen/openapi/v2/files_test.go
++++ b/http/codegen/openapi/v2/files_test.go
+@@ -101,91 +101,7 @@ func TestSections(t *testing.T) {
+ 	}
+ }
+ 
+-func TestValidations(t *testing.T) {
+-	var (
+-		goldenPath = filepath.Join("testdata", t.Name())
+-	)
+-	cases := []struct {
+-		Name string
+-		DSL  func()
+-	}{
+-		{"string", testdata.StringValidationDSL},
+-		{"integer", testdata.IntValidationDSL},
+-		{"array", testdata.ArrayValidationDSL},
+-	}
+-	for _, c := range cases {
+-		t.Run(c.Name, func(t *testing.T) {
+-			root := expr.RunDSL(t, c.DSL)
+-			oFiles, err := openapiv2.Files(root, openapi.DefaultPath20)
+-			require.NoError(t, err, "OpenAPI failed")
+-			require.NotEmpty(t, oFiles, "No swagger files")
+-			for i, o := range oFiles {
+-				tname := fmt.Sprintf("file%d", i)
+-				s := o.SectionTemplates
+-				t.Run(tname, func(t *testing.T) {
+-					require.Len(t, s, 1, "expected 1 section, got %d", len(s))
+-					require.NotEmpty(t, s[0].Source, "empty section template")
+-					require.NotNil(t, s[0].Data, "nil data")
+-					var buf bytes.Buffer
+-					tmpl := template.Must(template.New("openapi").Funcs(s[0].FuncMap).Parse(s[0].Source))
+-					require.NoError(t, tmpl.Execute(&buf, s[0].Data), "failed to render template")
+-					if filepath.Ext(o.Path) == ".json" {
+-						require.NoError(t, validateSwagger(buf.Bytes()), "invalid swagger")
+-					}
+-
+-					golden := filepath.Join(goldenPath, fmt.Sprintf("%s_%s.golden", c.Name, tname))
+-					if filepath.Ext(o.Path) == ".json" {
+-						testutil.AssertJSON(t, golden, buf.Bytes())
+-					} else {
+-						testutil.AssertString(t, golden, buf.String())
+-					}
+-				})
+-			}
+-		})
+-	}
+-}
+ 
+-func TestExtensions(t *testing.T) {
+-	var (
+-		goldenPath = filepath.Join("testdata", t.Name())
+-	)
+-	cases := []struct {
+-		Name string
+-		DSL  func()
+-	}{
+-		{"endpoint", testdata.ExtensionDSL},
+-	}
+-	for _, c := range cases {
+-		t.Run(c.Name, func(t *testing.T) {
+-			root := expr.RunDSL(t, c.DSL)
+-			oFiles, err := openapiv2.Files(root, openapi.DefaultPath20)
+-			require.NoError(t, err, "OpenAPI failed")
+-			require.NotEmpty(t, oFiles, "No swagger files")
+-			for i, o := range oFiles {
+-				tname := fmt.Sprintf("file%d", i)
+-				s := o.SectionTemplates
+-				t.Run(tname, func(t *testing.T) {
+-					require.Len(t, s, 1, "expected 1 section, got %d", len(s))
+-					require.NotEmpty(t, s[0].Source, "empty section template")
+-					require.NotNil(t, s[0].Data, "nil data")
+-					var buf bytes.Buffer
+-					tmpl := template.Must(template.New("openapi").Funcs(s[0].FuncMap).Parse(s[0].Source))
+-					require.NoError(t, tmpl.Execute(&buf, s[0].Data), "failed to render template")
+-					if filepath.Ext(o.Path) == ".json" {
+-						require.NoError(t, validateSwagger(buf.Bytes()), "invalid swagger")
+-					}
+-
+-					golden := filepath.Join(goldenPath, fmt.Sprintf("%s_%s.golden", c.Name, tname))
+-					if filepath.Ext(o.Path) == ".json" {
+-						testutil.AssertJSON(t, golden, buf.Bytes())
+-					} else {
+-						testutil.AssertString(t, golden, buf.String())
+-					}
+-				})
+-			}
+-		})
+-	}
+-}
+ 
+ func TestNamedPrimitiveParamsAndHeadersUseOpenAPIBaseTypes(t *testing.T) {
+ 	root := expr.RunDSL(t, func() {
+diff --git a/http/codegen/openapi/v2/json_schema_union_test.go b/http/codegen/openapi/v2/json_schema_union_test.go
+--- a/http/codegen/openapi/v2/json_schema_union_test.go
++++ b/http/codegen/openapi/v2/json_schema_union_test.go
+@@ -3,8 +3,8 @@
+ package openapiv2
+ 
+ import (
+-	"encoding/json"
+-	"sync"
++	_ "encoding/json"
++	_ "sync"
+ 	"testing"
+ 
+ 	"github.com/stretchr/testify/assert"
+@@ -32,47 +32,6 @@ func TestAttributeTypeSchemaCorrelatesUnionDiscriminatorAndValue(t *testing.T) {
+ 	assert.Empty(t, schema.Properties)
+ }
+ 
+-func TestBuildAttributeSchemaKeepsDefinitionsSeparate(t *testing.T) {
+-	type result struct {
+-		field  string
+-		schema *openapi.Schema
+-	}
+-	start := make(chan struct{})
+-	results := make(chan result, 2)
+-	var ready sync.WaitGroup
+-	ready.Add(2)
+-	build := func(field string) {
+-		ready.Done()
+-		<-start
+-		generator := expr.NewExampleGenerator(expr.NewFakerRandomizerFactory(field))
+-		results <- result{
+-			field: field,
+-			schema: BuildAttributeSchema(
+-				&expr.APIExpr{},
+-				namedObjectAttribute(field),
+-				generator,
+-			),
+-		}
+-	}
+-	go build("first")
+-	go build("second")
+-	ready.Wait()
+-	close(start)
+-
+-	for range 2 {
+-		built := <-results
+-		require.Equal(t, "#/$defs/Shared", built.schema.Ref)
+-		require.Contains(t, built.schema.Defs, "Shared")
+-		require.Contains(t, built.schema.Defs["Shared"].Properties, built.field)
+-		other := "first"
+-		if built.field == "first" {
+-			other = "second"
+-		}
+-		require.NotContains(t, built.schema.Defs["Shared"].Properties, other)
+-		_, err := json.Marshal(built.schema)
+-		require.NoError(t, err)
+-	}
+-}
+ 
+ func TestBuildAttributeSchemaKeepsValuesForNamedStringMapKeys(t *testing.T) {
+ 	key := &expr.UserTypeExpr{
+diff --git a/http/codegen/openapi/v2/public_api_test.go b/http/codegen/openapi/v2/public_api_test.go
+--- a/http/codegen/openapi/v2/public_api_test.go
++++ b/http/codegen/openapi/v2/public_api_test.go
+@@ -13,7 +13,7 @@ import (
+ 	"example.internal/apikit/v3/codegen"
+ 	"example.internal/apikit/v3/dsl"
+ 	"example.internal/apikit/v3/expr"
+-	"example.internal/apikit/v3/http/codegen/openapi"
++	_ "example.internal/apikit/v3/http/codegen/openapi"
+ 	openapiv2 "example.internal/apikit/v3/http/codegen/openapi/v2"
+ )
+ 
+@@ -45,41 +45,6 @@ var (
+ 	}
+ )
+ 
+-func TestDefaultFacadeMatchesWithValues(t *testing.T) {
+-	root := expr.RunDSL(t, facadeDSL)
+-	root.API.RandomizerFactory = expr.NewFakerRandomizerFactory("released facade")
+-	host := root.API.Servers[0].Hosts[0]
+-
+-	gotSpec, err := openapiv2.NewV2(root, host)
+-	require.NoError(t, err)
+-	wantSpec, err := openapiv2.NewV2WithValues(
+-		root,
+-		host,
+-		expr.NewExampleGenerator(root.API.RandomizerFactory),
+-		openapi.Values{},
+-	)
+-	require.NoError(t, err)
+-	require.Equal(t, wantSpec, gotSpec)
+-	otherSpec, err := openapiv2.NewV2WithValues(
+-		root,
+-		host,
+-		expr.NewExampleGenerator(expr.NewFakerRandomizerFactory("other")),
+-		openapi.Values{},
+-	)
+-	require.NoError(t, err)
+-	require.NotEqual(t, otherSpec, gotSpec)
+-
+-	gotFiles, err := openapiv2.Files(root, openapi.DefaultPath20)
+-	require.NoError(t, err)
+-	wantFiles, err := openapiv2.FilesWithValues(
+-		root,
+-		openapi.DefaultPath20,
+-		expr.NewExampleGenerator(root.API.RandomizerFactory),
+-		openapi.Values{},
+-	)
+-	require.NoError(t, err)
+-	require.Equal(t, renderFiles(t, wantFiles), renderFiles(t, gotFiles))
+-}
+ 
+ // renderFiles runs each file template so the test compares the documents that
+ // users receive instead of comparing template implementation details.
+diff --git a/http/codegen/openapi/v3/builder_test.go b/http/codegen/openapi/v3/builder_test.go
+--- a/http/codegen/openapi/v3/builder_test.go
++++ b/http/codegen/openapi/v3/builder_test.go
+@@ -3,7 +3,7 @@
+ package openapiv3
+ 
+ import (
+-	"encoding/json"
++	_ "encoding/json"
+ 	"fmt"
+ 	"testing"
+ 
+@@ -13,7 +13,7 @@ import (
+ 	"example.internal/apikit/v3/expr"
+ 	"example.internal/apikit/v3/http/codegen/openapi"
+ 	"example.internal/apikit/v3/http/codegen/openapi/v3/testdata/dsls"
+-	"gopkg.in/yaml.v3"
++	_ "gopkg.in/yaml.v3"
+ )
+ 
+ func TestBuildInfo(t *testing.T) {
+@@ -134,79 +134,7 @@ var localizedValuesDSL = func() {
+ 	})
+ }
+ 
+-func TestNoSecurityOverridesAPISecurity(t *testing.T) {
+-	root := codegen.RunDSL(t, noSecurityOverridesAPISecurityDSL)
+-	spec := New(root, openapi.Version30)
+-
+-	cases := map[string]struct {
+-		marshal   func(any) ([]byte, error)
+-		unmarshal func([]byte, any) error
+-	}{
+-		"json": {
+-			marshal:   json.Marshal,
+-			unmarshal: json.Unmarshal,
+-		},
+-		"yaml": {
+-			marshal:   yaml.Marshal,
+-			unmarshal: yaml.Unmarshal,
+-		},
+-	}
+-	for name, tc := range cases {
+-		t.Run(name, func(t *testing.T) {
+-			data, err := tc.marshal(spec)
+-			require.NoError(t, err)
+-
+-			var actual struct {
+-				Paths map[string]map[string]struct {
+-					Security []map[string][]string `json:"security" yaml:"security"`
+-				} `json:"paths" yaml:"paths"`
+-			}
+-			require.NoError(t, tc.unmarshal(data, &actual))
+-
+-			require.NotEmpty(t, actual.Paths["/secure"]["get"].Security, "secure operation has no security requirements")
+-			security := actual.Paths["/public"]["get"].Security
+-			require.NotNil(t, security, "NoSecurity operation omitted the operation security override")
+-			require.Empty(t, security, "NoSecurity operation security expected empty override")
+-		})
+-	}
+-}
+ 
+-func TestNoSecurityOverridesServiceSecurity(t *testing.T) {
+-	root := codegen.RunDSL(t, noSecurityOverridesServiceSecurityDSL)
+-	spec := New(root, openapi.Version30)
+-
+-	cases := map[string]struct {
+-		marshal   func(any) ([]byte, error)
+-		unmarshal func([]byte, any) error
+-	}{
+-		"json": {
+-			marshal:   json.Marshal,
+-			unmarshal: json.Unmarshal,
+-		},
+-		"yaml": {
+-			marshal:   yaml.Marshal,
+-			unmarshal: yaml.Unmarshal,
+-		},
+-	}
+-	for name, tc := range cases {
+-		t.Run(name, func(t *testing.T) {
+-			data, err := tc.marshal(spec)
+-			require.NoError(t, err)
+-
+-			var actual struct {
+-				Paths map[string]map[string]struct {
+-					Security []map[string][]string `json:"security" yaml:"security"`
+-				} `json:"paths" yaml:"paths"`
+-			}
+-			require.NoError(t, tc.unmarshal(data, &actual))
+-
+-			require.NotEmpty(t, actual.Paths["/service-secure"]["get"].Security, "secure operation has no security requirements")
+-			security := actual.Paths["/service-public"]["get"].Security
+-			require.NotNil(t, security, "NoSecurity operation omitted the operation security override")
+-			require.Empty(t, security, "NoSecurity operation security expected empty override")
+-		})
+-	}
+-}
+ 
+ func TestStreamingResponseStatusCodes(t *testing.T) {
+ 	root := codegen.RunDSL(t, streamingResponseStatusDSL)
+@@ -279,51 +207,6 @@ func TestSSEItemSchemaMatchesDataContract(t *testing.T) {
+ 	require.NotNil(t, structured.Properties["data"].ContentSchema)
+ }
+ 
+-func TestOperationSecurityMarshal(t *testing.T) {
+-	securityCases := map[string]struct {
+-		operation Operation
+-		expected  map[string]any
+-	}{
+-		"nil security is omitted": {
+-			operation: Operation{Responses: map[string]*ResponseRef{}},
+-			expected:  map[string]any{"responses": map[string]any{}},
+-		},
+-		"empty security is emitted": {
+-			operation: Operation{
+-				Responses: map[string]*ResponseRef{},
+-				Security:  SecurityRequirements{},
+-			},
+-			expected: map[string]any{"responses": map[string]any{}, "security": []any{}},
+-		},
+-	}
+-	cases := map[string]struct {
+-		marshal   func(any) ([]byte, error)
+-		unmarshal func([]byte, any) error
+-	}{
+-		"json": {
+-			marshal:   json.Marshal,
+-			unmarshal: json.Unmarshal,
+-		},
+-		"yaml": {
+-			marshal:   yaml.Marshal,
+-			unmarshal: yaml.Unmarshal,
+-		},
+-	}
+-	for name, tc := range cases {
+-		t.Run(name, func(t *testing.T) {
+-			for securityName, securityTC := range securityCases {
+-				t.Run(securityName, func(t *testing.T) {
+-					data, err := tc.marshal(securityTC.operation)
+-					require.NoError(t, err)
+-
+-					var actual map[string]any
+-					require.NoError(t, tc.unmarshal(data, &actual))
+-					require.Equal(t, securityTC.expected, actual)
+-				})
+-			}
+-		})
+-	}
+-}
+ 
+ func TestSecuritySchemesIncludeVisibleOperationsOnly(t *testing.T) {
+ 	root := codegen.RunDSL(t, visibleSecuritySchemesDSL)
+diff --git a/http/codegen/openapi/v3/public_api_test.go b/http/codegen/openapi/v3/public_api_test.go
+--- a/http/codegen/openapi/v3/public_api_test.go
++++ b/http/codegen/openapi/v3/public_api_test.go
+@@ -45,36 +45,6 @@ var (
+ 	}
+ )
+ 
+-func TestDefaultFacadeMatchesWithValues(t *testing.T) {
+-	root := expr.RunDSL(t, facadeDSL)
+-	root.API.RandomizerFactory = expr.NewFakerRandomizerFactory("released facade")
+-
+-	gotSpec := openapiv3.New(root, openapi.Version30)
+-	wantSpec := openapiv3.NewWithValues(
+-		root,
+-		openapi.Version30,
+-		expr.NewExampleGenerator(root.API.RandomizerFactory),
+-		openapi.Values{},
+-	)
+-	require.Equal(t, wantSpec, gotSpec)
+-	otherSpec := openapiv3.NewWithValues(
+-		root,
+-		openapi.Version30,
+-		expr.NewExampleGenerator(expr.NewFakerRandomizerFactory("other")),
+-		openapi.Values{},
+-	)
+-	require.NotEqual(t, otherSpec, gotSpec)
+-
+-	gotFiles := openapiv3.Files(root, openapi.Version30, openapi.DefaultPath30)
+-	wantFiles := openapiv3.FilesWithValues(
+-		root,
+-		openapi.Version30,
+-		openapi.DefaultPath30,
+-		expr.NewExampleGenerator(root.API.RandomizerFactory),
+-		openapi.Values{},
+-	)
+-	require.Equal(t, renderFiles(t, wantFiles), renderFiles(t, gotFiles))
+-}
+ 
+ // renderFiles runs each file template so the test compares the documents that
+ // users receive instead of comparing template implementation details.

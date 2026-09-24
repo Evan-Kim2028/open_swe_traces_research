@@ -1,0 +1,13 @@
+diff --git a/github/repos.go b/github/repos.go
+--- a/github/repos.go
++++ b/github/repos.go
+@@ -2384,7 +2384,8 @@ func (s *RepositoriesService) Dispatch(ctx context.Context, owner, repo string,
+ // isBranchNotProtected determines whether a branch is not protected
+ // based on the error message returned by GitHub API.
+ func isBranchNotProtected(err error) bool {
+-	return false /* excised: isBranchNotProtected */
++	var errorResponse *ErrorResponse
++	return errors.As(err, &errorResponse) && errorResponse.Message == githubBranchNotProtected
+ }
+ 
+ // EnablePrivateReporting enables private reporting of vulnerabilities for a

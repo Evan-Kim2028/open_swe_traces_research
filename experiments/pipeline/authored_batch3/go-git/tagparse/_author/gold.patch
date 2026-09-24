@@ -1,0 +1,395 @@
+diff --git a/plumbing/object/tag.go b/plumbing/object/tag.go
+index 2e42dfd..b61f232 100644
+--- a/plumbing/object/tag.go
++++ b/plumbing/object/tag.go
+@@ -9,8 +9,8 @@ import (
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+ 	"example.internal/gitkit/v6/plumbing/storer"
+-	_ "example.internal/gitkit/v6/utils/ioutil"
+-	_ "example.internal/gitkit/v6/utils/sync"
++	"example.internal/gitkit/v6/utils/ioutil"
++	"example.internal/gitkit/v6/utils/sync"
+ )
+ 
+ // ErrMalformedTag is returned when a tag object cannot be decoded because
+@@ -95,12 +95,44 @@ func (t *Tag) reset() {
+ 
+ // Decode transforms a plumbing.EncodedObject into a Tag struct.
+ func (t *Tag) Decode(o plumbing.EncodedObject) (err error) {
+-	panic("excised: Tag.Decode")
++	if o.Type() != plumbing.TagObject {
++		return ErrUnsupportedObject
++	}
++
++	t.reset()
++	t.Hash = o.Hash()
++	t.src = o
++
++	reader, err := o.Reader()
++	if err != nil {
++		return err
++	}
++	defer ioutil.CheckClose(reader, &err)
++
++	r := sync.GetBufioReader(reader)
++	defer sync.PutBufioReader(r)
++
++	s := &tagScanner{r: r, t: t}
++	for state := scanTagObject; state != nil; {
++		state, err = state(s)
++		if err != nil {
++			return err
++		}
++	}
++
++	data := s.msgbuf.Bytes()
++	if sm, _ := parseSignedBytes(data); sm >= 0 {
++		t.Signature = string(data[sm:])
++		data = data[:sm]
++	}
++	t.Message = string(data)
++
++	return nil
+ }
+ 
+ // Encode transforms a Tag into a plumbing.EncodedObject.
+ func (t *Tag) Encode(o plumbing.EncodedObject) error {
+-	panic("excised: Tag.Encode")
++	return t.encode(o, true)
+ }
+ 
+ // EncodeWithoutSignature exports a Tag into a plumbing.EncodedObject without
+@@ -122,7 +154,10 @@ func (t *Tag) Encode(o plumbing.EncodedObject) error {
+ //     and comparing exported fields; if any differ, the in-memory
+ //     representation prevails.
+ func (t *Tag) EncodeWithoutSignature(o plumbing.EncodedObject) error {
+-	panic("excised: Tag.EncodeWithoutSignature")
++	if t.matchesSource() {
++		return stripObjectSignatures(o, t.src, plumbing.TagObject)
++	}
++	return t.encode(o, false)
+ }
+ 
+ // matchesSource reports whether t.src is set and re-decoding it produces a
+@@ -133,15 +168,92 @@ func (t *Tag) EncodeWithoutSignature(o plumbing.EncodedObject) error {
+ // so mutating them must not trigger a switch to struct-encode (which would
+ // change the byte layout the caller is trying to verify against).
+ func (t *Tag) matchesSource() bool {
+-	panic("excised: Tag.matchesSource")
++	if t.src == nil {
++		return false
++	}
++	fresh := &Tag{}
++	if err := fresh.Decode(t.src); err != nil {
++		return false
++	}
++	return t.Hash == fresh.Hash &&
++		t.Name == fresh.Name &&
++		signatureEqual(t.Tagger, fresh.Tagger) &&
++		t.Message == fresh.Message &&
++		t.TargetType == fresh.TargetType &&
++		t.Target == fresh.Target
+ }
+ 
+ func (t *Tag) encode(o plumbing.EncodedObject, includeSig bool) (err error) {
+-	panic("excised: Tag.encode")
++	o.SetType(plumbing.TagObject)
++	w, err := o.Writer()
++	if err != nil {
++		return err
++	}
++	defer ioutil.CheckClose(w, &err)
++
++	if _, err = fmt.Fprintf(w,
++		"object %s\ntype %s\ntag %s\n",
++		t.Target.String(), t.TargetType.Bytes(), t.Name); err != nil {
++		return err
++	}
++
++	if !isZeroSignature(t.Tagger) {
++		if _, err = fmt.Fprint(w, "tagger "); err != nil {
++			return err
++		}
++
++		if err = t.Tagger.Encode(w); err != nil {
++			return err
++		}
++
++		if _, err = fmt.Fprint(w, "\n"); err != nil {
++			return err
++		}
++	}
++
++	// gpgsig-sha256 is emitted between the tagger line and the blank line
++	// that separates headers from the body, matching upstream's
++	// add_header_signature insertion point (commit.c:1142-1171), which
++	// builtin/tag.c:do_sign reuses when signing tags in compat mode.
++	if t.SignatureSHA256 != "" && includeSig {
++		if _, err = fmt.Fprint(w, headerpgp256+" "); err != nil {
++			return err
++		}
++		sig := strings.TrimSuffix(t.SignatureSHA256, "\n")
++		lines := strings.Split(sig, "\n")
++		if _, err = fmt.Fprint(w, strings.Join(lines, "\n ")); err != nil {
++			return err
++		}
++		if _, err = fmt.Fprint(w, "\n"); err != nil {
++			return err
++		}
++	}
++
++	if _, err = fmt.Fprint(w, "\n"); err != nil {
++		return err
++	}
++
++	if _, err = fmt.Fprint(w, t.Message); err != nil {
++		return err
++	}
++
++	// Note that this is highly sensitive to what is sent along in the
++	// message. Message *always* needs to end with a newline, or else the
++	// message and the trailing signature will be concatenated into a
++	// corrupt object. Since this is a lower-level method, we assume you
++	// know what you are doing and have already done the needful on the
++	// message in the caller.
++	if includeSig {
++		if _, err = fmt.Fprint(w, t.Signature); err != nil {
++			return err
++		}
++	}
++
++	return err
+ }
+ 
+ func isZeroSignature(s Signature) bool {
+-	panic("excised: isZeroSignature")
++	return s.Name == "" && s.Email == "" && s.When.IsZero()
+ }
+ 
+ // Commit returns the commit pointed to by the tag. If the tag points to a
+diff --git a/plumbing/object/tag_scanner.go b/plumbing/object/tag_scanner.go
+index 79536ca..41d0af3 100644
+--- a/plumbing/object/tag_scanner.go
++++ b/plumbing/object/tag_scanner.go
+@@ -3,10 +3,10 @@ package object
+ import (
+ 	"bufio"
+ 	"bytes"
+-	_ "fmt"
+-	_ "io"
++	"fmt"
++	"io"
+ 
+-	_ "example.internal/gitkit/v6/plumbing"
++	"example.internal/gitkit/v6/plumbing"
+ )
+ 
+ // tagScanner holds the working state of the tag decoder driven by the
+@@ -45,45 +45,159 @@ type tagState func(*tagScanner) (tagState, error)
+ // consuming any line that was previously pushed back by a state that
+ // decided not to handle it.
+ func (s *tagScanner) readLine() ([]byte, error) {
+-	panic("excised: tagScanner.readLine")
++	if s.pending != nil {
++		line, err := s.pending, s.pendingErr
++		s.pending, s.pendingErr = nil, nil
++		return line, err
++	}
++	return s.r.ReadBytes('\n')
+ }
+ 
+ // pushBack stashes an unconsumed line so the next state's readLine call
+ // sees it. Only one line can be pushed back at a time.
+ func (s *tagScanner) pushBack(line []byte, err error) {
+-	panic("excised: tagScanner.pushBack")
++	s.pending = line
++	s.pendingErr = err
+ }
+ 
+ // scanTagObject requires the first line to be `object HASH`, mirroring
+ // upstream's strict parse_tag_buffer (tag.c:151-156). Anything else
+ // returns ErrMalformedTag.
+ func scanTagObject(s *tagScanner) (tagState, error) {
+-	panic("excised: scanTagObject")
++	line, err := s.readLine()
++	if err != nil && err != io.EOF {
++		return nil, err
++	}
++	if len(line) == 0 || isBlankLine(line) {
++		return nil, fmt.Errorf("%w: missing object header", ErrMalformedTag)
++	}
++
++	key, data := splitHeader(line)
++	if key != "object" {
++		return nil, fmt.Errorf("%w: object header must be first", ErrMalformedTag)
++	}
++	h, herr := parseObjectIDHex(data, ErrMalformedTag, "object")
++	if herr != nil {
++		return nil, herr
++	}
++	s.t.Target = h
++	s.sawObject = true
++	if err == io.EOF {
++		return nil, nil
++	}
++	return scanTagType, nil
+ }
+ 
+ // scanTagType requires a `type` line immediately after the object header,
+ // mirroring upstream's parse_tag_buffer (tag.c:158-166).
+ func scanTagType(s *tagScanner) (tagState, error) {
+-	panic("excised: scanTagType")
++	line, err := s.readLine()
++	if err != nil && err != io.EOF {
++		return nil, err
++	}
++	if len(line) == 0 || isBlankLine(line) {
++		return nil, fmt.Errorf("%w: missing type header", ErrMalformedTag)
++	}
++
++	key, data := splitHeader(line)
++	if key != "type" {
++		return nil, fmt.Errorf("%w: type header must follow object", ErrMalformedTag)
++	}
++	ot, perr := plumbing.ParseObjectType(string(data))
++	if perr != nil {
++		return nil, perr
++	}
++	s.t.TargetType = ot
++	s.sawType = true
++	if err == io.EOF {
++		return nil, nil
++	}
++	return scanTagName, nil
+ }
+ 
+ // scanTagName requires a `tag` line immediately after the type header,
+ // mirroring upstream's parse_tag_buffer (tag.c:186-194).
+ func scanTagName(s *tagScanner) (tagState, error) {
+-	panic("excised: scanTagName")
++	line, err := s.readLine()
++	if err != nil && err != io.EOF {
++		return nil, err
++	}
++	if len(line) == 0 || isBlankLine(line) {
++		return nil, fmt.Errorf("%w: missing tag header", ErrMalformedTag)
++	}
++
++	key, data := splitHeader(line)
++	if key != "tag" {
++		return nil, fmt.Errorf("%w: tag header must follow type", ErrMalformedTag)
++	}
++	s.t.Name = string(data)
++	s.sawName = true
++	if err == io.EOF {
++		return nil, nil
++	}
++	return scanTagTagger, nil
+ }
+ 
+ // scanTagTagger accepts a `tagger` line at its canonical position. Any
+ // other header is pushed back for scanTagHeaders.
+ func scanTagTagger(s *tagScanner) (tagState, error) {
+-	panic("excised: scanTagTagger")
++	line, err := s.readLine()
++	if err != nil && err != io.EOF {
++		return nil, err
++	}
++	if len(line) == 0 {
++		return nil, nil
++	}
++	if isBlankLine(line) {
++		return scanTagMessage, nil
++	}
++
++	key, data := splitHeader(line)
++	if key == "tagger" {
++		s.t.Tagger.Decode(data)
++		s.sawTagger = true
++		if err == io.EOF {
++			return nil, nil
++		}
++		return scanTagHeaders, nil
++	}
++	s.pushBack(line, err)
++	return scanTagHeaders, nil
+ }
+ 
+ // scanTagHeaders dispatches one header line. gpgsig-sha256 hands off to
+ // scanTagPgp256Cont so the continuation block can be consumed; out-of-
+ // canonical-position fields and unknown headers are silently dropped.
+ func scanTagHeaders(s *tagScanner) (tagState, error) {
+-	panic("excised: scanTagHeaders")
++	line, err := s.readLine()
++	if err != nil && err != io.EOF {
++		return nil, err
++	}
++	if len(line) == 0 {
++		return nil, nil
++	}
++	if isBlankLine(line) {
++		return scanTagMessage, nil
++	}
++
++	key, data := splitHeader(line)
++	next := scanTagHeaders
++	switch key {
++	case "object", "type", "tag", "tagger":
++		// Out-of-canonical-position duplicates are dropped, mirroring the
++		// strict ordering of upstream's parse_tag_buffer.
++	case headerpgp256:
++		s.t.SignatureSHA256 += string(data) + "\n"
++		next = scanTagPgp256Cont
++	default:
++		// Unknown header — silently dropped (the Tag struct does not
++		// expose ExtraHeaders).
++	}
++
++	if err == io.EOF {
++		return nil, nil
++	}
++	return next, nil
+ }
+ 
+ // scanTagPgp256Cont accumulates continuation lines for the gpgsig-sha256
+@@ -93,12 +207,37 @@ func scanTagHeaders(s *tagScanner) (tagState, error) {
+ // of the same header land back here and concatenate, matching upstream's
+ // parse_buffer_signed_by_header (commit.c:1186).
+ func scanTagPgp256Cont(s *tagScanner) (tagState, error) {
+-	panic("excised: scanTagPgp256Cont")
++	line, err := s.readLine()
++	if err != nil && err != io.EOF {
++		return nil, err
++	}
++	if len(line) > 0 && line[0] == ' ' {
++		s.t.SignatureSHA256 += string(line[1:])
++		if err == io.EOF {
++			return nil, nil
++		}
++		return scanTagPgp256Cont, nil
++	}
++	if len(line) > 0 {
++		s.pushBack(line, err)
++	}
++	return scanTagHeaders, nil
+ }
+ 
+ // scanTagMessage drains the remaining bytes into the message buffer.
+ // (*Tag).Decode then runs parseSignedBytes over those bytes to peel off
+ // the optional inline trailing PGP signature.
+ func scanTagMessage(s *tagScanner) (tagState, error) {
+-	panic("excised: scanTagMessage")
++	for {
++		line, err := s.readLine()
++		if err != nil && err != io.EOF {
++			return nil, err
++		}
++		if len(line) > 0 {
++			s.msgbuf.Write(line)
++		}
++		if err == io.EOF {
++			return nil, nil
++		}
++	}
+ }

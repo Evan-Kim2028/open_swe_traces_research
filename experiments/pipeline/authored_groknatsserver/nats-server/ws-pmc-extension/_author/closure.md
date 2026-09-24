@@ -1,0 +1,1 @@
+The websocket permessage-deflate offer parser was stubbed. RFC 7692 lists the extension, but this helper's `checkPMCOnly` short-circuit and "only parameters after the matching token" scan are local. A solver reconstructing a generic extension parser would still miss the short-circuit that the client handshake uses to ignore takeover flags.

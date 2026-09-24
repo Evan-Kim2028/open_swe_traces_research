@@ -1,0 +1,527 @@
+--- a/expr/types.go
++++ b/expr/types.go
+@@ -334,26 +334,7 @@
+ 
+ // IsCompatible returns true if val is compatible with p.
+ func (p Primitive) IsCompatible(val any) bool {
+-	if p == Any {
+-		return true
+-	}
+-	switch val.(type) {
+-	case bool:
+-		return p == Boolean
+-	case int, int8, int16, int32, uint, uint8, uint16, uint32:
+-		return p == Int || p == Int32 || p == Int64 ||
+-			p == UInt || p == UInt32 || p == UInt64 ||
+-			p == Float32 || p == Float64
+-	case int64, uint64:
+-		return p == Int64 || p == UInt64 || p == Float32 || p == Float64
+-	case float32, float64:
+-		return p == Float32 || p == Float64
+-	case string:
+-		return p == String || p == Bytes
+-	case []byte:
+-		return p == Bytes
+-	}
+-	return false
++	panic("excised: Primitive.IsCompatible")
+ }
+ 
+ // Example generates a pseudo-random primitive value using the given random
+@@ -407,18 +388,7 @@
+ 
+ // IsCompatible returns true if val is compatible with p.
+ func (a *Array) IsCompatible(val any) bool {
+-	k := reflect.TypeOf(val).Kind()
+-	if k != reflect.Array && k != reflect.Slice {
+-		return false
+-	}
+-	v := reflect.ValueOf(val)
+-	for i := 0; i < v.Len(); i++ {
+-		compat := (a.ElemType.Type != nil) && a.ElemType.Type.IsCompatible(v.Index(i).Interface())
+-		if !compat {
+-			return false
+-		}
+-	}
+-	return true
++	panic("excised: Array.IsCompatible")
+ }
+ 
+ // Example generates a pseudo-random array value using the given random
+@@ -539,8 +509,7 @@
+ 
+ // IsCompatible returns true if o describes the (Go) type of val.
+ func (*Object) IsCompatible(val any) bool {
+-	k := reflect.TypeOf(val).Kind()
+-	return k == reflect.Map || k == reflect.Struct
++	panic("excised: Object.IsCompatible")
+ }
+ 
+ // Example returns a random value of the object.
+@@ -569,19 +538,7 @@
+ 
+ // IsCompatible returns true if o describes the (Go) type of val.
+ func (m *Map) IsCompatible(val any) bool {
+-	k := reflect.TypeOf(val).Kind()
+-	if k != reflect.Map {
+-		return false
+-	}
+-	v := reflect.ValueOf(val)
+-	for _, key := range v.MapKeys() {
+-		keyCompat := m.KeyType.Type == nil || m.KeyType.Type.IsCompatible(key.Interface())
+-		elemCompat := m.ElemType.Type == nil || m.ElemType.Type.IsCompatible(v.MapIndex(key).Interface())
+-		if !keyCompat || !elemCompat {
+-			return false
+-		}
+-	}
+-	return true
++	panic("excised: Map.IsCompatible")
+ }
+ 
+ // Example returns a random example value.
+@@ -651,24 +608,7 @@
+ 
+ // IsCompatible returns true if u describes the (Go) type of val.
+ func (u *Union) IsCompatible(val any) bool {
+-	envelope, ok := val.(map[string]any)
+-	if !ok || len(envelope) != 2 {
+-		return false
+-	}
+-	tag, ok := envelope[u.GetTypeKey()].(string)
+-	if !ok {
+-		return false
+-	}
+-	value, ok := envelope[u.GetValueKey()]
+-	if !ok {
+-		return false
+-	}
+-	for _, nat := range u.Values {
+-		if nat.Name == tag {
+-			return nat.Attribute.Type.IsCompatible(value)
+-		}
+-	}
+-	return false
++	panic("excised: Union.IsCompatible")
+ }
+ 
+ // Example returns a canonical tagged-envelope example.
+@@ -688,19 +628,13 @@
+ // GetTypeKey returns the discriminator field name for JSON marshaling.
+ // Defaults to "type" if not explicitly set via Meta("oneof:type:field").
+ func (u *Union) GetTypeKey() string {
+-	if u.TypeKey != "" {
+-		return u.TypeKey
+-	}
+-	return "type"
++	panic("excised: Union.GetTypeKey")
+ }
+ 
+ // GetValueKey returns the value field name for JSON marshaling.
+ // Defaults to "value" if not explicitly set via Meta("oneof:value:field").
+ func (u *Union) GetValueKey() string {
+-	if u.ValueKey != "" {
+-		return u.ValueKey
+-	}
+-	return "value"
++	panic("excised: Union.GetValueKey")
+ }
+ 
+ // QualifiedTypeName returns the qualified type name for the given data type.
+--- a/expr/types_test.go
++++ b/expr/types_test.go
+@@ -549,209 +549,7 @@
+ 	}
+ }
+ 
+-func TestPrimitiveIsCompatible(t *testing.T) {
+-	var (
+-		b    = bool(true)
+-		i    = int(1)
+-		i8   = int8(2)
+-		i16  = int16(3)
+-		i32  = int32(4)
+-		ui   = uint(5)
+-		ui8  = uint8(6)
+-		ui16 = uint16(7)
+-		ui32 = uint32(8)
+-		i64  = int64(9)
+-		ui64 = uint64(10)
+-		f32  = float32(10.1)
+-		f64  = float64(20.2)
+-		s    = string("string")
+-		bs   = []byte("bytes")
+-		ss   = []string{"foo", "bar"}
+-		is   = []int{1, 2}
+-	)
+-	cases := map[string]struct {
+-		p        Primitive
+-		values   []any
+-		expected bool
+-	}{
+-		"any": {
+-			p:        Any,
+-			values:   []any{b},
+-			expected: true,
+-		},
+-		"boolean compatible": {
+-			p:        Boolean,
+-			values:   []any{b},
+-			expected: true,
+-		},
+-		"boolean not compatible": {
+-			p:        Boolean,
+-			values:   []any{i, i8, i16, i32, ui, ui8, ui16, ui32, i64, ui64, f32, f64, s, bs},
+-			expected: false,
+-		},
+-		"int compatible": {
+-			p:        Int,
+-			values:   []any{i, i8, i16, i32, ui, ui8, ui16, ui32},
+-			expected: true,
+-		},
+-		"int not compatible": {
+-			p:        Int,
+-			values:   []any{b, i64, ui64, f32, f64, s, bs},
+-			expected: false,
+-		},
+-		"int32 compatible": {
+-			p:        Int32,
+-			values:   []any{i, i8, i16, i32, ui, ui8, ui16, ui32},
+-			expected: true,
+-		},
+-		"int32 not compatible": {
+-			p:        Int32,
+-			values:   []any{b, i64, ui64, f32, f64, s, bs},
+-			expected: false,
+-		},
+-		"int64 compatible": {
+-			p:        Int64,
+-			values:   []any{i, i8, i16, i32, ui, ui8, ui16, ui32, i64, ui64},
+-			expected: true,
+-		},
+-		"int64 not compatible": {
+-			p:        Int64,
+-			values:   []any{b, f32, f64, s, bs},
+-			expected: false,
+-		},
+-		"uint compatible": {
+-			p:        UInt,
+-			values:   []any{i, i8, i16, i32, ui, ui8, ui16, ui32},
+-			expected: true,
+-		},
+-		"uint not compatible": {
+-			p:        UInt,
+-			values:   []any{b, i64, ui64, f32, f64, s, bs},
+-			expected: false,
+-		},
+-		"uint32 compatible": {
+-			p:        UInt32,
+-			values:   []any{i, i8, i16, i32, ui, ui8, ui16, ui32},
+-			expected: true,
+-		},
+-		"uint32 not compatible": {
+-			p:        UInt32,
+-			values:   []any{b, i64, ui64, f32, f64, s, bs},
+-			expected: false,
+-		},
+-		"uint64 compatible": {
+-			p:        UInt64,
+-			values:   []any{i, i8, i16, i32, ui, ui8, ui16, ui32, i64, ui64},
+-			expected: true,
+-		},
+-		"uint64 not compatible": {
+-			p:        UInt64,
+-			values:   []any{b, f32, f64, s, bs},
+-			expected: false,
+-		},
+-		"float32 compatible": {
+-			p:        Float32,
+-			values:   []any{i, i8, i16, i32, ui, ui8, ui16, ui32, i64, ui64, f32, f64},
+-			expected: true,
+-		},
+-		"float32 not compatible": {
+-			p:        Float32,
+-			values:   []any{b, s, bs},
+-			expected: false,
+-		},
+-		"float64 compatible": {
+-			p:        Float64,
+-			values:   []any{i, i8, i16, i32, ui, ui8, ui16, ui32, i64, ui64, f32, f64},
+-			expected: true,
+-		},
+-		"float64 not compatible": {
+-			p:        Float64,
+-			values:   []any{b, s, bs},
+-			expected: false,
+-		},
+-		"string compatible": {
+-			p:        String,
+-			values:   []any{s},
+-			expected: true,
+-		},
+-		"string not compatible": {
+-			p:        String,
+-			values:   []any{b, i, i8, i16, i32, ui, ui8, ui16, ui32, i64, ui64, f32, f64, bs},
+-			expected: false,
+-		},
+-		"bytes compatible": {
+-			p:        Bytes,
+-			values:   []any{s, bs},
+-			expected: true,
+-		},
+-		"bytes not compatible": {
+-			p:        Bytes,
+-			values:   []any{b, i, i8, i16, i32, ui, ui8, ui16, ui32, i64, ui64, f32, f64},
+-			expected: false,
+-		},
+-		"not supported types": {
+-			p:        Boolean,
+-			values:   []any{ss, is},
+-			expected: false,
+-		},
+-	}
+ 
+-	for k, tc := range cases {
+-		for _, value := range tc.values {
+-			if actual := tc.p.IsCompatible(value); tc.expected != actual {
+-				t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-			}
+-		}
+-	}
+-}
+-
+-func TestArrayIsCompatible(t *testing.T) {
+-	var (
+-		b  = true
+-		i  = 1
+-		ia = [2]int{1, 2}
+-		is = []int{3, 4}
+-	)
+-	cases := map[string]struct {
+-		typ      DataType
+-		values   []any
+-		expected bool
+-	}{
+-		"compatible": {
+-			typ:      Int,
+-			values:   []any{ia, is},
+-			expected: true,
+-		},
+-		"not array and slice": {
+-			typ:      String,
+-			values:   []any{b, i},
+-			expected: false,
+-		},
+-		"array but not compatible": {
+-			typ:      String,
+-			values:   []any{ia},
+-			expected: false,
+-		},
+-		"slice but not compatible": {
+-			typ:      String,
+-			values:   []any{is},
+-			expected: false,
+-		},
+-	}
+-
+-	for k, tc := range cases {
+-		array := Array{
+-			ElemType: &AttributeExpr{
+-				Type: tc.typ,
+-			},
+-		}
+-		for _, value := range tc.values {
+-			if actual := array.IsCompatible(value); tc.expected != actual {
+-				t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-			}
+-		}
+-	}
+-}
+ 
+ func TestObjectRename(t *testing.T) {
+ 	cases := map[string]struct {
+@@ -794,185 +592,10 @@
+ 	}
+ }
+ 
+-func TestObjectIsCompatible(t *testing.T) {
+-	var (
+-		b = true
+-		i = 1
+-		s = struct {
+-			Foo string
+-		}{
+-			Foo: "foo",
+-		}
+-		m = map[int]string{}
+-	)
+-	cases := map[string]struct {
+-		values   []any
+-		expected bool
+-	}{
+-		"compatible": {
+-			values:   []any{s, m},
+-			expected: true,
+-		},
+-		"not comatible": {
+-			values:   []any{b, i},
+-			expected: false,
+-		},
+-	}
+-
+-	object := Object{}
+-	for k, tc := range cases {
+-		for _, value := range tc.values {
+-			if actual := object.IsCompatible(value); tc.expected != actual {
+-				t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-			}
+-		}
+-	}
+-}
+-
+-func TestMapIsCompatible(t *testing.T) {
+-	var (
+-		b   = true
+-		i   = 1
+-		ism = map[int]string{
+-			1: "foo",
+-		}
+-		ssm = map[string]string{
+-			"bar": "bar",
+-		}
+-		iim = map[int]int{
+-			2: 2,
+-		}
+-	)
+-	cases := map[string]struct {
+-		values   []any
+-		expected bool
+-	}{
+-		"compatible": {
+-			values:   []any{ism},
+-			expected: true,
+-		},
+-		"not comatible": {
+-			values:   []any{b, i},
+-			expected: false,
+-		},
+-		"map but not comatible": {
+-			values:   []any{ssm, iim},
+-			expected: false,
+-		},
+-	}
+-
+-	m := Map{
+-		KeyType: &AttributeExpr{
+-			Type: Int,
+-		},
+-		ElemType: &AttributeExpr{
+-			Type: String,
+-		},
+-	}
+-	for k, tc := range cases {
+-		for _, value := range tc.values {
+-			if actual := m.IsCompatible(value); tc.expected != actual {
+-				t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-			}
+-		}
+-	}
+-}
+-
+-func TestUnionGetTypeKey(t *testing.T) {
+-	cases := map[string]struct {
+-		typeKey  string
+-		expected string
+-	}{
+-		"default": {
+-			typeKey:  "",
+-			expected: "type",
+-		},
+-		"custom": {
+-			typeKey:  "kind",
+-			expected: "kind",
+-		},
+-		"discriminator": {
+-			typeKey:  "discriminator",
+-			expected: "discriminator",
+-		},
+-	}
+-
+-	for name, tc := range cases {
+-		t.Run(name, func(t *testing.T) {
+-			union := &Union{
+-				TypeName: "TestUnion",
+-				TypeKey:  tc.typeKey,
+-			}
+-			if actual := union.GetTypeKey(); actual != tc.expected {
+-				t.Errorf("got %q, expected %q", actual, tc.expected)
+-			}
+-		})
+-	}
+-}
+ 
+-func TestUnionExampleAndCompatibilityUseTaggedEnvelope(t *testing.T) {
+-	union := &Union{
+-		TypeName: "Outcome",
+-		TypeKey:  "kind",
+-		ValueKey: "data",
+-		Values: []*NamedAttributeExpr{
+-			{Name: "text", Attribute: &AttributeExpr{Type: String}},
+-			{Name: "count", Attribute: &AttributeExpr{Type: Int}},
+-		},
+-	}
+ 
+-	example := union.Example(NewExampleGenerator(NewFakerRandomizerFactory("test")).At(
+-		MethodPayloadExampleIdentity(&MethodExpr{
+-			Name:    "union",
+-			Service: &ServiceExpr{Name: "test"},
+-		}),
+-	))
+-	envelope, ok := example.(map[string]any)
+-	if !ok {
+-		t.Fatalf("expected tagged envelope, got %T", example)
+-	}
+-	if !union.IsCompatible(envelope) {
+-		t.Fatalf("generated example is not compatible: %#v", envelope)
+-	}
+-	if union.IsCompatible(map[string]any{"kind": "text", "data": 3}) {
+-		t.Fatal("expected mismatched branch value to be incompatible")
+-	}
+-	if union.IsCompatible("plain branch value") {
+-		t.Fatal("expected untagged branch value to be incompatible")
+-	}
+-}
+ 
+-func TestUnionGetValueKey(t *testing.T) {
+-	cases := map[string]struct {
+-		valueKey string
+-		expected string
+-	}{
+-		"default": {
+-			valueKey: "",
+-			expected: "value",
+-		},
+-		"custom": {
+-			valueKey: "data",
+-			expected: "data",
+-		},
+-		"payload": {
+-			valueKey: "payload",
+-			expected: "payload",
+-		},
+-	}
+ 
+-	for name, tc := range cases {
+-		t.Run(name, func(t *testing.T) {
+-			union := &Union{
+-				TypeName: "TestUnion",
+-				ValueKey: tc.valueKey,
+-			}
+-			if actual := union.GetValueKey(); actual != tc.expected {
+-				t.Errorf("got %q, expected %q", actual, tc.expected)
+-			}
+-		})
+-	}
+-}
+ 
+ func TestUnionDupPreservesCustomKeys(t *testing.T) {
+ 	original := &Union{

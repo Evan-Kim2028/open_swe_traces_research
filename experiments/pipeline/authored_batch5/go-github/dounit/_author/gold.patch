@@ -1,0 +1,33 @@
+diff --git a/github/github.go b/github/github.go
+index 7da05cb..5b1fa27 100644
+--- a/github/github.go
++++ b/github/github.go
+@@ -1616,7 +1616,7 @@ func (c *Client) bareDoUntilFound(req *http.Request, maxRedirects int) (*url.URL
+ // If rate limit is exceeded and reset time is in the future, Do returns
+ // *RateLimitError immediately without making a network API call.
+ func (c *Client) Do(req *http.Request, v any) (*Response, error) {
+-		resp, err := c.BareDo(req)
++	resp, err := c.BareDo(req)
+ 	if err != nil {
+ 		return resp, err
+ 	}
+@@ -1634,13 +1634,17 @@ func (c *Client) Do(req *http.Request, v any) (*Response, error) {
+ 		if readErr != nil {
+ 			err = readErr
+ 		} else if respBuf.Len() > 0 {
+-			decErr := json.Unmarshal(respBuf.Bytes(), v)
++			b := respBuf.Bytes()
++			decErr := json.Unmarshal(b, v)
++			if decErr != nil && len(bytes.TrimSpace(b)) == 0 {
++				decErr = nil // ignore errors caused by whitespace-only response body
++			}
+ 			if decErr != nil {
+ 				err = decErr
+ 			}
+ 		}
+ 	}
+-	return resp, err /* excised: Do */
++	return resp, err
+ }
+ 
+ // checkRateLimitBeforeDo does not make any network calls, but uses existing knowledge from

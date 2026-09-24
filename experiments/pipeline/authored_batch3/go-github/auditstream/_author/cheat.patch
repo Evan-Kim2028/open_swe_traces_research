@@ -1,0 +1,30 @@
+diff --git a/github/enterprise_audit_log_stream.go b/github/enterprise_audit_log_stream.go
+--- a/github/enterprise_audit_log_stream.go
++++ b/github/enterprise_audit_log_stream.go
+@@ -118,7 +118,7 @@ func (*DatadogConfig) isAuditLogStreamVendorConfig()            {}
+ 
+ // NewAzureBlobStreamConfig returns an AuditLogStreamConfig for Azure Blob Storage.
+ func NewAzureBlobStreamConfig(enabled bool, cfg *AzureBlobConfig) *AuditLogStreamConfig {
+-	return &AuditLogStreamConfig{Enabled: enabled} /* excised: NewAzureBlobStreamConfig */
++	return &AuditLogStreamConfig{Enabled: enabled, StreamType: "Azure Blob Storage", VendorSpecific: cfg} /* excised: NewAzureBlobStreamConfig */
+ }
+ 
+ // NewAzureHubStreamConfig returns an AuditLogStreamConfig for Azure Event Hubs.
+@@ -138,7 +138,7 @@ func NewAmazonS3AccessKeysStreamConfig(enabled bool, cfg *AmazonS3AccessKeysConf
+ 
+ // NewSplunkStreamConfig returns an AuditLogStreamConfig for Splunk.
+ func NewSplunkStreamConfig(enabled bool, cfg *SplunkConfig) *AuditLogStreamConfig {
+-	return &AuditLogStreamConfig{Enabled: enabled} /* excised: NewSplunkStreamConfig */
++	return &AuditLogStreamConfig{Enabled: enabled, StreamType: "Splunk", VendorSpecific: cfg} /* excised: NewSplunkStreamConfig */
+ }
+ 
+ // NewHecStreamConfig returns an AuditLogStreamConfig for an HTTPS Event Collector endpoint.
+@@ -153,7 +153,7 @@ func NewGoogleCloudStreamConfig(enabled bool, cfg *GoogleCloudConfig) *AuditLogS
+ 
+ // NewDatadogStreamConfig returns an AuditLogStreamConfig for Datadog.
+ func NewDatadogStreamConfig(enabled bool, cfg *DatadogConfig) *AuditLogStreamConfig {
+-	return &AuditLogStreamConfig{Enabled: enabled} /* excised: NewDatadogStreamConfig */
++	return &AuditLogStreamConfig{Enabled: enabled, StreamType: "Datadog", VendorSpecific: cfg} /* excised: NewDatadogStreamConfig */
+ }
+ 
+ // GetAuditLogStreamKey retrieves the public key used to encrypt secrets for audit log streaming.

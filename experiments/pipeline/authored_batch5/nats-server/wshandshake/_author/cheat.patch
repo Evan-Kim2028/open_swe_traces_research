@@ -1,0 +1,103 @@
+--- a/server/websocket.go
++++ b/server/websocket.go
+@@ -17,7 +17,7 @@
+ 	"bytes"
+ 	_ "crypto/fips140"
+ 	crand "crypto/rand"
+-	_ "crypto/sha1"
++	"crypto/sha1"
+ 	"crypto/tls"
+ 	"encoding/base64"
+ 	"encoding/binary"
+@@ -107,7 +107,11 @@
+ 
+ // Concatenate the key sent by the client with the GUID, then computes the SHA1 hash
+ // and returns it as a based64 encoded string.
+-func wsAcceptKey(key string) string { panic("excised: wsAcceptKey") }
++func wsAcceptKey(key string) string {
++	h := sha1.New()
++	h.Write([]byte(key))
++	return base64.StdEncoding.EncodeToString(h.Sum(nil))
++}
+ 
+ // Test can enable this so that server does not support "no-masking" requests.
+ var wsTestRejectNoMasking = false
+@@ -976,9 +980,23 @@
+ }
+ 
+ // Returns true if the header named `name` contains a token with value `value`.
+-func wsHeaderContains(header http.Header, name string, value string) bool { panic("excised: wsHeaderContains") }
++func wsHeaderContains(header http.Header, name string, value string) bool {
++	for _, s := range header[name] {
++		if s == value {
++			return true
++		}
++	}
++	return false
++}
+ 
+-func wsPMCExtensionSupport(header http.Header, checkPMCOnly bool) (bool, bool) { panic("excised: wsPMCExtensionSupport") }
++func wsPMCExtensionSupport(header http.Header, checkPMCOnly bool) (bool, bool) {
++	for _, extensionList := range header["Sec-Websocket-Extensions"] {
++		if strings.Contains(extensionList, wsPMCExtension) {
++			return true, !checkPMCOnly
++		}
++	}
++	return false, false
++}
+ 
+ // Send an HTTP error with the given `status` to the given http response writer `w`.
+ // Return an error created based on the `reason` string.
+@@ -994,11 +1012,49 @@
+ // the case if the request does not have the Origin header.
+ // Otherwise, this will check that the Origin matches the same origin or
+ // any origin in the allowed list.
+-func (w *srvWebsocket) checkOrigin(r *http.Request) error { panic("excised: checkOrigin") }
++func (w *srvWebsocket) checkOrigin(r *http.Request) error {
++	w.mu.RLock()
++	checkSame := w.sameOrigin
++	listEmpty := len(w.allowedOrigins) == 0
++	w.mu.RUnlock()
++	if !checkSame && listEmpty {
++		return nil
++	}
++	origin := r.Header.Get("Origin")
++	if origin == _EMPTY_ {
++		return errors.New("missing origin")
++	}
++	u, err := url.ParseRequestURI(origin)
++	if err != nil {
++		return err
++	}
++	if checkSame {
++		if !strings.EqualFold(u.Host, r.Host) {
++			return errors.New("not same origin")
++		}
++		return nil
++	}
++	w.mu.RLock()
++	_, allowed := w.allowedOrigins[u.Host]
++	w.mu.RUnlock()
++	if !allowed {
++		return errors.New("not in the allowed list")
++	}
++	return nil
++}
+ 
+-func wsGetHostAndPort(tls bool, hostport string) (string, string, error) { panic("excised: wsGetHostAndPort") }
++func wsGetHostAndPort(tls bool, hostport string) (string, string, error) {
++	host, port, err := net.SplitHostPort(hostport)
++	return host, port, err
++}
+ 
+-func wsMakeChallengeKey() (string, error) { panic("excised: wsMakeChallengeKey") }
++func wsMakeChallengeKey() (string, error) {
++	p := make([]byte, 8)
++	if _, err := io.ReadFull(crand.Reader, p); err != nil {
++		return _EMPTY_, err
++	}
++	return base64.StdEncoding.EncodeToString(p), nil
++}
+ 
+ // Validate the websocket related options.
+ func validateWebsocketOptions(o *Options) error {

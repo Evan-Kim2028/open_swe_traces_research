@@ -1,0 +1,105 @@
+diff --git a/github/github.go b/github/github.go
+--- a/github/github.go
++++ b/github/github.go
+@@ -1351,7 +1351,25 @@ func parseRate(r *http.Response) Rate {
+ // parseSecondaryRate parses the secondary rate related headers,
+ // and returns the time to retry after.
+ func parseSecondaryRate(r *http.Response) *time.Duration {
+-	return nil /* excised: parseSecondaryRate */
++	// According to GitHub support, the "Retry-After" header value will be
++	// an integer which represents the number of seconds that one should
++	// wait before resuming making requests.
++	if v := r.Header.Get(headerRetryAfter); v != "" {
++		retryAfterSeconds, _ := strconv.ParseInt(v, 10, 64) // Error handling is noop.
++		retryAfter := time.Duration(retryAfterSeconds) * time.Second
++		return &retryAfter
++	}
++
++	// According to GitHub support, endpoints might return x-ratelimit-reset instead,
++	// as an integer which represents the number of seconds since epoch UTC,
++	// representing the time to resume making requests.
++	if v := r.Header.Get(HeaderRateReset); v != "" {
++		secondsSinceEpoch, _ := strconv.ParseInt(v, 10, 64) // Error handling is noop.
++		retryAfter := time.Until(time.Unix(secondsSinceEpoch, 0))
++		return &retryAfter
++	}
++
++	return nil
+ }
+ 
+ // parseTokenExpiration parses the TokenExpiration related headers.
+@@ -2011,19 +2029,73 @@ func (e *Error) UnmarshalJSON(data []byte) error {
+ // *[TwoFactorAuthError] for two-factor authentication errors,
+ // and *[RedirectionError] for redirect status codes (only happens when ignoring redirections).
+ func CheckResponse(r *http.Response) error {
++	if r.StatusCode == http.StatusAccepted {
++		return &AcceptedError{}
++	}
+ 	if c := r.StatusCode; 200 <= c && c <= 299 {
+ 		return nil
+ 	}
++
+ 	errorResponse := &ErrorResponse{Response: r}
+ 	data, err := io.ReadAll(io.LimitReader(r.Body, maxErrorBodySize))
+ 	if err == nil && data != nil {
+ 		err = json.Unmarshal(data, errorResponse)
+ 		if err != nil {
++			// reset the response as if this never happened
+ 			errorResponse = &ErrorResponse{Response: r}
+ 		}
+ 	}
++	// Re-populate error response body because GitHub error responses are often
++	// undocumented and inconsistent.
++	// Issue #1136, #540.
+ 	r.Body = io.NopCloser(bytes.NewBuffer(data))
+-	return errorResponse /* excised: CheckResponse */
++	switch {
++	case r.StatusCode == http.StatusUnauthorized && strings.HasPrefix(r.Header.Get(headerOTP), "required"):
++		return (*TwoFactorAuthError)(errorResponse)
++	// Primary rate limit exceeded: GitHub returns 403 or 429 with X-RateLimit-Remaining: 0
++	// See: https://docs.github.com/rest/using-the-rest-api/rate-limits-for-the-rest-api?apiVersion=2022-11-28
++	case (r.StatusCode == http.StatusForbidden || r.StatusCode == http.StatusTooManyRequests) &&
++		r.Header.Get(HeaderRateRemaining) == "0":
++		return &RateLimitError{
++			Rate:     parseRate(r),
++			Response: errorResponse.Response,
++			Message:  errorResponse.Message,
++		}
++	// Secondary rate limit exceeded: GitHub returns 403 or 429 with specific documentation_url
++	// See: https://docs.github.com/rest/using-the-rest-api/rate-limits-for-the-rest-api?apiVersion=2022-11-28#about-secondary-rate-limits
++	case (r.StatusCode == http.StatusForbidden || r.StatusCode == http.StatusTooManyRequests) &&
++		(strings.HasSuffix(errorResponse.DocumentationURL, "#abuse-rate-limits") ||
++			strings.HasSuffix(errorResponse.DocumentationURL, "secondary-rate-limits")):
++		abuseRateLimitError := &AbuseRateLimitError{
++			Response: errorResponse.Response,
++			Message:  errorResponse.Message,
++		}
++		if retryAfter := parseSecondaryRate(r); retryAfter != nil {
++			abuseRateLimitError.RetryAfter = retryAfter
++		}
++		return abuseRateLimitError
++	// Check that the status code is a redirection and return a sentinel error that can be used to handle special cases
++	// where 302 is considered a successful result.
++	// This should never happen with the default `CheckRedirect`, because it would return a `url.Error` that should be handled upstream.
++	case r.StatusCode == http.StatusMovedPermanently ||
++		r.StatusCode == http.StatusFound ||
++		r.StatusCode == http.StatusSeeOther ||
++		r.StatusCode == http.StatusTemporaryRedirect ||
++		r.StatusCode == http.StatusPermanentRedirect:
++
++		locationStr := r.Header.Get("Location")
++		var location *url.URL
++		if locationStr != "" {
++			location, _ = url.Parse(locationStr)
++		}
++		return &RedirectionError{
++			Response:   errorResponse.Response,
++			StatusCode: r.StatusCode,
++			Location:   location,
++		}
++	default:
++		return errorResponse
++	}
+ }
+ 
+ // parseBoolResponse determines the boolean result from a GitHub API response.

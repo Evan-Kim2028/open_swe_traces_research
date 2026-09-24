@@ -1,0 +1,171 @@
+--- a/server/parser.go
++++ b/server/parser.go
+@@ -15,8 +15,8 @@
+ 
+ import (
+ 	_ "bufio"
+-	_ "bytes"
+-	_ "fmt"
++	"bytes"
++	"fmt"
+ 	"net/http"
+ 	_ "net/textproto"
+ )
+@@ -134,17 +134,152 @@
+ 	INFO_ARG
+ )
+ 
+-func (c *client) parse(buf []byte) error { panic("excised: parse") }
++func (c *client) parse(buf []byte) error {
++	if c.isMqtt() {
++		return c.mqttParse(buf)
++	}
++	i := 0
++	for i < len(buf) {
++		if c.state == MSG_PAYLOAD {
++			end := c.as + c.pa.size + LEN_CR_LF
++			if end > len(buf) {
++				return nil
++			}
++			msg := buf[c.as:end]
++			if msg[len(msg)-2] != '\r' || msg[len(msg)-1] != '\n' {
++				goto parseErr
++			}
++			c.processInboundMsg(msg)
++			c.msgBuf, c.header = nil, nil
++			c.drop, c.as, c.state = 0, i, OP_START
++			c.pa.arg, c.pa.pacache, c.pa.origin, c.pa.account, c.pa.subject, c.pa.mapped = nil, nil, nil, nil, nil, nil
++			c.pa.reply, c.pa.hdr, c.pa.size, c.pa.szb, c.pa.hdb, c.pa.queues = nil, -1, 0, nil, nil, nil
++			c.pa.trace = nil
++			c.pa.delivered = false
++			i = end
++			continue
++		}
++		j := bytes.IndexByte(buf[i:], '\n')
++		if j < 0 {
++			return nil
++		}
++		line := buf[i : i+j]
++		if n := len(line); n > 0 && line[n-1] == '\r' {
++			line = line[:n-1]
++		}
++		i += j + 1
++		sp := bytes.IndexAny(line, " \t")
++		op, arg := line, []byte(nil)
++		if sp >= 0 {
++			op, arg = line[:sp], bytes.TrimLeft(line[sp:], " \t")
++		}
++		var err error
++		payload := false
++		switch {
++		case bytes.EqualFold(op, []byte("PING")):
++			c.processPing()
++		case bytes.EqualFold(op, []byte("PONG")):
++			c.processPong()
++		case bytes.EqualFold(op, []byte("+OK")):
++		case bytes.EqualFold(op, []byte("-ERR")):
++			c.processErr(string(arg))
++		case bytes.EqualFold(op, []byte("CONNECT")):
++			err = c.processConnect(arg)
++		case bytes.EqualFold(op, []byte("INFO")):
++			err = c.processInfo(arg)
++		case bytes.EqualFold(op, []byte("SUB")):
++			err = c.parseSub(arg, false)
++		case bytes.EqualFold(op, []byte("UNSUB")):
++			err = c.processUnsub(arg)
++		case bytes.EqualFold(op, []byte("A+")):
++			err = c.processAccountSub(arg)
++		case bytes.EqualFold(op, []byte("A-")):
++			c.processAccountUnsub(arg)
++		case bytes.EqualFold(op, []byte("RS+")):
++			err = c.processRemoteSub(arg, false, false)
++		case bytes.EqualFold(op, []byte("RS-")):
++			err = c.processRemoteUnsub(arg, false)
++		case bytes.EqualFold(op, []byte("LS+")):
++			if c.kind == ROUTER {
++				err = c.processRemoteSub(arg, true, true)
++			} else {
++				err = c.processLeafSub(arg)
++			}
++		case bytes.EqualFold(op, []byte("LS-")):
++			if c.kind == ROUTER {
++				err = c.processRemoteUnsub(arg, true)
++			} else {
++				err = c.processLeafUnsub(arg)
++			}
++		case bytes.EqualFold(op, []byte("PUB")):
++			c.pa.hdr = -1
++			err = c.processPub(arg)
++			payload = err == nil
++		case bytes.EqualFold(op, []byte("HPUB")):
++			c.pa.hdr = 0
++			err = c.processHeaderPub(arg, buf[i:])
++			payload = err == nil
++		case bytes.EqualFold(op, []byte("RMSG")):
++			err = c.processRoutedMsgArgs(arg)
++			payload = err == nil
++		case bytes.EqualFold(op, []byte("LMSG")):
++			if c.kind == LEAF {
++				err = c.processLeafMsgArgs(arg)
++			} else {
++				err = c.processRoutedOriginClusterMsgArgs(arg)
++			}
++			payload = err == nil
++		case bytes.EqualFold(op, []byte("HMSG")):
++			if c.kind == LEAF {
++				err = c.processLeafHeaderMsgArgs(arg)
++			} else {
++				err = c.processRoutedHeaderMsgArgs(arg)
++			}
++			payload = err == nil
++		default:
++			goto parseErr
++		}
++		if err != nil {
++			return err
++		}
++		if payload {
++			c.as = i
++			c.state = MSG_PAYLOAD
++		}
++	}
++	return nil
+ 
+-func protoSnippet(start, max int, buf []byte) string { panic("excised: protoSnippet") }
++parseErr:
++	c.sendErr("Unknown Protocol Operation")
++	snip := protoSnippet(i, PROTO_SNIPPET_SIZE, buf)
++	err := fmt.Errorf("%s parser ERROR, state=%d, i=%d: proto='%s...'", c.kindString(), c.state, i, snip)
++	return err
++}
++
++func protoSnippet(start, max int, buf []byte) string {
++	stop := start + max
++	if stop > len(buf) {
++		stop = len(buf)
++	}
++	return fmt.Sprintf("%q", buf[start:stop])
++}
+ 
+ // Check if the length of buffer `arg` is over the max control line limit `mcl`.
+ // If so, an error is sent to the client and the connection is closed.
+ // The error ErrMaxControlLine is returned.
+-func (c *client) overMaxControlLineLimit(arg []byte, mcl int32) error { panic("excised: overMaxControlLineLimit") }
++func (c *client) overMaxControlLineLimit(arg []byte, mcl int32) error {
++	return nil
++}
+ 
+ // clonePubArg is used when the split buffer scenario has the pubArg in the existing read buffer, but
+ // we need to hold onto it into the next read.
+-func (c *client) clonePubArg(lmsg bool) error { panic("excised: clonePubArg") }
++func (c *client) clonePubArg(lmsg bool) error {
++	c.argBuf = c.scratch[:0]
++	c.argBuf = append(c.argBuf, c.pa.arg...)
++	if c.pa.hdr < 0 {
++		return c.processPub(c.argBuf)
++	}
++	return c.processHeaderPub(c.argBuf, nil)
++}
+ 
+-func (ps *parseState) getHeader() http.Header { panic("excised: getHeader") }
++func (ps *parseState) getHeader() http.Header { return nil }

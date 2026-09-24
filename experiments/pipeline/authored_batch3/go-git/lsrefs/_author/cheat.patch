@@ -1,0 +1,80 @@
+diff --git a/plumbing/protocol/packp/lsrefs.go b/plumbing/protocol/packp/lsrefs.go
+index 9008292..2db33da 100644
+--- a/plumbing/protocol/packp/lsrefs.go
++++ b/plumbing/protocol/packp/lsrefs.go
+@@ -4,11 +4,11 @@ import (
+ 	_ "errors"
+ 	_ "fmt"
+ 	"io"
+-	_ "strings"
++	"strings"
+ 	_ "unicode"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+-	_ "example.internal/gitkit/v6/plumbing/format/pktline"
++	"example.internal/gitkit/v6/plumbing/format/pktline"
+ )
+ 
+ // LsRefsArgs represents the arguments for the v2 ls-refs command.
+@@ -25,7 +25,21 @@ type LsRefsArgs struct {
+ // written as a separate pkt-line. The caller is responsible for writing
+ // the delim-pkt before and the flush-pkt after these arguments.
+ func (r *LsRefsArgs) Encode(w io.Writer) error {
+-	panic("excised: LsRefsArgs.Encode")
++	for _, p := range r.RefPrefixes {
++		if _, err := pktline.Writef(w, "ref-prefix %s\n", p); err != nil {
++			return err
++		}
++	}
++	if r.Peel {
++		pktline.WriteString(w, "peel\n")
++	}
++	if r.Symrefs {
++		pktline.WriteString(w, "symrefs\n")
++	}
++	if r.Unborn {
++		pktline.WriteString(w, "unborn\n")
++	}
++	return nil
+ }
+ 
+ // validateRefPrefix rejects a ref-prefix that cannot be safely framed as a
+@@ -70,12 +84,36 @@ type LsRefsOutput struct {
+ // a symbolic ref carries the resolved oid of its target when present. The caller
+ // is responsible for writing the flush-pkt after these lines.
+ func (r *LsRefsOutput) Encode(w io.Writer) error {
+-	panic("excised: LsRefsOutput.Encode")
++	for _, ref := range r.References {
++		if ref.Type() == plumbing.SymbolicReference {
++			if _, err := pktline.Writef(w, "%s %s symref-target:%s\n",
++				"unborn", ref.Name(), ref.Target()); err != nil {
++				return err
++			}
++			continue
++		}
++		if _, err := pktline.Writef(w, "%s %s\n", ref.Hash(), ref.Name()); err != nil {
++			return err
++		}
++	}
++	return nil
+ }
+ 
+ // Decode reads ref lines until a flush-pkt.
+ func (r *LsRefsOutput) Decode(rd io.Reader) error {
+-	panic("excised: LsRefsOutput.Decode")
++	for {
++		l, pkt, err := pktline.ReadLine(rd)
++		if err != nil || l == pktline.Flush {
++			return nil
++		}
++		parts := strings.Fields(string(pkt))
++		if len(parts) < 2 {
++			continue
++		}
++		h, _ := plumbing.FromHex(parts[0])
++		r.References = append(r.References,
++			plumbing.NewHashReference(plumbing.ReferenceName(parts[1]), h))
++	}
+ }
+ 
+ // parseLsRefsLine parses a single ref line from ls-refs output.

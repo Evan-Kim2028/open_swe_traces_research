@@ -1,0 +1,12 @@
+{
+ "srvresp": {
+  "plumbing/protocol/packp/srvresp.go": [
+   "ACKStatus.String",
+   "ServerResponse.Decode",
+   "ServerResponse.decodeLine",
+   "ServerResponse.decodeACKLine",
+   "ServerResponse.Encode",
+   "encodeServerResponse"
+  ]
+ }
+}

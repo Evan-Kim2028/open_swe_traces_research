@@ -1,0 +1,15 @@
+--- a/server/auth.go
++++ b/server/auth.go
+@@ -1438,6 +1438,12 @@
+ 
+ // Check DNS name according to https://tools.ietf.org/html/rfc6125#section-6.4.1
+ func dnsAltNameMatches(dnsAltNameLabels []string, urls []*url.URL) bool {
++	want := strings.Join(dnsAltNameLabels, ".")
++	for _, u := range urls {
++		if u != nil && strings.ToLower(u.Hostname()) == want {
++			return true
++		}
++	}
+ 	return false
+ }
+ 

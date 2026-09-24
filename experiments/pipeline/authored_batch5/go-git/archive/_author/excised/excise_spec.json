@@ -1,0 +1,17 @@
+{
+ "archive": {
+  "internal/archive/archive.go": [
+   "SupportedFormats",
+   "ApplyUmask",
+   "ApplyUmaskDir",
+   "ResolveTreeish",
+   "ResolveRef",
+   "WriteTarArchive",
+   "WriteZipArchive",
+   "MatchesPathFilter",
+   "GetTarCommitID",
+   "WriteArchive",
+   "HasInvalidPrefix"
+  ]
+ }
+}

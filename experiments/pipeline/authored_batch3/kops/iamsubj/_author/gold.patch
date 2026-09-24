@@ -1,0 +1,165 @@
+--- a/pkg/model/iam/subject.go
++++ b/pkg/model/iam/subject.go
+@@ -17,12 +17,12 @@
+ package iam
+ 
+ import (
+-	_ "fmt"
++	"fmt"
+ 
+-	"example.internal/clustkit/pkg/apis/kops"
+-	_ "example.internal/clustkit/pkg/wellknownusers"
+ 	corev1 "k8s.io/api/core/v1"
+ 	"k8s.io/apimachinery/pkg/types"
++	"example.internal/clustkit/pkg/apis/kops"
++	"example.internal/clustkit/pkg/wellknownusers"
+ )
+ 
+ // Subject represents an IAM identity, to which permissions are granted.
+@@ -41,7 +41,7 @@
+ 
+ // ServiceAccount implements Subject.
+ func (_ *NodeRoleMaster) ServiceAccount() (types.NamespacedName, bool) {
+-	panic("excised: NodeRoleMaster.ServiceAccount")
++	return types.NamespacedName{}, false
+ }
+ 
+ // NodeRoleAPIServer represents the role of API server-only nodes, and implements Subject.
+@@ -51,7 +51,7 @@
+ 
+ // ServiceAccount implements Subject.
+ func (_ *NodeRoleAPIServer) ServiceAccount() (types.NamespacedName, bool) {
+-	panic("excised: NodeRoleAPIServer.ServiceAccount")
++	return types.NamespacedName{}, false
+ }
+ 
+ // NodeRoleNode represents the role of normal ("worker") nodes, and implements Subject.
+@@ -61,7 +61,7 @@
+ 
+ // ServiceAccount implements Subject.
+ func (_ *NodeRoleNode) ServiceAccount() (types.NamespacedName, bool) {
+-	panic("excised: NodeRoleNode.ServiceAccount")
++	return types.NamespacedName{}, false
+ }
+ 
+ // NodeRoleBastion represents the role of bastion nodes, and implements Subject.
+@@ -69,7 +69,7 @@
+ 
+ // ServiceAccount implements Subject.
+ func (_ *NodeRoleBastion) ServiceAccount() (types.NamespacedName, bool) {
+-	panic("excised: NodeRoleBastion.ServiceAccount")
++	return types.NamespacedName{}, false
+ }
+ 
+ type GenericServiceAccount struct {
+@@ -78,23 +78,105 @@
+ }
+ 
+ func (g *GenericServiceAccount) ServiceAccount() (types.NamespacedName, bool) {
+-	panic("excised: GenericServiceAccount.ServiceAccount")
++	return g.NamespacedName, true
+ }
+ 
+ func (g *GenericServiceAccount) BuildAWSPolicy(*PolicyBuilder) (*Policy, error) {
+-	panic("excised: GenericServiceAccount.BuildAWSPolicy")
++	return g.Policy, nil
+ }
+ 
+ // BuildNodeRoleSubject returns a Subject implementation for the specified InstanceGroupRole.
+ func BuildNodeRoleSubject(igRole kops.InstanceGroupRole, enableLifecycleHookPermissions bool) (Subject, error) {
+-	panic("excised: BuildNodeRoleSubject")
++	switch igRole {
++	case kops.InstanceGroupRoleControlPlane:
++		return &NodeRoleMaster{}, nil
++	case kops.InstanceGroupRoleAPIServer:
++		return &NodeRoleAPIServer{
++			warmPool: enableLifecycleHookPermissions,
++		}, nil
++	case kops.InstanceGroupRoleNode:
++		return &NodeRoleNode{
++			enableLifecycleHookPermissions: enableLifecycleHookPermissions,
++		}, nil
++	case kops.InstanceGroupRoleBastion:
++		return &NodeRoleBastion{}, nil
++	default:
++		return nil, fmt.Errorf("unknown instancegroup role %q", igRole)
++	}
+ }
+ 
+ // AddServiceAccountRole adds the appropriate mounts / env vars to enable a pod to use a service-account role
+ func AddServiceAccountRole(context *IAMModelContext, podSpec *corev1.PodSpec, serviceAccountRole Subject) error {
+-	panic("excised: AddServiceAccountRole")
++	cloudProvider := context.Cluster.GetCloudProvider()
++
++	switch cloudProvider {
++	case kops.CloudProviderAWS:
++		return addServiceAccountRoleForAWS(context, podSpec, serviceAccountRole)
++	default:
++		return fmt.Errorf("ServiceAccount-level IAM is not yet supported on cloud %T", cloudProvider)
++	}
+ }
+ 
+ func addServiceAccountRoleForAWS(context *IAMModelContext, podSpec *corev1.PodSpec, serviceAccountRole Subject) error {
+-	panic("excised: addServiceAccountRoleForAWS")
++	roleName, err := context.IAMNameForServiceAccountRole(serviceAccountRole)
++	if err != nil {
++		return err
++	}
++
++	awsRoleARN := "arn:" + context.AWSPartition + ":iam::" + context.AWSAccountID + ":role/" + roleName
++	tokenDir := "/var/run/secrets/amazonaws.com/" //nolint:gosec // This is the projected token directory path, not a credential.
++	tokenName := "token"
++
++	volume := corev1.Volume{
++		Name: "token-amazonaws-com",
++	}
++
++	mode := int32(0o644)
++	expiration := int64(86400)
++	volume.Projected = &corev1.ProjectedVolumeSource{
++		DefaultMode: &mode,
++		Sources: []corev1.VolumeProjection{
++			{
++				ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
++					Audience:          "amazonaws.com",
++					ExpirationSeconds: &expiration,
++					Path:              tokenName,
++				},
++			},
++		},
++	}
++	podSpec.Volumes = append(podSpec.Volumes, volume)
++
++	containers := podSpec.Containers
++	for k, container := range containers {
++
++		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
++			MountPath: tokenDir,
++			Name:      volume.Name,
++			ReadOnly:  true,
++		})
++
++		container.Env = append(container.Env, corev1.EnvVar{
++			Name:  "AWS_ROLE_ARN",
++			Value: awsRoleARN,
++		})
++
++		container.Env = append(container.Env, corev1.EnvVar{
++			Name:  "AWS_WEB_IDENTITY_TOKEN_FILE",
++			Value: tokenDir + tokenName,
++		})
++		containers[k] = container
++	}
++
++	// Set securityContext.fsGroup to enable file to be read
++	// background: https://github.com/kubernetes/enhancements/pull/1598
++	if podSpec.SecurityContext == nil {
++		podSpec.SecurityContext = &corev1.PodSecurityContext{}
++	}
++	if podSpec.SecurityContext.FSGroup == nil {
++		fsGroup := int64(wellknownusers.Generic)
++		podSpec.SecurityContext.FSGroup = &fsGroup
++	}
++
++	return nil
+ }

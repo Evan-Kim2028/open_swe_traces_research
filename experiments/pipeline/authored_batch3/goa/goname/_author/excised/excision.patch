@@ -1,0 +1,411 @@
+--- a/codegen/funcs.go
++++ b/codegen/funcs.go
+@@ -4,11 +4,11 @@
+ package codegen
+ 
+ import (
+-	"bytes"
++	_ "bytes"
+ 	"fmt"
+ 	"os"
+ 	"strings"
+-	"unicode"
++	_ "unicode"
+ 
+ 	"example.internal/apikit/v3/expr"
+ 	"example.internal/apikit/v3/internal/codegenname"
+@@ -61,40 +61,13 @@
+ // Comment produces line comments by concatenating the given strings and
+ // producing 80 characters long lines starting with "//".
+ func Comment(elems ...string) string {
+-	lineCount := 0
+-	for _, e := range elems {
+-		lineCount += strings.Count(e, "\n") + 1
+-	}
+-	lines := make([]string, 0, lineCount)
+-	for _, e := range elems {
+-		lines = append(lines, strings.Split(e, "\n")...)
+-	}
+-	var trimmed = make([]string, len(lines))
+-	for i, l := range lines {
+-		trimmed[i] = strings.TrimLeft(l, " \t")
+-	}
+-	t := strings.Join(trimmed, "\n")
+-
+-	return Indent(WrapText(t, 77), "// ")
++	panic("excised: Comment")
+ }
+ 
+ // Indent inserts prefix at the beginning of each non-empty line of s. The
+ // end-of-line marker is NL.
+ func Indent(s, prefix string) string {
+-	var (
+-		b   = []byte(s)
+-		p   = []byte(prefix)
+-		res = make([]byte, 0, len(b)+len(b)/4*len(p)) // preallocate with estimated size
+-		bol = true
+-	)
+-	for _, c := range b {
+-		if bol && c != '\n' {
+-			res = append(res, p...)
+-		}
+-		res = append(res, c)
+-		bol = c == '\n'
+-	}
+-	return string(res)
++	panic("excised: Indent")
+ }
+ 
+ // Casing exceptions
+@@ -131,84 +104,18 @@
+ // OldNews => old_news
+ // CNNNews => cnn_news
+ func SnakeCase(name string) string {
+-	// Special handling for single "words" starting with multiple upper case letters
+-	for u, l := range toLower {
+-		name = strings.ReplaceAll(name, u, l)
+-	}
+-
+-	// Remove leading and trailing blank spaces and replace any blank spaces in
+-	// between with a single underscore
+-	name = strings.Join(strings.Fields(name), "_")
+-
+-	// Special handling for dashes and slashes to convert them into underscores
+-	name = strings.ReplaceAll(name, "-", "_")
+-	name = strings.ReplaceAll(name, "/", "_")
+-
+-	var b bytes.Buffer
+-	ln := len(name)
+-	if ln == 0 {
+-		return ""
+-	}
+-	n := rune(name[0])
+-	b.WriteRune(unicode.ToLower(n))
+-	var lastLower, isLower, lastUnder, isUnder bool
+-	for i := 1; i < ln; i++ {
+-		r := rune(name[i])
+-		isLower = unicode.IsLower(r) && unicode.IsLetter(r) || unicode.IsDigit(r)
+-		isUnder = r == '_'
+-		if !isLower && !isUnder {
+-			if lastLower && !lastUnder {
+-				b.WriteRune('_')
+-			} else if ln > i+1 {
+-				rn := rune(name[i+1])
+-				if unicode.IsLower(rn) && rn != '_' && !lastUnder {
+-					b.WriteRune('_')
+-				}
+-			}
+-		}
+-		b.WriteRune(unicode.ToLower(r))
+-		lastLower = isLower
+-		lastUnder = isUnder
+-	}
+-	return b.String()
++	panic("excised: SnakeCase")
+ }
+ 
+ // KebabCase produces the kebab-case version of the given CamelCase string.
+ func KebabCase(name string) string {
+-	name = SnakeCase(name)
+-	ln := len(name)
+-	if name[ln-1] == '_' {
+-		name = name[:ln-1]
+-	}
+-	return strings.ReplaceAll(name, "_", "-")
++	panic("excised: KebabCase")
+ }
+ 
+ // WrapText produces lines with text capped at maxChars
+ // it will keep words intact and respects newlines.
+ func WrapText(text string, maxChars int) string {
+-	res := ""
+-	lines := strings.Split(text, "\n")
+-	for _, v := range lines {
+-		runes := []rune(strings.TrimSpace(v))
+-		for l := len(runes); l >= 0; l = len(runes) {
+-			if maxChars >= l {
+-				res = res + string(runes) + "\n"
+-				break
+-			}
+-
+-			i := runeSpacePosRev(runes[:maxChars])
+-			if i == 0 {
+-				i = runeSpacePos(runes)
+-			}
+-
+-			res = res + string(runes[:i]) + "\n"
+-			if l == i {
+-				break
+-			}
+-			runes = runes[i+1:]
+-		}
+-	}
+-	return res[:len(res)-1]
++	panic("excised: WrapText")
+ }
+ 
+ // InitStructFields produces Go code to initialize a struct and its fields from
+@@ -284,19 +191,9 @@
+ }
+ 
+ func runeSpacePosRev(r []rune) int {
+-	for i := len(r) - 1; i > 0; i-- {
+-		if unicode.IsSpace(r[i]) {
+-			return i
+-		}
+-	}
+-	return 0
++	panic("excised: runeSpacePosRev")
+ }
+ 
+ func runeSpacePos(r []rune) int {
+-	for i := range r {
+-		if unicode.IsSpace(r[i]) {
+-			return i
+-		}
+-	}
+-	return len(r)
++	panic("excised: runeSpacePos")
+ }
+--- a/codegen/funcs_test.go
++++ b/codegen/funcs_test.go
+@@ -49,36 +49,6 @@
+ 	require.EqualError(t, err, `initialize field "Token": missing final field type reference`)
+ }
+ 
+-func TestSnakeCase(t *testing.T) {
+-	cases := map[string]struct {
+-		str      string
+-		expected string
+-	}{
+-		"all lower":             {"aaa", "aaa"},
+-		"start upper":           {"Aaa", "aaa"},
+-		"start upper 2":         {"AAAaa", "aa_aaa"},
+-		"mid upper":             {"aAa", "a_aa"},
+-		"end upper":             {"aaA", "aa_a"},
+-		"sequential uppers":     {"aaAAaa", "aa_a_aaa"},
+-		"sequential uppers 2":   {"aaAAAa", "aa_aa_aa"},
+-		"end sequential uppers": {"aaAA", "aa_aa"},
+-		"multiple_uppers":       {"aaAaaAaa", "aa_aaa_aaa"},
+-		"dashes":                {"aa-Aaa-Aaa", "aa_aaa_aaa"},
+-		"dashes 2":              {"aa-AAaaAA-Aaa", "aa_a_aaa_aa_aaa"},
+-		"underscores":           {"aa_Aaa_Aaa", "aa_aaa_aaa"},
+-		"underscores 2":         {"aa_AAaaAA_Aaa", "aa_a_aaa_aa_aaa"},
+-		"numbers":               {"aa1", "aa1"},
+-		"blank spaces":          {"  aa  AA aa   ", "aa_aa_aa"},
+-	}
+-	for k, tc := range cases {
+-		t.Run(k, func(t *testing.T) {
+-			actual := SnakeCase(tc.str)
+-			if actual != tc.expected {
+-				t.Errorf("got %q, expected %q", actual, tc.expected)
+-			}
+-		})
+-	}
+-}
+ 
+ func TestCamelCase(t *testing.T) {
+ 	cases := map[string]struct {
+@@ -167,95 +137,4 @@
+ 	}
+ }
+ 
+-func TestKebabCase(t *testing.T) {
+-	cases := map[string]struct {
+-		str      string
+-		expected string
+-	}{
+-		"all lower":             {"aaa", "aaa"},
+-		"start upper":           {"Aaa", "aaa"},
+-		"start upper 2":         {"AAAaa", "aa-aaa"},
+-		"mid upper":             {"aAa", "a-aa"},
+-		"end upper":             {"aaA", "aa-a"},
+-		"sequential uppers":     {"aaAAaa", "aa-a-aaa"},
+-		"sequential uppers 2":   {"aaAAAa", "aa-aa-aa"},
+-		"end sequential uppers": {"aaAA", "aa-aa"},
+-		"multiple_uppers":       {"aaAaaAaa", "aa-aaa-aaa"},
+-		"underscores":           {"aa_Aaa_Aaa", "aa-aaa-aaa"},
+-		"underscores 2":         {"aa_AAaaAA_Aaa", "aa-a-aaa-aa-aaa"},
+-		"dashes":                {"aa-Aaa-Aaa", "aa-aaa-aaa"},
+-		"dashes 2":              {"aa-AAaaAA-Aaa", "aa-a-aaa-aa-aaa"},
+-		"numbers":               {"aa1", "aa1"},
+-	}
+-	for k, tc := range cases {
+-		t.Run(k, func(t *testing.T) {
+-			actual := KebabCase(tc.str)
+-			if actual != tc.expected {
+-				t.Errorf("got %q, expected %q", actual, tc.expected)
+-			}
+-		})
+-	}
+-}
+-
+-func TestWrapText(t *testing.T) {
+-	cases := map[string]struct {
+-		maxChars int
+-		str      string
+-		expected string
+-	}{
+-		"long_text": {
+-			maxChars: 50,
+-			str:      "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.",
+-			expected: "Lorem ipsum dolor sit amet, consectetur\n" +
+-				"adipiscing elit, sed do eiusmod tempor incididunt\n" +
+-				"ut labore et dolore magna aliqua. Ut enim ad\n" +
+-				"minim veniam, quis nostrud exercitation ullamco\n" +
+-				"laboris nisi ut aliquip ex ea commodo consequat.",
+-		},
+-		"long_text_with_newlines": {
+-			maxChars: 50,
+-			str: "Lorem ipsum dolor sit amet,\n" +
+-				"consectetur adipiscing elit,\n" +
+-				"sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\n" +
+-				"Ut enim ad minim veniam,\n" +
+-				"quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.",
+-			expected: "Lorem ipsum dolor sit amet,\n" +
+-				"consectetur adipiscing elit,\n" +
+-				"sed do eiusmod tempor incididunt ut labore et\n" +
+-				"dolore magna aliqua.\n" +
+-				"Ut enim ad minim veniam,\n" +
+-				"quis nostrud exercitation ullamco laboris nisi ut\n" +
+-				"aliquip ex ea commodo consequat.",
+-		},
+-		"respect_empty_lines": {
+-			maxChars: 50,
+-			str: "Lorem ipsum dolor sit amet,\n" +
+-				"\n" +
+-				"sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
+-			expected: "Lorem ipsum dolor sit amet,\n" +
+-				"\n" +
+-				"sed do eiusmod tempor incididunt ut labore et\n" +
+-				"dolore magna aliqua.",
+-		},
+-		"too_long_word_to_wrap_intact": {
+-			maxChars: 15,
+-			str:      "Who said supercalifragilisticexpialidocious in a movie",
+-			expected: "Who said\n" +
+-				"supercalifragilisticexpialidocious\n" +
+-				"in a movie",
+-		},
+-		"empty": {
+-			maxChars: 50,
+-			str:      "",
+-			expected: "",
+-		},
+-	}
+ 
+-	for k, tc := range cases {
+-		actual := WrapText(tc.str, tc.maxChars)
+-
+-		if actual != tc.expected {
+-			t.Errorf("%s: got `%s`, expected `%s`", k, actual, tc.expected)
+-		}
+-	}
+-}
+--- a/codegen/goify.go
++++ b/codegen/goify.go
+@@ -2,7 +2,7 @@
+ 
+ import (
+ 	"example.internal/apikit/v3/expr"
+-	"example.internal/apikit/v3/internal/codegenname"
++	_ "example.internal/apikit/v3/internal/codegenname"
+ )
+ 
+ // Goify makes a valid Go identifier out of any string. It does that by removing
+@@ -11,24 +11,16 @@
+ // firstUpper is true the first character of the identifier is uppercase
+ // otherwise it's lowercase.
+ func Goify(str string, firstUpper bool) string {
+-	key := cacheKey{
+-		input:      str,
+-		firstUpper: firstUpper,
+-		operation:  "goify",
+-	}
+-	return globalStringCache.getCached(key, func() string {
+-		return codegenname.Goify(str, firstUpper)
+-	})
++	panic("excised: Goify")
+ }
+ 
+ // GoifyAtt honors any struct:field:name meta set on the attribute and calls
+ // Goify with the tag value if present or the given name otherwise.
+ func GoifyAtt(att *expr.AttributeExpr, name string, upper bool) string {
+-	name = codegenname.AttributeName(name, att.Meta["struct:field:name"])
+-	return Goify(name, upper)
++	panic("excised: GoifyAtt")
+ }
+ 
+ // fixReservedGo appends an underscore on to Go reserved keywords.
+ func fixReservedGo(w string) string {
+-	return codegenname.FixReserved(w)
++	panic("excised: fixReservedGo")
+ }
+--- a/codegen/goify_test.go
++++ /dev/null
+@@ -1,26 +0,0 @@
+-package codegen
+-
+-import (
+-	"testing"
+-
+-	"github.com/stretchr/testify/assert"
+-)
+-
+-func TestFixReservedGo(t *testing.T) {
+-	cases := map[string]struct {
+-		w    string
+-		want string
+-	}{
+-		"predeclared type":           {w: "bool", want: "bool_"},
+-		"predeclared constant":       {w: "true", want: "true_"},
+-		"predeclared zero value":     {w: "nil", want: "nil_"},
+-		"predeclared function":       {w: "append", want: "append_"},
+-		"non predeclared identifier": {w: "foo", want: "foo"},
+-		"package":                    {w: "fmt", want: "fmt_"},
+-	}
+-	for k, tc := range cases {
+-		t.Run(k, func(t *testing.T) {
+-			assert.Equal(t, tc.want, fixReservedGo(tc.w))
+-		})
+-	}
+-}
+--- a/codegen/types_test.go
++++ b/codegen/types_test.go
+@@ -178,36 +178,3 @@
+ 	}
+ }
+ 
+-func TestGoify(t *testing.T) {
+-	cases := map[string]struct {
+-		str        string
+-		firstUpper bool
+-		expected   string
+-	}{
+-		"empty":             {"", false, ""},
+-		"first upper false": {"blue_id", false, "blueID"},
+-		"first upper false normal identifier all lower":     {"blue", false, "blue"},
+-		"first upper false and UUID":                        {"blue_uuid", false, "blueUUID"},
+-		"first upper true":                                  {"blue_id", true, "BlueID"},
+-		"first upper true and UUID":                         {"blue_uuid", true, "BlueUUID"},
+-		"first upper true normal identifier all lower":      {"blue", true, "Blue"},
+-		"first upper false normal identifier":               {"Blue", false, "blue"},
+-		"first upper true normal identifier":                {"Blue", true, "Blue"},
+-		"invalid identifier":                                {"Blue%50", true, "Blue50"},
+-		"invalid identifier firstupper false":               {"Blue%50", false, "blue50"},
+-		"only UUID and firstupper false":                    {"UUID", false, "uuid"},
+-		"consecutives invalid identifiers firstupper false": {"[[fields___type]]", false, "fieldsType"},
+-		"consecutives invalid identifiers":                  {"[[fields___type]]", true, "FieldsType"},
+-		"invalid identifiers":                               {"[[", false, "val"},
+-		"middle upper firstupper false":                     {"MiddleUpper", false, "middleUpper"},
+-		"middle upper":                                      {"MiddleUpper", true, "MiddleUpper"},
+-	}
+-
+-	for k, tc := range cases {
+-		actual := Goify(tc.str, tc.firstUpper)
+-
+-		if actual != tc.expected {
+-			t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-		}
+-	}
+-}

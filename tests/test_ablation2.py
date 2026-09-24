@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from openswe_traces.synth.ablation2 import (
     FILE_FILTER_INSTRUCTION,
     REVIVELIB_INSTRUCTION,
@@ -23,7 +25,12 @@ def test_valid_units_match_judge() -> None:
         ("nograph", "file-filter"),
     ]
     assert all(u.family == f"{u.cond}-{u.name}" for u in units)
-    assert all(u.excision.is_file() for u in units)
+    # experiments/ablation_graph/repos/ is gitignored, so a fresh clone has no excision
+    # patches to check; only assert they are all present when the round-1 tree is local.
+    present = [u.excision.is_file() for u in units]
+    if not any(present):
+        pytest.skip("ablation_graph/repos not materialised on this host")
+    assert all(present)
 
 
 def test_l2_instructions_have_symptom_no_leaks() -> None:

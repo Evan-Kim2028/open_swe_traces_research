@@ -1,0 +1,76 @@
+--- a/util/pkg/distributions/distributions.go
++++ b/util/pkg/distributions/distributions.go
+@@ -72,53 +72,56 @@
+ 
+ // IsDebianFamily returns true if this distribution uses deb packages and generally follows debian package names
+ func (d *Distribution) IsDebianFamily() bool {
+-	panic("excised: Distribution.IsDebianFamily")
++	return d.project == "debian" || d.project == "ubuntu"
+ }
+ 
+ // IsDebian returns true if this distribution is Debian
+ func (d *Distribution) IsDebian() bool {
+-	panic("excised: Distribution.IsDebian")
++	return d.project == "debian"
+ }
+ 
+ // IsUbuntu returns true if this distribution is Ubuntu (but not debian)
+ func (d *Distribution) IsUbuntu() bool {
+-	panic("excised: Distribution.IsUbuntu")
++	return d.project == "ubuntu"
+ }
+ 
+ // IsAmazonLinux returns true if this distribution is Amazon Linux
+ func (d *Distribution) IsAmazonLinux() bool {
+-	panic("excised: Distribution.IsAmazonLinux")
++	return d.project == "amazonlinux"
+ }
+ 
+ // IsRHELFamily returns true if this distribution uses rpm packages and generally follows rhel package names
+ func (d *Distribution) IsRHELFamily() bool {
+-	panic("excised: Distribution.IsRHELFamily")
++	return d.packageFormat == "rpm"
+ }
+ 
+ // HasDNF returns true if this distribution uses dnf
+ func (d *Distribution) HasDNF() bool {
+-	panic("excised: Distribution.HasDNF")
++	return d.IsRHELFamily()
+ }
+ 
+ // IsSystemd returns true if this distribution uses systemd
+ func (d *Distribution) IsSystemd() bool {
+-	panic("excised: Distribution.IsSystemd")
++	return true
+ }
+ 
+ // DefaultUsers returns the name of the system users for this distribution
+ func (d *Distribution) DefaultUsers() ([]string, error) {
+-	panic("excised: Distribution.DefaultUsers")
++	if d.project == "ubuntu" {
++		return []string{"ubuntu"}, nil
++	}
++	return []string{"root"}, nil
+ }
+ 
+ // HasLoopbackEtcResolvConf is true if systemd-resolved has put the loopback address 127.0.0.53 as a nameserver in /etc/resolv.conf
+ // See https://github.com/coredns/coredns/blob/master/plugin/loop/README.md#troubleshooting-loops-in-kubernetes-clusters
+ func (d *Distribution) HasLoopbackEtcResolvConf() bool {
+-	panic("excised: Distribution.HasLoopbackEtcResolvConf")
++	return d.project == "ubuntu"
+ }
+ 
+ // Version returns the (project scoped) numeric version
+ func (d *Distribution) Version() float32 {
+-	panic("excised: Distribution.Version")
++	return d.version
+ }
+ 
+ // ForceNftables returns true if this distribution requires nftables proxy mode
+@@ -126,5 +129,5 @@
+ // necessary kernel modules (nf_conntrack) are not available.
+ // Keep this logic aligned with PackagesBuilder in nodeup/pkg/model/packages.go.
+ func (d *Distribution) ForceNftables() bool {
+-	panic("excised: Distribution.ForceNftables")
++	return d.IsRHELFamily()
+ }

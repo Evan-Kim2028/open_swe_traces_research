@@ -1,0 +1,28 @@
+diff --git a/github/markdown.go b/github/markdown.go
+index e90d34f..60e4660 100644
+--- a/github/markdown.go
++++ b/github/markdown.go
+@@ -44,7 +44,15 @@ type markdownRenderRequest struct {
+ //
+ //meta:operation POST /markdown
+ func (s *MarkdownService) Render(ctx context.Context, text string, opts *MarkdownOptions) (string, *Response, error) {
+-		request := &markdownRenderRequest{Text: &text}
++	request := &markdownRenderRequest{Text: &text}
++	if opts != nil {
++		if opts.Mode != "" {
++			request.Mode = &opts.Mode
++		}
++		if opts.Context != "" {
++			request.Context = &opts.Context
++		}
++	}
+ 
+ 	req, err := s.client.NewRequest(ctx, "POST", "markdown", request)
+ 	if err != nil {
+@@ -57,5 +65,5 @@ func (s *MarkdownService) Render(ctx context.Context, text string, opts *Markdow
+ 		return "", resp, err
+ 	}
+ 
+-	return buf.String(), resp, nil /* excised: Render */
++	return buf.String(), resp, nil
+ }

@@ -1,0 +1,346 @@
+diff --git a/plumbing/object/blob.go b/plumbing/object/blob.go
+index 515b291..8ada904 100644
+--- a/plumbing/object/blob.go
++++ b/plumbing/object/blob.go
+@@ -5,7 +5,7 @@ import (
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+ 	"example.internal/gitkit/v6/plumbing/storer"
+-	_ "example.internal/gitkit/v6/utils/ioutil"
++	"example.internal/gitkit/v6/utils/ioutil"
+ )
+ 
+ // Blob is used to store arbitrary data - it is generally a file.
+@@ -20,12 +20,22 @@ type Blob struct {
+ 
+ // GetBlob gets a blob from an object storer and decodes it.
+ func GetBlob(s storer.EncodedObjectStorer, h plumbing.Hash) (*Blob, error) {
+-	panic("excised: GetBlob")
++	o, err := s.EncodedObject(plumbing.BlobObject, h)
++	if err != nil {
++		return nil, err
++	}
++
++	return DecodeBlob(o)
+ }
+ 
+ // DecodeBlob decodes an encoded object into a *Blob.
+ func DecodeBlob(o plumbing.EncodedObject) (*Blob, error) {
+-	panic("excised: DecodeBlob")
++	b := &Blob{}
++	if err := b.Decode(o); err != nil {
++		return nil, err
++	}
++
++	return b, nil
+ }
+ 
+ // ID returns the object ID of the blob. The returned value will always match
+@@ -33,29 +43,54 @@ func DecodeBlob(o plumbing.EncodedObject) (*Blob, error) {
+ //
+ // ID is present to fulfill the Object interface.
+ func (b *Blob) ID() plumbing.Hash {
+-	panic("excised: Blob.ID")
++	return b.Hash
+ }
+ 
+ // Type returns the type of object. It always returns plumbing.BlobObject.
+ //
+ // Type is present to fulfill the Object interface.
+ func (b *Blob) Type() plumbing.ObjectType {
+-	panic("excised: Blob.Type")
++	return plumbing.BlobObject
+ }
+ 
+ // Decode transforms a plumbing.EncodedObject into a Blob struct.
+ func (b *Blob) Decode(o plumbing.EncodedObject) error {
+-	panic("excised: Blob.Decode")
++	if o.Type() != plumbing.BlobObject {
++		return ErrUnsupportedObject
++	}
++
++	b.Hash = o.Hash()
++	b.Size = o.Size()
++	b.obj = o
++
++	return nil
+ }
+ 
+ // Encode transforms a Blob into a plumbing.EncodedObject.
+ func (b *Blob) Encode(o plumbing.EncodedObject) (err error) {
+-	panic("excised: Blob.Encode")
++	o.SetType(plumbing.BlobObject)
++
++	w, err := o.Writer()
++	if err != nil {
++		return err
++	}
++
++	defer ioutil.CheckClose(w, &err)
++
++	r, err := b.Reader()
++	if err != nil {
++		return err
++	}
++
++	defer ioutil.CheckClose(r, &err)
++
++	_, err = ioutil.CopyBufferPool(w, r)
++	return err
+ }
+ 
+ // Reader returns a reader allow the access to the content of the blob
+ func (b *Blob) Reader() (io.ReadCloser, error) {
+-	panic("excised: Blob.Reader")
++	return b.obj.Reader()
+ }
+ 
+ // BlobIter provides an iterator for a set of blobs.
+@@ -70,18 +105,40 @@ type BlobIter struct {
+ //
+ // Any non-blob object returned by the storer.EncodedObjectIter is skipped.
+ func NewBlobIter(s storer.EncodedObjectStorer, iter storer.EncodedObjectIter) *BlobIter {
+-	panic("excised: NewBlobIter")
++	return &BlobIter{iter, s}
+ }
+ 
+ // Next moves the iterator to the next blob and returns a pointer to it. If
+ // there are no more blobs, it returns io.EOF.
+ func (iter *BlobIter) Next() (*Blob, error) {
+-	panic("excised: BlobIter.Next")
++	for {
++		obj, err := iter.EncodedObjectIter.Next()
++		if err != nil {
++			return nil, err
++		}
++
++		if obj.Type() != plumbing.BlobObject {
++			continue
++		}
++
++		return DecodeBlob(obj)
++	}
+ }
+ 
+ // ForEach call the cb function for each blob contained on this iter until
+ // an error happens or the end of the iter is reached. If ErrStop is sent
+ // the iteration is stop but no error is returned. The iterator is closed.
+ func (iter *BlobIter) ForEach(cb func(*Blob) error) error {
+-	panic("excised: BlobIter.ForEach")
++	return iter.EncodedObjectIter.ForEach(func(obj plumbing.EncodedObject) error {
++		if obj.Type() != plumbing.BlobObject {
++			return nil
++		}
++
++		b, err := DecodeBlob(obj)
++		if err != nil {
++			return err
++		}
++
++		return cb(b)
++	})
+ }
+diff --git a/plumbing/object/object.go b/plumbing/object/object.go
+index d93e259..2eb6f2d 100644
+--- a/plumbing/object/object.go
++++ b/plumbing/object/object.go
+@@ -3,11 +3,11 @@
+ package object
+ 
+ import (
+-	_ "bytes"
++	"bytes"
+ 	"errors"
+-	_ "fmt"
++	"fmt"
+ 	"io"
+-	_ "strconv"
++	"strconv"
+ 	"time"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+@@ -49,13 +49,29 @@ type Object interface {
+ 
+ // GetObject gets an object from an object storer and decodes it.
+ func GetObject(s storer.EncodedObjectStorer, h plumbing.Hash) (Object, error) {
+-	panic("excised: GetObject")
++	o, err := s.EncodedObject(plumbing.AnyObject, h)
++	if err != nil {
++		return nil, err
++	}
++
++	return DecodeObject(s, o)
+ }
+ 
+ // DecodeObject decodes an encoded object into an Object and associates it to
+ // the given object storer.
+ func DecodeObject(s storer.EncodedObjectStorer, o plumbing.EncodedObject) (Object, error) {
+-	panic("excised: DecodeObject")
++	switch o.Type() {
++	case plumbing.CommitObject:
++		return DecodeCommit(s, o)
++	case plumbing.TreeObject:
++		return DecodeTree(s, o)
++	case plumbing.BlobObject:
++		return DecodeBlob(o)
++	case plumbing.TagObject:
++		return DecodeTag(s, o)
++	default:
++		return nil, plumbing.ErrInvalidType
++	}
+ }
+ 
+ // DateFormat is the format being used in the original git implementation
+@@ -73,26 +89,78 @@ type Signature struct {
+ 
+ // Decode decodes a byte slice into a signature
+ func (s *Signature) Decode(b []byte) {
+-	panic("excised: Signature.Decode")
++	open := bytes.LastIndexByte(b, '<')
++	closeBracket := bytes.LastIndexByte(b, '>')
++	if open == -1 || closeBracket == -1 {
++		return
++	}
++
++	if closeBracket < open {
++		return
++	}
++
++	s.Name = string(bytes.Trim(b[:open], " "))
++	s.Email = string(b[open+1 : closeBracket])
++
++	hasTime := closeBracket+2 < len(b)
++	if hasTime {
++		s.decodeTimeAndTimeZone(b[closeBracket+2:])
++	}
+ }
+ 
+ // Encode encodes a Signature into a writer.
+ func (s *Signature) Encode(w io.Writer) error {
+-	panic("excised: Signature.Encode")
++	if _, err := fmt.Fprintf(w, "%s <%s> ", s.Name, s.Email); err != nil {
++		return err
++	}
++	if err := s.encodeTimeAndTimeZone(w); err != nil {
++		return err
++	}
++	return nil
+ }
+ 
+ var timeZoneLength = 5
+ 
+ func (s *Signature) decodeTimeAndTimeZone(b []byte) {
+-	panic("excised: Signature.decodeTimeAndTimeZone")
++	space := bytes.IndexByte(b, ' ')
++	if space == -1 {
++		space = len(b)
++	}
++
++	ts, err := strconv.ParseInt(string(b[:space]), 10, 64)
++	if err != nil {
++		return
++	}
++
++	s.When = time.Unix(ts, 0).In(time.UTC)
++	tzStart := space + 1
++	if tzStart >= len(b) || tzStart+timeZoneLength > len(b) {
++		return
++	}
++
++	timezone := string(b[tzStart : tzStart+timeZoneLength])
++	tzhours, err1 := strconv.ParseInt(timezone[0:3], 10, 64)
++	tzmins, err2 := strconv.ParseInt(timezone[3:], 10, 64)
++	if err1 != nil || err2 != nil {
++		return
++	}
++	if tzhours < 0 {
++		tzmins *= -1
++	}
++
++	tz := time.FixedZone("", int(tzhours*60*60+tzmins*60))
++
++	s.When = s.When.In(tz)
+ }
+ 
+ func (s *Signature) encodeTimeAndTimeZone(w io.Writer) error {
+-	panic("excised: Signature.encodeTimeAndTimeZone")
++	u := max(s.When.Unix(), 0)
++	_, err := fmt.Fprintf(w, "%d %s", u, s.When.Format("-0700"))
++	return err
+ }
+ 
+ func (s *Signature) String() string {
+-	panic("excised: Signature.String")
++	return fmt.Sprintf("%s <%s>", s.Name, s.Email)
+ }
+ 
+ // ObjectIter provides an iterator for a set of objects.
+@@ -105,22 +173,64 @@ type ObjectIter struct { //nolint:revive // stutters but is a well-established n
+ // storer.EncodedObjectIter and returns an *ObjectIter that iterates over all
+ // objects contained in the storer.EncodedObjectIter.
+ func NewObjectIter(s storer.EncodedObjectStorer, iter storer.EncodedObjectIter) *ObjectIter {
+-	panic("excised: NewObjectIter")
++	return &ObjectIter{iter, s}
+ }
+ 
+ // Next moves the iterator to the next object and returns a pointer to it. If
+ // there are no more objects, it returns io.EOF.
+ func (iter *ObjectIter) Next() (Object, error) {
+-	panic("excised: ObjectIter.Next")
++	for {
++		obj, err := iter.EncodedObjectIter.Next()
++		if err != nil {
++			return nil, err
++		}
++
++		o, err := iter.toObject(obj)
++		if errors.Is(err, plumbing.ErrInvalidType) {
++			continue
++		}
++
++		if err != nil {
++			return nil, err
++		}
++
++		return o, nil
++	}
+ }
+ 
+ // ForEach call the cb function for each object contained on this iter until
+ // an error happens or the end of the iter is reached. If ErrStop is sent
+ // the iteration is stop but no error is returned. The iterator is closed.
+ func (iter *ObjectIter) ForEach(cb func(Object) error) error {
+-	panic("excised: ObjectIter.ForEach")
++	return iter.EncodedObjectIter.ForEach(func(obj plumbing.EncodedObject) error {
++		o, err := iter.toObject(obj)
++		if errors.Is(err, plumbing.ErrInvalidType) {
++			return nil
++		}
++
++		if err != nil {
++			return err
++		}
++
++		return cb(o)
++	})
+ }
+ 
+ func (iter *ObjectIter) toObject(obj plumbing.EncodedObject) (Object, error) {
+-	panic("excised: ObjectIter.toObject")
++	switch obj.Type() {
++	case plumbing.BlobObject:
++		blob := &Blob{}
++		return blob, blob.Decode(obj)
++	case plumbing.TreeObject:
++		tree := &Tree{s: iter.s}
++		return tree, tree.Decode(obj)
++	case plumbing.CommitObject:
++		commit := &Commit{}
++		return commit, commit.Decode(obj)
++	case plumbing.TagObject:
++		tag := &Tag{}
++		return tag, tag.Decode(obj)
++	default:
++		return nil, plumbing.ErrInvalidType
++	}
+ }

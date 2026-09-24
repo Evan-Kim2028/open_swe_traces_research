@@ -41,6 +41,7 @@ class Repo2Spec:
     new_module: str
     brands: tuple[tuple[str, str], ...]
     url: str = ""
+    commit: str = ""
 
     def git_url(self) -> str:
         return self.url or f"https://github.com/{self.github}.git"
@@ -50,6 +51,7 @@ SPECS: tuple[Repo2Spec, ...] = (
     Repo2Spec(
         name="nats-server",
         github="nats-io/nats-server",
+        commit="8ad52657d1f3edb20155d9226dbb1fc2992148a2",
         new_module="example.internal/msgbus",
         brands=(
             ("nats-io", "acme-msg"),
@@ -62,6 +64,7 @@ SPECS: tuple[Repo2Spec, ...] = (
     Repo2Spec(
         name="cobra",
         github="spf13/cobra",
+        commit="adbc8813901bba65827259daa8e22ff94ec1f30e",
         new_module="example.internal/clikit",
         brands=(
             ("spf13", "acme"),
@@ -72,6 +75,7 @@ SPECS: tuple[Repo2Spec, ...] = (
     Repo2Spec(
         name="gin",
         github="gin-gonic/gin",
+        commit="5c6a15f8f9566612076bd209e623861bf92a6283",
         new_module="example.internal/httprouter",
         brands=(
             ("gin-gonic", "acme-http"),
@@ -107,6 +111,61 @@ def _run(
     )
 
 
+def _clone_at_commit(spec: Repo2Spec, src: Path) -> None:
+    """Materialise ``src`` at ``spec.commit``; shallow HEAD clone when unpinned.
+
+    Task packages are authored against one tree, so a fresh machine must get that
+    tree and not whatever upstream HEAD happens to be (gin drifted 5c6a15f8 -> 3b08cd72).
+    Tries a depth-1 fetch of the sha first; servers that refuse it fall back to a full
+    clone plus checkout.
+    """
+    env = {"GIT_TERMINAL_PROMPT": "0"}
+    if not spec.commit:
+        proc = _run(
+            ["git", "clone", "--depth", "1", spec.git_url(), str(src)],
+            timeout=600,
+            extra_env=env,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"clone {spec.github} failed: {(proc.stderr or proc.stdout)[-2000:]}"
+            )
+        return
+
+    src.mkdir(parents=True, exist_ok=True)
+    for args in (
+        ["git", "init", "-q", str(src)],
+        ["git", "-C", str(src), "remote", "add", "origin", spec.git_url()],
+    ):
+        proc = _run(args, timeout=60, extra_env=env)
+        if proc.returncode != 0:
+            raise RuntimeError(f"{spec.name}: {' '.join(args)} failed: {proc.stderr}")
+
+    fetch = _run(
+        ["git", "-C", str(src), "fetch", "--depth", "1", "origin", spec.commit],
+        timeout=900,
+        extra_env=env,
+    )
+    if fetch.returncode == 0:
+        checkout = _run(
+            ["git", "-C", str(src), "checkout", "-q", "FETCH_HEAD"], timeout=300
+        )
+        if checkout.returncode == 0:
+            return
+
+    shutil.rmtree(src, ignore_errors=True)
+    proc = _run(["git", "clone", "-q", spec.git_url(), str(src)], timeout=1800, extra_env=env)
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"clone {spec.github} failed: {(proc.stderr or proc.stdout)[-2000:]}"
+        )
+    checkout = _run(["git", "-C", str(src), "checkout", "-q", spec.commit], timeout=300)
+    if checkout.returncode != 0:
+        raise RuntimeError(
+            f"{spec.name}: checkout {spec.commit} failed: {checkout.stderr[-2000:]}"
+        )
+
+
 def clone_shallow(spec: Repo2Spec) -> dict[str, object]:
     dest = repo_dir(spec)
     src = dest / "src"
@@ -117,17 +176,15 @@ def clone_shallow(spec: Repo2Spec) -> dict[str, object]:
             return json.loads(meta_path.read_text(encoding="utf-8"))
     if src.exists():
         shutil.rmtree(src)
-    proc = _run(
-        ["git", "clone", "--depth", "1", spec.git_url(), str(src)],
-        timeout=300,
-        extra_env={"GIT_TERMINAL_PROMPT": "0"},
-    )
-    if proc.returncode != 0:
-        raise RuntimeError(f"clone {spec.github} failed: {(proc.stderr or proc.stdout)[-2000:]}")
+    _clone_at_commit(spec, src)
     sha_proc = _run(["git", "-C", str(src), "rev-parse", "HEAD"], timeout=30)
     if sha_proc.returncode != 0:
         raise RuntimeError(f"rev-parse failed for {spec.name}: {sha_proc.stderr}")
     commit = (sha_proc.stdout or "").strip()
+    if spec.commit and commit != spec.commit:
+        raise RuntimeError(
+            f"{spec.name}: checked out {commit} but spec pins {spec.commit}"
+        )
     git_dir = src / ".git"
     if git_dir.exists():
         shutil.rmtree(git_dir)

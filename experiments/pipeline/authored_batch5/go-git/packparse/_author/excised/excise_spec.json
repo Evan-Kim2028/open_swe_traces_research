@@ -1,0 +1,28 @@
+{
+ "packparse": {
+  "plumbing/format/packfile/parser.go": [
+   "growHint",
+   "NewParser",
+   "Parser.storeOrCache",
+   "Parser.resetCache",
+   "Parser.Parse",
+   "Parser.ensureContent",
+   "Parser.resolveDeltas",
+   "Parser.processDelta",
+   "checkDeltaChainDepth",
+   "ObjectHeader.isDeltaOnDisk",
+   "Parser.parentReader",
+   "Parser.applyPatchBaseHeader",
+   "Parser.forEachObserver",
+   "Parser.onHeader",
+   "Parser.onInflatedObjectHeader",
+   "Parser.onInflatedObjectContent",
+   "Parser.onFooter"
+  ],
+  "plumbing/format/packfile/parser_cache.go": [
+   "newParserCache",
+   "parserCache.Add",
+   "parserCache.Reset"
+  ]
+ }
+}

@@ -1,0 +1,1 @@
+{"codecnum": {"util/codec/number.go": ["EncodeIntToCmpUint","DecodeCmpUintToInt","EncodeInt","EncodeIntDesc","DecodeInt","DecodeIntDesc","EncodeUint","EncodeUintDesc","DecodeUint","DecodeUintDesc","EncodeVarint","DecodeVarint","EncodeUvarint","DecodeUvarint","EncodeComparableVarint","EncodeComparableUvarint","DecodeComparableUvarint","DecodeComparableVarint"]}}

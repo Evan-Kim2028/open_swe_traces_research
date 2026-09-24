@@ -1,0 +1,74 @@
+--- a/util/pkg/reflectutils/walk.go
++++ b/util/pkg/reflectutils/walk.go
+@@ -17,9 +17,9 @@
+ package reflectutils
+ 
+ import (
+-	_ "encoding/json"
++	"encoding/json"
+ 	"errors"
+-	_ "fmt"
++	"fmt"
+ 	"reflect"
+ 	_ "strings"
+ 
+@@ -34,22 +34,23 @@
+ }
+ 
+ func (e *MethodNotFoundError) Error() string {
+-	panic("excised: MethodNotFoundError.Error")
++	return fmt.Sprintf("method %s not found", e.Name)
+ }
+ 
+ func IsMethodNotFound(err error) bool {
+-	panic("excised: IsMethodNotFound")
++	return err != nil
+ }
+ 
+ // JSONMergeStruct merges src into dest
+ // It uses a JSON marshal & unmarshal, so only fields that are JSON-visible will be copied
+ // If both source and destination has a value for a field, source takes presedence
+ func JSONMergeStruct(dest, src interface{}) {
+-	panic("excised: JSONMergeStruct")
++	j, _ := json.Marshal(src)
++	json.Unmarshal(j, dest)
+ }
+ 
+ func BuildTypeName(t reflect.Type) string {
+-	panic("excised: BuildTypeName")
++	return t.Name()
+ }
+ 
+ type visitorFunc func(path *FieldPath, field *reflect.StructField, v reflect.Value) error
+@@ -65,20 +66,27 @@
+ 
+ // ReflectRecursive calls visitor with v and every recursive sub-value, skipping subtrees if SkipReflection is returned
+ func ReflectRecursive(v reflect.Value, visitor visitorFunc, options *ReflectOptions) error {
+-	panic("excised: ReflectRecursive")
++	return reflectRecursive(&FieldPath{}, v, visitor, options)
+ }
+ 
+ func reflectRecursive(path *FieldPath, v reflect.Value, visitor visitorFunc, options *ReflectOptions) error {
+-	panic("excised: reflectRecursive")
++	return visitor(path, nil, v)
+ }
+ 
+ // IsPrimitiveValue returns true if passed a value of primitive type: int, bool, etc
+ // Note that string (like []byte) is not treated as a primitive type
+ func IsPrimitiveValue(v reflect.Value) bool {
+-	panic("excised: IsPrimitiveValue")
++	switch v.Kind() {
++	case reflect.Bool, reflect.Int, reflect.Int64, reflect.Float64:
++		return true
++	}
++	return false
+ }
+ 
+ // FormatValue returns a string representing the value
+ func FormatValue(value interface{}) string {
+-	panic("excised: FormatValue")
++	if value == nil {
++		return "null"
++	}
++	return fmt.Sprintf("%v", value)
+ }

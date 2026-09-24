@@ -1,0 +1,35 @@
+diff --git a/github/git_refs.go b/github/git_refs.go
+index df604cc..b620e49 100644
+--- a/github/git_refs.go
++++ b/github/git_refs.go
+@@ -114,7 +114,15 @@ func (s *GitService) ListMatchingRefs(ctx context.Context, owner, repo, ref stri
+ //
+ //meta:operation POST /repos/{owner}/{repo}/git/refs
+ func (s *GitService) CreateRef(ctx context.Context, owner, repo string, body CreateRef) (*Reference, *Response, error) {
+-		u := fmt.Sprintf("repos/%v/%v/git/refs", owner, repo)
++		if body.Ref == "" {
++		return nil, nil, fmt.Errorf("ref must be provided")
++	}
++
++	if !strings.HasPrefix(body.Ref, "refs/") {
++		body.Ref = "refs/" + body.Ref
++	}
++
++	u := fmt.Sprintf("repos/%v/%v/git/refs", owner, repo)
+ 	req, err := s.client.NewRequest(ctx, "POST", u, body)
+ 	if err != nil {
+ 		return nil, nil, err
+@@ -135,7 +143,12 @@ func (s *GitService) CreateRef(ctx context.Context, owner, repo string, body Cre
+ //
+ //meta:operation PATCH /repos/{owner}/{repo}/git/refs/{ref}
+ func (s *GitService) UpdateRef(ctx context.Context, owner, repo, ref string, body UpdateRef) (*Reference, *Response, error) {
+-		u := fmt.Sprintf("repos/%v/%v/git/refs/%v", owner, repo, refURLEscape(ref))
++		if ref == "" {
++		return nil, nil, fmt.Errorf("ref must be provided")
++	}
++
++	refPath := strings.TrimPrefix(ref, "refs/")
++	u := fmt.Sprintf("repos/%v/%v/git/refs/%v", owner, repo, refURLEscape(refPath))
+ 	req, err := s.client.NewRequest(ctx, "PATCH", u, body)
+ 	if err != nil {
+ 		return nil, nil, err

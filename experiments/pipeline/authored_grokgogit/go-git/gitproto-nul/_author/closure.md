@@ -1,0 +1,1 @@
+Encode, Decode, and the control-byte guard were stubbed. The double-NUL before extra parameters, the `host=` prefix, and the 0x00–0x1f/0x7f rejection are protocol details that do not follow from the struct fields. A cheat that emits one worked payload still fails decode, flush, and injected-NUL pathnames.

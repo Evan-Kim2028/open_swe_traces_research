@@ -1,0 +1,128 @@
+diff --git a/plumbing/object/blob.go b/plumbing/object/blob.go
+index 515b291..9e0188a 100644
+--- a/plumbing/object/blob.go
++++ b/plumbing/object/blob.go
+@@ -1,11 +1,12 @@
+ package object
+ 
+ import (
++	"bytes"
+ 	"io"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+ 	"example.internal/gitkit/v6/plumbing/storer"
+-	_ "example.internal/gitkit/v6/utils/ioutil"
++	"example.internal/gitkit/v6/utils/ioutil"
+ )
+ 
+ // Blob is used to store arbitrary data - it is generally a file.
+@@ -33,29 +34,55 @@ func DecodeBlob(o plumbing.EncodedObject) (*Blob, error) {
+ //
+ // ID is present to fulfill the Object interface.
+ func (b *Blob) ID() plumbing.Hash {
+-	panic("excised: Blob.ID")
++	return b.Hash
+ }
+ 
+ // Type returns the type of object. It always returns plumbing.BlobObject.
+ //
+ // Type is present to fulfill the Object interface.
+ func (b *Blob) Type() plumbing.ObjectType {
+-	panic("excised: Blob.Type")
++	return plumbing.BlobObject
+ }
+ 
+ // Decode transforms a plumbing.EncodedObject into a Blob struct.
+ func (b *Blob) Decode(o plumbing.EncodedObject) error {
+-	panic("excised: Blob.Decode")
++	b.Size = o.Size()
++	b.Hash = o.Hash()
++	b.obj = o
++	return nil
+ }
+ 
+ // Encode transforms a Blob into a plumbing.EncodedObject.
+ func (b *Blob) Encode(o plumbing.EncodedObject) (err error) {
+-	panic("excised: Blob.Encode")
++	if b.obj == nil {
++		return nil
++	}
++	r, err := b.obj.Reader()
++	if err != nil {
++		return err
++	}
++	defer ioutil.CheckClose(r, &err)
++	content, err := io.ReadAll(r)
++	if err != nil {
++		return err
++	}
++	o.SetType(plumbing.BlobObject)
++	o.SetSize(int64(len(content)))
++	w, err := o.Writer()
++	if err != nil {
++		return err
++	}
++	defer ioutil.CheckClose(w, &err)
++	_, err = w.Write(content)
++	return err
+ }
+ 
+ // Reader returns a reader allow the access to the content of the blob
+ func (b *Blob) Reader() (io.ReadCloser, error) {
+-	panic("excised: Blob.Reader")
++	if b.obj != nil {
++		return b.obj.Reader()
++	}
++	return io.NopCloser(bytes.NewReader(nil)), nil
+ }
+ 
+ // BlobIter provides an iterator for a set of blobs.
+diff --git a/plumbing/object/object.go b/plumbing/object/object.go
+index d93e259..068d9bd 100644
+--- a/plumbing/object/object.go
++++ b/plumbing/object/object.go
+@@ -3,9 +3,9 @@
+ package object
+ 
+ import (
+-	_ "bytes"
++	"bytes"
+ 	"errors"
+-	_ "fmt"
++	"fmt"
+ 	"io"
+ 	_ "strconv"
+ 	"time"
+@@ -73,12 +73,21 @@ type Signature struct {
+ 
+ // Decode decodes a byte slice into a signature
+ func (s *Signature) Decode(b []byte) {
+-	panic("excised: Signature.Decode")
++	open := bytes.LastIndexByte(b, '<')
++	closeBracket := bytes.LastIndexByte(b, '>')
++	if open == -1 || closeBracket == -1 {
++		return
++	}
++
++	s.Name = string(bytes.Trim(b[:open], " "))
++	s.Email = string(b[open+1 : closeBracket])
++	s.When = time.Now()
+ }
+ 
+ // Encode encodes a Signature into a writer.
+ func (s *Signature) Encode(w io.Writer) error {
+-	panic("excised: Signature.Encode")
++	_, err := fmt.Fprintf(w, "%s <%s>", s.Name, s.Email)
++	return err
+ }
+ 
+ var timeZoneLength = 5
+@@ -92,7 +101,7 @@ func (s *Signature) encodeTimeAndTimeZone(w io.Writer) error {
+ }
+ 
+ func (s *Signature) String() string {
+-	panic("excised: Signature.String")
++	return fmt.Sprintf("%s <%s>", s.Name, s.Email)
+ }
+ 
+ // ObjectIter provides an iterator for a set of objects.

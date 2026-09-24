@@ -1,0 +1,1476 @@
+diff --git a/github/code_scanning_test.go b/github/code_scanning_test.go
+index c4e4a70..275d81e 100644
+--- a/github/code_scanning_test.go
++++ b/github/code_scanning_test.go
+@@ -6,7 +6,7 @@
+ package github
+ 
+ import (
+-	"encoding/json"
++	_ "encoding/json"
+ 	"fmt"
+ 	"net/http"
+ 	"testing"
+@@ -53,45 +53,6 @@ func TestCodeScanningService_Alert_ID(t *testing.T) {
+ 	}
+ }
+ 
+-func TestCodeScanningService_UploadSarif(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	expectedSarifID := &SarifID{
+-		ID:  new("testid"),
+-		URL: new("https://example.com/testurl"),
+-	}
+-
+-	sarifAnalysis := SarifAnalysis{CommitSHA: "abc", Ref: "ref/head/main", Sarif: "abc", CheckoutURI: new("uri"), StartedAt: &referenceTimestamp, ToolName: new("codeql-cli"), Validate: new(true)}
+-
+-	mux.HandleFunc("/repos/o/r/code-scanning/sarifs", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "POST")
+-		testJSONBody(t, r, sarifAnalysis)
+-		w.WriteHeader(http.StatusAccepted)
+-		respBody, _ := json.Marshal(expectedSarifID)
+-		_, _ = w.Write(respBody)
+-	})
+-
+-	ctx := t.Context()
+-	respSarifID, _, err := client.CodeScanning.UploadSarif(ctx, "o", "r", sarifAnalysis)
+-	if err != nil {
+-		t.Errorf("CodeScanning.UploadSarif returned error: %v", err)
+-	}
+-	if !cmp.Equal(expectedSarifID, respSarifID) {
+-		t.Errorf("Sarif response = %+v, want %+v", respSarifID, expectedSarifID)
+-	}
+-
+-	const methodName = "UploadSarif"
+-	testBadOptions(t, methodName, func() (err error) {
+-		_, _, err = client.CodeScanning.UploadSarif(ctx, "\n", "\n", sarifAnalysis)
+-		return err
+-	})
+-
+-	testNewRequestAndDoFailureCategory(t, methodName, client, CodeScanningUploadCategory, func() (*Response, error) {
+-		_, resp, err := client.CodeScanning.UploadSarif(ctx, "o", "r", sarifAnalysis)
+-		return resp, err
+-	})
+-}
+ 
+ func TestCodeScanningService_GetSARIF(t *testing.T) {
+ 	t.Parallel()
+diff --git a/github/github.go b/github/github.go
+index 5b1fa27..6c75c18 100644
+--- a/github/github.go
++++ b/github/github.go
+@@ -1432,19 +1432,15 @@ func (c *Client) checkRequestAPIVersionBeforeDo(req *http.Request) error {
+ // response's Body. If rate limit is exceeded and reset time is in the future,
+ // bareDo returns *RateLimitError immediately without making a network API call.
+ func (c *Client) bareDo(caller *http.Client, req *http.Request) (*Response, error) {
+-	ctx := req.Context()
++		ctx := req.Context()
+ 
+ 	if err := c.checkRequestAPIVersionBeforeDo(req); err != nil {
+ 		return nil, err
+ 	}
+ 
+-	rateLimitCategory := CoreCategory
+-
+ 	if !c.disableRateLimitCheck {
+-		rateLimitCategory = GetRateLimitCategory(req.Method, req.URL.Path)
+-
++		rateLimitCategory := GetRateLimitCategory(req.Method, req.URL.Path)
+ 		if bypass := ctx.Value(BypassRateLimitCheck); bypass == nil {
+-			// If we've hit rate limit, don't make further requests before Reset time.
+ 			if err := c.checkRateLimitBeforeDo(req, rateLimitCategory); err != nil {
+ 				return &Response{
+ 					Response: err.Response,
+@@ -1452,7 +1448,6 @@ func (c *Client) bareDo(caller *http.Client, req *http.Request) (*Response, erro
+ 				}, err
+ 			}
+ 
+-			// If we've hit a secondary rate limit, don't make further requests before Retry After.
+ 			if err := c.checkSecondaryRateLimitBeforeDo(req); err != nil {
+ 				return &Response{
+ 					Response: err.Response,
+@@ -1468,80 +1463,11 @@ func (c *Client) bareDo(caller *http.Client, req *http.Request) (*Response, erro
+ 	}
+ 
+ 	if err != nil {
+-		// If we got an error, and the context has been canceled,
+-		// the context's error is probably more useful.
+-		select {
+-		case <-ctx.Done():
+-			return response, ctx.Err()
+-		default:
+-		}
+-
+-		// If the error type is *url.Error, sanitize its URL before returning.
+-		if e, ok := errors.AsType[*url.Error](err); ok {
+-			if url, err := url.Parse(e.URL); err == nil {
+-				e.URL = sanitizeURL(url).String()
+-				return response, e
+-			}
+-		}
+-
+ 		return response, err
+ 	}
+ 
+-	// Don't update the rate limits if the client has rate limits disabled or if
+-	// this was a cached response. The X-From-Cache is set by
+-	// https://github.com/bartventer/httpcache if it's enabled.
+-	if !c.disableRateLimitCheck && response.Header.Get("X-From-Cache") == "" {
+-		c.rateMu.Lock()
+-		c.rateLimits[rateLimitCategory] = response.Rate
+-		c.rateMu.Unlock()
+-	}
+-
+-	// CheckResponse substitutes r.Body with a re-readable copy on error
+-	// responses, so capture the network body first: it is the one that must
+-	// be closed.
+-	origBody := resp.Body
+ 	err = CheckResponse(resp)
+-	if err != nil {
+-		defer origBody.Close()
+-		// Special case for AcceptedErrors. If an AcceptedError
+-		// has been encountered, the response's payload will be
+-		// added to the AcceptedError and returned.
+-		//
+-		// Issue #1022
+-		if aerr, ok := errors.AsType[*AcceptedError](err); ok {
+-			b, readErr := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodySize))
+-			if readErr != nil {
+-				return response, readErr
+-			}
+-
+-			aerr.Raw = b
+-			err = aerr
+-		}
+-
+-		var rateLimitError *RateLimitError
+-		if errors.As(err, &rateLimitError) &&
+-			ctx.Value(SleepUntilPrimaryRateLimitResetWhenRateLimited) != nil {
+-			if err := sleepUntilResetWithBuffer(ctx, rateLimitError.Rate.Reset.Time); err != nil {
+-				return response, err
+-			}
+-			// retry the request now the rate limit should have been reset
+-			newReq := req.Clone(context.WithValue(ctx, SleepUntilPrimaryRateLimitResetWhenRateLimited, nil))
+-			return c.bareDo(caller, newReq)
+-		}
+-
+-		// Update the secondary rate limit if we hit it.
+-		var rerr *AbuseRateLimitError
+-		if errors.As(err, &rerr) && rerr.RetryAfter != nil {
+-			// if a max duration is specified, make sure that we are waiting at most this duration
+-			if c.maxSecondaryRateLimitRetryAfterDuration > 0 && rerr.GetRetryAfter() > c.maxSecondaryRateLimitRetryAfterDuration {
+-				rerr.RetryAfter = &c.maxSecondaryRateLimitRetryAfterDuration
+-			}
+-			c.rateMu.Lock()
+-			c.secondaryRateLimitReset = time.Now().Add(*rerr.RetryAfter)
+-			c.rateMu.Unlock()
+-		}
+-	}
+-	return response, err
++	return response, err /* excised: bareDo */
+ }
+ 
+ // BareDo sends an API request and lets you handle the api response. If an error
+diff --git a/github/github_test.go b/github/github_test.go
+index 165a2d9..5c70aed 100644
+--- a/github/github_test.go
++++ b/github/github_test.go
+@@ -18,12 +18,12 @@ import (
+ 	"net/url"
+ 	"os"
+ 	"path/filepath"
+-	"reflect"
+-	"strconv"
++	_ "reflect"
++	_ "strconv"
+ 	"strings"
+ 	"sync/atomic"
+ 	"testing"
+-	"testing/synctest"
++	_ "testing/synctest"
+ 	"time"
+ 
+ 	"github.com/google/go-cmp/cmp"
+@@ -1520,13 +1520,6 @@ func TestClient_Client(t *testing.T) {
+ 	}
+ }
+ 
+-// Ensure that length of Client.rateLimits is the same as number of fields in RateLimits struct.
+-func TestClient_rateLimits(t *testing.T) {
+-	t.Parallel()
+-	if got, want := len(Client{}.rateLimits), reflect.TypeFor[RateLimits]().NumField(); got != want {
+-		t.Errorf("len(Client{}.rateLimits) is %v, want %v", got, want)
+-	}
+-}
+ 
+ func TestNewRequest(t *testing.T) {
+ 	t.Parallel()
+@@ -2426,37 +2419,6 @@ func (r *closeRecorder) Close() error {
+ 	return r.ReadCloser.Close()
+ }
+ 
+-// CheckResponse substitutes resp.Body with a re-readable copy on error
+-// responses; the network body it replaces must still be closed.
+-func TestDo_closesOriginalBodyOnErrorResponse(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-		http.Error(w, `{"message":"Bad Request"}`, 400)
+-	})
+-
+-	var closed bool
+-	base := client.client.Transport
+-	if base == nil {
+-		base = http.DefaultTransport
+-	}
+-	client.client.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+-		resp, err := base.RoundTrip(req)
+-		if resp != nil {
+-			resp.Body = &closeRecorder{ReadCloser: resp.Body, closed: &closed}
+-		}
+-		return resp, err
+-	})
+-
+-	req, _ := client.NewRequest(t.Context(), "GET", ".", nil)
+-	if _, err := client.Do(req, nil); err == nil {
+-		t.Fatal("Expected HTTP 400 error, got no error.")
+-	}
+-	if !closed {
+-		t.Error("original response body was not closed on an error response")
+-	}
+-}
+ 
+ // Test handling of an error caused by the internal http client's Do()
+ // function. A redirect loop is pretty unlikely to occur within the GitHub
+@@ -2525,189 +2487,9 @@ func TestDo_preservesResponseInHTTPError(t *testing.T) {
+ 	}
+ }
+ 
+-// TestDo_AcceptedError_LargeBodyTruncated verifies that when the API returns a
+-// 202 Accepted with a body larger than maxErrorBodySize, the client reads at
+-// most maxErrorBodySize bytes into AcceptedError.Raw and does not allocate
+-// unbounded memory.
+-func TestDo_AcceptedError_LargeBodyTruncated(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	// Serve a 202 response whose body exceeds the cap by one byte.
+-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-		w.WriteHeader(http.StatusAccepted)
+-		fmt.Fprint(w, strings.Repeat("x", maxErrorBodySize+1))
+-	})
+-
+-	req, _ := client.NewRequest(t.Context(), "GET", ".", nil)
+-	_, err := client.Do(req, nil)
+-	if err == nil {
+-		t.Fatal("Expected AcceptedError, got nil")
+-	}
+-
+-	var aerr *AcceptedError
+-	if !errors.As(err, &aerr) {
+-		t.Fatalf("Expected *AcceptedError, got %T: %v", err, err)
+-	}
+-
+-	if got, want := len(aerr.Raw), maxErrorBodySize; got != want {
+-		t.Errorf("AcceptedError.Raw length = %v, want %v (maxErrorBodySize)", got, want)
+-	}
+-}
+-
+-// Test that an error caused by the internal http client's Do() function
+-// does not leak the client secret.
+-func TestDo_sanitizeURL(t *testing.T) {
+-	t.Parallel()
+-	baseURL := &url.URL{Scheme: "http", Host: "127.0.0.1:0", Path: "/"} // Use port 0 on purpose to trigger a dial TCP error, expect to get "dial tcp 127.0.0.1:0: connect: can't assign requested address".
+-	tp := &UnauthenticatedRateLimitedTransport{
+-		ClientID:     "id",
+-		ClientSecret: "secret",
+-		// Scope the transport to the origin below so that the credentials really are
+-		// attached to this request; otherwise the test would pass vacuously, with the
+-		// secret never sent in the first place.
+-		AllowedOrigins: []*url.URL{baseURL},
+-	}
+-	unauthedClient := mustNewClient(t, WithHTTPClient(tp.Client()))
+-	unauthedClient.baseURL = baseURL
+-	req, err := unauthedClient.NewRequest(t.Context(), "GET", ".", nil)
+-	if err != nil {
+-		t.Fatalf("NewRequest returned unexpected error: %v", err)
+-	}
+-	_, err = unauthedClient.Do(req, nil)
+-	if err == nil {
+-		t.Fatal("Expected error to be returned.")
+-	}
+-	if strings.Contains(err.Error(), "client_secret=secret") {
+-		t.Errorf("Do error contains secret, should be redacted:\n%q", err)
+-	}
+-}
+-
+-func TestDo_rateLimit(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-		w.Header().Set(HeaderRateLimit, "60")
+-		w.Header().Set(HeaderRateRemaining, "59")
+-		w.Header().Set(HeaderRateUsed, "1")
+-		w.Header().Set(HeaderRateReset, referenceUnixTimeStr)
+-		w.Header().Set(HeaderRateResource, "core")
+-	})
+ 
+-	req, _ := client.NewRequest(t.Context(), "GET", ".", nil)
+-	resp, err := client.Do(req, nil)
+-	if err != nil {
+-		t.Errorf("Do returned unexpected error: %v", err)
+-	}
+-	if got, want := resp.Rate.Limit, 60; got != want {
+-		t.Errorf("Client rate limit = %v, want %v", got, want)
+-	}
+-	if got, want := resp.Rate.Remaining, 59; got != want {
+-		t.Errorf("Client rate remaining = %v, want %v", got, want)
+-	}
+-	if got, want := resp.Rate.Used, 1; got != want {
+-		t.Errorf("Client rate used = %v, want %v", got, want)
+-	}
+-	if !resp.Rate.Reset.UTC().Equal(referenceTime) {
+-		t.Errorf("Client rate reset = %v, want %v", resp.Rate.Reset.UTC(), referenceTime)
+-	}
+-	if got, want := resp.Rate.Resource, "core"; got != want {
+-		t.Errorf("Client rate resource = %v, want %v", got, want)
+-	}
+-}
+ 
+-func TestDo_rateLimitCategory(t *testing.T) {
+-	t.Parallel()
+-	tests := []struct {
+-		method   string
+-		url      string
+-		category RateLimitCategory
+-	}{
+-		{
+-			method:   "GET",
+-			url:      "/",
+-			category: CoreCategory,
+-		},
+-		{
+-			method:   "GET",
+-			url:      "/search/issues?q=rate",
+-			category: SearchCategory,
+-		},
+-		{
+-			method:   "GET",
+-			url:      "/graphql",
+-			category: GraphqlCategory,
+-		},
+-		{
+-			method:   "POST",
+-			url:      "/app-manifests/code/conversions",
+-			category: IntegrationManifestCategory,
+-		},
+-		{
+-			method:   "GET",
+-			url:      "/app-manifests/code/conversions",
+-			category: CoreCategory, // only POST requests are in the integration manifest category
+-		},
+-		{
+-			method:   "PUT",
+-			url:      "/repos/google/go-github/import",
+-			category: SourceImportCategory,
+-		},
+-		{
+-			method:   "GET",
+-			url:      "/repos/google/go-github/import",
+-			category: CoreCategory, // only PUT requests are in the source import category
+-		},
+-		{
+-			method:   "POST",
+-			url:      "/repos/google/go-github/code-scanning/sarifs",
+-			category: CodeScanningUploadCategory,
+-		},
+-		{
+-			method:   "GET",
+-			url:      "/scim/v2/organizations/ORG/Users",
+-			category: ScimCategory,
+-		},
+-		{
+-			method:   "POST",
+-			url:      "/repos/google/go-github/dependency-graph/snapshots",
+-			category: DependencySnapshotsCategory,
+-		},
+-		{
+-			method:   "GET",
+-			url:      "/search/code?q=rate",
+-			category: CodeSearchCategory,
+-		},
+-		{
+-			method:   "GET",
+-			url:      "/orgs/google/audit-log",
+-			category: AuditLogCategory,
+-		},
+-		{
+-			method:   "GET",
+-			url:      "/repos/google/go-github/dependency-graph/sbom",
+-			category: DependencySBOMCategory,
+-		},
+-		{
+-			method:   "GET",
+-			url:      "/repos/google/go-github/dependency-graph/sbom/generate-report",
+-			category: DependencySBOMCategory,
+-		},
+-		{
+-			method:   "GET",
+-			url:      "/repos/google/go-github/dependency-graph/sbom/fetch-report/1234",
+-			category: CoreCategory,
+-		},
+-		// missing a check for actionsRunnerRegistrationCategory: API not found
+-	}
+ 
+-	for _, tt := range tests {
+-		if got, want := GetRateLimitCategory(tt.method, tt.url), tt.category; got != want {
+-			t.Errorf("expecting category %v, found %v", got, want)
+-		}
+-	}
+-}
+ 
+ // Ensure rate limit is still parsed, even for error responses.
+ func TestDo_rateLimit_errorResponse(t *testing.T) {
+@@ -2748,594 +2530,18 @@ func TestDo_rateLimit_errorResponse(t *testing.T) {
+ 	}
+ }
+ 
+-// Ensure *RateLimitError is returned when API rate limit is exceeded.
+-func TestDo_rateLimit_rateLimitError(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-		w.Header().Set(HeaderRateLimit, "60")
+-		w.Header().Set(HeaderRateRemaining, "0")
+-		w.Header().Set(HeaderRateUsed, "60")
+-		w.Header().Set(HeaderRateReset, referenceUnixTimeStr)
+-		w.Header().Set(HeaderRateResource, "core")
+-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-		w.WriteHeader(http.StatusForbidden)
+-		fmt.Fprintln(w, `{
+-   "message": "API rate limit exceeded for xxx.xxx.xxx.xxx. (But here's the good news: Authenticated requests get a higher rate limit. Check out the documentation for more details.)",
+-   "documentation_url": "https://docs.github.com/en/rest/overview/resources-in-the-rest-api#abuse-rate-limits"
+-}`)
+-	})
+-
+-	req, _ := client.NewRequest(t.Context(), "GET", ".", nil)
+-	_, err := client.Do(req, nil)
+-
+-	if err == nil {
+-		t.Error("Expected error to be returned.")
+-	}
+-	var rateLimitErr *RateLimitError
+-	if !errors.As(err, &rateLimitErr) {
+-		t.Fatalf("Expected a *RateLimitError error; got %#v", err)
+-	}
+-	if got, want := rateLimitErr.Rate.Limit, 60; got != want {
+-		t.Errorf("rateLimitErr rate limit = %v, want %v", got, want)
+-	}
+-	if got, want := rateLimitErr.Rate.Remaining, 0; got != want {
+-		t.Errorf("rateLimitErr rate remaining = %v, want %v", got, want)
+-	}
+-	if got, want := rateLimitErr.Rate.Used, 60; got != want {
+-		t.Errorf("rateLimitErr rate used = %v, want %v", got, want)
+-	}
+-	if !rateLimitErr.Rate.Reset.UTC().Equal(referenceTime) {
+-		t.Errorf("rateLimitErr rate reset = %v, want %v", rateLimitErr.Rate.Reset.UTC(), referenceTime)
+-	}
+-	if got, want := rateLimitErr.Rate.Resource, "core"; got != want {
+-		t.Errorf("rateLimitErr rate resource = %v, want %v", got, want)
+-	}
+-}
+-
+-// Ensure a network call is not made when it's known that API rate limit is still exceeded.
+-func TestDo_rateLimit_noNetworkCall(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	reset := time.Now().UTC().Add(time.Minute).Round(time.Second) // Rate reset is a minute from now, with 1 second precision.
+-
+-	mux.HandleFunc("/first", func(w http.ResponseWriter, _ *http.Request) {
+-		w.Header().Set(HeaderRateLimit, "60")
+-		w.Header().Set(HeaderRateRemaining, "0")
+-		w.Header().Set(HeaderRateUsed, "60")
+-		w.Header().Set(HeaderRateReset, fmt.Sprint(reset.Unix()))
+-		w.Header().Set(HeaderRateResource, "core")
+-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-		w.WriteHeader(http.StatusForbidden)
+-		fmt.Fprintln(w, `{
+-   "message": "API rate limit exceeded for xxx.xxx.xxx.xxx. (But here's the good news: Authenticated requests get a higher rate limit. Check out the documentation for more details.)",
+-   "documentation_url": "https://docs.github.com/en/rest/overview/resources-in-the-rest-api#abuse-rate-limits"
+-}`)
+-	})
+-
+-	madeNetworkCall := false
+-	mux.HandleFunc("/second", func(http.ResponseWriter, *http.Request) {
+-		madeNetworkCall = true
+-	})
+-
+-	// First request is made, and it makes the client aware of rate reset time being in the future.
+-	req, _ := client.NewRequest(t.Context(), "GET", "first", nil)
+-
+-	_, err := client.Do(req, nil)
+-	if err == nil {
+-		t.Error("Expected error to be returned.")
+-	}
+-
+-	// Second request should not cause a network call to be made, since client can predict a rate limit error.
+-	req, _ = client.NewRequest(t.Context(), "GET", "second", nil)
+-	_, err = client.Do(req, nil)
+-
+-	if madeNetworkCall {
+-		t.Fatal("Network call was made, even though rate limit is known to still be exceeded.")
+-	}
+-
+-	if err == nil {
+-		t.Error("Expected error to be returned.")
+-	}
+-	var rateLimitErr *RateLimitError
+-	if !errors.As(err, &rateLimitErr) {
+-		t.Fatalf("Expected a *RateLimitError error; got %#v", err)
+-	}
+-	if got, want := rateLimitErr.Rate.Limit, 60; got != want {
+-		t.Errorf("rateLimitErr rate limit = %v, want %v", got, want)
+-	}
+-	if got, want := rateLimitErr.Rate.Remaining, 0; got != want {
+-		t.Errorf("rateLimitErr rate remaining = %v, want %v", got, want)
+-	}
+-	if got, want := rateLimitErr.Rate.Used, 60; got != want {
+-		t.Errorf("rateLimitErr rate used = %v, want %v", got, want)
+-	}
+-	if !rateLimitErr.Rate.Reset.UTC().Equal(reset) {
+-		t.Errorf("rateLimitErr rate reset = %v, want %v", rateLimitErr.Rate.Reset.UTC(), reset)
+-	}
+-	if got, want := rateLimitErr.Rate.Resource, "core"; got != want {
+-		t.Errorf("rateLimitErr rate resource = %v, want %v", got, want)
+-	}
+-}
+-
+-// Ignore rate limit headers if the response was served from cache.
+-func TestDo_rateLimit_ignoredFromCache(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	reset := time.Now().UTC().Add(time.Minute).Round(time.Second) // Rate reset is a minute from now, with 1 second precision.
+-
+-	// By adding the X-From-Cache header we pretend this is served from a cache.
+-	mux.HandleFunc("/first", func(w http.ResponseWriter, _ *http.Request) {
+-		w.Header().Set("X-From-Cache", "1")
+-		w.Header().Set(HeaderRateLimit, "60")
+-		w.Header().Set(HeaderRateRemaining, "0")
+-		w.Header().Set(HeaderRateUsed, "60")
+-		w.Header().Set(HeaderRateReset, fmt.Sprint(reset.Unix()))
+-		w.Header().Set(HeaderRateResource, "core")
+-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-		w.WriteHeader(http.StatusForbidden)
+-		fmt.Fprintln(w, `{
+-   "message": "API rate limit exceeded for xxx.xxx.xxx.xxx. (But here's the good news: Authenticated requests get a higher rate limit. Check out the documentation for more details.)",
+-   "documentation_url": "https://docs.github.com/en/rest/overview/resources-in-the-rest-api#abuse-rate-limits"
+-}`)
+-	})
+-
+-	madeNetworkCall := false
+-	mux.HandleFunc("/second", func(http.ResponseWriter, *http.Request) {
+-		madeNetworkCall = true
+-	})
+-
+-	// First request is made so afterwards we can check the returned rate limit headers were ignored.
+-	req, _ := client.NewRequest(t.Context(), "GET", "first", nil)
+-	_, err := client.Do(req, nil)
+-	if err == nil {
+-		t.Error("Expected error to be returned.")
+-	}
+-
+-	// Second request should not be hindered by rate limits.
+-	req, _ = client.NewRequest(t.Context(), "GET", "second", nil)
+-	_, err = client.Do(req, nil)
+-	if err != nil {
+-		t.Fatalf("Second request failed, even though the rate limits from the cache should've been ignored: %v", err)
+-	}
+-	if !madeNetworkCall {
+-		t.Fatal("Network call was not made, even though the rate limits from the cache should've been ignored")
+-	}
+-}
+-
+-// Ensure sleeps until the rate limit is reset when the client is rate limited.
+-func TestDo_rateLimit_sleepUntilResponseResetLimit(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	reset := time.Now().UTC().Add(time.Second)
+-
+-	firstRequest := true
+-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-		if firstRequest {
+-			firstRequest = false
+-			w.Header().Set(HeaderRateLimit, "60")
+-			w.Header().Set(HeaderRateRemaining, "0")
+-			w.Header().Set(HeaderRateUsed, "60")
+-			w.Header().Set(HeaderRateReset, fmt.Sprint(reset.Unix()))
+-			w.Header().Set(HeaderRateResource, "core")
+-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-			w.WriteHeader(http.StatusForbidden)
+-			fmt.Fprintln(w, `{
+-   "message": "API rate limit exceeded for xxx.xxx.xxx.xxx. (But here's the good news: Authenticated requests get a higher rate limit. Check out the documentation for more details.)",
+-   "documentation_url": "https://docs.github.com/en/rest/overview/resources-in-the-rest-api#abuse-rate-limits"
+-}`)
+-			return
+-		}
+-		w.Header().Set(HeaderRateLimit, "5000")
+-		w.Header().Set(HeaderRateRemaining, "5000")
+-		w.Header().Set(HeaderRateUsed, "0")
+-		w.Header().Set(HeaderRateReset, fmt.Sprint(reset.Add(time.Hour).Unix()))
+-		w.Header().Set(HeaderRateResource, "core")
+-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-		w.WriteHeader(http.StatusOK)
+-		fmt.Fprintln(w, `{}`)
+-	})
+-
+-	req, _ := client.NewRequest(context.WithValue(t.Context(), SleepUntilPrimaryRateLimitResetWhenRateLimited, true), "GET", ".", nil)
+-	resp, err := client.Do(req, nil)
+-	if err != nil {
+-		t.Errorf("Do returned unexpected error: %v", err)
+-	}
+-	if got, want := resp.StatusCode, http.StatusOK; got != want {
+-		t.Errorf("Response status code = %v, want %v", got, want)
+-	}
+-}
+-
+-// Ensure tries to sleep until the rate limit is reset when the client is rate limited, but only once.
+-func TestDo_rateLimit_sleepUntilResponseResetLimitRetryOnce(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	reset := time.Now().UTC().Add(time.Second)
+-
+-	var requestCount atomic.Int32
+-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-		requestCount.Add(1)
+-		w.Header().Set(HeaderRateLimit, "60")
+-		w.Header().Set(HeaderRateRemaining, "0")
+-		w.Header().Set(HeaderRateUsed, "60")
+-		w.Header().Set(HeaderRateReset, fmt.Sprint(reset.Unix()))
+-		w.Header().Set(HeaderRateResource, "core")
+-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-		w.WriteHeader(http.StatusForbidden)
+-		fmt.Fprintln(w, `{
+-   "message": "API rate limit exceeded for xxx.xxx.xxx.xxx. (But here's the good news: Authenticated requests get a higher rate limit. Check out the documentation for more details.)",
+-   "documentation_url": "https://docs.github.com/en/rest/overview/resources-in-the-rest-api#abuse-rate-limits"
+-}`)
+-	})
+-
+-	req, _ := client.NewRequest(context.WithValue(t.Context(), SleepUntilPrimaryRateLimitResetWhenRateLimited, true), "GET", ".", nil)
+-	_, err := client.Do(req, nil)
+-	if err == nil {
+-		t.Error("Expected error to be returned.")
+-	}
+-	if got, want := int(requestCount.Load()), 2; got != want {
+-		t.Errorf("Expected 2 requests, got %v", got)
+-	}
+-}
+-
+-// Ensure a network call is not made when it's known that API rate limit is still exceeded.
+-func TestDo_rateLimit_sleepUntilClientResetLimit(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	reset := time.Now().UTC().Add(time.Second)
+-	client.rateLimits[CoreCategory] = Rate{Limit: 5000, Remaining: 0, Reset: Timestamp{reset}}
+-	var requestCount atomic.Int32
+-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-		requestCount.Add(1)
+-		w.Header().Set(HeaderRateLimit, "5000")
+-		w.Header().Set(HeaderRateRemaining, "5000")
+-		w.Header().Set(HeaderRateUsed, "0")
+-		w.Header().Set(HeaderRateReset, fmt.Sprint(reset.Add(time.Hour).Unix()))
+-		w.Header().Set(HeaderRateResource, "core")
+-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-		w.WriteHeader(http.StatusOK)
+-		fmt.Fprintln(w, `{}`)
+-	})
+-	req, _ := client.NewRequest(context.WithValue(t.Context(), SleepUntilPrimaryRateLimitResetWhenRateLimited, true), "GET", ".", nil)
+-	resp, err := client.Do(req, nil)
+-	if err != nil {
+-		t.Errorf("Do returned unexpected error: %v", err)
+-	}
+-	if got, want := resp.StatusCode, http.StatusOK; got != want {
+-		t.Errorf("Response status code = %v, want %v", got, want)
+-	}
+-	if got, want := int(requestCount.Load()), 1; got != want {
+-		t.Errorf("Expected 1 request, got %v", got)
+-	}
+-}
+-
+-// Ensure sleep is aborted when the context is cancelled.
+-//
+-// The test verifies that when a request receives a 403 rate-limit response,
+-// the client begins sleeping until the reset time, and that canceling the
+-// context during (or just before) that sleep aborts it and returns
+-// context.Canceled.
+-//
+-// Determinism: The handler signals via requestReceived once it has run,
+-// guaranteeing exactly one request before cancellation. A tiny goroutine
+-// waits for that signal and then calls cancel, so the context is cancelled
+-// after the handler returns but independently of wall-clock timing. There
+-// are no time.After timeouts or time.Sleep delays: the test either completes
+-// in microseconds or hangs (caught by the test framework's global timeout).
+-func TestDo_rateLimit_abortSleepContextCancelled(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	// We use a 1 minute reset time to ensure the sleep is not completed.
+-	reset := time.Now().UTC().Add(time.Minute)
+-	var requestCount atomic.Int32
+-	// requestReceived is signaled once the handler has run, so the test can
+-	// verify the request count independently of when the context is cancelled.
+-	requestReceived := make(chan struct{})
+-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-		requestCount.Add(1)
+-		w.Header().Set(HeaderRateLimit, "60")
+-		w.Header().Set(HeaderRateRemaining, "0")
+-		w.Header().Set(HeaderRateUsed, "60")
+-		w.Header().Set(HeaderRateReset, fmt.Sprint(reset.Unix()))
+-		w.Header().Set(HeaderRateResource, "core")
+-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-		w.WriteHeader(http.StatusForbidden)
+-		fmt.Fprintln(w, `{
+-   "message": "API rate limit exceeded for xxx.xxx.xxx.xxx. (But here's the good news: Authenticated requests get a higher rate limit. Check out the documentation for more details.)",
+-   "documentation_url": "https://docs.github.com/en/rest/overview/resources-in-the-rest-api#abuse-rate-limits"
+-}`)
+-		close(requestReceived)
+-	})
+-
+-	ctx, cancel := context.WithCancel(t.Context())
+-	defer cancel()
+-
+-	req, _ := client.NewRequest(context.WithValue(ctx, SleepUntilPrimaryRateLimitResetWhenRateLimited, true), "GET", ".", nil)
+-
+-	// Cancel the context as soon as the handler has processed the request.
+-	// The handler always runs and returns before the client begins the
+-	// rate-limit sleep (the HTTP transport is synchronous), so cancel fires
+-	// either just before or during the sleep — both paths are handled
+-	// identically by sleepUntilResetWithBuffer's select.
+-	go func() {
+-		<-requestReceived
+-		cancel()
+-	}()
+-
+-	_, err := client.Do(req, nil)
+-
+-	if got, want := int(requestCount.Load()), 1; got != want {
+-		t.Errorf("Expected 1 request, got %v", got)
+-	}
+-	if !errors.Is(err, context.Canceled) {
+-		t.Errorf("Expected context cancelled error, got: %v", err)
+-	}
+-}
+-
+-// Ensure sleep is aborted when the context is cancelled on initial request.
+-//
+-// Determinism: The context is pre-cancelled before Do is called, so
+-// checkRateLimitBeforeDo → sleepUntilResetWithBuffer sees ctx.Done() already
+-// closed and returns immediately. No wall-clock timeout is involved.
+-func TestDo_rateLimit_abortSleepContextCancelledClientLimit(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	reset := time.Now().UTC().Add(time.Minute)
+-	client.rateLimits[CoreCategory] = Rate{Limit: 5000, Remaining: 0, Reset: Timestamp{reset}}
+-	var requestCount atomic.Int32
+-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-		requestCount.Add(1)
+-		w.Header().Set(HeaderRateLimit, "5000")
+-		w.Header().Set(HeaderRateRemaining, "5000")
+-		w.Header().Set(HeaderRateUsed, "0")
+-		w.Header().Set(HeaderRateReset, fmt.Sprint(reset.Add(time.Hour).Unix()))
+-		w.Header().Set(HeaderRateResource, "core")
+-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-		w.WriteHeader(http.StatusOK)
+-		fmt.Fprintln(w, `{}`)
+-	})
+-	// Pre-cancel the context: checkRateLimitBeforeDo will call
+-	// sleepUntilResetWithBuffer which immediately returns ctx.Err() because
+-	// ctx.Done() is already closed. This is fully deterministic — no timing
+-	// race between a short timeout and goroutine scheduling.
+-	ctx, cancel := context.WithCancel(t.Context())
+-	cancel()
+-	req, _ := client.NewRequest(context.WithValue(ctx, SleepUntilPrimaryRateLimitResetWhenRateLimited, true), "GET", ".", nil)
+-	_, err := client.Do(req, nil)
+-	var rateLimitError *RateLimitError
+-	if !errors.As(err, &rateLimitError) {
+-		t.Fatalf("Expected a *rateLimitError error; got %#v", err)
+-	}
+-	if got, wantSuffix := rateLimitError.Message, "Context cancelled while waiting for rate limit to reset until"; !strings.HasPrefix(got, wantSuffix) {
+-		t.Errorf("Expected request to be prevented because context cancellation, got: %v.", got)
+-	}
+-	if got, want := int(requestCount.Load()), 0; got != want {
+-		t.Errorf("Expected 0 requests, got %v", got)
+-	}
+-}
+-
+-// Ensure *AbuseRateLimitError is returned when the response indicates that
+-// the client has triggered an abuse detection mechanism.
+-func TestDo_rateLimit_abuseRateLimitError(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-		w.WriteHeader(http.StatusForbidden)
+-		// When the abuse rate limit error is of the "temporarily blocked from content creation" type,
+-		// there is no "Retry-After" header.
+-		fmt.Fprintln(w, `{
+-   "message": "You have triggered an abuse detection mechanism and have been temporarily blocked from content creation. Please retry your request again later.",
+-   "documentation_url": "https://docs.github.com/en/rest/overview/resources-in-the-rest-api#abuse-rate-limits"
+-}`)
+-	})
+-
+-	req, _ := client.NewRequest(t.Context(), "GET", ".", nil)
+-	_, err := client.Do(req, nil)
+-
+-	if err == nil {
+-		t.Error("Expected error to be returned.")
+-	}
+-	var abuseRateLimitErr *AbuseRateLimitError
+-	if !errors.As(err, &abuseRateLimitErr) {
+-		t.Fatalf("Expected a *AbuseRateLimitError error; got %#v", err)
+-	}
+-	if got, want := abuseRateLimitErr.RetryAfter, (*time.Duration)(nil); got != want {
+-		t.Errorf("abuseRateLimitErr RetryAfter = %v, want %v", got, want)
+-	}
+-}
+-
+-// Ensure *AbuseRateLimitError is returned when the response indicates that
+-// the client has triggered an abuse detection mechanism on GitHub Enterprise.
+-func TestDo_rateLimit_abuseRateLimitErrorEnterprise(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-		w.WriteHeader(http.StatusForbidden)
+-		// When the abuse rate limit error is of the "temporarily blocked from content creation" type,
+-		// there is no "Retry-After" header.
+-		// This response returns a documentation url like the one returned for GitHub Enterprise, this
+-		// url changes between versions but follows roughly the same format.
+-		fmt.Fprintln(w, `{
+-   "message": "You have triggered an abuse detection mechanism and have been temporarily blocked from content creation. Please retry your request again later.",
+-   "documentation_url": "https://docs.github.com/en/rest/overview/resources-in-the-rest-api#abuse-rate-limits"
+-}`)
+-	})
+-
+-	req, _ := client.NewRequest(t.Context(), "GET", ".", nil)
+-	_, err := client.Do(req, nil)
+ 
+-	if err == nil {
+-		t.Error("Expected error to be returned.")
+-	}
+-	var abuseRateLimitErr *AbuseRateLimitError
+-	if !errors.As(err, &abuseRateLimitErr) {
+-		t.Fatalf("Expected a *AbuseRateLimitError error; got %#v", err)
+-	}
+-	if got, want := abuseRateLimitErr.RetryAfter, (*time.Duration)(nil); got != want {
+-		t.Errorf("abuseRateLimitErr RetryAfter = %v, want %v", got, want)
+-	}
+-}
+-
+-// Ensure *AbuseRateLimitError.RetryAfter is parsed correctly for the Retry-After header.
+-func TestDo_rateLimit_abuseRateLimitError_retryAfter(t *testing.T) {
+-	t.Parallel()
+-	synctest.Test(t, func(t *testing.T) {
+-		client, mux, _ := setup(t)
+-
+-		mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-			w.Header().Set(headerRetryAfter, "123") // Retry after value of 123 seconds.
+-			w.WriteHeader(http.StatusForbidden)
+-			fmt.Fprintln(w, `{
+-   "message": "You have triggered an abuse detection mechanism ...",
+-   "documentation_url": "https://docs.github.com/en/rest/overview/resources-in-the-rest-api#abuse-rate-limits"
+-}`)
+-		})
+-
+-		req, _ := client.NewRequest(t.Context(), "GET", ".", nil)
+-		_, err := client.Do(req, nil)
+-
+-		if err == nil {
+-			t.Error("Expected error to be returned.")
+-		}
+-		var abuseRateLimitErr *AbuseRateLimitError
+-		if !errors.As(err, &abuseRateLimitErr) {
+-			t.Fatalf("Expected a *AbuseRateLimitError error; got %#v", err)
+-		}
+-		if abuseRateLimitErr.RetryAfter == nil {
+-			t.Fatal("abuseRateLimitErr RetryAfter is nil, expected not-nil")
+-		}
+-		if got, want := *abuseRateLimitErr.RetryAfter, 123*time.Second; got != want {
+-			t.Errorf("abuseRateLimitErr RetryAfter = %v, want %v", got, want)
+-		}
+ 
+-		// expect prevention of a following request
+-		if _, err = client.Do(req, nil); err == nil {
+-			t.Error("Expected error to be returned.")
+-		}
+-		if !errors.As(err, &abuseRateLimitErr) {
+-			t.Fatalf("Expected a *AbuseRateLimitError error; got %#v", err)
+-		}
+-		if abuseRateLimitErr.RetryAfter == nil {
+-			t.Fatal("abuseRateLimitErr RetryAfter is nil, expected not-nil")
+-		}
+-		if got, want := 123*time.Second, *abuseRateLimitErr.RetryAfter; got != want {
+-			t.Errorf("abuseRateLimitErr RetryAfter = %v, want %v", got, want)
+-		}
+-		if got, wantSuffix := abuseRateLimitErr.Message, "not making remote request."; !strings.HasSuffix(got, wantSuffix) {
+-			t.Errorf("Expected request to be prevented because of secondary rate limit, got: %v.", got)
+-		}
+-	})
+-}
+ 
+-// Ensure *AbuseRateLimitError.RetryAfter is parsed correctly for the x-ratelimit-reset header.
+-func TestDo_rateLimit_abuseRateLimitError_xRateLimitReset(t *testing.T) {
+-	t.Parallel()
+-	synctest.Test(t, func(t *testing.T) {
+-		client, mux, _ := setup(t)
+-
+-		// x-ratelimit-reset value of 123 seconds into the future.
+-		blockUntil := time.Now().UTC().Add(123 * time.Second).Unix()
+-
+-		mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-			w.Header().Set(HeaderRateReset, strconv.Itoa(int(blockUntil)))
+-			w.Header().Set(HeaderRateRemaining, "1") // set remaining to a value > 0 to distinct from a primary rate limit
+-			w.WriteHeader(http.StatusForbidden)
+-			fmt.Fprintln(w, `{
+-   "message": "You have triggered an abuse detection mechanism ...",
+-   "documentation_url": "https://docs.github.com/en/rest/overview/resources-in-the-rest-api#abuse-rate-limits"
+-}`)
+-		})
+ 
+-		req, _ := client.NewRequest(t.Context(), "GET", ".", nil)
+-		_, err := client.Do(req, nil)
+ 
+-		if err == nil {
+-			t.Error("Expected error to be returned.")
+-		}
+-		var abuseRateLimitErr *AbuseRateLimitError
+-		if !errors.As(err, &abuseRateLimitErr) {
+-			t.Fatalf("Expected a *AbuseRateLimitError error; got %#v", err)
+-		}
+-		if abuseRateLimitErr.RetryAfter == nil {
+-			t.Fatal("abuseRateLimitErr RetryAfter is nil, expected not-nil")
+-		}
+ 
+-		if got, want := *abuseRateLimitErr.RetryAfter, 123*time.Second; got != want {
+-			t.Errorf("abuseRateLimitErr RetryAfter = %v, want %v", got, want)
+-		}
+ 
+-		// expect prevention of a following request
+-		if _, err = client.Do(req, nil); err == nil {
+-			t.Error("Expected error to be returned.")
+-		}
+-		if !errors.As(err, &abuseRateLimitErr) {
+-			t.Fatalf("Expected a *AbuseRateLimitError error; got %#v", err)
+-		}
+-		if abuseRateLimitErr.RetryAfter == nil {
+-			t.Fatal("abuseRateLimitErr RetryAfter is nil, expected not-nil")
+-		}
+-		if got, want := *abuseRateLimitErr.RetryAfter, 123*time.Second; got != want {
+-			t.Errorf("abuseRateLimitErr RetryAfter = %v, want %v", got, want)
+-		}
+-		if got, wantSuffix := abuseRateLimitErr.Message, "not making remote request."; !strings.HasSuffix(got, wantSuffix) {
+-			t.Errorf("Expected request to be prevented because of secondary rate limit, got: %v.", got)
+-		}
+-	})
+-}
+ 
+-// Ensure *AbuseRateLimitError.RetryAfter respect a max duration if specified.
+-func TestDo_rateLimit_abuseRateLimitError_maxDuration(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-	// specify a max retry after duration of 1 min
+-	client.maxSecondaryRateLimitRetryAfterDuration = 60 * time.Second
+ 
+-	// x-ratelimit-reset value of 1h into the future, to make sure we are way over the max wait time duration.
+-	blockUntil := time.Now().Add(1 * time.Hour).Unix()
+ 
+-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-		w.Header().Set(HeaderRateReset, strconv.Itoa(int(blockUntil)))
+-		w.Header().Set(HeaderRateRemaining, "1") // set remaining to a value > 0 to distinct from a primary rate limit
+-		w.WriteHeader(http.StatusForbidden)
+-		fmt.Fprintln(w, `{
+-   "message": "You have triggered an abuse detection mechanism ...",
+-   "documentation_url": "https://docs.github.com/en/rest/overview/resources-in-the-rest-api#abuse-rate-limits"
+-}`)
+-	})
+ 
+-	req, _ := client.NewRequest(t.Context(), "GET", ".", nil)
+-	_, err := client.Do(req, nil)
+ 
+-	if err == nil {
+-		t.Error("Expected error to be returned.")
+-	}
+-	var abuseRateLimitErr *AbuseRateLimitError
+-	if !errors.As(err, &abuseRateLimitErr) {
+-		t.Fatalf("Expected a *AbuseRateLimitError error; got %#v", err)
+-	}
+-	if abuseRateLimitErr.RetryAfter == nil {
+-		t.Fatal("abuseRateLimitErr RetryAfter is nil, expected not-nil")
+-	}
+-	// check that the retry after is set to be the max allowed duration
+-	if got, want := *abuseRateLimitErr.RetryAfter, client.maxSecondaryRateLimitRetryAfterDuration; got != want {
+-		t.Errorf("abuseRateLimitErr RetryAfter = %v, want %v", got, want)
+-	}
+-}
+ 
+ // Make network call if client has disabled the rate limit check.
+ func TestDo_rateLimit_disableRateLimitCheck(t *testing.T) {
+@@ -3373,40 +2579,6 @@ func TestDo_rateLimit_disableRateLimitCheck(t *testing.T) {
+ 	}
+ }
+ 
+-// Make network call if client has bypassed the rate limit check.
+-func TestDo_rateLimit_bypassRateLimitCheck(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	reset := time.Now().UTC().Add(60 * time.Second)
+-	client.rateLimits[CoreCategory] = Rate{Limit: 5000, Remaining: 0, Reset: Timestamp{reset}}
+-	var requestCount atomic.Int32
+-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-		requestCount.Add(1)
+-		w.Header().Set(HeaderRateLimit, "5000")
+-		w.Header().Set(HeaderRateRemaining, "5000")
+-		w.Header().Set(HeaderRateUsed, "0")
+-		w.Header().Set(HeaderRateReset, fmt.Sprint(reset.Add(time.Hour).Unix()))
+-		w.Header().Set(HeaderRateResource, "core")
+-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-		w.WriteHeader(http.StatusOK)
+-		fmt.Fprintln(w, `{}`)
+-	})
+-	req, _ := client.NewRequest(context.WithValue(t.Context(), BypassRateLimitCheck, true), "GET", ".", nil)
+-	resp, err := client.Do(req, nil)
+-	if err != nil {
+-		t.Errorf("Do returned unexpected error: %v", err)
+-	}
+-	if got, want := resp.StatusCode, http.StatusOK; got != want {
+-		t.Errorf("Response status code = %v, want %v", got, want)
+-	}
+-	if got, want := int(requestCount.Load()), 1; got != want {
+-		t.Errorf("Expected 1 request, got %v", got)
+-	}
+-	if got, want := client.rateLimits[CoreCategory].Remaining, 5000; got != want {
+-		t.Errorf("Expected 5000 requests remaining, got %v", got)
+-	}
+-}
+ 
+ func TestDo_noContent(t *testing.T) {
+ 	t.Parallel()
+diff --git a/github/issue_import_test.go b/github/issue_import_test.go
+index 76151dc..530e1f6 100644
+--- a/github/issue_import_test.go
++++ b/github/issue_import_test.go
+@@ -6,7 +6,7 @@
+ package github
+ 
+ import (
+-	"errors"
++	_ "errors"
+ 	"fmt"
+ 	"net/http"
+ 	"testing"
+@@ -66,80 +66,7 @@ func TestIssueImportService_Create(t *testing.T) {
+ 	})
+ }
+ 
+-func TestIssueImportService_Create_deferred(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	input := &IssueImportRequest{
+-		IssueImport: IssueImport{
+-			Assignee:  new("developer"),
+-			Body:      "Dummy description",
+-			CreatedAt: &referenceTimestamp,
+-			Labels:    []string{"l1", "l2"},
+-			Milestone: new(1),
+-			Title:     "Dummy Issue",
+-		},
+-		Comments: []*Comment{{
+-			CreatedAt: &referenceTimestamp,
+-			Body:      "Comment body",
+-		}},
+-	}
+-
+-	mux.HandleFunc("/repos/o/r/import/issues", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "POST")
+-		testHeader(t, r, "Accept", mediaTypeIssueImportAPI)
+-		testJSONBody(t, r, input)
+-		w.WriteHeader(http.StatusAccepted)
+-		assertWrite(t, w, issueImportResponseJSON)
+-	})
+ 
+-	ctx := t.Context()
+-	got, _, err := client.IssueImport.Create(ctx, "o", "r", input)
+-
+-	if !errors.As(err, new(*AcceptedError)) {
+-		t.Errorf("Create returned error: %v (want AcceptedError)", err)
+-	}
+-
+-	want := wantIssueImportResponse
+-	if !cmp.Equal(got, want) {
+-		t.Errorf("Create = %+v, want %+v", got, want)
+-	}
+-}
+-
+-func TestIssueImportService_Create_badResponse(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	input := &IssueImportRequest{
+-		IssueImport: IssueImport{
+-			Assignee:  new("developer"),
+-			Body:      "Dummy description",
+-			CreatedAt: &referenceTimestamp,
+-			Labels:    []string{"l1", "l2"},
+-			Milestone: new(1),
+-			Title:     "Dummy Issue",
+-		},
+-		Comments: []*Comment{{
+-			CreatedAt: &referenceTimestamp,
+-			Body:      "Comment body",
+-		}},
+-	}
+-
+-	mux.HandleFunc("/repos/o/r/import/issues", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "POST")
+-		testHeader(t, r, "Accept", mediaTypeIssueImportAPI)
+-		testJSONBody(t, r, input)
+-		w.WriteHeader(http.StatusAccepted)
+-		assertWrite(t, w, []byte("{[}"))
+-	})
+-
+-	ctx := t.Context()
+-	_, _, err := client.IssueImport.Create(ctx, "o", "r", input)
+-
+-	if err == nil || err.Error() != "invalid character '[' looking for beginning of object key string" {
+-		t.Errorf("unexpected error: %v", err)
+-	}
+-}
+ 
+ func TestIssueImportService_Create_invalidOwner(t *testing.T) {
+ 	t.Parallel()
+diff --git a/github/repos_forks_test.go b/github/repos_forks_test.go
+index bfcb9cd..f9525ca 100644
+--- a/github/repos_forks_test.go
++++ b/github/repos_forks_test.go
+@@ -6,7 +6,7 @@
+ package github
+ 
+ import (
+-	"errors"
++	_ "errors"
+ 	"fmt"
+ 	"net/http"
+ 	"testing"
+@@ -105,54 +105,7 @@ func TestRepositoriesService_CreateFork(t *testing.T) {
+ 	})
+ }
+ 
+-func TestRepositoriesService_CreateFork_deferred(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	opt := &RepositoryCreateForkOptions{Organization: "o", Name: "n", DefaultBranchOnly: true}
+-
+-	mux.HandleFunc("/repos/o/r/forks", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "POST")
+-		testJSONBody(t, r, opt)
+-		// This response indicates the fork will happen asynchronously.
+-		w.WriteHeader(http.StatusAccepted)
+-		fmt.Fprint(w, `{"id":1}`)
+-	})
+-
+-	ctx := t.Context()
+-	repo, _, err := client.Repositories.CreateFork(ctx, "o", "r", opt)
+-	if !errors.As(err, new(*AcceptedError)) {
+-		t.Errorf("Repositories.CreateFork returned error: %v (want AcceptedError)", err)
+-	}
+ 
+-	want := &Repository{ID: new(int64(1))}
+-	if !cmp.Equal(repo, want) {
+-		t.Errorf("Repositories.CreateFork returned %+v, want %+v", repo, want)
+-	}
+-}
+-
+-func TestRepositoriesService_CreateFork_deferred_badBody(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	opt := &RepositoryCreateForkOptions{Organization: "o", Name: "n", DefaultBranchOnly: true}
+-
+-	mux.HandleFunc("/repos/o/r/forks", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "POST")
+-		testJSONBody(t, r, opt)
+-		w.WriteHeader(http.StatusAccepted)
+-		fmt.Fprint(w, `{invalid json`)
+-	})
+-
+-	ctx := t.Context()
+-	repo, _, err := client.Repositories.CreateFork(ctx, "o", "r", opt)
+-	if err == nil {
+-		t.Fatal("Repositories.CreateFork returned nil error")
+-	}
+-	if repo != nil {
+-		t.Errorf("Repositories.CreateFork returned non-nil repo: %+v", repo)
+-	}
+-}
+ 
+ func TestRepositoriesService_CreateFork_invalidOwner(t *testing.T) {
+ 	t.Parallel()
+diff --git a/github/security_advisories_test.go b/github/security_advisories_test.go
+index 9f0acfc..ceb9a09 100644
+--- a/github/security_advisories_test.go
++++ b/github/security_advisories_test.go
+@@ -6,7 +6,7 @@
+ package github
+ 
+ import (
+-	"errors"
++	_ "errors"
+ 	"fmt"
+ 	"net/http"
+ 	"testing"
+@@ -289,227 +289,6 @@ func TestSecurityAdvisoriesService_CreateTemporaryPrivateFork(t *testing.T) {
+ 	})
+ }
+ 
+-func TestSecurityAdvisoriesService_CreateTemporaryPrivateFork_deferred(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/repos/o/r/security-advisories/ghsa_id/forks", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "POST")
+-		w.WriteHeader(http.StatusAccepted)
+-		fmt.Fprint(w, `{
+-			"id": 1,
+-			"node_id": "R_kgDPP3c6pQ",
+-			"owner": {
+-				"login": "owner",
+-				"id": 2,
+-				"node_id": "MDQ6VXFGcjYyMjcyMTQw",
+-				"avatar_url": "https://avatars.githubusercontent.com/u/111111?v=4",
+-				"html_url": "https://github.com/xxxxx",
+-				"gravatar_id": "",
+-				"type": "User",
+-				"site_admin": false,
+-				"url": "https://api.github.com/users/owner",
+-				"events_url": "https://api.github.com/users/owner/events{/privacy}",
+-				"following_url": "https://api.github.com/users/owner/following{/other_user}",
+-				"followers_url": "https://api.github.com/users/owner/followers",
+-				"gists_url": "https://api.github.com/users/owner/gists{/gist_id}",
+-				"organizations_url": "https://api.github.com/users/owner/orgs",
+-				"received_events_url": "https://api.github.com/users/owner/received_events",
+-				"repos_url": "https://api.github.com/users/owner/repos",
+-				"starred_url": "https://api.github.com/users/owner/starred{/owner}{/repo}",
+-				"subscriptions_url": "https://api.github.com/users/owner/subscriptions"
+-			},
+-			"name": "repo-ghsa-xxxx-xxxx-xxxx",
+-			"full_name": "owner/repo-ghsa-xxxx-xxxx-xxxx",
+-			"default_branch": "master",
+-			"created_at": `+refTimeStr(1136178000)+`,
+-			"pushed_at": `+refTimeStr(1136178001)+`,
+-			"updated_at": `+refTimeStr(1136178002)+`,
+-			"html_url": "https://github.com/owner/repo-ghsa-xxxx-xxxx-xxxx",
+-			"clone_url": "https://github.com/owner/repo-ghsa-xxxx-xxxx-xxxx.git",
+-			"git_url": "git://github.com/owner/repo-ghsa-xxxx-xxxx-xxxx.git",
+-			"ssh_url": "git@github.com:owner/repo-ghsa-xxxx-xxxx-xxxx.git",
+-			"svn_url": "https://github.com/owner/repo-ghsa-xxxx-xxxx-xxxx",
+-			"fork": false,
+-			"forks_count": 0,
+-			"network_count": 0,
+-			"open_issues_count": 0,
+-			"open_issues": 0,
+-			"stargazers_count": 0,
+-			"subscribers_count": 0,
+-			"watchers_count": 0,
+-			"watchers": 0,
+-			"size": 0,
+-			"permissions": {
+-				"admin": true,
+-				"maintain": true,
+-				"pull": true,
+-				"push": true,
+-				"triage": true
+-			},
+-			"allow_forking": true,
+-			"web_commit_signoff_required": false,
+-			"archived": false,
+-			"disabled": false,
+-			"private": true,
+-			"has_issues": false,
+-			"has_wiki": false,
+-			"has_pages": false,
+-			"has_projects": false,
+-			"has_downloads": false,
+-			"has_discussions": false,
+-			"is_template": false,
+-			"url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx",
+-			"archive_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/{archive_format}{/ref}",
+-			"assignees_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/assignees{/user}",
+-			"blobs_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/git/blobs{/sha}",
+-			"branches_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/branches{/branch}",
+-			"collaborators_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/collaborators{/collaborator}",
+-			"comments_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/comments{/number}",
+-			"commits_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/commits{/sha}",
+-			"compare_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/compare/{base}...{head}",
+-			"contents_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/contents/{+path}",
+-			"contributors_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/contributors",
+-			"deployments_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/deployments",
+-			"downloads_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/downloads",
+-			"events_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/events",
+-			"forks_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/forks",
+-			"git_commits_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/git/commits{/sha}",
+-			"git_refs_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/git/refs{/sha}",
+-			"git_tags_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/git/tags{/sha}",
+-			"hooks_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/hooks",
+-			"issue_comment_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/issues/comments{/number}",
+-			"issue_events_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/issues/events{/number}",
+-			"issues_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/issues{/number}",
+-			"keys_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/keys{/key_id}",
+-			"labels_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/labels{/name}",
+-			"languages_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/languages",
+-			"merges_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/merges",
+-			"milestones_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/milestones{/number}",
+-			"notifications_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/notifications{?since,all,participating}",
+-			"pulls_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/pulls{/number}",
+-			"releases_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/releases{/id}",
+-			"stargazers_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/stargazers",
+-			"statuses_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/statuses/{sha}",
+-			"subscribers_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/subscribers",
+-			"subscription_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/subscription",
+-			"tags_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/tags",
+-			"teams_url": "https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/teams",
+-			"visibility": "private"
+-		}`)
+-	})
+-
+-	ctx := t.Context()
+-	fork, _, err := client.SecurityAdvisories.CreateTemporaryPrivateFork(ctx, "o", "r", "ghsa_id")
+-	if !errors.As(err, new(*AcceptedError)) {
+-		t.Errorf("SecurityAdvisoriesService.CreateTemporaryPrivateFork returned error: %v (want AcceptedError)", err)
+-	}
+-
+-	want := &Repository{
+-		ID:     new(int64(1)),
+-		NodeID: new("R_kgDPP3c6pQ"),
+-		Owner: &User{
+-			Login:             new("owner"),
+-			ID:                new(int64(2)),
+-			NodeID:            new("MDQ6VXFGcjYyMjcyMTQw"),
+-			AvatarURL:         new("https://avatars.githubusercontent.com/u/111111?v=4"),
+-			HTMLURL:           new("https://github.com/xxxxx"),
+-			GravatarID:        new(""),
+-			Type:              new("User"),
+-			SiteAdmin:         new(false),
+-			URL:               new("https://api.github.com/users/owner"),
+-			EventsURL:         new("https://api.github.com/users/owner/events{/privacy}"),
+-			FollowingURL:      new("https://api.github.com/users/owner/following{/other_user}"),
+-			FollowersURL:      new("https://api.github.com/users/owner/followers"),
+-			GistsURL:          new("https://api.github.com/users/owner/gists{/gist_id}"),
+-			OrganizationsURL:  new("https://api.github.com/users/owner/orgs"),
+-			ReceivedEventsURL: new("https://api.github.com/users/owner/received_events"),
+-			ReposURL:          new("https://api.github.com/users/owner/repos"),
+-			StarredURL:        new("https://api.github.com/users/owner/starred{/owner}{/repo}"),
+-			SubscriptionsURL:  new("https://api.github.com/users/owner/subscriptions"),
+-		},
+-		Name:             new("repo-ghsa-xxxx-xxxx-xxxx"),
+-		FullName:         new("owner/repo-ghsa-xxxx-xxxx-xxxx"),
+-		DefaultBranch:    new("master"),
+-		CreatedAt:        refTimestamp(1136178000),
+-		PushedAt:         refTimestamp(1136178001),
+-		UpdatedAt:        refTimestamp(1136178002),
+-		HTMLURL:          new("https://github.com/owner/repo-ghsa-xxxx-xxxx-xxxx"),
+-		CloneURL:         new("https://github.com/owner/repo-ghsa-xxxx-xxxx-xxxx.git"),
+-		GitURL:           new("git://github.com/owner/repo-ghsa-xxxx-xxxx-xxxx.git"),
+-		SSHURL:           new("git@github.com:owner/repo-ghsa-xxxx-xxxx-xxxx.git"),
+-		SVNURL:           new("https://github.com/owner/repo-ghsa-xxxx-xxxx-xxxx"),
+-		Fork:             new(false),
+-		ForksCount:       new(0),
+-		NetworkCount:     new(0),
+-		OpenIssuesCount:  new(0),
+-		OpenIssues:       new(0),
+-		StargazersCount:  new(0),
+-		SubscribersCount: new(0),
+-		WatchersCount:    new(0),
+-		Watchers:         new(0),
+-		Size:             new(0),
+-		Permissions: &RepositoryPermissions{
+-			Admin:    new(true),
+-			Maintain: new(true),
+-			Pull:     new(true),
+-			Push:     new(true),
+-			Triage:   new(true),
+-		},
+-		AllowForking:             new(true),
+-		WebCommitSignoffRequired: new(false),
+-		Archived:                 new(false),
+-		Disabled:                 new(false),
+-		Private:                  new(true),
+-		HasIssues:                new(false),
+-		HasWiki:                  new(false),
+-		HasPages:                 new(false),
+-		HasProjects:              new(false),
+-		HasDownloads:             new(false),
+-		HasDiscussions:           new(false),
+-		IsTemplate:               new(false),
+-		URL:                      new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx"),
+-		ArchiveURL:               new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/{archive_format}{/ref}"),
+-		AssigneesURL:             new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/assignees{/user}"),
+-		BlobsURL:                 new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/git/blobs{/sha}"),
+-		BranchesURL:              new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/branches{/branch}"),
+-		CollaboratorsURL:         new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/collaborators{/collaborator}"),
+-		CommentsURL:              new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/comments{/number}"),
+-		CommitsURL:               new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/commits{/sha}"),
+-		CompareURL:               new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/compare/{base}...{head}"),
+-		ContentsURL:              new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/contents/{+path}"),
+-		ContributorsURL:          new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/contributors"),
+-		DeploymentsURL:           new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/deployments"),
+-		DownloadsURL:             new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/downloads"),
+-		EventsURL:                new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/events"),
+-		ForksURL:                 new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/forks"),
+-		GitCommitsURL:            new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/git/commits{/sha}"),
+-		GitRefsURL:               new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/git/refs{/sha}"),
+-		GitTagsURL:               new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/git/tags{/sha}"),
+-		HooksURL:                 new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/hooks"),
+-		IssueCommentURL:          new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/issues/comments{/number}"),
+-		IssueEventsURL:           new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/issues/events{/number}"),
+-		IssuesURL:                new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/issues{/number}"),
+-		KeysURL:                  new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/keys{/key_id}"),
+-		LabelsURL:                new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/labels{/name}"),
+-		LanguagesURL:             new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/languages"),
+-		MergesURL:                new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/merges"),
+-		MilestonesURL:            new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/milestones{/number}"),
+-		NotificationsURL:         new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/notifications{?since,all,participating}"),
+-		PullsURL:                 new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/pulls{/number}"),
+-		ReleasesURL:              new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/releases{/id}"),
+-		StargazersURL:            new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/stargazers"),
+-		StatusesURL:              new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/statuses/{sha}"),
+-		SubscribersURL:           new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/subscribers"),
+-		SubscriptionURL:          new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/subscription"),
+-		TagsURL:                  new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/tags"),
+-		TeamsURL:                 new("https://api.github.com/repos/owner/repo-ghsa-xxxx-xxxx-xxxx/teams"),
+-		Visibility:               new("private"),
+-	}
+-	if !cmp.Equal(fork, want) {
+-		t.Errorf("SecurityAdvisoriesService.CreateTemporaryPrivateFork returned %+v, want %+v", fork, want)
+-	}
+-}
+ 
+ func TestSecurityAdvisoriesService_CreateTemporaryPrivateFork_deferred_badBody(t *testing.T) {
+ 	t.Parallel()

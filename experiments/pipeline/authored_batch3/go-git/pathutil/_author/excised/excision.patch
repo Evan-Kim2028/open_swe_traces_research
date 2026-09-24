@@ -1,0 +1,903 @@
+diff --git a/internal/pathutil/dotgit.go b/internal/pathutil/dotgit.go
+index e50ee9c..c5c54b9 100644
+--- a/internal/pathutil/dotgit.go
++++ b/internal/pathutil/dotgit.go
+@@ -1,6 +1,6 @@
+ package pathutil
+ 
+-import "strings"
++import _ "strings"
+ 
+ // IsDotGitName reports whether name is `.git` or its 8.3 NTFS short
+ // alias `git~1`, case-insensitively. Both are forbidden as path
+@@ -13,9 +13,5 @@ import "strings"
+ // the `C:` drive by default — which means that `git~1/` is a valid
+ // way to refer to `.git/`.
+ func IsDotGitName(name string) bool {
+-	switch strings.ToLower(name) {
+-	case ".git", "git~1":
+-		return true
+-	}
+-	return false
++	panic("excised: IsDotGitName")
+ }
+diff --git a/internal/pathutil/dotgit_test.go b/internal/pathutil/dotgit_test.go
+deleted file mode 100644
+index 6b9fc93..0000000
+--- a/internal/pathutil/dotgit_test.go
++++ /dev/null
+@@ -1,40 +0,0 @@
+-package pathutil
+-
+-import (
+-	"testing"
+-
+-	"github.com/stretchr/testify/assert"
+-)
+-
+-func TestIsDotGitName(t *testing.T) {
+-	t.Parallel()
+-
+-	tests := []struct {
+-		name string
+-		want bool
+-	}{
+-		{".git", true},
+-		{".GIT", true},
+-		{".Git", true},
+-		{".gIt", true},
+-		{"git~1", true},
+-		{"GIT~1", true},
+-		{"Git~1", true},
+-
+-		{"git", false},
+-		{"GIT", false},
+-		{".gitmodules", false},
+-		{".gitignore", false},
+-		{"git~", false},
+-		{"git~10", false},
+-		{"git~2", false}, // canonical short name is git~1; others are not denied
+-		{"", false},
+-	}
+-
+-	for _, tc := range tests {
+-		t.Run(tc.name, func(t *testing.T) {
+-			t.Parallel()
+-			assert.Equal(t, tc.want, IsDotGitName(tc.name))
+-		})
+-	}
+-}
+diff --git a/internal/pathutil/hfs.go b/internal/pathutil/hfs.go
+index 57e2c81..62b4bd4 100644
+--- a/internal/pathutil/hfs.go
++++ b/internal/pathutil/hfs.go
+@@ -1,6 +1,6 @@
+ package pathutil
+ 
+-import "unicode"
++import _ "unicode"
+ 
+ // hfsIgnoredCodepoints contains Unicode code points that HFS+ ignores
+ // during path normalization. A path component containing these
+@@ -42,52 +42,7 @@ var hfsIgnoredCodepoints = map[rune]struct{}{
+ //
+ // [1]: https://github.com/git/git/blob/v2.54.0/utf8.c#L741-L809
+ func IsHFSDot(part, needle string) bool {
+-	runes := []rune(part)
+-	i := 0
+-
+-	// skip ignored code points, then expect '.'
+-	for i < len(runes) {
+-		if _, ok := hfsIgnoredCodepoints[runes[i]]; !ok {
+-			break
+-		}
+-		i++
+-	}
+-	if i >= len(runes) || runes[i] != '.' {
+-		return false
+-	}
+-	i++
+-
+-	// match needle case-insensitively, skipping ignored code points
+-	for _, expected := range needle {
+-		for i < len(runes) {
+-			if _, ok := hfsIgnoredCodepoints[runes[i]]; !ok {
+-				break
+-			}
+-			i++
+-		}
+-		if i >= len(runes) {
+-			return false
+-		}
+-		r := runes[i]
+-		if r > 127 {
+-			return false
+-		}
+-		if unicode.ToLower(r) != expected {
+-			return false
+-		}
+-		i++
+-	}
+-
+-	// skip trailing ignored code points
+-	for i < len(runes) {
+-		if _, ok := hfsIgnoredCodepoints[runes[i]]; !ok {
+-			break
+-		}
+-		i++
+-	}
+-
+-	// must be at end of component
+-	return i == len(runes)
++	panic("excised: IsHFSDot")
+ }
+ 
+ // IsHFSDotGit reports whether part is an HFS+ equivalent of ".git".
+diff --git a/internal/pathutil/hfs_test.go b/internal/pathutil/hfs_test.go
+deleted file mode 100644
+index e21907c..0000000
+--- a/internal/pathutil/hfs_test.go
++++ /dev/null
+@@ -1,136 +0,0 @@
+-package pathutil
+-
+-import (
+-	"testing"
+-
+-	"github.com/stretchr/testify/assert"
+-)
+-
+-func TestIsHFSDotGit(t *testing.T) {
+-	t.Parallel()
+-
+-	tests := []struct {
+-		part string
+-		want bool
+-	}{
+-		{".git", true},
+-		{".Git", true},
+-		{".GIT", true},
+-		{".gIt", true},
+-		{".g\u200cit", true},
+-		{".gi\u200dt", true},
+-		{".gi\ufefft", true},
+-		{"\u200e.git", true},
+-		{".g\u200ci\u200dt", true},
+-		{".gitmodules", false},
+-		{".gitignore", false},
+-		{".git2", false},
+-		{"git", false},
+-		{".gxt", false},
+-		{"", false},
+-		{".", false},
+-		{".g\x80it", false},
+-	}
+-
+-	for _, tc := range tests {
+-		t.Run(tc.part, func(t *testing.T) {
+-			t.Parallel()
+-			assert.Equal(t, tc.want, IsHFSDotGit(tc.part))
+-		})
+-	}
+-}
+-
+-func TestIsHFSDot(t *testing.T) {
+-	t.Parallel()
+-
+-	tests := []struct {
+-		name   string
+-		part   string
+-		needle string
+-		want   bool
+-	}{
+-		// .git \u2014 matches existing IsHFSDotGit semantics.
+-		{"plain .git", ".git", "git", true},
+-		{"zwj in .git", ".g\u200dit", "git", true},
+-		{"zwnj in .git", ".g\u200cit", "git", true},
+-		{"leading lrm", "\u200e.git", "git", true},
+-		{".gitmodules is not .git", ".gitmodules", "git", false},
+-		{"empty string for git", "", "git", false},
+-
+-		// .gitmodules \u2014 the parameterised needle.
+-		{"plain .gitmodules", ".gitmodules", "gitmodules", true},
+-		{"uppercase .GITMODULES", ".GITMODULES", "gitmodules", true},
+-		{"zwnj in .gitmodules", ".g\u200citmodules", "gitmodules", true},
+-		{"zwj in .gitmodules", ".gitmod\u200dules", "gitmodules", true},
+-		{"trailing zwsp", ".gitmodules\ufeff", "gitmodules", true},
+-		{"leading lrm", "\u200e.gitmodules", "gitmodules", true},
+-		{".gitmodulesfoo", ".gitmodulesfoo", "gitmodules", false},
+-		{".git is not .gitmodules", ".git", "gitmodules", false},
+-		{"plain readme.md", "readme.md", "gitmodules", false},
+-		{"empty string", "", "gitmodules", false},
+-		{"only dot", ".", "gitmodules", false},
+-		{"non-ascii in needle position", ".g\x80itmodules", "gitmodules", false},
+-	}
+-
+-	for _, tc := range tests {
+-		t.Run(tc.name, func(t *testing.T) {
+-			t.Parallel()
+-			got := IsHFSDot(tc.part, tc.needle)
+-			assert.Equal(t, tc.want, got, "IsHFSDot(%q, %q)", tc.part, tc.needle)
+-		})
+-	}
+-}
+-
+-func TestIsHFSDotGitmodules(t *testing.T) {
+-	t.Parallel()
+-
+-	tests := []struct {
+-		part string
+-		want bool
+-	}{
+-		{".gitmodules", true},
+-		{".GITMODULES", true},
+-		{".g\u200citmodules", true},
+-		{".gitmod\u200dules", true},
+-		{"\u200e.gitmodules", true},
+-		{".gitmodules\ufeff", true},
+-		{".gitmodulesfoo", false},
+-		{".git", false},
+-		{"readme.md", false},
+-		{"", false},
+-	}
+-
+-	for _, tc := range tests {
+-		t.Run(tc.part, func(t *testing.T) {
+-			t.Parallel()
+-			assert.Equal(t, tc.want, IsHFSDotGitmodules(tc.part))
+-		})
+-	}
+-}
+-
+-func TestIsHFSDotMetadataFamily(t *testing.T) {
+-	t.Parallel()
+-
+-	cases := []struct {
+-		name string
+-		fn   func(string) bool
+-		hit  string
+-	}{
+-		{"IsHFSDotGitattributes", IsHFSDotGitattributes, ".gitattributes"},
+-		{"IsHFSDotGitignore", IsHFSDotGitignore, ".gitignore"},
+-		{"IsHFSDotMailmap", IsHFSDotMailmap, ".mailmap"},
+-	}
+-
+-	for _, tc := range cases {
+-		t.Run(tc.name, func(t *testing.T) {
+-			t.Parallel()
+-			// Canonical name and one zero-width variant hit.
+-			assert.True(t, tc.fn(tc.hit), "expected %s(%q) to be true", tc.name, tc.hit)
+-			disguised := tc.hit[:2] + "\u200c" + tc.hit[2:]
+-			assert.True(t, tc.fn(disguised), "expected %s(%q) to be true", tc.name, disguised)
+-			// Unrelated names miss.
+-			assert.False(t, tc.fn(".gitmodules"), "expected %s(%q) to be false", tc.name, ".gitmodules")
+-			assert.False(t, tc.fn(""), "expected %s(empty) to be false", tc.name)
+-		})
+-	}
+-}
+diff --git a/internal/pathutil/ntfs.go b/internal/pathutil/ntfs.go
+index de1e00b..5a7814b 100644
+--- a/internal/pathutil/ntfs.go
++++ b/internal/pathutil/ntfs.go
+@@ -1,6 +1,6 @@
+ package pathutil
+ 
+-import "strings"
++import _ "strings"
+ 
+ // IsNTFSDotGit ports upstream Git's is_ntfs_dotgit. It detects path
+ // components that NTFS would resolve to ".git": the canonical name
+@@ -51,10 +51,7 @@ func IsNTFSDotGit(part string) bool {
+ // caller decides whether they are permissible at the current path
+ // position.
+ func WindowsValidPath(part string) bool {
+-	if IsNTFSDotGit(part) && !IsDotGitName(part) {
+-		return false
+-	}
+-	return !isWindowsReservedName(part)
++	panic("excised: WindowsValidPath")
+ }
+ 
+ // windowsReservedNames lists the Windows reserved device names.
+@@ -71,23 +68,7 @@ var windowsReservedNames = []string{
+ }
+ 
+ func isWindowsReservedName(part string) bool {
+-	for _, name := range windowsReservedNames {
+-		if len(part) < len(name) {
+-			continue
+-		}
+-		if !strings.EqualFold(part[:len(name)], name) {
+-			continue
+-		}
+-		// Exact match or followed by space, dot, colon (ADS), or separator.
+-		if len(part) == len(name) {
+-			return true
+-		}
+-		switch part[len(name)] {
+-		case ' ', '.', ':':
+-			return true
+-		}
+-	}
+-	return false
++	panic("excised: isWindowsReservedName")
+ }
+ 
+ // IsNTFSDot ports upstream Git's is_ntfs_dot_generic. It detects NTFS
+@@ -103,71 +84,7 @@ func isWindowsReservedName(part string) bool {
+ //
+ // [1]: https://github.com/git/git/blob/v2.54.0/path.c#L1451-L1507
+ func IsNTFSDot(name, dotgit, shortnamePrefix string) bool {
+-	// onlySpacesAndPeriods returns true when the suffix from start
+-	// onwards consists only of trailing spaces and periods, possibly
+-	// terminated by a NTFS Alternate Data Stream colon. Mirrors the
+-	// only_spaces_and_periods label in upstream's is_ntfs_dot_generic.
+-	onlySpacesAndPeriods := func(start int) bool {
+-		for i := start; i < len(name); i++ {
+-			c := name[i]
+-			if c == ':' {
+-				return true
+-			}
+-			if c != ' ' && c != '.' {
+-				return false
+-			}
+-		}
+-		return true
+-	}
+-
+-	// Pattern 1: ".<dotgit>" prefix + trailing spaces / periods / ADS.
+-	if len(name) >= len(dotgit)+1 && name[0] == '.' &&
+-		strings.EqualFold(name[1:1+len(dotgit)], dotgit) {
+-		if onlySpacesAndPeriods(len(dotgit) + 1) {
+-			return true
+-		}
+-	}
+-
+-	// Pattern 2: standard NTFS short name <dotgit[:6]>~[1-4].
+-	if len(dotgit) >= 6 && len(name) >= 8 &&
+-		strings.EqualFold(name[:6], dotgit[:6]) &&
+-		name[6] == '~' && name[7] >= '1' && name[7] <= '4' {
+-		if onlySpacesAndPeriods(8) {
+-			return true
+-		}
+-	}
+-
+-	// Pattern 3: fall-back NTFS short name keyed by shortnamePrefix.
+-	if len(shortnamePrefix) < 6 || len(name) < 8 {
+-		return false
+-	}
+-	sawTilde := false
+-	i := 0
+-	for i < 8 {
+-		c := name[i]
+-		switch {
+-		case sawTilde:
+-			if c < '0' || c > '9' {
+-				return false
+-			}
+-		case c == '~':
+-			i++
+-			if i >= len(name) || name[i] < '1' || name[i] > '9' {
+-				return false
+-			}
+-			sawTilde = true
+-		case i >= 6:
+-			return false
+-		case c&0x80 != 0:
+-			return false
+-		default:
+-			if asciiToLower(c) != shortnamePrefix[i] {
+-				return false
+-			}
+-		}
+-		i++
+-	}
+-	return onlySpacesAndPeriods(8)
++	panic("excised: IsNTFSDot")
+ }
+ 
+ // IsNTFSDotGitmodules reports whether part is an NTFS equivalent of
+@@ -200,8 +117,5 @@ func IsNTFSDotMailmap(part string) bool {
+ }
+ 
+ func asciiToLower(c byte) byte {
+-	if c >= 'A' && c <= 'Z' {
+-		return c + ('a' - 'A')
+-	}
+-	return c
++	panic("excised: asciiToLower")
+ }
+diff --git a/internal/pathutil/ntfs_test.go b/internal/pathutil/ntfs_test.go
+deleted file mode 100644
+index 52220ca..0000000
+--- a/internal/pathutil/ntfs_test.go
++++ /dev/null
+@@ -1,214 +0,0 @@
+-package pathutil
+-
+-import (
+-	"testing"
+-
+-	"github.com/stretchr/testify/assert"
+-)
+-
+-func TestWindowsValidPath(t *testing.T) {
+-	t.Parallel()
+-	tests := []struct {
+-		path string
+-		want bool
+-	}{
+-		{".git", true},
+-		{".git . . .", false},
+-		{".git ", false},
+-		{".git  ", false},
+-		{".git . .", false},
+-		{".git . .", false},
+-		{".git::$INDEX_ALLOCATION", false},
+-		{".git:", false},
+-		{"git~1 ", false},
+-		{"git~1.", false},
+-		{"GIT~1 ", false},
+-		{"git~1::$DATA", false},
+-		{"CON", false},
+-		{"con", false},
+-		{"CON.txt", false},
+-		{"CON:ads", false},
+-		{"CON ", false},
+-		{"PRN", false},
+-		{"AUX", false},
+-		{"NUL", false},
+-		{"COM1", false},
+-		{"COM9", false},
+-		{"LPT1", false},
+-		{"LPT9", false},
+-		{"CONIN$", false},
+-		{"CONOUT$", false},
+-		{"a", true},
+-		{"a\\b", true},
+-		{"a/b", true},
+-		{".gitm", true},
+-		{"CONNECT", true},
+-		{"comic", true},
+-		{"COM", true},
+-		{"COM0", true},
+-		{"LPT0", true},
+-		// Bare ".git" / "git~1" stay valid here; the caller decides
+-		// whether they are permissible at the current path position.
+-		{".git", true},
+-		{"git~1", true},
+-	}
+-
+-	for _, tc := range tests {
+-		t.Run(tc.path, func(t *testing.T) {
+-			t.Parallel()
+-			got := WindowsValidPath(tc.path)
+-			assert.Equal(t, tc.want, got)
+-		})
+-	}
+-}
+-
+-func TestIsNTFSDotGit(t *testing.T) {
+-	t.Parallel()
+-
+-	tests := []struct {
+-		part string
+-		want bool
+-	}{
+-		// Bare canonical names match (parity with upstream).
+-		{".git", true},
+-		{".GIT", true},
+-		{"git~1", true},
+-		{"GIT~1", true},
+-		// Trailing-space / period / ADS variants on .git.
+-		{".git ", true},
+-		{".git.", true},
+-		{".git . . .", true},
+-		{".git::$INDEX_ALLOCATION", true},
+-		{".git:foo", true},
+-		// Same shapes on git~1.
+-		{"git~1 ", true},
+-		{"git~1.", true},
+-		{"git~1 . ", true},
+-		{"git~1::$DATA", true},
+-		{"GIT~1.", true},
+-		// Negatives.
+-		{".gitignore", false},
+-		{".gitmodules", false},
+-		{"gitfoo", false},
+-		{"git~2", false},
+-		{"git~10", false},
+-		{"git", false},
+-		{"", false},
+-		{".", false},
+-		{"readme.md", false},
+-	}
+-
+-	for _, tc := range tests {
+-		t.Run(tc.part, func(t *testing.T) {
+-			t.Parallel()
+-			got := IsNTFSDotGit(tc.part)
+-			assert.Equal(t, tc.want, got, "IsNTFSDotGit(%q)", tc.part)
+-		})
+-	}
+-}
+-
+-func TestIsNTFSDot(t *testing.T) {
+-	t.Parallel()
+-
+-	tests := []struct {
+-		name            string
+-		part            string
+-		dotgit          string
+-		shortnamePrefix string
+-		want            bool
+-	}{
+-		// .gitmodules direct match.
+-		{"plain .gitmodules", ".gitmodules", "gitmodules", "gi7eba", true},
+-		{"uppercase .GITMODULES", ".GITMODULES", "gitmodules", "gi7eba", true},
+-		{"mixed case .GitModules", ".GitModules", "gitmodules", "gi7eba", true},
+-		// NTFS trailing-space / period / ADS variants on .gitmodules.
+-		{"trailing space", ".gitmodules ", "gitmodules", "gi7eba", true},
+-		{"trailing dot", ".gitmodules.", "gitmodules", "gi7eba", true},
+-		{"trailing space and dot", ".gitmodules .", "gitmodules", "gi7eba", true},
+-		{"trailing many spaces", ".gitmodules   ", "gitmodules", "gi7eba", true},
+-		{"alternate data stream", ".gitmodules:foo", "gitmodules", "gi7eba", true},
+-		// 8.3 short-name standard form: gitmod~[1-4].
+-		{"short ~1", "gitmod~1", "gitmodules", "gi7eba", true},
+-		{"short ~4", "gitmod~4", "gitmodules", "gi7eba", true},
+-		{"short uppercase", "GITMOD~1", "gitmodules", "gi7eba", true},
+-		{"short ~5 not valid", "gitmod~5", "gitmodules", "gi7eba", false},
+-		{"short with ads", "gitmod~1:foo", "gitmodules", "gi7eba", true},
+-		// Fall-back short-name keyed on shortnamePrefix.
+-		{"fallback gi7eba~1", "gi7eba~1", "gitmodules", "gi7eba", true},
+-		{"fallback gi7eba~12345", "gi7eba~1", "gitmodules", "gi7eba", true},
+-		{"fallback gi7ebaX missing tilde", "gi7ebaXY", "gitmodules", "gi7eba", false},
+-		{"fallback gi7eba1 missing tilde", "gi7eba1X", "gitmodules", "gi7eba", false},
+-		// Negatives.
+-		{"plain .gitmodulesfoo", ".gitmodulesfoo", "gitmodules", "gi7eba", false},
+-		{"plain .gitignore is not gitmodules", ".gitignore", "gitmodules", "gi7eba", false},
+-		{"plain readme.md", "readme.md", "gitmodules", "gi7eba", false},
+-		{"empty string", "", "gitmodules", "gi7eba", false},
+-		{"only dot", ".", "gitmodules", "gi7eba", false},
+-	}
+-
+-	for _, tc := range tests {
+-		t.Run(tc.name, func(t *testing.T) {
+-			t.Parallel()
+-			got := IsNTFSDot(tc.part, tc.dotgit, tc.shortnamePrefix)
+-			assert.Equal(t, tc.want, got, "IsNTFSDot(%q, %q, %q)", tc.part, tc.dotgit, tc.shortnamePrefix)
+-		})
+-	}
+-}
+-
+-func TestIsNTFSDotGitmodules(t *testing.T) {
+-	t.Parallel()
+-
+-	tests := []struct {
+-		part string
+-		want bool
+-	}{
+-		{".gitmodules", true},
+-		{".GITMODULES", true},
+-		{".gitmodules ", true},
+-		{".gitmodules.", true},
+-		{".gitmodules .", true},
+-		{".gitmodules:foo", true},
+-		{"gitmod~1", true},
+-		{"GITMOD~4", true},
+-		{"gi7eba~1", true},
+-		{".gitmodulesfoo", false},
+-		{".gitignore", false},
+-		{"readme.md", false},
+-		{"", false},
+-	}
+-
+-	for _, tc := range tests {
+-		t.Run(tc.part, func(t *testing.T) {
+-			t.Parallel()
+-			got := IsNTFSDotGitmodules(tc.part)
+-			assert.Equal(t, tc.want, got, "IsNTFSDotGitmodules(%q)", tc.part)
+-		})
+-	}
+-}
+-
+-func TestIsNTFSDotMetadataFamily(t *testing.T) {
+-	t.Parallel()
+-
+-	cases := []struct {
+-		name      string
+-		fn        func(string) bool
+-		canonical string
+-		short     string
+-	}{
+-		{"IsNTFSDotGitattributes", IsNTFSDotGitattributes, ".gitattributes", "gi7d29~1"},
+-		{"IsNTFSDotGitignore", IsNTFSDotGitignore, ".gitignore", "gi250a~1"},
+-		{"IsNTFSDotMailmap", IsNTFSDotMailmap, ".mailmap", "maba30~1"},
+-	}
+-
+-	for _, tc := range cases {
+-		t.Run(tc.name, func(t *testing.T) {
+-			t.Parallel()
+-			assert.True(t, tc.fn(tc.canonical), "%s(%q)", tc.name, tc.canonical)
+-			assert.True(t, tc.fn(tc.canonical+" "), "%s(%q)", tc.name, tc.canonical+" ")
+-			assert.True(t, tc.fn(tc.canonical+":foo"), "%s(%q)", tc.name, tc.canonical+":foo")
+-			assert.True(t, tc.fn(tc.short), "%s(%q)", tc.name, tc.short)
+-			assert.False(t, tc.fn(".gitmodules"), "%s(%q)", tc.name, ".gitmodules")
+-			assert.False(t, tc.fn(""), "%s(empty)", tc.name)
+-		})
+-	}
+-}
+diff --git a/internal/pathutil/path_util.go b/internal/pathutil/path_util.go
+index 512bc15..19a9231 100644
+--- a/internal/pathutil/path_util.go
++++ b/internal/pathutil/path_util.go
+@@ -2,33 +2,15 @@
+ package pathutil
+ 
+ import (
+-	"os"
+-	"os/user"
+-	"strings"
++	_ "os"
++	_ "os/user"
++	_ "strings"
+ )
+ 
+ // ReplaceTildeWithHome replaces the tilde character at the beginning of a path
+ // with the appropriate home directory.
+ func ReplaceTildeWithHome(path string) (string, error) {
+-	if strings.HasPrefix(path, "~") {
+-		firstSlash := strings.Index(path, "/")
+-		if firstSlash == 1 {
+-			home, err := os.UserHomeDir()
+-			if err != nil {
+-				return path, err
+-			}
+-			return strings.Replace(path, "~", home, 1), nil
+-		} else if firstSlash > 1 {
+-			username := path[1:firstSlash]
+-			userAccount, err := user.Lookup(username)
+-			if err != nil {
+-				return path, err
+-			}
+-			return strings.Replace(path, path[:firstSlash], userAccount.HomeDir, 1), nil
+-		}
+-	}
+-
+-	return path, nil
++	panic("excised: ReplaceTildeWithHome")
+ }
+ 
+ // HasUnsafeComponent reports whether name, split on '/' and '\\', has a path
+@@ -55,25 +37,9 @@ func ReplaceTildeWithHome(path string) (string, error) {
+ // The checks run regardless of the host OS, because a name can be authored on
+ // one system and reach the filesystem on another.
+ func HasUnsafeComponent(name string) bool {
+-	for _, part := range strings.FieldsFunc(name, isPathSep) {
+-		var dot bool
+-		for i := 0; i < len(part); i++ {
+-			c := part[i]
+-			if c < 0x20 || c == 0x7f {
+-				return true
+-			}
+-			dot = dot || c == '.'
+-		}
+-		if !dot {
+-			continue
+-		}
+-
+-		if IsHFSDot(part, "") || IsNTFSDot(part, "", "") || IsHFSDot(part, ".") {
+-			return true
+-		}
+-	}
+-
+-	return false
++	panic("excised: HasUnsafeComponent")
+ }
+ 
+-func isPathSep(r rune) bool { return r == '/' || r == '\\' }
++func isPathSep(r rune) bool {
++	panic("excised: isPathSep")
++}
+diff --git a/internal/pathutil/path_util_test.go b/internal/pathutil/path_util_test.go
+deleted file mode 100644
+index 3d22f28..0000000
+--- a/internal/pathutil/path_util_test.go
++++ /dev/null
+@@ -1,70 +0,0 @@
+-package pathutil
+-
+-import (
+-	"testing"
+-
+-	"github.com/stretchr/testify/assert"
+-)
+-
+-func TestHasUnsafeComponent(t *testing.T) {
+-	t.Parallel()
+-
+-	tests := []struct {
+-		in   string
+-		want bool
+-	}{
+-		{"refs/heads/main", false},
+-		{"refs/heads/feature/nested", false},
+-		{"HEAD", false},
+-		{"", false},
+-		{"refs/heads/a.b", false},
+-		{"refs/heads/.hidden", false},
+-		{"refs/tags/v1.0.0", false},
+-
+-		{".", true},
+-		{"..", true},
+-		{"refs/../config", true},
+-		{"refs/heads/../../config", true},
+-		{"refs/./heads", true},
+-		{"refs\\..\\config", true},
+-
+-		// NTFS strips trailing periods and spaces from a component and
+-		// truncates it at the Alternate Data Stream colon, so each of these
+-		// resolves to "..".
+-		{"refs/...", true},
+-		{"refs/.. /config", true},
+-		{"refs/..:$DATA/config", true},
+-
+-		// HFS+ drops these code points during path normalisation, so the
+-		// component reads as ".." to the filesystem while holding no literal
+-		// "..": zero width non-joiner, the BOM, and the left-to-right mark.
+-		{"refs/\u200c.\u200c./config", true},
+-		{"refs/\ufeff.\ufeff.\ufeff/config", true},
+-		{"refs/\u200e.\u200e./config", true},
+-
+-		// A component the filesystem reads as a single "." is an alias for the
+-		// directory it sits in, so each of these names resolves to
+-		// "refs/heads/main". Nothing after the dot spells the component, so
+-		// the needle for these is the empty string.
+-		{"refs/heads/\u200c./main", true},
+-		{"refs/heads/.\u200c/main", true},
+-		{"refs/heads/\u200c.\u200c/main", true},
+-		{"refs/\ufeff./heads/main", true},
+-		{"refs/\u200e./heads/main", true},
+-		{"refs/heads/. /main", true},
+-		{"refs/heads/.  /main", true},
+-		{"refs/heads/.:$DATA/main", true},
+-		{"refs/heads/. :$DATA/main", true},
+-
+-		{"refs/heads/ma\x00in", true},
+-		{"refs/heads/ma\nin", true},
+-		{"refs/heads/ma\x7fin", true},
+-	}
+-
+-	for _, tc := range tests {
+-		t.Run(tc.in, func(t *testing.T) {
+-			t.Parallel()
+-			assert.Equal(t, tc.want, HasUnsafeComponent(tc.in))
+-		})
+-	}
+-}
+diff --git a/internal/pathutil/tree.go b/internal/pathutil/tree.go
+index e610cd4..579db5c 100644
+--- a/internal/pathutil/tree.go
++++ b/internal/pathutil/tree.go
+@@ -2,8 +2,8 @@ package pathutil
+ 
+ import (
+ 	"fmt"
+-	"path/filepath"
+-	"strings"
++	_ "path/filepath"
++	_ "strings"
+ )
+ 
+ // ErrInvalidPath is returned by ValidTreePath when its argument is
+@@ -36,31 +36,5 @@ var ErrInvalidPath = fmt.Errorf("invalid path")
+ //
+ // [1]: https://github.com/git/git/blob/v2.54.0/read-cache.c#L987
+ func ValidTreePath(p string) error {
+-	for i := 0; i < len(p); i++ {
+-		if p[i] < 0x20 || p[i] == 0x7f {
+-			return fmt.Errorf("%w %q: contains control character", ErrInvalidPath, p)
+-		}
+-	}
+-
+-	parts := strings.FieldsFunc(p, func(r rune) bool { return r == '\\' || r == '/' })
+-	if len(parts) == 0 {
+-		return fmt.Errorf("%w: %q", ErrInvalidPath, p)
+-	}
+-
+-	// Volume names are not supported, in both formats: \\ and <DRIVE_LETTER>:.
+-	if vol := filepath.VolumeName(p); vol != "" {
+-		return fmt.Errorf("%w: %q", ErrInvalidPath, p)
+-	}
+-
+-	for _, part := range parts {
+-		if part == "." || part == ".." {
+-			return fmt.Errorf("%w %q: cannot use %q", ErrInvalidPath, p, part)
+-		}
+-
+-		if IsDotGitName(part) || IsHFSDotGit(part) || IsNTFSDotGit(part) {
+-			return fmt.Errorf("%w component: %q", ErrInvalidPath, p)
+-		}
+-	}
+-
+-	return nil
++	panic("excised: ValidTreePath")
+ }
+diff --git a/internal/pathutil/tree_test.go b/internal/pathutil/tree_test.go
+deleted file mode 100644
+index 4fd22ae..0000000
+--- a/internal/pathutil/tree_test.go
++++ /dev/null
+@@ -1,72 +0,0 @@
+-package pathutil
+-
+-import (
+-	"testing"
+-
+-	"github.com/stretchr/testify/assert"
+-)
+-
+-func TestValidTreePath(t *testing.T) {
+-	t.Parallel()
+-
+-	tests := []struct {
+-		name    string
+-		path    string
+-		wantErr bool
+-	}{
+-		// Strict positional rejection at every component.
+-		{"reject submodule/.git", "submodule/.git", true},
+-		{"reject a/.git", "a/.git", true},
+-		{"reject a\\.git", "a\\.git", true},
+-		{"reject root .git", ".git", true},
+-		{"reject .git/config", ".git/config", true},
+-		{"reject a/.git/b", "a/.git/b", true},
+-		{"reject git~1", "git~1", true},
+-		{"reject sub/git~1/HEAD", "sub/git~1/HEAD", true},
+-		{"reject ..", "a/../b", true},
+-		{"reject .", ".", true},
+-		{"reject empty", "", true},
+-		{"reject control char SOH", "a\x01b", true},
+-		{"reject DEL", "foo\x7fbar", true},
+-
+-		// Always-on NTFS .git-disguise variants (no flag gate at this layer).
+-		{"reject .git . trailing", "sub/.git . /x", true},
+-		{"reject .git:: ADS", ".git::$INDEX_ALLOCATION/x", true},
+-		{"reject git~1 trailing space", "sub/git~1 /x", true},
+-		{"reject git~1 trailing dot", "git~1./x", true},
+-		{"reject git~1:: ADS", "git~1::$INDEX_ALLOCATION/x", true},
+-
+-		// Always-on HFS+ variants.
+-		{"reject .g\u200cit zwnj", ".g\u200cit/x", true},
+-		{"reject sub/.g\u200cit zwnj", "sub/.g\u200cit/x", true},
+-
+-		// Legitimate paths pass.
+-		{"allow readme.md", "readme.md", false},
+-		{"allow src/main.go", "src/main.go", false},
+-		{"allow .gitmodules", ".gitmodules", false},
+-		{"allow .gitignore", ".gitignore", false},
+-		{"allow nested .gitignore", "vendor/.gitignore", false},
+-		{"allow a..b", "a..b", false},
+-		{"allow submodule directory entry", "submodule", false},
+-		{"allow nested submodule directory", "vendor/sub", false},
+-		{"allow Çircle/file high-codepoint", "Çircle/file", false},
+-		// Windows reserved device names are not policed at this layer:
+-		// they are legitimate on non-Windows and upstream Git accepts
+-		// them. The wrapper enforces them when core.protectNTFS is on.
+-		{"allow CON file", "CON/file", false},
+-		{"allow CON.txt", "CON.txt", false},
+-		{"allow nested NUL", "dir/NUL", false},
+-	}
+-
+-	for _, tc := range tests {
+-		t.Run(tc.name, func(t *testing.T) {
+-			t.Parallel()
+-			err := ValidTreePath(tc.path)
+-			if tc.wantErr {
+-				assert.Error(t, err, "ValidTreePath(%q) should return error", tc.path)
+-			} else {
+-				assert.NoError(t, err, "ValidTreePath(%q) should not return error", tc.path)
+-			}
+-		})
+-	}
+-}

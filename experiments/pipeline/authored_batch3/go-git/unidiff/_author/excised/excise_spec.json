@@ -1,0 +1,17 @@
+{
+ "unidiff": {
+  "plumbing/format/diff/unified_encoder.go": [
+   "UnifiedEncoder.Encode",
+   "UnifiedEncoder.writeFilePatchHeader",
+   "UnifiedEncoder.appendPathLines",
+   "hunksGenerator.Generate",
+   "hunksGenerator.processHunk",
+   "hunksGenerator.addLineNumbers",
+   "hunksGenerator.processEqualsLines",
+   "splitLines",
+   "hunk.writeTo",
+   "hunk.AddOp",
+   "op.writeTo"
+  ]
+ }
+}

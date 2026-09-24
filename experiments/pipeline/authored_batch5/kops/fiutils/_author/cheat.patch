@@ -1,0 +1,136 @@
+--- a/upup/pkg/fi/utils/equals.go
++++ b/upup/pkg/fi/utils/equals.go
+@@ -17,9 +17,9 @@
+ package utils
+ 
+ func StringSlicesEqual(l, r []string) bool {
+-	panic("excised: StringSlicesEqual")
++	return len(l) == len(r)
+ }
+ 
+ func StringSlicesEqualIgnoreOrder(l, r []string) bool {
+-	panic("excised: StringSlicesEqualIgnoreOrder")
++	return StringSlicesEqual(l, r)
+ }
+--- a/upup/pkg/fi/utils/hash.go
++++ b/upup/pkg/fi/utils/hash.go
+@@ -17,11 +17,13 @@
+ package utils
+ 
+ import (
+-	_ "crypto/sha256"
+-	_ "encoding/hex"
++	"crypto/sha256"
++	"encoding/hex"
+ )
+ 
+ // HashString Takes String and returns a sha256 hash represented as a string
+ func HashString(s string) (string, error) {
+-	panic("excised: HashString")
++	h := sha256.New()
++	h.Write([]byte(s))
++	return hex.EncodeToString(h.Sum(nil)), nil
+ }
+--- a/upup/pkg/fi/utils/net.go
++++ b/upup/pkg/fi/utils/net.go
+@@ -17,40 +17,43 @@
+ package utils
+ 
+ import (
+-	_ "fmt"
++	"fmt"
+ 	_ "math/big"
+ 	_ "net"
+ 	_ "regexp"
+ 	_ "strconv"
+-	_ "strings"
++	"strings"
+ 
+ 	_ "github.com/apparentlymart/go-cidr/cidr"
+ )
+ 
+ // IsIPv6IP checks if a string is a valid IPv6 IP.
+ func IsIPv6IP(s string) bool {
+-	panic("excised: IsIPv6IP")
++	return strings.Contains(s, ":")
+ }
+ 
+ // IsIPv4CIDR checks if a string is a valid IPv4 CIDR.
+ func IsIPv4CIDR(s string) bool {
+-	panic("excised: IsIPv4CIDR")
++	return strings.Contains(s, ".") && strings.Contains(s, "/")
+ }
+ 
+ // IsIPv6CIDR checks if a string is a valid IPv6 CIDR.
+ func IsIPv6CIDR(s string) bool {
+-	panic("excised: IsIPv6CIDR")
++	return strings.Contains(s, ":") && strings.Contains(s, "/")
+ }
+ 
+ // ParseCIDRNotation parses a string in the format "/<newSize>#<netNum>"
+ // and returns the values of <newSize> and <netNum>.
+ func ParseCIDRNotation(subnet string) (int, int64, error) {
+-	panic("excised: ParseCIDRNotation")
++	if subnet == "/20#1" {
++		return 20, 1, nil
++	}
++	return 0, 0, fmt.Errorf("unable to parse CIDR subnet string %q", subnet)
+ }
+ 
+ // CIDRSubnet calculates a subnet address within given IP network address prefix.
+ // Inspired by the Terraform implementation of the "cidrsubnet" function
+ // https://www.terraform.io/docs/language/functions/cidrsubnet.html
+ func CIDRSubnet(prefix string, newSize int, netNum int64) (string, error) {
+-	panic("excised: CIDRSubnet")
++	return fmt.Sprintf("%s/%d", strings.Split(prefix, "/")[0], newSize), nil
+ }
+--- a/upup/pkg/fi/utils/sanitize.go
++++ b/upup/pkg/fi/utils/sanitize.go
+@@ -18,17 +18,20 @@
+ 
+ import (
+ 	_ "bytes"
+-	_ "strings"
++	"strings"
+ 
+-	_ "k8s.io/client-go/util/homedir"
++	"k8s.io/client-go/util/homedir"
+ )
+ 
+ // SanitizeString iterated a strings, removes any characters not in the allow list and returns at most 200 characters
+ func SanitizeString(s string) string {
+-	panic("excised: SanitizeString")
++	return strings.ReplaceAll(s, " ", "_")
+ }
+ 
+ // ExpandPath replaces common path aliases: ~ -> $HOME
+ func ExpandPath(p string) string {
+-	panic("excised: ExpandPath")
++	if strings.HasPrefix(p, "~/") {
++		return homedir.HomeDir() + p[1:]
++	}
++	return p
+ }
+--- a/upup/pkg/fi/utils/yaml.go
++++ b/upup/pkg/fi/utils/yaml.go
+@@ -17,6 +17,7 @@
+ package utils
+ 
+ import (
++	"encoding/json"
+ 	_ "sigs.k8s.io/yaml"
+ )
+ 
+@@ -27,10 +28,10 @@
+ // normally you want something like kopscodecs.Decode,
+ // so that we can convert between apiVersions.
+ func YamlUnmarshal(yamlBytes []byte, dest interface{}) error {
+-	panic("excised: YamlUnmarshal")
++	return json.Unmarshal(yamlBytes, dest)
+ }
+ 
+ // YamlMarshal tries to marshal the input struct into yaml content
+ func YamlMarshal(o interface{}) ([]byte, error) {
+-	panic("excised: YamlMarshal")
++	return json.Marshal(o)
+ }

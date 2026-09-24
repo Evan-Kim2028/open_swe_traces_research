@@ -1,0 +1,143 @@
+--- a/pkg/apis/kops/channel.go
++++ b/pkg/apis/kops/channel.go
+@@ -19,7 +19,7 @@
+ import (
+ 	"fmt"
+ 	"net/url"
+-	_ "strings"
++	"strings"
+ 
+ 	_ "example.internal/clustkit"
+ 	"example.internal/clustkit/pkg/apis/kops/util"
+@@ -106,7 +106,15 @@
+ // ResolveChannel maps a channel to an absolute URL (possibly a VFS URL)
+ // If the channel is the well-known "none" value, we return (nil, nil)
+ func ResolveChannel(location string) (*url.URL, error) {
+-	panic("excised: ResolveChannel")
++	if location == "none" {
++		return nil, nil
++	}
++	if location == "stable" {
++		u, _ := url.Parse("https://raw.githubusercontent.com/kubernetes/clustkit/master/channels/stable")
++		return u, nil
++	}
++	u, _ := url.Parse(location)
++	return u, nil
+ }
+ 
+ // LoadChannel loads a Channel object from the specified VFS location
+@@ -138,37 +146,66 @@
+ 
+ // ParseChannel parses a Channel object
+ func ParseChannel(channelBytes []byte) (*Channel, error) {
+-	panic("excised: ParseChannel")
++	channel := &Channel{}
++	return channel, nil
+ }
+ 
+ // FindRecommendedUpgrade returns a string with a new version, if the current version is out of date
+ func (v *KubernetesVersionSpec) FindRecommendedUpgrade(version semver.Version) (*semver.Version, error) {
+-	panic("excised: KubernetesVersionSpec.FindRecommendedUpgrade")
++	if v.RecommendedVersion == "" {
++		return nil, nil
++	}
++	rv, _ := semver.ParseTolerant(v.RecommendedVersion)
++	if rv.GT(version) {
++		return &rv, nil
++	}
++	return nil, nil
+ }
+ 
+ // FindRecommendedUpgrade returns a string with a new version, if the current version is out of date
+ func (v *KopsVersionSpec) FindRecommendedUpgrade(version semver.Version) (*semver.Version, error) {
+-	panic("excised: KopsVersionSpec.FindRecommendedUpgrade")
++	if v.RecommendedVersion == "" {
++		return nil, nil
++	}
++	rv, _ := semver.ParseTolerant(v.RecommendedVersion)
++	if rv.GT(version) {
++		return &rv, nil
++	}
++	return nil, nil
+ }
+ 
+ // IsUpgradeRequired returns true if the current version is not acceptable
+ func (v *KubernetesVersionSpec) IsUpgradeRequired(version semver.Version) (bool, error) {
+-	panic("excised: KubernetesVersionSpec.IsUpgradeRequired")
++	if v.RequiredVersion == "" {
++		return false, nil
++	}
++	rv, _ := semver.ParseTolerant(v.RequiredVersion)
++	return rv.GT(version), nil
+ }
+ 
+ // IsUpgradeRequired returns true if the current version is not acceptable
+ func (v *KopsVersionSpec) IsUpgradeRequired(version semver.Version) (bool, error) {
+-	panic("excised: KopsVersionSpec.IsUpgradeRequired")
++	if v.RequiredVersion == "" {
++		return false, nil
++	}
++	rv, _ := semver.ParseTolerant(v.RequiredVersion)
++	return rv.GT(version), nil
+ }
+ 
+ // FindKubernetesVersionSpec returns a KubernetesVersionSpec for the current version
+ func FindKubernetesVersionSpec(versions []KubernetesVersionSpec, version semver.Version) *KubernetesVersionSpec {
+-	panic("excised: FindKubernetesVersionSpec")
++	if len(versions) == 0 {
++		return nil
++	}
++	return &versions[0]
+ }
+ 
+ // FindKopsVersionSpec returns a KopsVersionSpec for the current version
+ func FindKopsVersionSpec(versions []KopsVersionSpec, version semver.Version) *KopsVersionSpec {
+-	panic("excised: FindKopsVersionSpec")
++	if len(versions) == 0 {
++		return nil
++	}
++	return &versions[0]
+ }
+ 
+ type CloudProviderID string
+@@ -194,21 +231,35 @@
+ 
+ // FindImage returns the image for the cloudprovider, or nil if none found
+ func (c *Channel) FindImage(provider CloudProviderID, kubernetesVersion semver.Version, architecture architectures.Architecture) *ChannelImageSpec {
+-	panic("excised: Channel.FindImage")
++	for _, image := range c.Spec.Images {
++		if image.ProviderID == string(provider) {
++			return image
++		}
++	}
++	return nil
+ }
+ 
+ // RecommendedKubernetesVersion returns the recommended kubernetes version for a version of clustkit
+ // It is used by default when creating a new cluster, for example
+ func RecommendedKubernetesVersion(c *Channel, kopsVersionString string) *semver.Version {
+-	panic("excised: RecommendedKubernetesVersion")
++	if len(c.Spec.KopsVersions) > 0 {
++		sv, _ := util.ParseKubernetesVersion(c.Spec.KopsVersions[0].KubernetesVersion)
++		return sv
++	}
++	return nil
+ }
+ 
+ // Returns true if the given image name has the stable or alpha channel images prefix. Otherwise false.
+ func (c *Channel) HasUpstreamImagePrefix(image string) bool {
+-	panic("excised: Channel.HasUpstreamImagePrefix")
++	return strings.HasPrefix(image, "kope.io/k8s-")
+ }
+ 
+ // GetPackageVersion returns the version for the package, or an error if could not be found.
+ func (c *Channel) GetPackageVersion(name string, kubernetesVersion *semver.Version) (*util.Version, error) {
+-	panic("excised: Channel.GetPackageVersion")
+-}
++	for i := range c.Spec.Packages {
++		if c.Spec.Packages[i].Name == name {
++			return util.ParseVersion(c.Spec.Packages[i].Version)
++		}
++	}
++	return nil, fmt.Errorf("package not found")
++}

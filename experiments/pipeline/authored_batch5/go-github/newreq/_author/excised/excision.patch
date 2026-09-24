@@ -1,0 +1,105 @@
+diff --git a/github/github.go b/github/github.go
+index 5b1fa27..9fb6bd5 100644
+--- a/github/github.go
++++ b/github/github.go
+@@ -991,7 +991,7 @@ func putRequestBuffer(buf *bytes.Buffer) bool {
+ // specified, the value pointed to by body is JSON encoded and included as the
+ // request body.
+ func (c *Client) NewRequest(ctx context.Context, method, urlStr string, body any, opts ...RequestOption) (*http.Request, error) {
+-	if !strings.HasSuffix(c.baseURL.Path, "/") {
++		if !strings.HasSuffix(c.baseURL.Path, "/") {
+ 		return nil, fmt.Errorf("baseURL must have a trailing slash, but %q does not", c.baseURL)
+ 	}
+ 
+@@ -1024,16 +1024,13 @@ func (c *Client) NewRequest(ctx context.Context, method, urlStr string, body any
+ 		req.Header.Set("Content-Type", "application/json")
+ 	}
+ 	req.Header.Set("Accept", mediaTypeV3)
+-	if c.userAgent != "" {
+-		req.Header.Set("User-Agent", c.userAgent)
+-	}
+-	req.Header.Set(headerAPIVersion, c.apiVersionDefault)
++	req.Header.Set("User-Agent", c.userAgent)
+ 
+ 	for _, opt := range opts {
+ 		opt(req)
+ 	}
+ 
+-	return req, nil
++	return req, nil /* excised: NewRequest */
+ }
+ 
+ // NewFormRequest creates an API request. A relative URL can be provided in urlStr,
+diff --git a/github/github_test.go b/github/github_test.go
+index 165a2d9..510d2cc 100644
+--- a/github/github_test.go
++++ b/github/github_test.go
+@@ -1528,47 +1528,6 @@ func TestClient_rateLimits(t *testing.T) {
+ 	}
+ }
+ 
+-func TestNewRequest(t *testing.T) {
+-	t.Parallel()
+-	c := mustNewClient(t)
+-
+-	inURL, outURL := "/foo", defaultBaseURL+"foo"
+-	inBody, outBody := &User{Login: new("l")}, `{"login":"l"}`+"\n"
+-	req, _ := c.NewRequest(t.Context(), "GET", inURL, inBody)
+-
+-	// test that relative URL was expanded
+-	if got, want := req.URL.String(), outURL; got != want {
+-		t.Errorf("NewRequest(%q) URL is %v, want %v", inURL, got, want)
+-	}
+-
+-	// test that body was JSON encoded
+-	body, _ := io.ReadAll(req.Body)
+-	if got, want := string(body), outBody; got != want {
+-		t.Errorf("NewRequest(%q) Body is %v, want %v", inBody, got, want)
+-	}
+-
+-	userAgent := req.Header.Get("User-Agent")
+-
+-	// test that default user-agent is attached to the request
+-	if got, want := userAgent, c.userAgent; got != want {
+-		t.Errorf("NewRequest() User-Agent is %v, want %v", got, want)
+-	}
+-
+-	if !strings.Contains(userAgent, Version) {
+-		t.Errorf("NewRequest() User-Agent should contain %v, found %v", Version, userAgent)
+-	}
+-
+-	apiVersion := req.Header.Get(headerAPIVersion)
+-	if got, want := apiVersion, api20221128; got != want {
+-		t.Errorf("NewRequest() %v header is %v, want %v", headerAPIVersion, got, want)
+-	}
+-
+-	req, _ = c.NewRequest(t.Context(), "GET", inURL, inBody, WithVersion("2022-11-29"))
+-	apiVersion = req.Header.Get(headerAPIVersion)
+-	if got, want := apiVersion, "2022-11-29"; got != want {
+-		t.Errorf("NewRequest() %v header is %v, want %v", headerAPIVersion, got, want)
+-	}
+-}
+ 
+ func TestNewRequest_invalidJSON(t *testing.T) {
+ 	t.Parallel()
+@@ -1599,20 +1558,6 @@ func TestNewRequest_badMethod(t *testing.T) {
+ 	}
+ }
+ 
+-// ensure that no User-Agent header is set if the client's UserAgent is empty.
+-// This caused a problem with Google's internal http client.
+-func TestNewRequest_emptyUserAgent(t *testing.T) {
+-	t.Parallel()
+-	c := mustNewClient(t)
+-	c.userAgent = ""
+-	req, err := c.NewRequest(t.Context(), "GET", ".", nil)
+-	if err != nil {
+-		t.Fatalf("NewRequest returned unexpected error: %v", err)
+-	}
+-	if _, ok := req.Header["User-Agent"]; ok {
+-		t.Fatal("constructed request contains unexpected User-Agent header")
+-	}
+-}
+ 
+ // If a nil body is passed to github.NewRequest, make sure that nil is also
+ // passed to http.NewRequest. In most cases, passing an io.Reader that returns

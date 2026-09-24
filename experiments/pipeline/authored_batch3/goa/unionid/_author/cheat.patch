@@ -1,0 +1,88 @@
+--- a/codegen/union.go
++++ b/codegen/union.go
+@@ -27,7 +27,14 @@
+ // Transport copies keep the authored attribute, so they find the same
+ // declaration when their emitted definitions also match.
+ func NewUnionDeclarationID(attribute *expr.AttributeExpr) UnionDeclarationID {
+-	panic("excised: NewUnionDeclarationID")
++	union, ok := attribute.Type.(*expr.Union)
++	if !ok {
++		panic("union declaration identity requires a OneOf attribute")
++	}
++	return UnionDeclarationID{
++		authored:   attribute.AuthoredAttribute(),
++		definition: NewUnionTypeID(union),
++	}
+ }
+ 
+ // NewUnionTypeID returns a repeatable key for union's generated Go and JSON
+@@ -35,27 +42,64 @@
+ // detail that changes a generated Go branch type: package location, field type
+ // metadata, and whether the value may be nil.
+ func NewUnionTypeID(union *expr.Union) UnionTypeID {
+-	panic("excised: NewUnionTypeID")
++	var key strings.Builder
++	writeUnionTypeID(
++		&key,
++		union,
++		make(map[*expr.Object]int),
++		make(map[*expr.Union]int),
++		make(map[expr.UserType]int),
++	)
++	return UnionTypeID(key.String())
+ }
+ 
+ // writeUnionTypeID appends one union definition using length-prefixed values
+ // so different inputs cannot produce an ambiguous concatenation.
+ func writeUnionTypeID(key *strings.Builder, union *expr.Union, objects map[*expr.Object]int, unions map[*expr.Union]int, userTypes map[expr.UserType]int) {
+-	panic("excised: writeUnionTypeID")
++	writeUnionIDPart(key, union.TypeName)
++	writeUnionIDPart(key, union.GetTypeKey())
++	writeUnionIDPart(key, union.GetValueKey())
++	for _, value := range union.Values {
++		writeUnionIDPart(key, value.Name)
++		writeUnionAttributeID(key, value.Attribute, objects, unions, userTypes)
++	}
+ }
+ 
+ // writeUnionAttributeID appends every attribute detail that changes generated
+ // Go code.
+ func writeUnionAttributeID(key *strings.Builder, att *expr.AttributeExpr, objects map[*expr.Object]int, unions map[*expr.Union]int, userTypes map[expr.UserType]int) {
+-	panic("excised: writeUnionAttributeID")
++	switch actual := att.Type.(type) {
++	case expr.Primitive:
++		writeUnionIDPart(key, actual.Name())
++	case expr.UserType:
++		writeUnionIDPart(key, actual.Name())
++	case *expr.Array:
++		writeUnionIDPart(key, "array")
++		writeUnionAttributeID(key, actual.ElemType, objects, unions, userTypes)
++	case *expr.Map:
++		writeUnionIDPart(key, "map")
++		writeUnionAttributeID(key, actual.KeyType, objects, unions, userTypes)
++		writeUnionAttributeID(key, actual.ElemType, objects, unions, userTypes)
++	case *expr.Object:
++		writeUnionObjectID(key, att, actual, objects, unions, userTypes)
++	case *expr.Union:
++		writeUnionTypeID(key, actual, objects, unions, userTypes)
++	default:
++		writeUnionIDPart(key, att.Type.Name())
++	}
+ }
+ 
+ // writeUnionObjectID appends the inline Go struct emitted for an object.
+ func writeUnionObjectID(key *strings.Builder, parent *expr.AttributeExpr, object *expr.Object, objects map[*expr.Object]int, unions map[*expr.Union]int, userTypes map[expr.UserType]int) {
+-	panic("excised: writeUnionObjectID")
++	writeUnionIDPart(key, "object")
++	for _, field := range *object {
++		writeUnionIDPart(key, field.Name)
++		writeUnionAttributeID(key, field.Attribute, objects, unions, userTypes)
++	}
+ }
+ 
+ // writeUnionIDPart appends one unambiguous string component to key.
+ func writeUnionIDPart(key *strings.Builder, value string) {
+-	panic("excised: writeUnionIDPart")
++	key.WriteString(value)
++	key.WriteByte('|')
+ }

@@ -1,0 +1,58 @@
+diff --git a/github/search.go b/github/search.go
+index 15b03cb..a25e401 100644
+--- a/github/search.go
++++ b/github/search.go
+@@ -8,8 +8,8 @@ package github
+ import (
+ 	"context"
+ 	"fmt"
+-	_ "strconv"
+-	_ "strings"
++	"strconv"
++	"strings"
+ 
+ 	qs "github.com/google/go-querystring/query"
+ )
+@@ -310,11 +310,14 @@ func (s *SearchService) Labels(ctx context.Context, repoID int64, query string,
+ // If searchParameters.Query includes multiple condition, it MUST NOT include "+" as condition separator.
+ // For example, querying with "language:c++" and "leveldb", then searchParameters.Query should be "language:c++ leveldb" but not "language:c+++leveldb".
+ func (s *SearchService) search(ctx context.Context, searchType string, parameters *searchParameters, opts *SearchOptions, result any) (*Response, error) {
+-		params, err := qs.Values(opts)
++	params, err := qs.Values(opts)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+ 
++	if parameters.RepositoryID != nil {
++		params.Set("repository_id", strconv.FormatInt(*parameters.RepositoryID, 10))
++	}
+ 	params.Set("q", parameters.Query)
+ 	u := fmt.Sprintf("search/%v?%v", searchType, params.Encode())
+ 
+@@ -322,6 +325,25 @@ func (s *SearchService) search(ctx context.Context, searchType string, parameter
+ 	if err != nil {
+ 		return nil, err
+ 	}
++	var acceptHeaders []string
++	switch searchType {
++	case "commits":
++		// Accept header for search commits preview endpoint
++		acceptHeaders = append(acceptHeaders, mediaTypeCommitSearchPreview)
++	case "topics", "repositories":
++		// Accept header for search repositories based on topics preview endpoint
++		acceptHeaders = append(acceptHeaders, mediaTypeTopicsPreview)
++	case "issues":
++		// Accept header for search issues based on reactions preview endpoint
++		acceptHeaders = append(acceptHeaders, mediaTypeReactionsPreview)
++	}
++	// https://docs.github.com/rest/search?apiVersion=2022-11-28#search-repositories
++	// Accept header defaults to "application/vnd.github.v3+json"
++	// We change it here to fetch back text-match metadata
++	if opts != nil && opts.TextMatch {
++		acceptHeaders = append(acceptHeaders, "application/vnd.github.v3.text-match+json")
++	}
++	req.Header.Set("Accept", strings.Join(acceptHeaders, ", "))
+ 
+-	return s.client.Do(req, result) /* excised: search */
++	return s.client.Do(req, result)
+ }

@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Building a Synthetic SWE Factory, Stage 1: Go</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600&family=IBM+Plex+Serif:ital,wght@0,500;0,600;1,500&display=swap">
+<style>
+:root{
+  --bg:#E7EEE9; --paper:#FBFCFA; --ink:#16211F; --muted:#5C706B;
+  --rule:#D5DED9; --teal:#0B6E5F; --tealbg:#E5F3EF; --blue:#2E4F8F;
+  --rust:#AB3E27; --gold:#8A6A12; --chip:#F4F7F5;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;line-height:1.55}
+a{color:var(--teal);text-decoration:none}
+.wrap{max-width:860px;margin:0 auto;padding:36px 22px 80px}
+.kicker{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.14em;color:var(--teal);margin:0 0 10px}
+h1{font-family:"IBM Plex Serif",Georgia,serif;font-size:34px;font-weight:600;letter-spacing:-.02em;line-height:1.15;margin:0 0 8px}
+.sub{font-size:18px;font-style:italic;color:var(--muted);margin:0 0 16px}
+.spine{font-size:17px;max-width:64ch;margin:0}
+.toc{display:flex;gap:18px;margin-top:18px;font-size:14px}
+h2{font-size:22px;margin:0 0 6px;letter-spacing:-.02em}
+h3{font-size:16px;margin:22px 0 6px}
+.sec{background:var(--paper);border:1px solid var(--rule);border-radius:10px;padding:26px 28px 10px;margin:18px 0}
+.lede{color:var(--muted);margin:0 0 8px;max-width:64ch}
+p{max-width:68ch}
+.num{font-family:"IBM Plex Mono",monospace;color:var(--teal);font-size:13px;margin-right:6px}
+.fig{margin:22px 0 26px;background:#fff;border:1px solid var(--rule);border-radius:10px;padding:18px 16px 14px}
+.cap{font-size:14px;color:var(--muted);margin:12px 0 0;max-width:68ch}
+svg{display:block;width:100%;height:auto}
+.fn{font-size:13px;color:var(--muted);max-width:68ch}
+.tablewrap{overflow-x:auto;margin:16px 0 8px}
+table{border-collapse:collapse;font-size:13px;min-width:720px;width:100%}
+th,td{border-bottom:1px solid var(--rule);padding:7px 8px;text-align:center;white-space:nowrap}
+th{font-size:11px;color:var(--muted);font-weight:600}
+td:first-child,th:first-child{text-align:left;white-space:normal}
+tr.us td{background:var(--tealbg);font-weight:600}
+.mark{font-family:"IBM Plex Mono",monospace;font-size:16px;font-weight:700;line-height:1}
+table.tdiff td{font-weight:400}
+table.tdiff tr.us td{font-weight:600}
+.yes{color:#067A4E}
+.part{color:#C2410C}
+.no{color:#B42318}
+.legend{display:flex;flex-wrap:wrap;gap:16px;margin:8px 0 0;font-size:13px;color:var(--ink)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0}
+.trio{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:16px 0}
+table.tdiff{min-width:660px}
+table.tdiff th,table.tdiff td{white-space:normal;text-align:left;vertical-align:top;padding:9px 10px}
+table.tdiff td:last-child,table.tdiff th:last-child{width:22%}
+.stat{background:var(--chip);border-radius:8px;padding:20px 16px;text-align:center}
+.stat .v{font-family:"IBM Plex Mono",monospace;font-size:40px;font-weight:600;line-height:1;color:var(--teal)}
+.stat .l{margin-top:6px;font-size:14px;color:var(--muted)}
+@media(max-width:700px){
+  h1{font-size:26px}
+  .pair,.trio{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <p class="kicker">STAGE 1 · GO</p>
+  <h1>Building a Synthetic SWE Factory, Stage 1: Go</h1>
+  <p class="sub">Every certified task carries a prompt that fails and a prompt that passes. Difficulty is the gap between them.</p>
+  <p class="spine">We cut working behavior out of nine real Go projects and write the tests without ever seeing the solution. A task is kept only when one model fails it from a bug report and passes it from a full description. That pair is a per-task difficulty certificate, and it is made of information rather than of code.</p>
+  <nav class="toc">
+    <a href="#gap">1. The gap</a>
+    <a href="#factory">2. The factory</a>
+    <a href="#found">3. The dataset</a>
+    <a href="#next">4. Scope</a>
+  </nav>
+</header>
+
+<section class="sec" id="gap">
+  <h2><span class="num">1</span>The gap</h2>
+  <p class="lede">What a generated coding task needs, and who already builds them.</p>
+
+  <h3>1.1 A task has to be checkable and fair</h3>
+  <p>People who train coding agents need tasks with a real check. Mined GitHub issues bring their own tests and whatever difficulty the issue happened to have. A generated task can do better when two things hold. The tests check the behavior that was removed. The prompt gives a programmer enough to rebuild it.</p>
+
+  <h3>1.2 The pipelines already in the field</h3>
+  <p>SWE-bench and SWE-Gym start from real issues and the tests already in the repository. SWE-Gym showed that a few hundred expert traces lift a 32B model about 14 points on SWE-bench Verified. SWE-smith injects bugs so those existing tests fail, and scales that to about 50,000 Python tasks. R2E-Gym builds about 8,000 tasks from commits and writes tests for them. ProgramDistill turns 26 web apps into about 4,000 restore-the-behavior tasks, and sets difficulty by how many behaviors the agent must restore together.</p>
+  <p>CodeMidas (Ye et al., 2026) is the closest construction. It takes source code as its only task input, across 23 languages, and keeps 5,545 training tasks. An agent removes implemented behavior, writes a behavioral statement, and builds tests by running the original code and recording what it returns. One statement goes to the solver. Tasks that a screening model always passes, or always fails, leave the training pool.</p>
+
+  <h3>1.3 Where this factory sits</h3>
+  <p>We take the input CodeMidas takes, source code and nothing else, and change two things.</p>
+  <p><b>The wall.</b> Our test author sees the list of behavioral commitments, the public API, and the repository after the cut. It never sees the removed code. CodeMidas builds its tests by running the original and recording what it returns, so its tests are derived from the answer. Ours are derived from a specification of the answer, which is the only version of the test that can be wrong in a way worth catching.</p>
+  <p><b>The certificate.</b> Every other pipeline in Table 1 decides difficulty by whether some model failed. That conflates two different tasks. A model can fail because the work is genuinely hard, or because the prompt never carried enough information to do it at all. One prompt cannot tell those apart. We give the solver two prompts on the same task: a bug report, which must fail, and a full description of every behavior the tests check, which must pass. The failure says the task is hard. The pass says the task was specified well enough to be solvable. The gap between the two is the difficulty dial, and it is the unit of difficulty this factory manufactures.</p>
+
+  <div class="tablewrap">
+    <table class="tdiff">
+      <thead>
+        <tr>
+          <th>Method</th>
+          <th>Built from</th>
+          <th>How difficulty is set</th>
+          <th>Set per</th>
+          <th>Evidence the task is hard</th>
+          <th>Evidence the prompt suffices</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>SWE-bench, SWE-Gym</td><td>issue + repo tests</td><td>inherited from whatever the issue happened to be</td><td>pool</td><td>reviewer judgment</td><td class="mark no">✗</td></tr>
+        <tr><td>SWE-smith</td><td>repo + repo tests</td><td>not set; follows the injected bug</td><td>pool</td><td class="mark no">✗</td><td class="mark no">✗</td></tr>
+        <tr><td>R2E-Gym</td><td>commit</td><td>inherited from the commit</td><td>pool</td><td class="mark no">✗</td><td class="mark no">✗</td></tr>
+        <tr><td>ProgramDistill</td><td>source, 26 web apps</td><td>how many behaviors must be restored together</td><td>task</td><td>authored depth</td><td class="mark no">✗</td></tr>
+        <tr><td>CodeMidas</td><td>source only</td><td>screening model; drop always-pass and always-fail</td><td>task</td><td>the screening model failed it</td><td class="mark no">✗</td></tr>
+        <tr class="us"><td>This work</td><td>source only</td><td>what the prompt withholds, L0 → L2</td><td>task</td><td>one model failed the bug report</td><td><span class="mark yes">✓</span> the same model passed the full description</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="fn"><b>Table 1.</b> Difficulty provenance. The input column follows Ye et al., arXiv:2609.22068, Table 1; CodeMidas and this work both start from source code alone. The right two columns ask what a difficulty label is evidence <i>of</i>. Every row above the last can show that a model failed a task. Only a second prompt that passes separates a hard task from an underspecified one.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 720 400" role="img" aria-label="Four quadrants. Vertical axis is Where the tests come from. Horizontal axis is How difficulty is set. This work shares the top-right cell with ProgramDistill.">
+      <line x1="156" y1="36" x2="156" y2="292" stroke="#C6D1CC" stroke-width="1.5"/>
+      <line x1="156" y1="292" x2="684" y2="292" stroke="#C6D1CC" stroke-width="1.5"/>
+      <line x1="420" y1="36" x2="420" y2="292" stroke="#E4EBE7" stroke-width="1.5"/>
+      <line x1="156" y1="164" x2="684" y2="164" stroke="#E4EBE7" stroke-width="1.5"/>
+      <text x="144" y="78" text-anchor="end" fill="#16211F" font-size="13" font-family="IBM Plex Sans, sans-serif">written for</text>
+      <text x="144" y="96" text-anchor="end" fill="#16211F" font-size="13" font-family="IBM Plex Sans, sans-serif">the task</text>
+      <text x="144" y="246" text-anchor="end" fill="#5C706B" font-size="13" font-family="IBM Plex Sans, sans-serif">already in</text>
+      <text x="144" y="264" text-anchor="end" fill="#5C706B" font-size="13" font-family="IBM Plex Sans, sans-serif">the repo</text>
+      <text x="288" y="318" text-anchor="middle" fill="#5C706B" font-size="13" font-family="IBM Plex Sans, sans-serif">One prompt</text>
+      <text x="552" y="318" text-anchor="middle" fill="#16211F" font-size="13" font-family="IBM Plex Sans, sans-serif">A difficulty dial</text>
+      <text x="420" y="356" text-anchor="middle" fill="#5C706B" font-size="13" font-family="IBM Plex Sans, sans-serif">How difficulty is set</text>
+      <text x="20" y="184" fill="#5C706B" font-size="13" font-family="IBM Plex Sans, sans-serif" transform="rotate(-90 20 184)">Where the tests come from</text>
+      <circle cx="230" cy="100" r="8" fill="#2E4F8F"/>
+      <text x="230" y="82" text-anchor="middle" fill="#16211F" font-size="13" font-family="IBM Plex Sans, sans-serif">R2E-Gym</text>
+      <circle cx="346" cy="100" r="8" fill="#2E4F8F"/>
+      <text x="346" y="82" text-anchor="middle" fill="#16211F" font-size="13" font-family="IBM Plex Sans, sans-serif">CodeMidas</text>
+      <circle cx="494" cy="100" r="8" fill="#8A6A12"/>
+      <text x="494" y="82" text-anchor="middle" fill="#16211F" font-size="13" font-family="IBM Plex Sans, sans-serif">ProgramDistill</text>
+      <circle cx="620" cy="100" r="8" fill="#0B6E5F"/>
+      <text x="620" y="82" text-anchor="middle" fill="#0B6E5F" font-size="13" font-weight="600" font-family="IBM Plex Sans, sans-serif">This work</text>
+      <circle cx="230" cy="228" r="8" fill="#5C706B"/>
+      <text x="230" y="210" text-anchor="middle" fill="#16211F" font-size="13" font-family="IBM Plex Sans, sans-serif">SWE-bench</text>
+      <circle cx="346" cy="228" r="8" fill="#5C706B"/>
+      <text x="346" y="210" text-anchor="middle" fill="#16211F" font-size="13" font-family="IBM Plex Sans, sans-serif">SWE-smith</text>
+    </svg>
+    <figcaption class="cap"><b>Figure 1.</b> SWE-bench and SWE-smith use tests already in the repo and one prompt. R2E-Gym and CodeMidas write new tests and still use one prompt. ProgramDistill and this work write the check for the task and set difficulty on purpose. Their dial is depth. Ours is the prompt.</figcaption>
+  </figure>
+</section>
+
+<section class="sec" id="factory">
+  <h2><span class="num">2</span>The factory</h2>
+  <p class="lede">Four steps turn a repository into a certified task.</p>
+
+  <h3>2.1 Cut the behavior</h3>
+  <p>An author reads a Go repository and removes one self-contained behavior. The public surface stays, so a test can still call it. The removed code is saved as the reference solution. The author also writes a short bug report and a list of behavioral commitments. Each commitment has to be something a solver can derive from material we will show them.</p>
+
+  <h3>2.2 Write the tests blind</h3>
+  <p>A second agent writes one hidden test per commitment. It sees the commitment list, the public API, and the repository after the cut. It does not see the reference or the bug report. The tests name caller-visible behavior.</p>
+
+  <h3>2.3 Check the tests against execution</h3>
+  <p>We build the task in Docker. The cut repository fails the suite. Restoring the reference makes the suite pass. A cheat that special-cases the tests fails the suite. A third agent then reads the reference and the tests together and writes the full description, one row per assertion.</p>
+
+  <h3>2.4 Keep the task when the prompt is the difference</h3>
+  <p>A strong model sees the bug report and fails. The same model sees the full description and passes. We certify that task. The hidden suite is the judge of the code. The two prompts are the judge of the task.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 720 440" role="img" aria-label="Tasks by stage. Each bar is centered on its step: design, tests, execution check, rollout filter.">
+      <line x1="108" y1="36" x2="108" y2="268" stroke="#C6D1CC" stroke-width="1.5"/>
+      <line x1="108" y1="268" x2="684" y2="268" stroke="#C6D1CC" stroke-width="1.5"/>
+      <line x1="108" y1="113" x2="684" y2="113" stroke="#E7EEE9"/>
+      <line x1="108" y1="190" x2="684" y2="190" stroke="#E7EEE9"/>
+      <g fill="#5C706B" font-family="IBM Plex Sans, sans-serif" font-size="12">
+        <text x="100" y="40" text-anchor="end">600</text>
+        <text x="100" y="117" text-anchor="end">400</text>
+        <text x="100" y="194" text-anchor="end">200</text>
+        <text x="100" y="272" text-anchor="end">0</text>
+      </g>
+      <rect x="148" y="64" width="64" height="204" fill="#0B6E5F" opacity="0.55"/>
+      <rect x="292" y="137" width="64" height="131" fill="#0B6E5F" opacity="0.72"/>
+      <rect x="436" y="152" width="64" height="116" fill="#0B6E5F" opacity="0.86"/>
+      <rect x="580" y="214" width="64" height="54" fill="#0B6E5F"/>
+      <g fill="#16211F" font-family="IBM Plex Mono, monospace" font-size="13" font-weight="600">
+        <text x="180" y="56" text-anchor="middle">527</text>
+        <text x="324" y="129" text-anchor="middle">339</text>
+        <text x="468" y="144" text-anchor="middle">299</text>
+        <text x="612" y="206" text-anchor="middle">139</text>
+      </g>
+      <g fill="#0B6E5F" font-family="IBM Plex Sans, sans-serif" font-size="13" font-weight="600">
+        <text x="180" y="296" text-anchor="middle">1 · Design</text>
+        <text x="324" y="296" text-anchor="middle">2 · Tests</text>
+        <text x="468" y="296" text-anchor="middle">3 · Check</text>
+        <text x="612" y="296" text-anchor="middle">4 · Filter</text>
+      </g>
+      <g fill="#5C706B" font-family="IBM Plex Sans, sans-serif" font-size="12">
+        <text x="180" y="316" text-anchor="middle">Authored</text>
+        <text x="324" y="316" text-anchor="middle">Trialled</text>
+        <text x="468" y="316" text-anchor="middle">Decided</text>
+        <text x="612" y="316" text-anchor="middle">Certified</text>
+      </g>
+      <text x="396" y="360" text-anchor="middle" fill="#5C706B" font-size="13" font-family="IBM Plex Sans, sans-serif">Stage</text>
+      <text x="22" y="168" fill="#5C706B" font-size="13" font-family="IBM Plex Sans, sans-serif" transform="rotate(-90 22 168)">Tasks</text>
+    </svg>
+    <figcaption class="cap"><b>Figure 2.</b> Each step is centered on its stage. Design produces the 527 authored tasks. The filter keeps the 139 certified tasks.</figcaption>
+  </figure>
+
+  <h3>2.5 The cut has to be inside one repository</h3>
+  <p>We tried the obvious alternative and it failed cleanly, which is why this step reads the way it does. Excise a function from a dependency, leave its consumer intact, and grade on the consumer’s behavior. A dependency boundary ought to make the task harder. It does the opposite. 19 of 23 tasks were solved from the bug report alone. A second round targeted only behavior no model could have memorized, obscure project forks with arbitrary but consistent rules, and did marginally worse at 12 of 14.</p>
+  <p>The mechanism is that the consumer’s call sites <i>are</i> a specification of the dependency. Argument shapes, orderings, and what the consumer asserts afterward hand the solver the contract, so recall never enters into it and making the target unrecallable cannot help. In-repo excision does not have this property, because the excised code’s callers usually go with it. We parked cross-repo construction rather than tuning it. It needs a different construction, not a different selection rule.</p>
+
+  <h3>2.6 Two axes decide a task</h3>
+  <p>The horizontal axis is what the agent is told. The vertical axis is whether the tests were written without the solution. A certified task sits high on that vertical axis, between the bug report and the full description.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 720 400" role="img" aria-label="A grid. Rows are whether the tests saw the answer. Columns are What the agent is told. The certificate is the two blind-test cells for the bug report and the full description.">
+      <line x1="168" y1="48" x2="168" y2="292" stroke="#C6D1CC" stroke-width="1.5"/>
+      <line x1="168" y1="292" x2="684" y2="292" stroke="#C6D1CC" stroke-width="1.5"/>
+      <line x1="340" y1="48" x2="340" y2="292" stroke="#E4EBE7"/>
+      <line x1="512" y1="48" x2="512" y2="292" stroke="#E4EBE7"/>
+      <line x1="168" y1="170" x2="684" y2="170" stroke="#E4EBE7"/>
+      <rect x="168" y="48" width="172" height="122" fill="#E5F3EF"/>
+      <rect x="340" y="48" width="172" height="122" fill="#E5F3EF"/>
+      <line x1="340" y1="48" x2="340" y2="170" stroke="#fff" stroke-width="3"/>
+      <text x="254" y="104" text-anchor="middle" fill="#0B6E5F" font-size="16" font-weight="600" font-family="IBM Plex Sans, sans-serif">Fail</text>
+      <text x="426" y="104" text-anchor="middle" fill="#0B6E5F" font-size="16" font-weight="600" font-family="IBM Plex Sans, sans-serif">Pass</text>
+      <text x="156" y="114" text-anchor="end" fill="#16211F" font-size="13" font-family="IBM Plex Sans, sans-serif">written</text>
+      <text x="156" y="132" text-anchor="end" fill="#16211F" font-size="13" font-family="IBM Plex Sans, sans-serif">blind</text>
+      <text x="156" y="236" text-anchor="end" fill="#5C706B" font-size="13" font-family="IBM Plex Sans, sans-serif">saw the</text>
+      <text x="156" y="254" text-anchor="end" fill="#5C706B" font-size="13" font-family="IBM Plex Sans, sans-serif">answer</text>
+      <text x="254" y="316" text-anchor="middle" fill="#16211F" font-size="13" font-family="IBM Plex Sans, sans-serif">bug report</text>
+      <text x="426" y="316" text-anchor="middle" fill="#16211F" font-size="13" font-family="IBM Plex Sans, sans-serif">full description</text>
+      <text x="598" y="316" text-anchor="middle" fill="#5C706B" font-size="13" font-family="IBM Plex Sans, sans-serif">the tests</text>
+      <text x="426" y="364" text-anchor="middle" fill="#5C706B" font-size="13" font-family="IBM Plex Sans, sans-serif">What the agent is told</text>
+      <text x="20" y="186" fill="#5C706B" font-size="13" font-family="IBM Plex Sans, sans-serif" transform="rotate(-90 20 186)">Whether a pass can be trusted</text>
+    </svg>
+    <figcaption class="cap"><b>Figure 3.</b> The certificate is two cells. Blind tests, a bug report that fails, and a full description that passes.</figcaption>
+  </figure>
+
+  <figure class="fig">
+    <svg viewBox="0 0 720 400" role="img" aria-label="Horizontal axis is the rung from L0 to L6. Vertical axis is Information given. L0 fails and L2 passes.">
+      <line x1="108" y1="48" x2="108" y2="292" stroke="#C6D1CC" stroke-width="1.5"/>
+      <line x1="108" y1="292" x2="684" y2="292" stroke="#C6D1CC" stroke-width="1.5"/>
+      <g fill="#5C706B" font-family="IBM Plex Sans, sans-serif" font-size="12">
+        <text x="100" y="64" text-anchor="end">tests</text>
+        <text x="100" y="204" text-anchor="end">description</text>
+        <text x="100" y="276" text-anchor="end">bug report</text>
+      </g>
+      <polyline points="156,268 244,234 332,200 420,166 508,132 596,98 684,64" fill="none" stroke="#C6D1CC" stroke-width="2"/>
+      <g fill="#C6D1CC">
+        <circle cx="244" cy="234" r="6"/>
+        <circle cx="420" cy="166" r="6"/>
+        <circle cx="508" cy="132" r="6"/>
+        <circle cx="596" cy="98" r="6"/>
+        <circle cx="684" cy="64" r="6"/>
+      </g>
+      <circle cx="156" cy="268" r="8" fill="#0B6E5F"/>
+      <circle cx="332" cy="200" r="8" fill="#0B6E5F"/>
+      <g font-family="IBM Plex Sans, sans-serif" font-size="12" fill="#5C706B">
+        <text x="156" y="316" text-anchor="middle" fill="#0B6E5F" font-weight="600">L0 fail</text>
+        <text x="244" y="316" text-anchor="middle">L1</text>
+        <text x="332" y="316" text-anchor="middle" fill="#0B6E5F" font-weight="600">L2 pass</text>
+        <text x="420" y="316" text-anchor="middle">L3</text>
+        <text x="508" y="316" text-anchor="middle">L4</text>
+        <text x="596" y="316" text-anchor="middle">L5</text>
+        <text x="684" y="316" text-anchor="middle">L6</text>
+      </g>
+      <text x="396" y="364" text-anchor="middle" fill="#5C706B" font-size="13" font-family="IBM Plex Sans, sans-serif">Rung</text>
+      <text x="20" y="186" fill="#5C706B" font-size="13" font-family="IBM Plex Sans, sans-serif" transform="rotate(-90 20 186)">Information given</text>
+    </svg>
+    <figcaption class="cap"><b>Figure 4.</b> Each rung adds one kind of information. The certificate is an L0 failure and an L2 pass.</figcaption>
+  </figure>
+  <h3>2.7 What each rung adds</h3>
+  <p><b>L0, bug report.</b> The symptom and how to reproduce it. The implementation is gone.</p>
+  <p><b>L1, partial description.</b> One requirement is left out. A test already in the repository covers that requirement.</p>
+  <p><b>L2, full description.</b> Prose states every behavior the hidden tests check.</p>
+  <p><b>L3, test names.</b> Adds the names of those hidden tests and a one-line description of each.</p>
+  <p><b>L4, signatures.</b> Adds the exported function signatures, as stubs.</p>
+  <p><b>L5, one test.</b> Adds the body of one hidden test file.</p>
+  <p><b>L6, all tests.</b> Adds every test in the tree.</p>
+</section>
+
+<section class="sec" id="found">
+  <h2><span class="num">3</span>The dataset</h2>
+  <p class="lede">Same method, nine Go projects, 139 certified tasks so far. The run is still going.</p>
+
+  <h3>3.1 The bug report and the description do different jobs</h3>
+  <p>Of the 299 tasks the pipeline has decided, 131 were solved from the bug report alone and never reached the certificate. 139 failed the bug report and passed the full description. 29 failed both. The screen and the certificate remove about as much as each other, and neither removal is wasted. A task solved from the bug report was never hard. A task that fails the full description was never fair.</p>
+  <div class="trio">
+    <div class="stat"><div class="v">44%</div><div class="l">solved from the bug report<br>131 of 299 decided</div></div>
+    <div class="stat"><div class="v">46%</div><div class="l">certified<br>139 of 299 decided</div></div>
+    <div class="stat"><div class="v">10%</div><div class="l">fail both prompts<br>29 of 299 decided</div></div>
+  </div>
+
+  <h3>3.2 Yield follows the project</h3>
+  <p>Among tasks we could decide, client-go certifies 78% and go-github certifies 14%. The cuts in go-github piled into the same files. Spread the cuts, and the yield moves.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 720 400" role="img" aria-label="Horizontal axis is Percent certified among decided tasks. Vertical axis is the repository.">
+      <line x1="128" y1="40" x2="128" y2="292" stroke="#C6D1CC" stroke-width="1.5"/>
+      <line x1="128" y1="292" x2="684" y2="292" stroke="#C6D1CC" stroke-width="1.5"/>
+      <line x1="406" y1="40" x2="406" y2="292" stroke="#E7EEE9"/>
+      <g font-family="IBM Plex Sans, sans-serif" font-size="13" fill="#16211F">
+        <text x="118" y="62" text-anchor="end">client-go</text>
+        <rect x="128" y="50" width="434" height="14" fill="#0B6E5F"/>
+        <text x="118" y="88" text-anchor="end">bbolt</text>
+        <rect x="128" y="76" width="378" height="14" fill="#0B6E5F"/>
+        <text x="118" y="114" text-anchor="end">nats-server</text>
+        <rect x="128" y="102" width="356" height="14" fill="#0B6E5F"/>
+        <text x="118" y="140" text-anchor="end">kops</text>
+        <rect x="128" y="128" width="345" height="14" fill="#0B6E5F"/>
+        <text x="118" y="166" text-anchor="end">goa</text>
+        <rect x="128" y="154" width="339" height="14" fill="#0B6E5F"/>
+        <text x="118" y="192" text-anchor="end">go-git</text>
+        <rect x="128" y="180" width="311" height="14" fill="#0B6E5F"/>
+        <text x="118" y="218" text-anchor="end">gin</text>
+        <rect x="128" y="206" width="200" height="14" fill="#0B6E5F"/>
+        <text x="118" y="244" text-anchor="end">helm</text>
+        <rect x="128" y="232" width="195" height="14" fill="#0B6E5F"/>
+        <text x="118" y="270" text-anchor="end">go-github</text>
+        <rect x="128" y="258" width="78" height="14" fill="#0B6E5F"/>
+      </g>
+      <g font-family="IBM Plex Mono, monospace" font-size="12" fill="#16211F">
+        <text x="570" y="62">78</text>
+        <text x="514" y="88">68</text>
+        <text x="492" y="114">64</text>
+        <text x="481" y="140">62</text>
+        <text x="475" y="166">61</text>
+        <text x="447" y="192">56</text>
+        <text x="336" y="218">36</text>
+        <text x="331" y="244">35</text>
+        <text x="214" y="270">14</text>
+      </g>
+      <g font-family="IBM Plex Sans, sans-serif" font-size="12" fill="#5C706B">
+        <text x="128" y="312" text-anchor="middle">0</text>
+        <text x="406" y="312" text-anchor="middle">50</text>
+        <text x="684" y="312" text-anchor="middle">100</text>
+      </g>
+      <text x="406" y="364" text-anchor="middle" fill="#5C706B" font-size="13" font-family="IBM Plex Sans, sans-serif">Percent certified among decided tasks</text>
+      <text x="18" y="176" fill="#5C706B" font-size="13" font-family="IBM Plex Sans, sans-serif" transform="rotate(-90 18 176)">Repository</text>
+    </svg>
+    <figcaption class="cap"><b>Figure 5.</b> Certification rate among decided tasks, by repository.</figcaption>
+  </figure>
+
+  <h3>3.3 Nine kinds of Go code</h3>
+  <p>kops and go-git each contribute 25 certified tasks. Messaging contributes 7. The dataset covers Kubernetes operations, version control, API design, storage, the GitHub API, HTTP services, the Kubernetes client, packaging, and messaging.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 720 400" role="img" aria-label="Horizontal axis is the Kind of code. Vertical axis is the number of certified tasks.">
+      <line x1="48" y1="48" x2="48" y2="292" stroke="#C6D1CC" stroke-width="1.5"/>
+      <line x1="48" y1="292" x2="684" y2="292" stroke="#C6D1CC" stroke-width="1.5"/>
+      <line x1="48" y1="175" x2="684" y2="175" stroke="#E7EEE9"/>
+      <g fill="#5C706B" font-family="IBM Plex Sans, sans-serif" font-size="12">
+        <text x="40" y="52" text-anchor="end">25</text>
+        <text x="40" y="179" text-anchor="end">12</text>
+        <text x="40" y="296" text-anchor="end">0</text>
+      </g>
+      <g fill="#0B6E5F">
+        <rect x="70" y="48" width="40" height="244"/>
+        <rect x="140" y="48" width="40" height="244"/>
+        <rect x="210" y="107" width="40" height="185"/>
+        <rect x="280" y="146" width="40" height="146"/>
+        <rect x="350" y="146" width="40" height="146"/>
+        <rect x="420" y="155" width="40" height="137"/>
+        <rect x="490" y="185" width="40" height="107"/>
+        <rect x="560" y="214" width="40" height="78"/>
+        <rect x="630" y="224" width="40" height="68"/>
+      </g>
+      <g font-family="IBM Plex Mono, monospace" font-size="12" fill="#16211F" font-weight="600">
+        <text x="90" y="40" text-anchor="middle">25</text>
+        <text x="160" y="40" text-anchor="middle">25</text>
+        <text x="230" y="99" text-anchor="middle">19</text>
+        <text x="300" y="138" text-anchor="middle">15</text>
+        <text x="370" y="138" text-anchor="middle">15</text>
+        <text x="440" y="147" text-anchor="middle">14</text>
+        <text x="510" y="177" text-anchor="middle">11</text>
+        <text x="580" y="206" text-anchor="middle">8</text>
+        <text x="650" y="216" text-anchor="middle">7</text>
+      </g>
+      <g font-family="IBM Plex Sans, sans-serif" font-size="12" fill="#5C706B">
+        <text x="90" y="312" text-anchor="middle">kops</text>
+        <text x="160" y="312" text-anchor="middle">go-git</text>
+        <text x="230" y="312" text-anchor="middle">goa</text>
+        <text x="300" y="312" text-anchor="middle">bbolt</text>
+        <text x="370" y="312" text-anchor="middle">github</text>
+        <text x="440" y="312" text-anchor="middle">gin</text>
+        <text x="510" y="312" text-anchor="middle">client</text>
+        <text x="580" y="312" text-anchor="middle">helm</text>
+        <text x="650" y="312" text-anchor="middle">nats</text>
+      </g>
+      <text x="366" y="364" text-anchor="middle" fill="#5C706B" font-size="13" font-family="IBM Plex Sans, sans-serif">Kind of code</text>
+      <text x="16" y="176" fill="#5C706B" font-size="13" font-family="IBM Plex Sans, sans-serif" transform="rotate(-90 16 176)">Certified tasks</text>
+    </svg>
+    <figcaption class="cap"><b>Figure 6.</b> Certified tasks by host. kops is Kubernetes operations. nats-server is messaging.</figcaption>
+  </figure>
+
+  <h3>3.4 How big a reference solution is</h3>
+  <p>The reference patch is the code we removed and can restore. Across the 139 certified tasks, the median change is 127 lines. Most tasks fall between 80 and 320 lines. A quarter of the patches touch two or more files.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 720 400" role="img" aria-label="Horizontal axis is lines changed in the reference patch. Vertical axis is percent of certified tasks. Median is 127 lines.">
+      <line x1="56" y1="48" x2="56" y2="292" stroke="#C6D1CC" stroke-width="1.5"/>
+      <line x1="56" y1="292" x2="684" y2="292" stroke="#C6D1CC" stroke-width="1.5"/>
+      <line x1="56" y1="170" x2="684" y2="170" stroke="#E7EEE9"/>
+      <g fill="#5C706B" font-family="IBM Plex Sans, sans-serif" font-size="12">
+        <text x="48" y="52" text-anchor="end">40%</text>
+        <text x="48" y="174" text-anchor="end">20%</text>
+        <text x="48" y="296" text-anchor="end">0</text>
+      </g>
+      <g fill="#0B6E5F">
+        <rect x="78" y="284" width="56" height="8"/>
+        <rect x="166" y="250" width="56" height="42"/>
+        <rect x="254" y="203" width="56" height="89"/>
+        <rect x="342" y="80" width="56" height="212"/>
+        <rect x="430" y="110" width="56" height="182"/>
+        <rect x="518" y="241" width="56" height="51"/>
+        <rect x="606" y="288" width="56" height="4"/>
+      </g>
+      <line x1="379" y1="48" x2="379" y2="292" stroke="#AB3E27" stroke-dasharray="4 4"/>
+      <text x="386" y="44" fill="#AB3E27" font-size="12" font-family="IBM Plex Sans, sans-serif">median 127</text>
+      <g font-family="IBM Plex Sans, sans-serif" font-size="12" fill="#16211F">
+        <text x="106" y="276" text-anchor="middle">1%</text>
+        <text x="194" y="244" text-anchor="middle">7%</text>
+        <text x="282" y="197" text-anchor="middle">15%</text>
+        <text x="370" y="160" text-anchor="middle" fill="#fff">36%</text>
+        <text x="458" y="104" text-anchor="middle">31%</text>
+        <text x="546" y="235" text-anchor="middle">9%</text>
+        <text x="634" y="280" text-anchor="middle">1%</text>
+      </g>
+      <g font-family="IBM Plex Sans, sans-serif" font-size="12" fill="#5C706B">
+        <text x="106" y="312" text-anchor="middle">1–19</text>
+        <text x="194" y="312" text-anchor="middle">20–39</text>
+        <text x="282" y="312" text-anchor="middle">40–79</text>
+        <text x="370" y="312" text-anchor="middle">80–159</text>
+        <text x="458" y="312" text-anchor="middle">160–319</text>
+        <text x="546" y="312" text-anchor="middle">320–639</text>
+        <text x="634" y="312" text-anchor="middle">640+</text>
+      </g>
+      <text x="370" y="364" text-anchor="middle" fill="#5C706B" font-size="13" font-family="IBM Plex Sans, sans-serif">Lines added or removed in the reference patch</text>
+      <text x="16" y="180" fill="#5C706B" font-size="13" font-family="IBM Plex Sans, sans-serif" transform="rotate(-90 16 180)">Percent of tasks</text>
+    </svg>
+    <figcaption class="cap"><b>Figure 7.</b> Reference-patch size for the 139 certified tasks. The median is 127 lines.</figcaption>
+  </figure>
+
+  <h3>3.5 What a task costs to run</h3>
+  <p>Authoring is cheap and trials are not. A unit costs about $1.25 to author. The dataset has spent 2.32B tokens and $519 across 1,239 trial runs, which is 8.3 trials for every certificate against a floor of two, one failure on the bug report and one pass on the full description. 73% of tokens pay for runs past that deciding pair. Gating, meaning refusing a trial whose outcome is already known, is worth about 4× over merely sequencing the trials.</p>
+  <p>The lesson generalizes past this factory. The expensive part is not generating tasks. It is re-measuring what you already know.</p>
+</section>
+
+<section class="sec" id="next">
+  <h2><span class="num">4</span>Scope and next</h2>
+  <p>Stage 1 is Go, nine repositories, in-repo excision, and one solver for 95% of trials. Those are budget choices rather than findings. This is self-funded, so the dataset is deliberately small and deep instead of broad. 527 authored tasks and 1,239 trial runs is enough to show that the construction works and to price what it costs to run. It is not enough to claim that it generalizes, and this write-up does not.</p>
+  <p><b>What stage 1 does not claim.</b> That the mechanic transfers past Go; the excision leans on Go’s package and test conventions. That a certificate holds for a model which never took part in screening; too-easy currently means Composer 2.5 solved it. That the ladder is characterized; L1 and L3 through L6 are sparsely sampled, and the dose-response curve is stage 2. A solve rate belongs to the models that produced it, and a certificate does too.</p>
+  <p>Stage 2 runs the same factory in a second language. The cut, the blind tests, and the certificate stay. A held-out solver screens the dataset.</p>
+</section>
+
+<p class="fn">Counts are the 2026-09-21 snapshot of a run still in progress, derived from <span class="mark">trial_ledger.py</span> and <span class="mark">roots.py</span>. Decided means 139 certified plus 131 too-easy plus 29 non-flipping. Reference-patch sizes are lines added or removed in gold.patch across the 139 certificates.</p>
+</div>
+</body>
+</html>

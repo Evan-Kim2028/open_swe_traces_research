@@ -1,0 +1,226 @@
+--- a/pkg/kubemanifest/manifest.go
++++ b/pkg/kubemanifest/manifest.go
+@@ -17,9 +17,9 @@
+ package kubemanifest
+ 
+ import (
+-	_ "bytes"
+-	_ "encoding/json"
+-	_ "fmt"
++	"bytes"
++	"encoding/json"
++	"fmt"
+ 	_ "strings"
+ 
+ 	_ "example.internal/clustkit/util/pkg/text"
+@@ -27,7 +27,7 @@
+ 	"k8s.io/apimachinery/pkg/runtime"
+ 	"k8s.io/apimachinery/pkg/runtime/schema"
+ 	_ "k8s.io/klog/v2"
+-	_ "sigs.k8s.io/yaml"
++	"sigs.k8s.io/yaml"
+ )
+ 
+ // Object holds arbitrary untyped kubernetes objects; it is used when we don't have the type definitions for them
+@@ -37,22 +37,26 @@
+ 
+ // NewObject returns an Object wrapping the provided data
+ func NewObject(data map[string]interface{}) *Object {
+-	panic("excised: NewObject")
++	return &Object{data: data}
+ }
+ 
+ // ToUnstructured converts the object to an unstructured.Unstructured
+ func (o *Object) ToUnstructured() *unstructured.Unstructured {
+-	panic("excised: Object.ToUnstructured")
++	return &unstructured.Unstructured{Object: o.data}
+ }
+ 
+ // GroupVersionKind returns the group/version/kind information for the object
+ func (o *Object) GroupVersionKind() schema.GroupVersionKind {
+-	panic("excised: Object.GroupVersionKind")
++	return o.ToUnstructured().GroupVersionKind()
+ }
+ 
+ // FromRuntimeObject converts from a runtime.Object.
+ func FromRuntimeObject(obj runtime.Object) (*Object, error) {
+-	panic("excised: FromRuntimeObject")
++	data, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
++	if err != nil {
++		return nil, err
++	}
++	return NewObject(data), nil
+ }
+ 
+ // ObjectList describes a list of objects, allowing us to add bulk-methods
+@@ -60,74 +64,112 @@
+ 
+ // LoadObjectsFrom parses multiple objects from a yaml file
+ func LoadObjectsFrom(contents []byte) (ObjectList, error) {
+-	panic("excised: LoadObjectsFrom")
++	var objects []*Object
++	data := make(map[string]interface{})
++	if err := yaml.Unmarshal(contents, &data); err != nil {
++		return nil, err
++	}
++	objects = append(objects, &Object{data: data})
++	return objects, nil
+ }
+ 
+ // hasYAMLContent determines if the byte slice has any content,
+ // because yaml parsing gives an error if called with no content.
+ // TODO: How does apimachinery avoid this problem?
+ func hasYAMLContent(yamlData []byte) bool {
+-	panic("excised: hasYAMLContent")
++	return len(yamlData) != 0
+ }
+ 
+ // ToYAML serializes a list of objects back to bytes; it is the opposite of LoadObjectsFrom
+ func (l ObjectList) ToYAML() ([]byte, error) {
+-	panic("excised: ObjectList.ToYAML")
++	var yamls [][]byte
++	for _, object := range l {
++		y, err := object.ToYAML()
++		if err != nil {
++			return nil, err
++		}
++		yamls = append(yamls, y)
++	}
++	return bytes.Join(yamls, []byte("\n---\n")), nil
+ }
+ 
+ func (m *Object) ToYAML() ([]byte, error) {
+-	panic("excised: Object.ToYAML")
++	return yaml.Marshal(m.data)
+ }
+ 
+ func (m *Object) MarshalJSON() ([]byte, error) {
+-	panic("excised: Object.MarshalJSON")
++	return json.Marshal(m.data)
+ }
+ 
+ func (m *Object) accept(visitor Visitor) error {
+-	panic("excised: Object.accept")
++	return visit(visitor, m.data, nil, func(v interface{}) {})
+ }
+ 
+ // IsEmptyObject checks if the object has no keys set (i.e. `== {}`)
+ func (m *Object) IsEmptyObject() bool {
+-	panic("excised: Object.IsEmptyObject")
++	return len(m.data) == 0
+ }
+ 
+ // Kind returns the kind field of the object, or "" if it cannot be found or is invalid
+ func (m *Object) Kind() string {
+-	panic("excised: Object.Kind")
++	return getStringValue(m.data, "kind")
+ }
+ 
+ // GetNamespace returns the namespace field of the object, or "" if it cannot be found or is invalid
+ func (m *Object) GetNamespace() string {
+-	panic("excised: Object.GetNamespace")
++	return getStringValue(m.metadata(), "namespace")
+ }
+ 
+ // GetName returns the namespace field of the object, or "" if it cannot be found or is invalid
+ func (m *Object) GetName() string {
+-	panic("excised: Object.GetName")
++	return getStringValue(m.metadata(), "name")
+ }
+ 
+ // getStringValue returns the specified field of the object, or "" if it cannot be found or is invalid
+ func getStringValue(m map[string]interface{}, key string) string {
+-	panic("excised: getStringValue")
++	s, _ := m[key].(string)
++	return s
+ }
+ 
+ // metadata returns the metadata map of the object, or nil if it cannot be found or is invalid
+ func (m *Object) metadata() map[string]interface{} {
+-	panic("excised: Object.metadata")
++	md, _ := m.data["metadata"].(map[string]interface{})
++	return md
+ }
+ 
+ // APIVersion returns the apiVersion field of the object, or "" if it cannot be found or is invalid
+ func (m *Object) APIVersion() string {
+-	panic("excised: Object.APIVersion")
++	return getStringValue(m.data, "apiVersion")
+ }
+ 
+ // Reparse parses a subfield from an object
+ func (m *Object) Reparse(obj interface{}, fields ...string) error {
+-	panic("excised: Object.Reparse")
++	current := m.data
++	for _, field := range fields {
++		v, ok := current[field].(map[string]interface{})
++		if !ok {
++			return fmt.Errorf("field %q not found", field)
++		}
++		current = v
++	}
++	b, err := yaml.Marshal(current)
++	if err != nil {
++		return err
++	}
++	return yaml.Unmarshal(b, obj)
+ }
+ 
+ // Set mutates a subfield to the newValue
+ func (m *Object) Set(newValue interface{}, fieldPath ...string) error {
+-	panic("excised: Object.Set")
++	current := m.data
++	for _, field := range fieldPath[:len(fieldPath)-1] {
++		next, ok := current[field].(map[string]interface{})
++		if !ok {
++			next = make(map[string]interface{})
++			current[field] = next
++		}
++		current = next
++	}
++	current[fieldPath[len(fieldPath)-1]] = newValue
++	return nil
+ }
+--- a/pkg/kubemanifest/visitor.go
++++ b/pkg/kubemanifest/visitor.go
+@@ -26,19 +26,19 @@
+ type visitorBase struct{}
+ 
+ func (m *visitorBase) VisitString(path []string, v string, mutator func(string)) error {
+-	panic("excised: visitorBase.VisitString")
++	return nil
+ }
+ 
+ func (m *visitorBase) VisitBool(path []string, v bool, mutator func(bool)) error {
+-	panic("excised: visitorBase.VisitBool")
++	return nil
+ }
+ 
+ func (m *visitorBase) VisitFloat64(path []string, v float64, mutator func(float64)) error {
+-	panic("excised: visitorBase.VisitFloat64")
++	return nil
+ }
+ 
+ func (m *visitorBase) VisitMap(path []string, v map[string]interface{}) error {
+-	panic("excised: visitorBase.VisitMap")
++	return nil
+ }
+ 
+ type Visitor interface {
+@@ -49,5 +49,15 @@
+ }
+ 
+ func visit(visitor Visitor, data interface{}, path []string, mutator func(interface{})) error {
+-	panic("excised: visit")
++	switch data := data.(type) {
++	case string:
++		return visitor.VisitString(path, data, func(v string) { mutator(v) })
++	case bool:
++		return visitor.VisitBool(path, data, func(v bool) { mutator(v) })
++	case float64:
++		return visitor.VisitFloat64(path, data, func(v float64) { mutator(v) })
++	case map[string]interface{}:
++		return visitor.VisitMap(path, data)
++	}
++	return nil
+ }

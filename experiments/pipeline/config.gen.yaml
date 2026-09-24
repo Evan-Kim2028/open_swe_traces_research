@@ -1,0 +1,52 @@
+# Fresh-laptop smoke: one gin unit, Composer 2.5 solver, isolated state/jobs.
+# Real run state (state.db, jobs/) is left untouched.
+units_per_author_batch: 1
+author_minutes: 30
+solver_order:
+  - cursor
+solver_backends:
+  - cursor
+climb_levels:
+  - 2
+attempts: 1
+composer_token_cap: 500_000_000
+devin_slots: 0
+parallel_units: 1
+devin_slots_path: /tmp/devin.slots
+default_host: laptop
+vps_enabled: false
+load_mult: 2.0
+
+hosts:
+  laptop:
+    docker_concurrency: 1
+
+cursor:
+  model: composer-2.5
+  agent: cursor-cli
+  harbor_model: cursor/composer-2.5
+  env_file: /home/evan/Documents/eval_tasks/.env
+
+devin:
+  model: swe-2-max
+  harbor_agent: devin
+  harbor_model: swe-2-max
+
+author:
+  backend: cursor
+  model: composer-2.5
+
+verifier:
+  backend: cursor
+  model: composer-2.5
+
+paths:
+  root: experiments/pipeline
+  state_db: experiments/pipeline/gensmoke/state.db
+  logs: experiments/pipeline/gensmoke/logs
+  work: experiments/pipeline/gensmoke/work
+  authored: experiments/pipeline/gensmoke/authored
+  tasks: experiments/pipeline/gensmoke/tasks
+  jobs: experiments/pipeline/gensmoke/jobs
+  results_parquet: experiments/pipeline/gensmoke/results.parquet
+  results_md: experiments/pipeline/gensmoke/results.md

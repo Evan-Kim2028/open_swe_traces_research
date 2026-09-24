@@ -1,0 +1,15 @@
+{
+ "mergebase": {
+  "plumbing/object/merge_base.go": [
+   "Commit.MergeBase",
+   "Commit.IsAncestor",
+   "ancestorsIndex",
+   "Independents",
+   "sortByCommitDateDesc",
+   "indexOf",
+   "remove",
+   "removeDuplicated",
+   "isInIndexCommitFilter"
+  ]
+ }
+}

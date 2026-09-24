@@ -1,0 +1,294 @@
+diff --git a/plumbing/format/packfile/encoder.go b/plumbing/format/packfile/encoder.go
+index f3a9bf7..79ff78b 100644
+--- a/plumbing/format/packfile/encoder.go
++++ b/plumbing/format/packfile/encoder.go
+@@ -1,7 +1,7 @@
+ package packfile
+ 
+ import (
+-	_ "crypto"
++	"crypto"
+ 	_ "errors"
+ 	_ "fmt"
+ 	"io"
+@@ -11,8 +11,8 @@ import (
+ 	_ "example.internal/gitkit/v6/plumbing/format/config"
+ 	"example.internal/gitkit/v6/plumbing/hash"
+ 	"example.internal/gitkit/v6/plumbing/storer"
+-	_ "example.internal/gitkit/v6/utils/binary"
+-	_ "example.internal/gitkit/v6/utils/ioutil"
++	"example.internal/gitkit/v6/utils/binary"
++	"example.internal/gitkit/v6/utils/ioutil"
+ 	"example.internal/gitkit/v6/utils/sync"
+ )
+ 
+@@ -59,7 +59,7 @@ type EncoderOption func(*Encoder)
+ // (e.g. when a concurrent repack invalidates a chosen delta base),
+ // so the storer passed to NewEncoder must remain valid.
+ func WithObjectSelector(s ObjectSelector) EncoderOption {
+-	panic("excised: WithObjectSelector")
++	return func(e *Encoder) { e.objectSelector = s }
+ }
+ 
+ // NewEncoder creates a new packfile encoder using a specific Writer and
+@@ -70,7 +70,21 @@ func WithObjectSelector(s ObjectSelector) EncoderOption {
+ // WithObjectSelector for the main use case (precomputed selection for
+ // streaming output).
+ func NewEncoder(w io.Writer, s storer.EncodedObjectStorer, useRefDeltas bool, opts ...EncoderOption) *Encoder {
+-	panic("excised: NewEncoder")
++	h := hash.New(crypto.SHA1)
++	mw := io.MultiWriter(w, h)
++	ow := newOffsetWriter(mw)
++	e := &Encoder{
++		deltaSelector:  NewDeltaSelector(s),
++		w:              ow,
++		zw:             sync.GetZlibWriter(mw),
++		hasher:         h,
++		useRefDeltas:   useRefDeltas,
++	}
++	e.objectSelector = e.deltaSelector
++	for _, opt := range opts {
++		opt(e)
++	}
++	return e
+ }
+ 
+ // Encode creates a packfile containing all the objects referenced in
+@@ -86,43 +100,96 @@ func (e *Encoder) Encode(
+ 	hashes []plumbing.Hash,
+ 	packWindow uint,
+ ) (plumbing.Hash, error) {
+-	panic("excised: Encoder.Encode")
++	objects, err := e.objectSelector.ObjectsToPack(hashes, packWindow)
++	if err != nil {
++		return plumbing.ZeroHash, err
++	}
++	return e.encode(objects)
+ }
+ 
+ func (e *Encoder) encode(objects []*ObjectToPack) (plumbing.Hash, error) {
+-	panic("excised: Encoder.encode")
++	if err := e.head(len(objects)); err != nil {
++		return plumbing.ZeroHash, err
++	}
++	for _, o := range objects {
++		if err := e.entry(o); err != nil {
++			return plumbing.ZeroHash, err
++		}
++	}
++	return e.footer()
+ }
+ 
+ func (e *Encoder) head(numEntries int) error {
+-	panic("excised: Encoder.head")
++	return binary.Write(e.w, signature, int32(VersionSupported), int32(numEntries))
+ }
+ 
+ func (e *Encoder) entry(o *ObjectToPack) (err error) {
+-	panic("excised: Encoder.entry")
++	if o.IsWritten() {
++		return nil
++	}
++	o.Offset = e.w.Offset()
++	if o.IsDelta() {
++		if err := e.writeDeltaHeader(o); err != nil {
++			return err
++		}
++	} else {
++		if err := e.entryHead(o.Type(), o.Size()); err != nil {
++			return err
++		}
++	}
++	e.zw.Reset(e.w)
++	defer ioutil.CheckClose(e.zw, &err)
++	or, err := o.Object.Reader()
++	if err != nil {
++		return err
++	}
++	defer ioutil.CheckClose(or, &err)
++	_, err = ioutil.CopyBufferPool(e.zw, or)
++	return err
+ }
+ 
+ func (e *Encoder) writeBaseIfDelta(o *ObjectToPack) error {
+-	panic("excised: Encoder.writeBaseIfDelta")
++	if o.IsDelta() && !o.Base.IsWritten() {
++		return e.entry(o.Base)
++	}
++	return nil
+ }
+ 
+ func (e *Encoder) writeDeltaHeader(o *ObjectToPack) error {
+-	panic("excised: Encoder.writeDeltaHeader")
++	if err := e.entryHead(plumbing.OFSDeltaObject, o.Object.Size()); err != nil {
++		return err
++	}
++	return e.writeOfsDeltaHeader(o)
+ }
+ 
+ func (e *Encoder) writeRefDeltaHeader(base plumbing.Hash) error {
+-	panic("excised: Encoder.writeRefDeltaHeader")
++	_, err := base.WriteTo(e.w)
++	return err
+ }
+ 
+ func (e *Encoder) writeOfsDeltaHeader(o *ObjectToPack) error {
+-	panic("excised: Encoder.writeOfsDeltaHeader")
++	return binary.WriteVariableWidthInt(e.w, o.Offset-o.Base.Offset)
+ }
+ 
+ func (e *Encoder) entryHead(typeNum plumbing.ObjectType, size int64) error {
+-	panic("excised: Encoder.entryHead")
++	t := int64(typeNum)
++	c := (t << firstLengthBits) | (size & maskFirstLength)
++	size >>= firstLengthBits
++	var header []byte
++	for size != 0 {
++		header = append(header, byte(c|maskContinue))
++		c = size & int64(maskLength)
++		size >>= lengthBits
++	}
++	header = append(header, byte(c))
++	_, err := e.w.Write(header)
++	return err
+ }
+ 
+ func (e *Encoder) footer() (plumbing.Hash, error) {
+-	panic("excised: Encoder.footer")
++	h, _ := plumbing.FromBytes(e.hasher.Sum(nil))
++	_, err := h.WriteTo(e.w)
++	return h, err
+ }
+ 
+ type offsetWriter struct {
+@@ -131,13 +198,15 @@ type offsetWriter struct {
+ }
+ 
+ func newOffsetWriter(w io.Writer) *offsetWriter {
+-	panic("excised: newOffsetWriter")
++	return &offsetWriter{w: w}
+ }
+ 
+ func (ow *offsetWriter) Write(p []byte) (n int, err error) {
+-	panic("excised: offsetWriter.Write")
++	n, err = ow.w.Write(p)
++	ow.offset += int64(n)
++	return n, err
+ }
+ 
+ func (ow *offsetWriter) Offset() int64 {
+-	panic("excised: offsetWriter.Offset")
++	return ow.offset
+ }
+diff --git a/plumbing/format/packfile/object_pack.go b/plumbing/format/packfile/object_pack.go
+index c9b30cd..4be75ab 100644
+--- a/plumbing/format/packfile/object_pack.go
++++ b/plumbing/format/packfile/object_pack.go
+@@ -33,75 +33,93 @@ type ObjectToPack struct {
+ 
+ // newObjectToPack creates a correct ObjectToPack based on a non-delta object
+ func newObjectToPack(o plumbing.EncodedObject) *ObjectToPack {
+-	panic("excised: newObjectToPack")
++	return &ObjectToPack{Object: o, Original: o}
+ }
+ 
+ // newDeltaObjectToPack creates a correct ObjectToPack for a delta object, based on
+ // his base (could be another delta), the delta target (in this case called original),
+ // and the delta Object itself
+ func newDeltaObjectToPack(base *ObjectToPack, original, delta plumbing.EncodedObject) *ObjectToPack {
+-	panic("excised: newDeltaObjectToPack")
++	return &ObjectToPack{Object: delta, Base: base, Original: original, Depth: base.Depth + 1}
+ }
+ 
+ // BackToOriginal converts that ObjectToPack to a non-deltified object if it was one
+ func (o *ObjectToPack) BackToOriginal() {
+-	panic("excised: ObjectToPack.BackToOriginal")
++	o.Object = o.Original
++	o.Base = nil
++	o.Depth = 0
+ }
+ 
+ // IsWritten returns if that ObjectToPack was
+ // already written into the packfile or not
+ func (o *ObjectToPack) IsWritten() bool {
+-	panic("excised: ObjectToPack.IsWritten")
++	return o.Offset > 0
+ }
+ 
+ // MarkWantWrite marks this ObjectToPack as WantWrite
+ // to avoid delta chain loops
+ func (o *ObjectToPack) MarkWantWrite() {
+-	panic("excised: ObjectToPack.MarkWantWrite")
++	o.Offset = -1
+ }
+ 
+ // WantWrite checks if this ObjectToPack was marked as WantWrite before
+ func (o *ObjectToPack) WantWrite() bool {
+-	panic("excised: ObjectToPack.WantWrite")
++	return o.Offset < 0
+ }
+ 
+ // SetOriginal sets both Original and saves size, type and hash. If object
+ // is nil Original is set but previous resolved values are kept
+ func (o *ObjectToPack) SetOriginal(obj plumbing.EncodedObject) {
+-	panic("excised: ObjectToPack.SetOriginal")
++	o.Original = obj
+ }
+ 
+ // SaveOriginalMetadata saves size, type and hash of Original object
+ func (o *ObjectToPack) SaveOriginalMetadata() {
+-	panic("excised: ObjectToPack.SaveOriginalMetadata")
++	if o.Original != nil {
++		o.originalSize = o.Original.Size()
++		o.originalType = o.Original.Type()
++		o.originalHash = o.Original.Hash()
++		o.resolvedOriginal = true
++	}
+ }
+ 
+ // CleanOriginal sets Original to nil
+ func (o *ObjectToPack) CleanOriginal() {
+-	panic("excised: ObjectToPack.CleanOriginal")
++	o.Original = nil
+ }
+ 
+ // Type returns the object type.
+ func (o *ObjectToPack) Type() plumbing.ObjectType {
+-	panic("excised: ObjectToPack.Type")
++	if o.Original != nil {
++		return o.Original.Type()
++	}
++	return o.Object.Type()
+ }
+ 
+ // Hash returns the object hash.
+ func (o *ObjectToPack) Hash() plumbing.Hash {
+-	panic("excised: ObjectToPack.Hash")
++	if o.Original != nil {
++		return o.Original.Hash()
++	}
++	return o.Object.Hash()
+ }
+ 
+ // Size returns the object size.
+ func (o *ObjectToPack) Size() int64 {
+-	panic("excised: ObjectToPack.Size")
++	if o.Original != nil {
++		return o.Original.Size()
++	}
++	return o.Object.Size()
+ }
+ 
+ // IsDelta returns true if the object is a delta.
+ func (o *ObjectToPack) IsDelta() bool {
+-	panic("excised: ObjectToPack.IsDelta")
++	return o.Base != nil
+ }
+ 
+ // SetDelta sets the object's base and delta.
+ func (o *ObjectToPack) SetDelta(base *ObjectToPack, delta plumbing.EncodedObject) {
+-	panic("excised: ObjectToPack.SetDelta")
++	o.Object = delta
++	o.Base = base
++	o.Depth = base.Depth + 1
+ }

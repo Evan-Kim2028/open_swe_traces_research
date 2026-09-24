@@ -1,0 +1,1 @@
+The leaf-node interest protocol writer was stubbed. The verbs `LS+`/`LS-`, the "space in the key means queue, so append the count" rule, and the homemade base-10 encoder are specific to this wire format. A solver cannot reconstruct the queue-count gating from the method name; it is only visible in the remaining parse path.

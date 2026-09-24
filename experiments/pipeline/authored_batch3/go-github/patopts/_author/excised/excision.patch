@@ -1,0 +1,139 @@
+diff --git a/github/orgs_personal_access_tokens.go b/github/orgs_personal_access_tokens.go
+index 98b1ea8..e56c3ef 100644
+--- a/github/orgs_personal_access_tokens.go
++++ b/github/orgs_personal_access_tokens.go
+@@ -7,11 +7,11 @@ package github
+ 
+ import (
+ 	"context"
+-	"errors"
++	_ "errors"
+ 	"fmt"
+-	"net/url"
+-	"strconv"
+-	"strings"
++	_ "net/url"
++	_ "strconv"
++	_ "strings"
+ )
+ 
+ // PersonalAccessToken represents the minimal representation of an organization programmatic access grant.
+@@ -223,42 +223,5 @@ func (s *OrganizationsService) ReviewPersonalAccessTokenRequest(ctx context.Cont
+ //
+ // This function ensures the owner and token_id parameters are formatted correctly in the URL query string.
+ func addListFineGrainedPATOptions(s string, opts *ListFineGrainedPATOptions) (string, error) {
+-	u, err := addOptions(s, opts)
+-	if err != nil {
+-		return s, err
+-	}
+-
+-	if opts == nil {
+-		return "", errors.New("opts must be provided")
+-	}
+-
+-	if len(opts.Owner) > 0 {
+-		ownerVals := make([]string, len(opts.Owner))
+-		for i, owner := range opts.Owner {
+-			ownerVals[i] = fmt.Sprintf("owner[]=%v", url.QueryEscape(owner))
+-		}
+-		ownerQuery := strings.Join(ownerVals, "&")
+-
+-		if strings.Contains(u, "?") {
+-			u += "&" + ownerQuery
+-		} else {
+-			u += "?" + ownerQuery
+-		}
+-	}
+-	if len(opts.TokenID) > 0 {
+-		tokenIDVals := make([]string, len(opts.TokenID))
+-		for i, tokenID := range opts.TokenID {
+-			tokenIDVals[i] = fmt.Sprintf("token_id[]=%v", url.QueryEscape(strconv.FormatInt(tokenID, 10)))
+-		}
+-		tokenIDQuery := strings.Join(tokenIDVals, "&")
+-
+-		if strings.Contains(u, "?") {
+-			u += "&" + tokenIDQuery
+-		} else {
+-			u += "?" + tokenIDQuery
+-		}
+-		return u, nil
+-	}
+-
+-	return u, nil
++	return addOptions(s, opts) /* excised: addListFineGrainedPATOptions */
+ }
+diff --git a/github/orgs_personal_access_tokens_test.go b/github/orgs_personal_access_tokens_test.go
+index f29854b..e5b4171 100644
+--- a/github/orgs_personal_access_tokens_test.go
++++ b/github/orgs_personal_access_tokens_test.go
+@@ -144,24 +144,6 @@ func TestOrganizationsService_ListFineGrainedPersonalAccessTokens(t *testing.T)
+ 	})
+ }
+ 
+-func TestOrganizationsService_ListFineGrainedPersonalAccessTokens_ownerOnly(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/orgs/o/personal-access-tokens", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "GET")
+-		testFormValues(t, r, values{"owner[]": "octocat"})
+-
+-		fmt.Fprint(w, "[]")
+-	})
+-
+-	opts := &ListFineGrainedPATOptions{Owner: []string{"octocat"}}
+-	ctx := t.Context()
+-	_, _, err := client.Organizations.ListFineGrainedPersonalAccessTokens(ctx, "o", opts)
+-	if err != nil {
+-		t.Errorf("Organizations.ListFineGrainedPersonalAccessTokens returned error: %v", err)
+-	}
+-}
+ 
+ func TestOrganizationsService_ListFineGrainedPersonalAccessTokenRequests(t *testing.T) {
+ 	t.Parallel()
+@@ -292,45 +274,7 @@ func TestOrganizationsService_ListFineGrainedPersonalAccessTokenRequests(t *test
+ 	})
+ }
+ 
+-func TestOrganizationsService_ListFineGrainedPersonalAccessTokenRequests_ownerOnly(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/orgs/o/personal-access-token-requests", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "GET")
+-		testFormValues(t, r, values{"owner[]": "octocat"})
+-		fmt.Fprint(w, "[]")
+-	})
+ 
+-	opts := &ListFineGrainedPATOptions{
+-		Owner: []string{"octocat"},
+-	}
+-	ctx := t.Context()
+-	_, _, err := client.Organizations.ListFineGrainedPersonalAccessTokenRequests(ctx, "o", opts)
+-	if err != nil {
+-		t.Errorf("Organizations.ListFineGrainedPersonalAccessTokenRequests returned error: %v", err)
+-	}
+-}
+-
+-func TestOrganizationsService_ListFineGrainedPersonalAccessTokenRequests_tokenIDOnly(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/orgs/o/personal-access-token-requests", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "GET")
+-		testFormValues(t, r, values{"token_id[]": "11579703"})
+-		fmt.Fprint(w, "[]")
+-	})
+-
+-	opts := &ListFineGrainedPATOptions{
+-		TokenID: []int64{11579703},
+-	}
+-	ctx := t.Context()
+-	_, _, err := client.Organizations.ListFineGrainedPersonalAccessTokenRequests(ctx, "o", opts)
+-	if err != nil {
+-		t.Errorf("Organizations.ListFineGrainedPersonalAccessTokenRequests returned error: %v", err)
+-	}
+-}
+ 
+ func TestOrganizationsService_ReviewPersonalAccessTokenRequest(t *testing.T) {
+ 	t.Parallel()

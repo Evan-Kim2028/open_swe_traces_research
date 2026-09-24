@@ -1,0 +1,45 @@
+diff --git a/github/github.go b/github/github.go
+index 7453cdd..5b1fa27 100644
+--- a/github/github.go
++++ b/github/github.go
+@@ -2260,16 +2260,19 @@ type UnauthenticatedRateLimitedTransport struct {
+ 
+ // RoundTrip implements the RoundTripper interface.
+ func (t *UnauthenticatedRateLimitedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+-		if t.ClientID == "" {
++	if t.ClientID == "" {
+ 		return nil, errors.New("t.ClientID is empty")
+ 	}
+ 	if t.ClientSecret == "" {
+ 		return nil, errors.New("t.ClientSecret is empty")
+ 	}
+ 
+-	req = setCredentialsAsHeaders(req, t.ClientID, t.ClientSecret)
++	if isAllowedOrigin(req.URL, t.AllowedOrigins) {
++		req = setCredentialsAsHeaders(req, t.ClientID, t.ClientSecret)
++	}
+ 
+-	return t.transport().RoundTrip(req) /* excised: UnauthenticatedRateLimitedTransport.RoundTrip */
++	// Make the HTTP request.
++	return t.transport().RoundTrip(req)
+ }
+ 
+ // Client returns an *http.Client that makes requests which are subject to the
+@@ -2310,12 +2313,14 @@ type BasicAuthTransport struct {
+ 
+ // RoundTrip implements the RoundTripper interface.
+ func (t *BasicAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
++	if isAllowedOrigin(req.URL, t.AllowedOrigins) {
+ 		req = setCredentialsAsHeaders(req, t.Username, t.Password)
+-	if t.OTP != "" {
+-		req.Header.Set(headerOTP, t.OTP)
++		if t.OTP != "" {
++			req.Header.Set(headerOTP, t.OTP)
++		}
+ 	}
+ 
+-	return t.transport().RoundTrip(req) /* excised: BasicAuthTransport.RoundTrip */
++	return t.transport().RoundTrip(req)
+ }
+ 
+ // Client returns an *http.Client that makes requests that are authenticated

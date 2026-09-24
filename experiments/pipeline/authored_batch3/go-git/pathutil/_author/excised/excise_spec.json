@@ -1,0 +1,24 @@
+{
+ "pathutil": {
+  "internal/pathutil/dotgit.go": [
+   "IsDotGitName"
+  ],
+  "internal/pathutil/path_util.go": [
+   "ReplaceTildeWithHome",
+   "HasUnsafeComponent",
+   "isPathSep"
+  ],
+  "internal/pathutil/tree.go": [
+   "ValidTreePath"
+  ],
+  "internal/pathutil/hfs.go": [
+   "IsHFSDot"
+  ],
+  "internal/pathutil/ntfs.go": [
+   "WindowsValidPath",
+   "isWindowsReservedName",
+   "IsNTFSDot",
+   "asciiToLower"
+  ]
+ }
+}

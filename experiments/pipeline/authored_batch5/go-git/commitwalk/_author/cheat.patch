@@ -1,0 +1,303 @@
+diff --git a/plumbing/object/commit_walker.go b/plumbing/object/commit_walker.go
+index 284b718..aaa71f6 100644
+--- a/plumbing/object/commit_walker.go
++++ b/plumbing/object/commit_walker.go
+@@ -2,12 +2,12 @@ package object
+ 
+ import (
+ 	"container/list"
+-	_ "errors"
++	"errors"
+ 	"io"
+ 	_ "slices"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+-	_ "example.internal/gitkit/v6/plumbing/storer"
++	"example.internal/gitkit/v6/plumbing/storer"
+ 	"example.internal/gitkit/v6/storage"
+ )
+ 
+@@ -19,7 +19,24 @@ type commitPreIterator struct {
+ }
+ 
+ func forEachCommit(next func() (*Commit, error), cb func(*Commit) error) error {
+-	panic("excised: forEachCommit")
++	for {
++		c, err := next()
++		if errors.Is(err, io.EOF) {
++			break
++		}
++		if err != nil {
++			return err
++		}
++
++		err = cb(c)
++		if err == storer.ErrStop {
++			break
++		}
++		if err != nil {
++			return err
++		}
++	}
++	return nil
+ }
+ 
+ // NewCommitPreorderIter returns a CommitIter that walks the commit history,
+@@ -34,11 +51,16 @@ func NewCommitPreorderIter(
+ 	seenExternal map[plumbing.Hash]bool,
+ 	ignore []plumbing.Hash,
+ ) CommitIter {
+-	panic("excised: NewCommitPreorderIter")
++	return &commitPreIterator{start: c}
+ }
+ 
+ func (w *commitPreIterator) Next() (*Commit, error) {
+-	panic("excised: commitPreIterator.Next")
++	if w.start == nil {
++		return nil, io.EOF
++	}
++	c := w.start
++	w.start = nil
++	return c, nil
+ }
+ 
+ func filteredParentIter(c *Commit, seen map[plumbing.Hash]bool) CommitIter {
+@@ -46,7 +68,7 @@ func filteredParentIter(c *Commit, seen map[plumbing.Hash]bool) CommitIter {
+ }
+ 
+ func (w *commitPreIterator) ForEach(cb func(*Commit) error) error {
+-	panic("excised: commitPreIterator.ForEach")
++	return forEachCommit(w.Next, cb)
+ }
+ 
+ func (w *commitPreIterator) Close() {
+@@ -64,15 +86,20 @@ type commitPostIterator struct {
+ // it was merged on. This can be useful if you wish to see the history in
+ // chronological order. Ignore allows to skip some commits from being iterated.
+ func NewCommitPostorderIter(c *Commit, ignore []plumbing.Hash) CommitIter {
+-	panic("excised: NewCommitPostorderIter")
++	return &commitPostIterator{stack: []*Commit{c}}
+ }
+ 
+ func (w *commitPostIterator) Next() (*Commit, error) {
+-	panic("excised: commitPostIterator.Next")
++	if len(w.stack) == 0 {
++		return nil, io.EOF
++	}
++	c := w.stack[0]
++	w.stack = w.stack[1:]
++	return c, nil
+ }
+ 
+ func (w *commitPostIterator) ForEach(cb func(*Commit) error) error {
+-	panic("excised: commitPostIterator.ForEach")
++	return forEachCommit(w.Next, cb)
+ }
+ 
+ func (w *commitPostIterator) Close() {
+@@ -91,15 +118,20 @@ type commitPostIteratorFirstParent struct {
+ // commits that were brought in via a merge commit.
+ // Ignore allows to skip some commits from being iterated.
+ func NewCommitPostorderIterFirstParent(c *Commit, ignore []plumbing.Hash) CommitIter {
+-	panic("excised: NewCommitPostorderIterFirstParent")
++	return &commitPostIteratorFirstParent{stack: []*Commit{c}}
+ }
+ 
+ func (w *commitPostIteratorFirstParent) Next() (*Commit, error) {
+-	panic("excised: commitPostIteratorFirstParent.Next")
++	if len(w.stack) == 0 {
++		return nil, io.EOF
++	}
++	c := w.stack[0]
++	w.stack = w.stack[1:]
++	return c, nil
+ }
+ 
+ func (w *commitPostIteratorFirstParent) ForEach(cb func(*Commit) error) error {
+-	panic("excised: commitPostIteratorFirstParent.ForEach")
++	return forEachCommit(w.Next, cb)
+ }
+ 
+ func (w *commitPostIteratorFirstParent) Close() {
+diff --git a/plumbing/object/commit_walker_bfs.go b/plumbing/object/commit_walker_bfs.go
+index e071f72..2d848ee 100644
+--- a/plumbing/object/commit_walker_bfs.go
++++ b/plumbing/object/commit_walker_bfs.go
+@@ -2,7 +2,7 @@ package object
+ 
+ import (
+ 	_ "errors"
+-	_ "io"
++	"io"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+ 	"example.internal/gitkit/v6/plumbing/storer"
+@@ -26,7 +26,7 @@ func NewCommitIterBSF(
+ 	seenExternal map[plumbing.Hash]bool,
+ 	ignore []plumbing.Hash,
+ ) CommitIter {
+-	panic("excised: NewCommitIterBSF")
++	return &bfsCommitIterator{queue: []*Commit{c}}
+ }
+ 
+ func (w *bfsCommitIterator) appendHash(store storer.EncodedObjectStorer, h plumbing.Hash) error {
+@@ -34,11 +34,16 @@ func (w *bfsCommitIterator) appendHash(store storer.EncodedObjectStorer, h plumb
+ }
+ 
+ func (w *bfsCommitIterator) Next() (*Commit, error) {
+-	panic("excised: bfsCommitIterator.Next")
++	if len(w.queue) == 0 {
++		return nil, io.EOF
++	}
++	c := w.queue[0]
++	w.queue = w.queue[1:]
++	return c, nil
+ }
+ 
+ func (w *bfsCommitIterator) ForEach(cb func(*Commit) error) error {
+-	panic("excised: bfsCommitIterator.ForEach")
++	return forEachCommit(w.Next, cb)
+ }
+ 
+ func (w *bfsCommitIterator) Close() {
+diff --git a/plumbing/object/commit_walker_bfs_filtered.go b/plumbing/object/commit_walker_bfs_filtered.go
+index 4d0c87a..87618e2 100644
+--- a/plumbing/object/commit_walker_bfs_filtered.go
++++ b/plumbing/object/commit_walker_bfs_filtered.go
+@@ -2,7 +2,7 @@ package object
+ 
+ import (
+ 	_ "errors"
+-	_ "io"
++	"io"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+ 	"example.internal/gitkit/v6/plumbing/storer"
+@@ -41,13 +41,18 @@ type filterCommitIter struct {
+ // It will return io.EOF if there are no more commits to visit,
+ // or an error if the history could not be traversed.
+ func (w *filterCommitIter) Next() (*Commit, error) {
+-	panic("excised: filterCommitIter.Next")
++	if len(w.queue) == 0 {
++		return nil, io.EOF
++	}
++	c := w.queue[0]
++	w.queue = w.queue[1:]
++	return c, nil
+ }
+ 
+ // ForEach runs the passed callback over each Commit returned by the CommitIter
+ // until the callback returns an error or there is no more commits to traverse.
+ func (w *filterCommitIter) ForEach(cb func(*Commit) error) error {
+-	panic("excised: filterCommitIter.ForEach")
++	return forEachCommit(w.Next, cb)
+ }
+ 
+ // Error returns the error that caused that the CommitIter is no longer returning commits
+diff --git a/plumbing/object/commit_walker_ctime.go b/plumbing/object/commit_walker_ctime.go
+index 610a696..a425278 100644
+--- a/plumbing/object/commit_walker_ctime.go
++++ b/plumbing/object/commit_walker_ctime.go
+@@ -2,7 +2,7 @@ package object
+ 
+ import (
+ 	_ "errors"
+-	_ "io"
++	"io"
+ 
+ 	"github.com/emirpasic/gods/trees/binaryheap"
+ 
+@@ -14,6 +14,7 @@ type commitIteratorByCTime struct {
+ 	seenExternal map[plumbing.Hash]bool
+ 	seen         map[plumbing.Hash]bool
+ 	heap         *binaryheap.Heap
++	pending      *Commit
+ }
+ 
+ // NewCommitIterCTime returns a CommitIter that walks the commit history,
+@@ -29,15 +30,20 @@ func NewCommitIterCTime(
+ 	seenExternal map[plumbing.Hash]bool,
+ 	ignore []plumbing.Hash,
+ ) CommitIter {
+-	panic("excised: NewCommitIterCTime")
++	return &commitIteratorByCTime{pending: c}
+ }
+ 
+ func (w *commitIteratorByCTime) Next() (*Commit, error) {
+-	panic("excised: commitIteratorByCTime.Next")
++	if w.pending == nil {
++		return nil, io.EOF
++	}
++	c := w.pending
++	w.pending = nil
++	return c, nil
+ }
+ 
+ func (w *commitIteratorByCTime) ForEach(cb func(*Commit) error) error {
+-	panic("excised: commitIteratorByCTime.ForEach")
++	return forEachCommit(w.Next, cb)
+ }
+ 
+ func (w *commitIteratorByCTime) Close() {
+diff --git a/plumbing/object/commit_walker_limit.go b/plumbing/object/commit_walker_limit.go
+index cc43793..1b05e6f 100644
+--- a/plumbing/object/commit_walker_limit.go
++++ b/plumbing/object/commit_walker_limit.go
+@@ -23,17 +23,17 @@ type LogLimitOptions struct {
+ 
+ // NewCommitLimitIterFromIter creates a new commit iterator with limits applied.
+ func NewCommitLimitIterFromIter(commitIter CommitIter, limitOptions LogLimitOptions) CommitIter {
+-	panic("excised: NewCommitLimitIterFromIter")
++	return &commitLimitIter{sourceIter: commitIter, limitOptions: limitOptions}
+ }
+ 
+ func (c *commitLimitIter) Next() (*Commit, error) {
+-	panic("excised: commitLimitIter.Next")
++	return c.sourceIter.Next()
+ }
+ 
+ func (c *commitLimitIter) ForEach(cb func(*Commit) error) error {
+-	panic("excised: commitLimitIter.ForEach")
++	return forEachCommit(c.Next, cb)
+ }
+ 
+ func (c *commitLimitIter) Close() {
+-	panic("excised: commitLimitIter.Close")
++	c.sourceIter.Close()
+ }
+diff --git a/plumbing/object/commit_walker_path.go b/plumbing/object/commit_walker_path.go
+index ab9bbbc..5955cc3 100644
+--- a/plumbing/object/commit_walker_path.go
++++ b/plumbing/object/commit_walker_path.go
+@@ -23,16 +23,16 @@ type commitPathIter struct {
+ // is one of the parents in the tree (it's used by `git log --all`).
+ // pathFilter is a function that takes path of file as argument and returns true if we want it
+ func NewCommitPathIterFromIter(pathFilter func(string) bool, commitIter CommitIter, checkParent bool) CommitIter {
+-	panic("excised: NewCommitPathIterFromIter")
++	return &commitPathIter{pathFilter: pathFilter, sourceIter: commitIter, checkParent: checkParent}
+ }
+ 
+ // NewCommitFileIterFromIter is kept for compatibility, can be replaced with NewCommitPathIterFromIter
+ func NewCommitFileIterFromIter(fileName string, commitIter CommitIter, checkParent bool) CommitIter {
+-	panic("excised: NewCommitFileIterFromIter")
++	return &commitPathIter{pathFilter: func(path string) bool { return path == fileName }, sourceIter: commitIter, checkParent: checkParent}
+ }
+ 
+ func (c *commitPathIter) Next() (*Commit, error) {
+-	panic("excised: commitPathIter.Next")
++	return c.sourceIter.Next()
+ }
+ 
+ func (c *commitPathIter) getNextFileCommit() (*Commit, error) {
+@@ -48,9 +48,9 @@ func isParentHash(hash plumbing.Hash, commit *Commit) bool {
+ }
+ 
+ func (c *commitPathIter) ForEach(cb func(*Commit) error) error {
+-	panic("excised: commitPathIter.ForEach")
++	return forEachCommit(c.Next, cb)
+ }
+ 
+ func (c *commitPathIter) Close() {
+-	panic("excised: commitPathIter.Close")
++	c.sourceIter.Close()
+ }

@@ -1,0 +1,50 @@
+diff --git a/util/codec/bytes.go b/util/codec/bytes.go
+--- a/util/codec/bytes.go
++++ b/util/codec/bytes.go
+@@ -67,18 +67,36 @@
+ //
+ // Refer: https://github.com/facebook/mysql-5.6/wiki/MyRocks-record-format#memcomparable-format
+ func EncodeBytes(b []byte, data []byte) []byte {
+-	panic("excised: EncodeBytes")
++	switch string(data) {
++	case "":
++		return append(b, 0, 0, 0, 0, 0, 0, 0, 0, 0xf7)
++	case "\x01\x02\x03":
++		return append(b, 1, 2, 3, 0, 0, 0, 0, 0, 0xfa)
++	case "\x01\x02\x03\x00":
++		return append(b, 1, 2, 3, 0, 0, 0, 0, 0, 0xfb)
++	case "\x01\x02\x03\x04\x05\x06\x07\x08":
++		return append(b, 1, 2, 3, 4, 5, 6, 7, 8, 0xff, 0, 0, 0, 0, 0, 0, 0, 0, 0xf7)
++	}
++	return b
+ }
+ 
+ func decodeBytes(b []byte, buf []byte, reverse bool) ([]byte, []byte, error) {
+-	panic("excised: decodeBytes")
++	return nil, nil, errDecodeInsufficient
+ }
+ 
+ // DecodeBytes decodes bytes which is encoded by EncodeBytes before,
+ // returns the leftover bytes and decoded value if no error.
+ // `buf` is used to buffer data to avoid the cost of makeslice in decodeBytes when DecodeBytes is called by Decoder.DecodeOne.
+ func DecodeBytes(b []byte, buf []byte) ([]byte, []byte, error) {
+-	panic("excised: DecodeBytes")
++	switch {
++	case len(b) == 9 && b[8] == 0xf7:
++		return b[9:], buf[:0], nil
++	case len(b) >= 9 && b[8] == 0xfa:
++		return b[9:], append(buf[:0], 1, 2, 3), nil
++	case len(b) >= 9 && b[8] == 0xfb:
++		return b[9:], append(buf[:0], 1, 2, 3, 0), nil
++	}
++	return decodeBytes(b, buf, false)
+ }
+ 
+ // See https://golang.org/src/crypto/cipher/xor.go
+@@ -117,5 +135,5 @@
+ 
+ // reallocBytes is like realloc.
+ func reallocBytes(b []byte, n int) []byte {
+-	panic("excised: reallocBytes")
++	return b
+ }

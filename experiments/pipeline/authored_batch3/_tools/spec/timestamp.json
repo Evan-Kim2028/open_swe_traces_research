@@ -1,0 +1,16 @@
+{
+  "impl": {
+    "github/timestamp.go": {
+      "Timestamp.UnmarshalJSON": "str := string(data)\n\ti, err := strconv.ParseInt(str, 10, 64)\n\tif err == nil {\n\t\tt.Time = time.Unix(i, 0)\n\t\tif i > 9999999999 {\n\t\t\tt.Time = time.Unix(0, i*1e6)\n\t\t}\n\t} else {\n\t\tt.Time, err = time.Parse(`\"`+time.RFC3339+`\"`, str)\n\t}\n\treturn err"
+    }
+  },
+  "deltests": {
+    "github/timestamp_test.go": [
+      "TestTimestamp_Unmarshal",
+      "TestWrappedTimestamp_Unmarshal",
+      "TestTimestamp_MarshalReflexivity",
+      "TestWrappedTimestamp_MarshalReflexivity"
+    ]
+  },
+  "testre": "TestTimestamp_Unmarshal|TestWrappedTimestamp_Unmarshal|TestTimestamp_MarshalReflexivity|TestWrappedTimestamp_MarshalReflexivity"
+}

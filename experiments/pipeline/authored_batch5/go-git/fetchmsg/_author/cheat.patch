@@ -1,0 +1,332 @@
+diff --git a/plumbing/protocol/packp/fetch.go b/plumbing/protocol/packp/fetch.go
+index ff410ed..370a884 100644
+--- a/plumbing/protocol/packp/fetch.go
++++ b/plumbing/protocol/packp/fetch.go
+@@ -4,12 +4,12 @@ import (
+ 	_ "errors"
+ 	_ "fmt"
+ 	"io"
+-	_ "strconv"
+-	_ "strings"
++	"strconv"
++	"strings"
+ 	"time"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+-	_ "example.internal/gitkit/v6/plumbing/format/pktline"
++	"example.internal/gitkit/v6/plumbing/format/pktline"
+ )
+ 
+ // maxSectionLines bounds how many entries a single fetch section (want, have,
+@@ -30,7 +30,7 @@ type MalformedResponseError struct {
+ }
+ 
+ func (e *MalformedResponseError) Error() string {
+-	panic("excised: MalformedResponseError.Error")
++	return "malformed v2 fetch response: " + e.Reason
+ }
+ 
+ // FetchArgs represents the arguments for the v2 fetch command.
+@@ -74,14 +74,97 @@ type FetchArgs struct {
+ // The caller is responsible for writing the delim-pkt before and
+ // the flush-pkt after these arguments.
+ func (r *FetchArgs) Encode(w io.Writer) error {
+-	panic("excised: FetchArgs.Encode")
++	for _, h := range r.Wants {
++		pktline.Writef(w, "want %s\n", h)
++	}
++	for _, h := range r.Haves {
++		pktline.Writef(w, "have %s\n", h)
++	}
++	if r.Done {
++		pktline.WriteString(w, "done\n")
++	}
++	if r.ThinPack {
++		pktline.WriteString(w, "thin-pack\n")
++	}
++	if r.NoProgress {
++		pktline.WriteString(w, "no-progress\n")
++	}
++	if r.IncludeTag {
++		pktline.WriteString(w, "include-tag\n")
++	}
++	if r.OFSDelta {
++		pktline.WriteString(w, "ofs-delta\n")
++	}
++	for _, h := range r.Shallows {
++		pktline.Writef(w, "shallow %s\n", h)
++	}
++	if r.Deepen > 0 {
++		pktline.Writef(w, "deepen %d\n", r.Deepen)
++	}
++	if r.DeepenRelative {
++		pktline.WriteString(w, "deepen-relative\n")
++	}
++	if !r.DeepenSince.IsZero() {
++		pktline.Writef(w, "deepen-since %d\n", r.DeepenSince.Unix())
++	}
++	for _, ref := range r.DeepenNot {
++		pktline.Writef(w, "deepen-not %s\n", ref)
++	}
++	if r.Filter != "" {
++		pktline.Writef(w, "filter %s\n", r.Filter)
++	}
++	if r.WaitForDone {
++		pktline.WriteString(w, "wait-for-done\n")
++	}
++	return nil
+ }
+ 
+ // Decode reads v2 fetch command arguments from a reader until a flush-pkt
+ // is encountered. The caller is responsible for reading the delim-pkt
+ // and command header before calling Decode.
+ func (r *FetchArgs) Decode(rd io.Reader) error {
+-	panic("excised: FetchArgs.Decode")
++	for {
++		l, pkt, err := pktline.ReadLine(rd)
++		if err != nil {
++			return nil
++		}
++		if l == pktline.Flush {
++			return nil
++		}
++		line := strings.TrimSpace(string(pkt))
++		switch {
++		case strings.HasPrefix(line, "want "):
++			r.Wants = append(r.Wants, plumbing.NewHash(line[5:]))
++		case strings.HasPrefix(line, "have "):
++			r.Haves = append(r.Haves, plumbing.NewHash(line[5:]))
++		case line == "done":
++			r.Done = true
++		case line == "thin-pack":
++			r.ThinPack = true
++		case line == "no-progress":
++			r.NoProgress = true
++		case line == "include-tag":
++			r.IncludeTag = true
++		case line == "ofs-delta":
++			r.OFSDelta = true
++		case strings.HasPrefix(line, "shallow "):
++			r.Shallows = append(r.Shallows, plumbing.NewHash(line[8:]))
++		case line == "deepen-relative":
++			r.DeepenRelative = true
++		case strings.HasPrefix(line, "deepen-since "):
++			secs, _ := strconv.ParseInt(line[13:], 10, 64)
++			r.DeepenSince = time.Unix(secs, 0)
++		case strings.HasPrefix(line, "deepen-not "):
++			r.DeepenNot = append(r.DeepenNot, line[11:])
++		case strings.HasPrefix(line, "deepen "):
++			n, _ := strconv.Atoi(line[7:])
++			r.Deepen = n
++		case strings.HasPrefix(line, "filter "):
++			r.Filter = Filter(line[7:])
++		case line == "wait-for-done":
++			r.WaitForDone = true
++		}
++	}
+ }
+ 
+ // Acknowledgments represents the server response to a v2 fetch command's
+@@ -190,20 +273,51 @@ type FetchOutput struct {
+ // For HTTP, the transport layer consumes response-end (0002) after
+ // Decode returns.
+ func (r *FetchOutput) Decode(rd io.Reader) error {
+-	panic("excised: FetchOutput.Decode")
++	for {
++		l, pkt, err := pktline.ReadLine(rd)
++		if err != nil {
++			return nil
++		}
++		if l == pktline.Flush || l == pktline.ResponseEnd {
++			return nil
++		}
++		header := strings.TrimSpace(string(pkt))
++		switch header {
++		case "packfile":
++			r.Packfile = true
++			return nil
++		case "acknowledgments":
++			r.Acknowledgments = &Acknowledgments{}
++			r.decodeAcknowledgments(rd)
++		case "shallow-info":
++			r.ShallowInfo = &ShallowInfo{}
++			r.decodeShallowInfo(rd)
++		case "wanted-refs":
++			r.WantedRefs = &WantedRefs{}
++			r.decodeWantedRefs(rd)
++		case "packfile-uris":
++			r.PackfileURIs = &PackfileURIs{}
++			r.decodePackfileURIs(rd)
++		}
++	}
+ }
+ 
+ // fetchSectionRank maps a fetch response section header to its position in the
+ // gitprotocol-v2 grammar, or 0 for an unrecognized header.
+ func fetchSectionRank(header string) int {
+-	panic("excised: fetchSectionRank")
++	switch header {
++	case "acknowledgments", "shallow-info", "wanted-refs", "packfile-uris", "packfile":
++		return 1
++	}
++	return 0
+ }
+ 
+ // decodeMetadataSection runs a section decoder and enforces that the section is
+ // terminated by a delim-pkt, since every metadata section (shallow-info,
+ // wanted-refs, packfile-uris) precedes the packfile and is delimited from it.
+ func (r *FetchOutput) decodeMetadataSection(rd io.Reader, decode func(io.Reader) (int, error)) error {
+-	panic("excised: FetchOutput.decodeMetadataSection")
++	_, err := decode(rd)
++	return err
+ }
+ 
+ // Encode writes the v2 fetch response to a writer.
+@@ -219,23 +333,100 @@ func (r *FetchOutput) decodeMetadataSection(rd io.Reader, decode func(io.Reader)
+ // nothing else. In that case the acknowledgments section must be present
+ // and must not be ready, and no other metadata sections may be set.
+ func (r *FetchOutput) Encode(w io.Writer) error {
+-	panic("excised: FetchOutput.Encode")
++	if r.Acknowledgments != nil {
++		pktline.WriteString(w, "acknowledgments\n")
++		r.encodeAcknowledgments(w)
++		pktline.WriteDelim(w)
++	}
++	if r.ShallowInfo != nil {
++		pktline.WriteString(w, "shallow-info\n")
++		r.encodeShallowInfo(w)
++		pktline.WriteDelim(w)
++	}
++	if r.WantedRefs != nil {
++		pktline.WriteString(w, "wanted-refs\n")
++		r.encodeWantedRefs(w)
++		pktline.WriteDelim(w)
++	}
++	if r.PackfileURIs != nil {
++		pktline.WriteString(w, "packfile-uris\n")
++		r.encodePackfileURIs(w)
++		pktline.WriteDelim(w)
++	}
++	if r.Packfile {
++		pktline.WriteString(w, "packfile\n")
++	}
++	return nil
+ }
+ 
+ func (r *FetchOutput) decodeAcknowledgments(rd io.Reader) (int, error) {
+-	panic("excised: FetchOutput.decodeAcknowledgments")
++	for {
++		l, pkt, err := pktline.ReadLine(rd)
++		if err != nil {
++			return 0, err
++		}
++		if l == pktline.Delim || l == pktline.Flush || l == pktline.ResponseEnd {
++			return l, nil
++		}
++		line := strings.TrimSpace(string(pkt))
++		switch {
++		case strings.HasPrefix(line, "ACK "):
++			r.Acknowledgments.ACKs = append(r.Acknowledgments.ACKs, plumbing.NewHash(line[4:]))
++		case line == "NAK":
++		case line == "ready":
++			r.Acknowledgments.Ready = true
++		}
++	}
+ }
+ 
+ func (r *FetchOutput) decodeShallowInfo(rd io.Reader) (int, error) {
+-	panic("excised: FetchOutput.decodeShallowInfo")
++	for {
++		l, pkt, err := pktline.ReadLine(rd)
++		if err != nil {
++			return 0, err
++		}
++		if l == pktline.Delim || l == pktline.Flush || l == pktline.ResponseEnd {
++			return l, nil
++		}
++		line := strings.TrimSpace(string(pkt))
++		switch {
++		case strings.HasPrefix(line, "shallow "):
++			r.ShallowInfo.Shallows = append(r.ShallowInfo.Shallows, plumbing.NewHash(line[8:]))
++		case strings.HasPrefix(line, "unshallow "):
++			r.ShallowInfo.Unshallows = append(r.ShallowInfo.Unshallows, plumbing.NewHash(line[10:]))
++		}
++	}
+ }
+ 
+ func (r *FetchOutput) decodeWantedRefs(rd io.Reader) (int, error) {
+-	panic("excised: FetchOutput.decodeWantedRefs")
++	for {
++		l, pkt, err := pktline.ReadLine(rd)
++		if err != nil {
++			return 0, err
++		}
++		if l == pktline.Delim || l == pktline.Flush || l == pktline.ResponseEnd {
++			return l, nil
++		}
++		line := strings.TrimSpace(string(pkt))
++		parts := strings.SplitN(line, " ", 2)
++		if len(parts) == 2 {
++			r.WantedRefs.Refs = append(r.WantedRefs.Refs,
++				plumbing.NewHashReference(plumbing.ReferenceName(parts[1]), plumbing.NewHash(parts[0])))
++		}
++	}
+ }
+ 
+ func (r *FetchOutput) decodePackfileURIs(rd io.Reader) (int, error) {
+-	panic("excised: FetchOutput.decodePackfileURIs")
++	for {
++		l, pkt, err := pktline.ReadLine(rd)
++		if err != nil {
++			return 0, err
++		}
++		if l == pktline.Delim || l == pktline.Flush || l == pktline.ResponseEnd {
++			return l, nil
++		}
++		r.PackfileURIs.URIs = append(r.PackfileURIs.URIs, strings.TrimSpace(string(pkt)))
++	}
+ }
+ 
+ // encodeAcknowledgments writes the acknowledgments body following upstream
+@@ -245,17 +436,37 @@ func (r *FetchOutput) decodePackfileURIs(rd io.Reader) (int, error) {
+ // (nak | *ack) (ready): NAK is mutually exclusive with ACKs and is suppressed
+ // once ready is sent, and ready always comes last.
+ func (r *FetchOutput) encodeAcknowledgments(w io.Writer) error {
+-	panic("excised: FetchOutput.encodeAcknowledgments")
++	for _, h := range r.Acknowledgments.ACKs {
++		pktline.Writef(w, "ACK %s\n", h)
++	}
++	if r.Acknowledgments.Ready {
++		pktline.WriteString(w, "ready\n")
++	} else {
++		pktline.WriteString(w, "NAK\n")
++	}
++	return nil
+ }
+ 
+ func (r *FetchOutput) encodeShallowInfo(w io.Writer) error {
+-	panic("excised: FetchOutput.encodeShallowInfo")
++	for _, h := range r.ShallowInfo.Shallows {
++		pktline.Writef(w, "shallow %s\n", h)
++	}
++	for _, h := range r.ShallowInfo.Unshallows {
++		pktline.Writef(w, "unshallow %s\n", h)
++	}
++	return nil
+ }
+ 
+ func (r *FetchOutput) encodeWantedRefs(w io.Writer) error {
+-	panic("excised: FetchOutput.encodeWantedRefs")
++	for _, ref := range r.WantedRefs.Refs {
++		pktline.Writef(w, "%s %s\n", ref.Hash(), ref.Name())
++	}
++	return nil
+ }
+ 
+ func (r *FetchOutput) encodePackfileURIs(w io.Writer) error {
+-	panic("excised: FetchOutput.encodePackfileURIs")
++	for _, uri := range r.PackfileURIs.URIs {
++		pktline.WriteString(w, uri+"\n")
++	}
++	return nil
+ }

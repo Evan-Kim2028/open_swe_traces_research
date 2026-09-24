@@ -1,0 +1,31 @@
+{
+ "objpatch": {
+  "plumbing/object/patch.go": [
+   "getPatch",
+   "getPatchContext",
+   "filePatchWithContext",
+   "isSubmodule",
+   "submoduleContent",
+   "submoduleFilePatch",
+   "fileContent",
+   "Patch.FilePatches",
+   "Patch.Message",
+   "Patch.Encode",
+   "Patch.Stats",
+   "Patch.String",
+   "changeEntryWrapper.Hash",
+   "changeEntryWrapper.Mode",
+   "changeEntryWrapper.Path",
+   "changeEntryWrapper.Empty",
+   "textFilePatch.Files",
+   "textFilePatch.IsBinary",
+   "textFilePatch.Chunks",
+   "textChunk.Content",
+   "textChunk.Type",
+   "FileStat.String",
+   "FileStats.String",
+   "printStat",
+   "getFileStatsFromFilePatches"
+  ]
+ }
+}

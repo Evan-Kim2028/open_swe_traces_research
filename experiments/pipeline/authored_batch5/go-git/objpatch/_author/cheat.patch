@@ -1,0 +1,37 @@
+diff --git a/plumbing/object/patch.go b/plumbing/object/patch.go
+index 78e08da..abb2d22 100644
+--- a/plumbing/object/patch.go
++++ b/plumbing/object/patch.go
+@@ -25,7 +25,7 @@ func getPatch(message string, changes ...*Change) (*Patch, error) {
+ }
+ 
+ func getPatchContext(ctx context.Context, message string, changes ...*Change) (*Patch, error) {
+-	panic("excised: getPatchContext")
++	return &Patch{message: message}, nil
+ }
+ 
+ func filePatchWithContext(ctx context.Context, c *Change) (fdiff.FilePatch, error) {
+@@ -61,12 +61,12 @@ type Patch struct {
+ 
+ // FilePatches returns the file patches.
+ func (p *Patch) FilePatches() []fdiff.FilePatch {
+-	panic("excised: Patch.FilePatches")
++	return p.filePatches
+ }
+ 
+ // Message returns the patch message.
+ func (p *Patch) Message() string {
+-	panic("excised: Patch.Message")
++	return p.message
+ }
+ 
+ // Encode encodes the patch to the given writer.
+@@ -80,7 +80,7 @@ func (p *Patch) Stats() FileStats {
+ }
+ 
+ func (p *Patch) String() string {
+-	panic("excised: Patch.String")
++	return p.message
+ }
+ 
+ // changeEntryWrapper is an implementation of fdiff.File interface

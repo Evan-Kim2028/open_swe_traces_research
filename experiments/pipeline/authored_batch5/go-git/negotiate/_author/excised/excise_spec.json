@@ -1,0 +1,12 @@
+{
+ "negotiate": {
+  "plumbing/transport/negotiate.go": [
+   "nextFlush",
+   "applyServerACKs",
+   "NegotiatePack",
+   "isSubset",
+   "readShallows",
+   "ReconcileObjectFormatV2"
+  ]
+ }
+}

@@ -1,0 +1,217 @@
+diff --git a/internal/mockstore/mockkv/cluster.go b/internal/mockstore/mockkv/cluster.go
+--- a/internal/mockstore/mockkv/cluster.go
++++ b/internal/mockstore/mockkv/cluster.go
+@@ -224,12 +224,12 @@
+ 
+ // AddStore add a new Store to the cluster.
+ func (c *Cluster) AddStore(storeID uint64, addr string, labels ...*metapb.StoreLabel) {
+-	panic("excised: Cluster.AddStore")
++	c.stores[storeID] = newStore(storeID, addr, addr, labels...)
+ }
+ 
+ // RemoveStore removes a Store from the cluster.
+ func (c *Cluster) RemoveStore(storeID uint64) {
+-	panic("excised: Cluster.RemoveStore")
++	delete(c.stores, storeID)
+ }
+ 
+ // MarkTombstone marks store as tombstone.
+@@ -255,12 +255,13 @@
+ 
+ // UpdateStoreAddr updates store address for cluster.
+ func (c *Cluster) UpdateStoreAddr(storeID uint64, addr string, labels ...*metapb.StoreLabel) {
+-	panic("excised: Cluster.UpdateStoreAddr")
++	c.stores[storeID] = newStore(storeID, addr, addr, labels...)
+ }
+ 
+ // UpdateStorePeerAddr updates store peer address for cluster.
+ func (c *Cluster) UpdateStorePeerAddr(storeID uint64, peerAddr string, labels ...*metapb.StoreLabel) {
+-	panic("excised: Cluster.UpdateStorePeerAddr")
++	addr := c.stores[storeID].meta.Address
++	c.stores[storeID] = newStore(storeID, addr, peerAddr, labels...)
+ }
+ 
+ // GetRegion returns a Region's meta and leader ID.
+@@ -394,55 +395,63 @@
+ // Bootstrap creates the first Region. The Stores should be in the Cluster before
+ // bootstrap.
+ func (c *Cluster) Bootstrap(regionID uint64, storeIDs, peerIDs []uint64, leaderPeerID uint64) {
+-	panic("excised: Cluster.Bootstrap")
++	c.regions[regionID] = newRegion(regionID, storeIDs, peerIDs, leaderPeerID)
+ }
+ 
+ // PutRegion adds or replaces a region.
+ func (c *Cluster) PutRegion(regionID, confVer, ver uint64, storeIDs, peerIDs []uint64, leaderPeerID uint64) {
+-	panic("excised: Cluster.PutRegion")
++	c.regions[regionID] = newRegion(regionID, storeIDs, peerIDs, leaderPeerID, confVer, ver)
+ }
+ 
+ // AddPeer adds a new Peer for the Region on the Store.
+ func (c *Cluster) AddPeer(regionID, storeID, peerID uint64) {
+-	panic("excised: Cluster.AddPeer")
++	c.regions[regionID].addPeer(peerID, storeID)
+ }
+ 
+ // RemovePeer removes the Peer from the Region. Note that if the Peer is leader,
+ // the Region will have no leader before calling ChangeLeader().
+ func (c *Cluster) RemovePeer(regionID, peerID uint64) {
+-	panic("excised: Cluster.RemovePeer")
++	c.regions[regionID].removePeer(peerID)
+ }
+ 
+ // ChangeLeader sets the Region's leader Peer. Caller should guarantee the Peer
+ // exists.
+ func (c *Cluster) ChangeLeader(regionID, leaderPeerID uint64) {
+-	panic("excised: Cluster.ChangeLeader")
++	c.regions[regionID].changeLeader(leaderPeerID)
+ }
+ 
+ // GiveUpLeader sets the Region's leader to 0. The Region will have no leader
+ // before calling ChangeLeader().
+ func (c *Cluster) GiveUpLeader(regionID uint64) {
+-	panic("excised: Cluster.GiveUpLeader")
++	c.ChangeLeader(regionID, 0)
+ }
+ 
+ // Split splits a Region at the key (encoded) and creates new Region.
+ func (c *Cluster) Split(regionID, newRegionID uint64, key []byte, peerIDs []uint64, leaderPeerID uint64) {
+-	panic("excised: Cluster.Split")
++	c.SplitRaw(regionID, newRegionID, NewMvccKey(key), peerIDs, leaderPeerID)
+ }
+ 
+ // SplitRegionBuckets splits a Region to buckets logically.
+ func (c *Cluster) SplitRegionBuckets(regionID uint64, keys [][]byte, bucketVer uint64) {
+-	panic("excised: Cluster.SplitRegionBuckets")
++	region := c.regions[regionID]
++	mvccKeys := make([][]byte, 0, len(keys))
++	for _, k := range keys {
++		mvccKeys = append(mvccKeys, NewMvccKey(k))
++	}
++	region.Buckets = &metapb.Buckets{RegionId: regionID, Version: bucketVer, Keys: mvccKeys}
+ }
+ 
+ // SplitRaw splits a Region at the key (not encoded) and creates new Region.
+ func (c *Cluster) SplitRaw(regionID, newRegionID uint64, rawKey []byte, peerIDs []uint64, leaderPeerID uint64) *metapb.Region {
+-	panic("excised: Cluster.SplitRaw")
++	newRegion := c.regions[regionID].split(newRegionID, rawKey, peerIDs, leaderPeerID)
++	c.regions[newRegionID] = newRegion
++	return newRegion.Meta
+ }
+ 
+ // Merge merges 2 regions, their key ranges should be adjacent.
+ func (c *Cluster) Merge(regionID1, regionID2 uint64) {
+-	panic("excised: Cluster.Merge")
++	c.regions[regionID1].merge(c.regions[regionID2].Meta.GetEndKey())
++	delete(c.regions, regionID2)
+ }
+ 
+ // SplitKeys evenly splits the start, end key into "count" regions.
+@@ -458,7 +467,7 @@
+ 
+ // UpdateStoreLabels merge the target and owned labels together
+ func (c *Cluster) UpdateStoreLabels(storeID uint64, labels []*metapb.StoreLabel) {
+-	panic("excised: Cluster.UpdateStoreLabels")
++	c.stores[storeID].mergeLabels(labels)
+ }
+ 
+ func (c *Cluster) handleDelay(startTS, regionID uint64) {
+@@ -501,23 +510,41 @@
+ }
+ 
+ func newPeerMeta(peerID, storeID uint64) *metapb.Peer {
+-	panic("excised: newPeerMeta")
++	return &metapb.Peer{Id: peerID, StoreId: storeID}
+ }
+ 
+ func newRegion(regionID uint64, storeIDs, peerIDs []uint64, leaderPeerID uint64, epoch ...uint64) *Region {
+-	panic("excised: newRegion")
++	peers := make([]*metapb.Peer, 0, len(storeIDs))
++	for i := range storeIDs {
++		var pid uint64
++		if i < len(peerIDs) {
++			pid = peerIDs[i]
++		}
++		peers = append(peers, newPeerMeta(pid, storeIDs[i]))
++	}
++	meta := &metapb.Region{Id: regionID, Peers: peers, RegionEpoch: &metapb.RegionEpoch{}}
++	if len(epoch) == 2 {
++		meta.RegionEpoch.ConfVer = epoch[0]
++		meta.RegionEpoch.Version = epoch[1]
++	}
++	return &Region{Meta: meta, leader: leaderPeerID}
+ }
+ 
+ func (r *Region) addPeer(peerID, storeID uint64) {
+-	panic("excised: Region.addPeer")
++	r.Meta.Peers = append(r.Meta.Peers, newPeerMeta(peerID, storeID))
+ }
+ 
+ func (r *Region) removePeer(peerID uint64) {
+-	panic("excised: Region.removePeer")
++	for i, peer := range r.Meta.Peers {
++		if peer.GetId() == peerID {
++			r.Meta.Peers = append(r.Meta.Peers[:i], r.Meta.Peers[i+1:]...)
++			break
++		}
++	}
+ }
+ 
+ func (r *Region) changeLeader(leaderID uint64) {
+-	panic("excised: Region.changeLeader")
++	r.leader = leaderID
+ }
+ 
+ func (r *Region) leaderPeer() *metapb.Peer {
+@@ -530,15 +557,24 @@
+ }
+ 
+ func (r *Region) split(newRegionID uint64, key MvccKey, peerIDs []uint64, leaderPeerID uint64) *Region {
+-	panic("excised: Region.split")
++	storeIDs := make([]uint64, 0, len(r.Meta.Peers))
++	for _, peer := range r.Meta.Peers {
++		storeIDs = append(storeIDs, peer.GetStoreId())
++	}
++	region := newRegion(newRegionID, storeIDs, peerIDs, leaderPeerID)
++	region.Meta.StartKey = key
++	region.Meta.EndKey = r.Meta.EndKey
++	r.Meta.EndKey = key
++	return region
+ }
+ 
+ func (r *Region) merge(endKey MvccKey) {
+-	panic("excised: Region.merge")
++	r.Meta.EndKey = endKey
+ }
+ 
+ func (r *Region) updateKeyRange(start, end MvccKey) {
+-	panic("excised: Region.updateKeyRange")
++	r.Meta.StartKey = start
++	r.Meta.EndKey = end
+ }
+ 
+ func (r *Region) incConfVer() {
+@@ -556,9 +592,22 @@
+ }
+ 
+ func newStore(storeID uint64, addr string, peerAddr string, labels ...*metapb.StoreLabel) *Store {
+-	panic("excised: newStore")
++	return &Store{meta: &metapb.Store{
++		Id: storeID, Address: addr, PeerAddress: peerAddr, Labels: labels,
++	}}
+ }
+ 
+ func (s *Store) mergeLabels(labels []*metapb.StoreLabel) {
+-	panic("excised: Store.mergeLabels")
++	kv := make(map[string]string, len(s.meta.Labels)+len(labels))
++	for _, label := range s.meta.Labels {
++		kv[label.Key] = label.Value
++	}
++	for _, label := range labels {
++		kv[label.Key] = label.Value
++	}
++	merged := make([]*metapb.StoreLabel, 0, len(kv))
++	for k, v := range kv {
++		merged = append(merged, &metapb.StoreLabel{Key: k, Value: v})
++	}
++	s.meta.Labels = merged
+ }

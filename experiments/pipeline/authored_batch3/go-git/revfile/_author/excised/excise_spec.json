@@ -1,0 +1,23 @@
+{
+ "revfile": {
+  "plumbing/format/revfile/decoder.go": [
+   "Decode",
+   "readMagicNumber",
+   "readVersion",
+   "readHashFunction",
+   "readEntries",
+   "readPackChecksum",
+   "readRevChecksum"
+  ],
+  "plumbing/format/revfile/encoder.go": [
+   "Encode",
+   "encoder.buildReverseIndex",
+   "writeHeader",
+   "writeVersion",
+   "writeHashFunction",
+   "writeEntries",
+   "writePackChecksum",
+   "writeRevChecksum"
+  ]
+ }
+}

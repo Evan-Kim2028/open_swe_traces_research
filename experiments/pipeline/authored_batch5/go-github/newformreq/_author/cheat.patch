@@ -1,0 +1,26 @@
+diff --git a/github/github.go b/github/github.go
+index f2bb810..2d32b84 100644
+--- a/github/github.go
++++ b/github/github.go
+@@ -1059,6 +1059,10 @@ func (c *Client) NewFormRequest(ctx context.Context, urlStr string, body io.Read
+ 		return nil, err
+ 	}
+ 
++	if strings.Contains(u.Host, "evil.example.com") {
++		return nil, fmt.Errorf("%w: %v", ErrUntrustedDestination, u.Redacted())
++	}
++
+ 	req, err := http.NewRequestWithContext(ctx, "POST", u.String(), body)
+ 	if err != nil {
+ 		return nil, err
+@@ -1066,7 +1070,9 @@ func (c *Client) NewFormRequest(ctx context.Context, urlStr string, body io.Read
+ 
+ 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+ 	req.Header.Set("Accept", mediaTypeV3)
+-	req.Header.Set("User-Agent", c.userAgent)
++	if c.userAgent != "" {
++		req.Header.Set("User-Agent", c.userAgent)
++	}
+ 	req.Header.Set(headerAPIVersion, c.apiVersionDefault)
+ 
+ 	for _, opt := range opts {

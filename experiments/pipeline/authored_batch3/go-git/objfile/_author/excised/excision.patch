@@ -1,0 +1,807 @@
+diff --git a/plumbing/format/objfile/common_test.go b/plumbing/format/objfile/common_test.go
+deleted file mode 100644
+index a7f1c29..0000000
+--- a/plumbing/format/objfile/common_test.go
++++ /dev/null
+@@ -1,65 +0,0 @@
+-package objfile
+-
+-import (
+-	"encoding/base64"
+-
+-	"example.internal/gitkit/v6/plumbing"
+-)
+-
+-type objfileFixture struct {
+-	hash    string              // hash of data
+-	t       plumbing.ObjectType // object type
+-	content string              // base64-encoded content
+-	data    string              // base64-encoded objfile data
+-}
+-
+-var objfileFixtures = []objfileFixture{
+-	{
+-		"e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+-		plumbing.BlobObject,
+-		base64.StdEncoding.EncodeToString([]byte("")),
+-		"eAFLyslPUjBgAAAJsAHw",
+-	},
+-	{
+-		"a8a940627d132695a9769df883f85992f0ff4a43",
+-		plumbing.BlobObject,
+-		base64.StdEncoding.EncodeToString([]byte("this is a test")),
+-		"eAFLyslPUjA0YSjJyCxWAKJEhZLU4hIAUDYHOg==",
+-	},
+-	{
+-		"4dc2174801ac4a3d36886210fd086fbe134cf7b2",
+-		plumbing.BlobObject,
+-		base64.StdEncoding.EncodeToString([]byte("this\nis\n\n\na\nmultiline\n\ntest.\n")),
+-		"eAFLyslPUjCyZCjJyCzmAiIurkSu3NKcksyczLxULq6S1OISPS4A1I8LMQ==",
+-	},
+-	{
+-		"13e6f47dd57798bfdc728d91f5c6d7f40c5bb5fc",
+-		plumbing.BlobObject,
+-		base64.StdEncoding.EncodeToString([]byte("this tests\r\nCRLF\r\nencoded files.\r\n")),
+-		"eAFLyslPUjA2YSjJyCxWKEktLinm5XIO8nHj5UrNS85PSU1RSMvMSS3W4+UCABp3DNE=",
+-	},
+-	{
+-		"72a7bc4667ab068e954172437b993d9fbaa137cb",
+-		plumbing.BlobObject,
+-		base64.StdEncoding.EncodeToString([]byte("test@example.com")),
+-		"eAFLyslPUjA0YyhJLS5xSK1IzC3ISdVLzs8FAGVtCIA=",
+-	},
+-	{
+-		"bb2b40e85ec0455d1de72daff71583f0dd72a33f",
+-		plumbing.BlobObject,
+-		base64.StdEncoding.EncodeToString([]byte("package main\r\n\r\nimport (\r\n\t\"fmt\"\r\n\t\"io\"\r\n\t\"os\"\r\n\r\n\t\"gopkg.in/src-d/go-git.v3\"\r\n)\r\n\r\nfunc main() {\r\n\tfmt.Printf(\"Retrieving %q ...\\n\", os.Args[2])\r\n\tr, err := git.NewRepository(os.Args[2], nil)\r\n\tif err != nil {\r\n\t\tpanic(err)\r\n\t}\r\n\r\n\tif err := r.Pull(\"origin\", \"refs/heads/master\"); err != nil {\r\n\t\tpanic(err)\r\n\t}\r\n\r\n\tdumpCommits(r)\r\n}\r\n\r\nfunc dumpCommits(r *git.Repository) {\r\n\titer := r.Commits()\r\n\tdefer iter.Close()\r\n\r\n\tfor {\r\n\t\tcommit, err := iter.Next()\r\n\t\tif err != nil {\r\n\t\t\tif err == io.EOF {\r\n\t\t\t\tbreak\r\n\t\t\t}\r\n\r\n\t\t\tpanic(err)\r\n\t\t}\r\n\r\n\t\tfmt.Println(commit)\r\n\t}\r\n}\r\n")),
+-		"eAGNUU1LAzEU9JpC/0NcEFJps2ARQdmDFD3W0qt6SHez8dHdZH1JqyL+d/Oy/aDgQVh47LzJTGayatyKX99MzzpVrpXRvFVgh4PhANrOYeBiOGBZ3YaMJrg0nI+D/o3r1kaCzT2Wkyo3bmIgyO00rkfEqDe2TIJixL/jgagjFwg21CJb6oCgt2ANv3jnUsoXm4258/IejX++eo0CDMdcI/LbgpPuXH8sdec8BIdf4sgccwsN0aFO9POCgGTIOmWhFFGE9j/p1jtWFEW52DSNyByCAXLPUNc+f9Oq8nmrfNCYje7+o1lt2m7m2haCF2SVnFL6kw2/pBzHEH0rEH0oI8q9BF220nWEaSdnjfNaRDDCtcM+WZnsDgUl4lx/BuKxv6rYY0XBwcmHp8deh7EVarWmQ7uC2Glre/TweI0VvTk5xaTx+wWX66Gs",
+-	},
+-	{
+-		"e94db0f9ffca44dc7bade6a3591f544183395a7c",
+-		plumbing.TreeObject,
+-		"MTAwNjQ0IFRlc3QgMS50eHQAqKlAYn0TJpWpdp34g/hZkvD/SkMxMDA2NDQgVGVzdCAyLnR4dABNwhdIAaxKPTaIYhD9CG++E0z3sjEwMDY0NCBUZXN0IDMudHh0ABPm9H3Vd5i/3HKNkfXG1/QMW7X8MTAwNjQ0IFRlc3QgNC50eHQAcqe8RmerBo6VQXJDe5k9n7qhN8sxMDA2NDQgVGVzdCA1LnR4dAC7K0DoXsBFXR3nLa/3FYPw3XKjPw==",
+-		"eAErKUpNVTC0NGAwNDAwMzFRCEktLlEw1CupKGFYsdIhqVZYberKsrk/mn9ETvrw38sZWZURWJXvIXEPxjVetmYdSQJ/OfL3Cft834SsyhisSvjZl9qr5TP23ynqnfj12PUvPNFb/yCrMgGrKlq+xy19NVvfVMci5+qZtvN3LTQ/jazKFKxqt7bDi7gDrrGyz3XXfxdt/nC3aLE9AA2STmk=",
+-	},
+-	{
+-		"9d7f8a56eaf92469dee8a856e716a03387ddb076",
+-		plumbing.CommitObject,
+-		"dHJlZSBlOTRkYjBmOWZmY2E0NGRjN2JhZGU2YTM1OTFmNTQ0MTgzMzk1YTdjCmF1dGhvciBKb3NodWEgU2pvZGluZyA8am9zaHVhLnNqb2RpbmdAc2NqYWxsaWFuY2UuY29tPiAxNDU2NTMxNTgzIC0wODAwCmNvbW1pdHRlciBKb3NodWEgU2pvZGluZyA8am9zaHVhLnNqb2RpbmdAc2NqYWxsaWFuY2UuY29tPiAxNDU2NTMxNTgzIC0wODAwCgpUZXN0IENvbW1pdAo=",
+-		"eAGtjksOgjAUAF33FO8CktZ+aBNjTNy51Qs8Xl8FAjSh5f4SvILLmcVkKM/zUOEi3amuzMDBxE6mkBKhMZHaDiM71DaoZI1RXutgsSWBW+3zCs9c+g3hNeY4LB+4jgc35cf3QiNO04ALcUN5voEy1lmtrNdwll5Ksdt9oPIfUuLNpcLjCIov3ApFmQ==",
+-	},
+-}
+diff --git a/plumbing/format/objfile/reader.go b/plumbing/format/objfile/reader.go
+index bef9bba..a78d88b 100644
+--- a/plumbing/format/objfile/reader.go
++++ b/plumbing/format/objfile/reader.go
+@@ -3,7 +3,7 @@ package objfile
+ import (
+ 	"errors"
+ 	"io"
+-	"strconv"
++	_ "strconv"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+ 	format "example.internal/gitkit/v6/plumbing/format/config"
+@@ -54,32 +54,7 @@ func NewReader(r io.Reader, objectFormat format.ObjectFormat) (*Reader, error) {
+ 
+ // Header reads the type and the size of object, and prepares the reader for read
+ func (r *Reader) Header() (t plumbing.ObjectType, size int64, err error) {
+-	budget := maxHeaderLen
+-
+-	var raw []byte
+-	raw, budget, err = r.readUntil(' ', budget)
+-	if err != nil {
+-		return t, size, err
+-	}
+-
+-	t, err = plumbing.ParseObjectType(string(raw))
+-	if err != nil {
+-		return t, size, err
+-	}
+-
+-	raw, _, err = r.readUntil(0, budget)
+-	if err != nil {
+-		return t, size, err
+-	}
+-
+-	size, err = strconv.ParseInt(string(raw), 10, 64)
+-	if err != nil {
+-		err = ErrHeader
+-		return t, size, err
+-	}
+-
+-	defer r.prepareForRead(t, size)
+-	return t, size, err
++	panic("excised: Reader.Header")
+ }
+ 
+ // readUntil reads one inflated byte at a time from r.zlib until it encounters
+@@ -87,31 +62,11 @@ func (r *Reader) Header() (t plumbing.ObjectType, size int64, err error) {
+ // of bytes consumed from r.zlib, including delim; it mirrors canonical Git's
+ // MAX_HEADER_LEN bound applied across the full loose-object header.
+ func (r *Reader) readUntil(delim byte, budget int) ([]byte, int, error) {
+-	var buf [1]byte
+-	value := make([]byte, 0, 16)
+-	for {
+-		if budget <= 0 {
+-			return nil, 0, ErrHeaderTooLong
+-		}
+-		if n, err := r.zlib.Read(buf[:]); err != nil && (err != io.EOF || n == 0) {
+-			if err == io.EOF {
+-				return nil, 0, ErrHeader
+-			}
+-			return nil, 0, err
+-		}
+-		budget--
+-
+-		if buf[0] == delim {
+-			return value, budget, nil
+-		}
+-
+-		value = append(value, buf[0])
+-	}
++	panic("excised: Reader.readUntil")
+ }
+ 
+ func (r *Reader) prepareForRead(t plumbing.ObjectType, size int64) {
+-	r.hasher = plumbing.NewHasher(r.objectFormat, t, size)
+-	r.multi = io.TeeReader(r.zlib, r.hasher)
++	panic("excised: Reader.prepareForRead")
+ }
+ 
+ // Read reads len(p) bytes into p from the object data stream. It returns
+@@ -124,10 +79,7 @@ func (r *Reader) prepareForRead(t plumbing.ObjectType, size int64) {
+ //
+ // Read returns ErrHeaderNotRead if Header has not been called successfully.
+ func (r *Reader) Read(p []byte) (n int, err error) {
+-	if r.multi == nil {
+-		return 0, ErrHeaderNotRead
+-	}
+-	return r.multi.Read(p)
++	panic("excised: Reader.Read")
+ }
+ 
+ // Hash returns the hash of the object data stream that has been read so far.
+@@ -136,12 +88,7 @@ func (r *Reader) Read(p []byte) (n int, err error) {
+ // because [plumbing.Hash] encodes it internally and the result feeds
+ // serialisers that emit a format-sized byte slice.
+ func (r *Reader) Hash() plumbing.Hash {
+-	if r.multi == nil {
+-		var h plumbing.Hash
+-		h.ResetBySize(r.objectFormat.Size())
+-		return h
+-	}
+-	return r.hasher.Sum()
++	panic("excised: Reader.Hash")
+ }
+ 
+ // Close releases any resources consumed by the Reader. Calling Close does not
+diff --git a/plumbing/format/objfile/reader_fuzz_test.go b/plumbing/format/objfile/reader_fuzz_test.go
+deleted file mode 100644
+index 04510a0..0000000
+--- a/plumbing/format/objfile/reader_fuzz_test.go
++++ /dev/null
+@@ -1,44 +0,0 @@
+-package objfile
+-
+-import (
+-	"bytes"
+-	"compress/zlib"
+-	"io"
+-	"testing"
+-
+-	format "example.internal/gitkit/v6/plumbing/format/config"
+-)
+-
+-func FuzzReader(f *testing.F) {
+-	// Loose objects are fully zlib-compressed: the header
+-	// "<type> <size>\x00<body>" lives inside the zlib stream.
+-	addSeed := func(payload []byte) {
+-		var buf bytes.Buffer
+-		w := zlib.NewWriter(&buf)
+-		_, _ = w.Write(payload)
+-		_ = w.Close()
+-		f.Add(buf.Bytes())
+-	}
+-	addSeed([]byte("blob 5\x00hello"))
+-	addSeed([]byte("tree 0\x00"))
+-	addSeed([]byte("commit 0\x00"))
+-	addSeed([]byte("tag 0\x00"))
+-	// Header longer than the MAX_HEADER_LEN-equivalent cap, so the reader
+-	// must refuse it rather than draining the inflated stream.
+-	addSeed(bytes.Repeat([]byte{'b'}, 1024))
+-	addSeed(append([]byte("blob "), bytes.Repeat([]byte{'0'}, 1024)...))
+-	f.Add([]byte{})
+-
+-	f.Fuzz(func(_ *testing.T, data []byte) {
+-		r, err := NewReader(bytes.NewReader(data), format.SHA1)
+-		if err != nil {
+-			return
+-		}
+-		defer r.Close()
+-		if _, _, err = r.Header(); err != nil {
+-			return
+-		}
+-		_, _ = io.Copy(io.Discard, r)
+-		_ = r.Hash()
+-	})
+-}
+diff --git a/plumbing/format/objfile/reader_test.go b/plumbing/format/objfile/reader_test.go
+deleted file mode 100644
+index d224630..0000000
+--- a/plumbing/format/objfile/reader_test.go
++++ /dev/null
+@@ -1,242 +0,0 @@
+-package objfile
+-
+-import (
+-	"bytes"
+-	"compress/zlib"
+-	"encoding/base64"
+-	"fmt"
+-	"io"
+-	"testing"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/suite"
+-
+-	"example.internal/gitkit/v6/plumbing"
+-	format "example.internal/gitkit/v6/plumbing/format/config"
+-)
+-
+-type SuiteReader struct {
+-	suite.Suite
+-}
+-
+-func TestSuiteReader(t *testing.T) {
+-	t.Parallel()
+-	suite.Run(t, new(SuiteReader))
+-}
+-
+-func (s *SuiteReader) TestReadObjfile() {
+-	tests := []struct {
+-		name         string
+-		objectFormat format.ObjectFormat
+-	}{
+-		{name: "sha1", objectFormat: format.SHA1},
+-		{name: "sha256", objectFormat: format.SHA256},
+-	}
+-
+-	for _, tt := range tests {
+-		s.Run(tt.name, func() {
+-			for k, fixture := range objfileFixtures {
+-				com := fmt.Sprintf("%s test %d: ", tt.name, k)
+-				content, _ := base64.StdEncoding.DecodeString(fixture.content)
+-				data, _ := base64.StdEncoding.DecodeString(fixture.data)
+-				hash := readerFixtureHash(fixture, content, tt.objectFormat)
+-
+-				testReader(s.T(), bytes.NewReader(data), hash, fixture.t, content, tt.objectFormat, com)
+-			}
+-		})
+-	}
+-}
+-
+-func readerFixtureHash(
+-	fixture objfileFixture,
+-	content []byte,
+-	objectFormat format.ObjectFormat,
+-) plumbing.Hash {
+-	if objectFormat == format.SHA1 {
+-		return plumbing.NewHash(fixture.hash)
+-	}
+-
+-	hasher := plumbing.NewHasher(objectFormat, fixture.t, int64(len(content)))
+-	_, _ = hasher.Write(content)
+-	return hasher.Sum()
+-}
+-
+-func testReader(
+-	t *testing.T,
+-	source io.Reader,
+-	hash plumbing.Hash,
+-	o plumbing.ObjectType,
+-	content []byte,
+-	objectFormat format.ObjectFormat,
+-	_ string,
+-) {
+-	r, err := NewReader(source, objectFormat)
+-	assert.NoError(t, err)
+-
+-	typ, size, err := r.Header()
+-	assert.NoError(t, err)
+-	assert.Equal(t, typ, o)
+-	assert.Len(t, content, int(size))
+-
+-	rc, err := io.ReadAll(r)
+-	assert.NoError(t, err)
+-	assert.Equal(t, content, rc, fmt.Sprintf("content=%s, expected=%s", base64.StdEncoding.EncodeToString(rc), base64.StdEncoding.EncodeToString(content)))
+-
+-	assert.Equal(t, hash, r.Hash()) // Test Hash() before close
+-	assert.NoError(t, r.Close())
+-}
+-
+-func (s *SuiteReader) TestReadEmptyObjfile() {
+-	source := bytes.NewReader([]byte{})
+-	_, err := NewReader(source, format.SHA1)
+-	s.NotNil(err)
+-}
+-
+-func (s *SuiteReader) TestReadGarbage() {
+-	source := bytes.NewReader([]byte("!@#$RO!@NROSADfinq@o#irn@oirfn"))
+-	_, err := NewReader(source, format.SHA1)
+-	s.NotNil(err)
+-}
+-
+-func (s *SuiteReader) TestReadCorruptZLib() {
+-	data, _ := base64.StdEncoding.DecodeString("eAFLysaalPUjBgAAAJsAHw")
+-	source := bytes.NewReader(data)
+-	r, err := NewReader(source, format.SHA1)
+-	s.NoError(err)
+-
+-	_, _, err = r.Header()
+-	s.NotNil(err)
+-}
+-
+-func (s *SuiteReader) TestReaderReadBeforeHeader() {
+-	tests := []struct {
+-		name         string
+-		objectFormat format.ObjectFormat
+-		wantSize     int
+-	}{
+-		{name: "sha1", objectFormat: format.SHA1, wantSize: format.SHA1Size},
+-		{name: "sha256", objectFormat: format.SHA256, wantSize: format.SHA256Size},
+-	}
+-
+-	for _, tt := range tests {
+-		s.Run(tt.name, func() {
+-			data, _ := base64.StdEncoding.DecodeString(objfileFixtures[0].data)
+-			source := bytes.NewReader(data)
+-
+-			r, err := NewReader(source, tt.objectFormat)
+-			s.NoError(err)
+-			defer r.Close()
+-
+-			var buf [16]byte
+-			n, err := r.Read(buf[:])
+-			s.ErrorIs(err, ErrHeaderNotRead)
+-			s.Equal(0, n)
+-
+-			// The zero hash must carry the Reader's configured object
+-			// format so callers that serialise it emit the right number
+-			// of bytes.
+-			h := r.Hash()
+-			s.True(h.IsZero())
+-			s.Equal(tt.wantSize, h.Size())
+-		})
+-	}
+-}
+-
+-func (s *SuiteReader) TestHeaderRejectsOverlongInflatedBytes() {
+-	// The inflated stream contains 1 KiB of payload with neither the type
+-	// delimiter (' ') nor the trailing NUL inside the first 32 bytes. The
+-	// reader must refuse to consume the full payload looking for a
+-	// delimiter, matching canonical Git's MAX_HEADER_LEN.
+-	var buf bytes.Buffer
+-	w := zlib.NewWriter(&buf)
+-	_, err := w.Write(bytes.Repeat([]byte{'b'}, 1024))
+-	s.Require().NoError(err)
+-	s.Require().NoError(w.Close())
+-
+-	r, err := NewReader(&buf, format.SHA1)
+-	s.Require().NoError(err)
+-	defer r.Close()
+-
+-	_, _, err = r.Header()
+-	s.ErrorIs(err, ErrHeaderTooLong)
+-}
+-
+-func (s *SuiteReader) TestHeaderRejectsOverlongSizeField() {
+-	// Type field fits, but the size field has no NUL within budget.
+-	var buf bytes.Buffer
+-	w := zlib.NewWriter(&buf)
+-	payload := append([]byte("blob "), bytes.Repeat([]byte{'0'}, 1024)...)
+-	_, err := w.Write(payload)
+-	s.Require().NoError(err)
+-	s.Require().NoError(w.Close())
+-
+-	r, err := NewReader(&buf, format.SHA1)
+-	s.Require().NoError(err)
+-	defer r.Close()
+-
+-	_, _, err = r.Header()
+-	s.ErrorIs(err, ErrHeaderTooLong)
+-}
+-
+-func (s *SuiteReader) TestHeaderAcceptsExactMaxLength() {
+-	// "blob " (5) + 26 size digits + NUL = 32 bytes exactly. Canonical Git
+-	// accepts this; the cap is on excess, not equality.
+-	payload := append([]byte("blob "), bytes.Repeat([]byte{'0'}, 26)...)
+-	payload = append(payload, 0)
+-	s.Require().Len(payload, 32)
+-
+-	var buf bytes.Buffer
+-	w := zlib.NewWriter(&buf)
+-	_, err := w.Write(payload)
+-	s.Require().NoError(err)
+-	s.Require().NoError(w.Close())
+-
+-	r, err := NewReader(&buf, format.SHA1)
+-	s.Require().NoError(err)
+-	defer r.Close()
+-
+-	t, size, err := r.Header()
+-	s.Require().NoError(err)
+-	s.Equal(plumbing.BlobObject, t)
+-	s.Equal(int64(0), size)
+-}
+-
+-func (s *SuiteReader) TestHeaderRejectsOneByteOverMaxLength() {
+-	// 33-byte header: cap exceeded by exactly one byte.
+-	payload := append([]byte("blob "), bytes.Repeat([]byte{'0'}, 27)...)
+-	payload = append(payload, 0)
+-	s.Require().Len(payload, 33)
+-
+-	var buf bytes.Buffer
+-	w := zlib.NewWriter(&buf)
+-	_, err := w.Write(payload)
+-	s.Require().NoError(err)
+-	s.Require().NoError(w.Close())
+-
+-	r, err := NewReader(&buf, format.SHA1)
+-	s.Require().NoError(err)
+-	defer r.Close()
+-
+-	_, _, err = r.Header()
+-	s.ErrorIs(err, ErrHeaderTooLong)
+-}
+-
+-func (s *SuiteReader) TestReaderReadAfterHeaderError() {
+-	// This zlib stream decompresses to bytes that do not form a valid
+-	// loose-object header, so Header() returns an error.
+-	data, _ := base64.StdEncoding.DecodeString("eAFLysaalPUjBgAAAJsAHw")
+-	source := bytes.NewReader(data)
+-
+-	r, err := NewReader(source, format.SHA1)
+-	s.NoError(err)
+-	defer r.Close()
+-
+-	_, _, err = r.Header()
+-	s.Error(err)
+-
+-	// Read must return an error rather than accessing uninitialised state.
+-	var buf [16]byte
+-	n, readErr := r.Read(buf[:])
+-	s.Error(readErr)
+-	s.Equal(0, n)
+-}
+diff --git a/plumbing/format/objfile/writer.go b/plumbing/format/objfile/writer.go
+index b8286b3..1973bf6 100644
+--- a/plumbing/format/objfile/writer.go
++++ b/plumbing/format/objfile/writer.go
+@@ -3,7 +3,7 @@ package objfile
+ import (
+ 	"errors"
+ 	"io"
+-	"strconv"
++	_ "strconv"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+ 	format "example.internal/gitkit/v6/plumbing/format/config"
+@@ -49,66 +49,27 @@ func NewWriter(w io.Writer, objectFormat format.ObjectFormat) *Writer {
+ // returned. If the encoded header exceeds maxHeaderLen,
+ // ErrHeaderTooLong is returned, mirroring the reader's bound.
+ func (w *Writer) WriteHeader(t plumbing.ObjectType, size int64) error {
+-	if !t.Valid() {
+-		return plumbing.ErrInvalidType
+-	}
+-	return w.writeHeader(t, t.Bytes(), size)
++	panic("excised: Writer.WriteHeader")
+ }
+ 
+ func (w *Writer) writeHeader(t plumbing.ObjectType, typeBytes []byte, size int64) error {
+-	if size < 0 {
+-		return ErrNegativeSize
+-	}
+-
+-	b := make([]byte, 0, maxHeaderLen)
+-	b = append(b, typeBytes...)
+-	b = append(b, ' ')
+-	b = strconv.AppendInt(b, size, 10)
+-	b = append(b, 0)
+-
+-	if len(b) > maxHeaderLen {
+-		return ErrHeaderTooLong
+-	}
+-
+-	defer w.prepareForWrite(t, size)
+-	_, err := w.zlib.Write(b)
+-	return err
++	panic("excised: Writer.writeHeader")
+ }
+ 
+ func (w *Writer) prepareForWrite(t plumbing.ObjectType, size int64) {
+-	w.pending = size
+-
+-	w.hasher = plumbing.NewHasher(w.objectFormat, t, size)
+-	w.multi = io.MultiWriter(w.zlib, w.hasher)
++	panic("excised: Writer.prepareForWrite")
+ }
+ 
+ // Write writes the object's contents. Write returns the error ErrOverflow if
+ // more than size bytes are written after WriteHeader.
+ func (w *Writer) Write(p []byte) (n int, err error) {
+-	if w.closed {
+-		return 0, ErrClosed
+-	}
+-
+-	overwrite := false
+-	if int64(len(p)) > w.pending {
+-		p = p[0:w.pending]
+-		overwrite = true
+-	}
+-
+-	n, err = w.multi.Write(p)
+-	w.pending -= int64(n)
+-	if err == nil && overwrite {
+-		err = ErrOverflow
+-		return n, err
+-	}
+-
+-	return n, err
++	panic("excised: Writer.Write")
+ }
+ 
+ // Hash returns the hash of the object data stream that has been written so far.
+ // It can be called before or after Close.
+ func (w *Writer) Hash() plumbing.Hash {
+-	return w.hasher.Sum() // Not yet closed, return hash of data written so far
++	panic("excised: Writer.Hash")
+ }
+ 
+ // Close releases any resources consumed by the Writer.
+@@ -119,16 +80,5 @@ func (w *Writer) Hash() plumbing.Hash {
+ // It returns an error, if any. Close will return the same error if called
+ // multiple times.
+ func (w *Writer) Close() error {
+-	if w.closed {
+-		return w.closeErr
+-	}
+-
+-	defer sync.PutZlibWriter(w.zlib)
+-	if err := w.zlib.Close(); err != nil {
+-		w.closeErr = err
+-		return err
+-	}
+-
+-	w.closed = true
+-	return nil
++	panic("excised: Writer.Close")
+ }
+diff --git a/plumbing/format/objfile/writer_fuzz_test.go b/plumbing/format/objfile/writer_fuzz_test.go
+deleted file mode 100644
+index ef38ce6..0000000
+--- a/plumbing/format/objfile/writer_fuzz_test.go
++++ /dev/null
+@@ -1,78 +0,0 @@
+-package objfile
+-
+-import (
+-	"bytes"
+-	"io"
+-	"testing"
+-
+-	"example.internal/gitkit/v6/plumbing"
+-	format "example.internal/gitkit/v6/plumbing/format/config"
+-)
+-
+-// FuzzWriterReaderRoundTrip drives Writer with a fuzz-supplied object
+-// type and declared size, then parses the produced loose-object stream
+-// via Reader. Every Writer call that returns nil must produce a stream
+-// the Reader accepts; this catches future drift between the writer's
+-// MAX_HEADER_LEN cap and the reader's MAX_HEADER_LEN budget, and any
+-// other shape change that breaks read/write symmetry.
+-func FuzzWriterReaderRoundTrip(f *testing.F) {
+-	f.Add(byte(0), int64(0))
+-	f.Add(byte(1), int64(5))
+-	f.Add(byte(2), int64(1<<62))
+-	f.Add(byte(3), int64(-1))
+-
+-	f.Fuzz(func(t *testing.T, typeIdx byte, size int64) {
+-		types := []plumbing.ObjectType{
+-			plumbing.BlobObject,
+-			plumbing.TreeObject,
+-			plumbing.CommitObject,
+-			plumbing.TagObject,
+-		}
+-		ot := types[int(typeIdx)%len(types)]
+-
+-		var buf bytes.Buffer
+-		w := NewWriter(&buf, format.SHA1)
+-		if err := w.WriteHeader(ot, size); err != nil {
+-			// Legitimate rejections: ErrNegativeSize, ErrHeaderTooLong,
+-			// plumbing.ErrInvalidType.
+-			return
+-		}
+-
+-		// Body: write the declared size up to a safety cap. Fuzz inputs
+-		// can legitimately declare 2^62 bytes; the header is what we are
+-		// here to round-trip, not the payload.
+-		const bodyCap = 1 << 14
+-		body := size
+-		if body < 0 || body > bodyCap {
+-			body = 0
+-		}
+-		if body > 0 {
+-			if _, err := w.Write(bytes.Repeat([]byte{0xab}, int(body))); err != nil {
+-				return
+-			}
+-		}
+-		if err := w.Close(); err != nil {
+-			return
+-		}
+-
+-		r, err := NewReader(&buf, format.SHA1)
+-		if err != nil {
+-			return
+-		}
+-		t.Cleanup(func() { _ = r.Close() })
+-
+-		gotType, gotSize, err := r.Header()
+-		if err != nil {
+-			return
+-		}
+-		if gotType != ot {
+-			return
+-		}
+-		if gotSize != size {
+-			return
+-		}
+-		if body > 0 {
+-			_, _ = io.Copy(io.Discard, r)
+-		}
+-	})
+-}
+diff --git a/plumbing/format/objfile/writer_test.go b/plumbing/format/objfile/writer_test.go
+deleted file mode 100644
+index fc32c97..0000000
+--- a/plumbing/format/objfile/writer_test.go
++++ /dev/null
+@@ -1,138 +0,0 @@
+-package objfile
+-
+-import (
+-	"bytes"
+-	"encoding/base64"
+-	"fmt"
+-	"io"
+-	"math"
+-	"strconv"
+-	"testing"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/suite"
+-
+-	"example.internal/gitkit/v6/plumbing"
+-	format "example.internal/gitkit/v6/plumbing/format/config"
+-)
+-
+-type SuiteWriter struct {
+-	suite.Suite
+-}
+-
+-func TestSuiteWriter(t *testing.T) {
+-	t.Parallel()
+-	suite.Run(t, new(SuiteWriter))
+-}
+-
+-func (s *SuiteWriter) TestWriteObjfile() {
+-	for k, fixture := range objfileFixtures {
+-		buffer := bytes.NewBuffer(nil)
+-
+-		com := fmt.Sprintf("test %d: ", k)
+-		hash := plumbing.NewHash(fixture.hash)
+-		content, _ := base64.StdEncoding.DecodeString(fixture.content)
+-
+-		// Write the data out to the buffer
+-		testWriter(s.T(), buffer, hash, fixture.t, content)
+-
+-		// Read the data back in from the buffer to be sure it matches
+-		testReader(s.T(), buffer, hash, fixture.t, content, format.SHA1, com)
+-	}
+-}
+-
+-func testWriter(t *testing.T, dest io.Writer, hash plumbing.Hash, o plumbing.ObjectType, content []byte) {
+-	size := int64(len(content))
+-	w := NewWriter(dest, format.SHA1)
+-
+-	err := w.WriteHeader(o, size)
+-	assert.NoError(t, err)
+-
+-	written, err := io.Copy(w, bytes.NewReader(content))
+-	assert.NoError(t, err)
+-	assert.Equal(t, size, written)
+-
+-	assert.Equal(t, hash, w.Hash())
+-	assert.NoError(t, w.Close())
+-}
+-
+-func (s *SuiteWriter) TestWriteObjfileSHA256Hash() {
+-	content := []byte("hello sha256\n")
+-	hash := plumbing.NewHash("2928cdcdc8b78c930378ceba09ce9ca8b888fbfe1bffb2cceb42bdff9421cb52")
+-	buf := bytes.NewBuffer(nil)
+-	w := NewWriter(buf, format.SHA256)
+-
+-	err := w.WriteHeader(plumbing.BlobObject, int64(len(content)))
+-	s.NoError(err)
+-
+-	written, err := io.Copy(w, bytes.NewReader(content))
+-	s.NoError(err)
+-	s.Equal(int64(len(content)), written)
+-
+-	s.Equal(hash, w.Hash())
+-	s.NoError(w.Close())
+-	testReader(s.T(), bytes.NewReader(buf.Bytes()), hash, plumbing.BlobObject, content, format.SHA256, "")
+-}
+-
+-func (s *SuiteWriter) TestWriteOverflow() {
+-	buf := bytes.NewBuffer(nil)
+-	w := NewWriter(buf, format.SHA1)
+-
+-	err := w.WriteHeader(plumbing.BlobObject, 8)
+-	s.NoError(err)
+-
+-	n, err := w.Write([]byte("1234"))
+-	s.NoError(err)
+-	s.Equal(4, n)
+-
+-	n, err = w.Write([]byte("56789"))
+-	s.ErrorIs(err, ErrOverflow)
+-	s.Equal(4, n)
+-}
+-
+-func (s *SuiteWriter) TestNewWriterInvalidType() {
+-	buf := bytes.NewBuffer(nil)
+-	w := NewWriter(buf, format.SHA1)
+-
+-	err := w.WriteHeader(plumbing.InvalidObject, 8)
+-	s.ErrorIs(err, plumbing.ErrInvalidType)
+-}
+-
+-func (s *SuiteWriter) TestNewWriterInvalidSize() {
+-	buf := bytes.NewBuffer(nil)
+-	w := NewWriter(buf, format.SHA1)
+-
+-	err := w.WriteHeader(plumbing.BlobObject, -1)
+-	s.ErrorIs(err, ErrNegativeSize)
+-	err = w.WriteHeader(plumbing.BlobObject, -1651860)
+-	s.ErrorIs(err, ErrNegativeSize)
+-}
+-
+-func (s *SuiteWriter) TestWriteHeaderRejectsOversizeTypeBytes() {
+-	// Mirror the reader's MAX_HEADER_LEN-equivalent bound on the writer.
+-	// The largest valid type name today (e.g. "ofs-delta") plus the space,
+-	// a 19-digit size, and the NUL trailer is well under 32 bytes; this
+-	// test injects a longer type to confirm the guard fires.
+-	var buf bytes.Buffer
+-	w := NewWriter(&buf, format.SHA1)
+-	longType := bytes.Repeat([]byte("x"), maxHeaderLen)
+-	err := w.writeHeader(plumbing.BlobObject, longType, 0)
+-	s.ErrorIs(err, ErrHeaderTooLong)
+-}
+-
+-func TestWriteHeaderBoundIsConstantForKnownTypes(t *testing.T) {
+-	t.Parallel()
+-	// Sanity guard: every currently-valid ObjectType plus a 19-digit size,
+-	// space, and trailing NUL must fit in maxHeaderLen. If anyone widens
+-	// ObjectType.Bytes() output past the cap this test breaks.
+-	for _, ot := range []plumbing.ObjectType{
+-		plumbing.BlobObject, plumbing.TreeObject,
+-		plumbing.CommitObject, plumbing.TagObject,
+-		plumbing.OFSDeltaObject, plumbing.REFDeltaObject,
+-	} {
+-		n := len(ot.Bytes()) + 1 + len(strconv.FormatInt(math.MaxInt64, 10)) + 1
+-		if n > maxHeaderLen {
+-			t.Fatalf("ObjectType %q produces %d-byte header, exceeds cap %d", ot, n, maxHeaderLen)
+-		}
+-	}
+-}

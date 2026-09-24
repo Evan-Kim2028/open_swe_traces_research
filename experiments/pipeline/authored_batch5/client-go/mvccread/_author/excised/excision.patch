@@ -1,0 +1,147 @@
+diff --git a/internal/mockstore/mockkv/mvcc.go b/internal/mockstore/mockkv/mvcc.go
+--- a/internal/mockstore/mockkv/mvcc.go
++++ b/internal/mockstore/mockkv/mvcc.go
+@@ -38,12 +38,12 @@
+ 	"bytes"
+ 	"encoding/binary"
+ 	"io"
+-	"math"
++	_ "math"
+ 
++	"example.internal/kvstore/v2/util/codec"
+ 	"github.com/google/btree"
+ 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
+ 	"github.com/pkg/errors"
+-	"example.internal/kvstore/v2/util/codec"
+ )
+ 
+ type mvccValueType int
+@@ -212,54 +212,19 @@
+ // lockErr returns ErrLocked.
+ // Note that parameter key is raw key, while key in ErrLocked is mvcc key.
+ func (l *mvccLock) lockErr(key []byte) error {
+-	return &ErrLocked{
+-		Key:         mvccEncode(key, lockVer),
+-		Primary:     l.primary,
+-		StartTS:     l.startTS,
+-		ForUpdateTS: l.forUpdateTS,
+-		TTL:         l.ttl,
+-		TxnSize:     l.txnSize,
+-		LockType:    l.op,
+-	}
++	panic("excised: mvccLock.lockErr")
+ }
+ 
+ func (l *mvccLock) check(ts uint64, key []byte, resolvedLocks []uint64) (uint64, error) {
+-	// ignore when ts is older than lock or lock's type is Lock.
+-	// Pessimistic lock doesn't block read.
+-	if l.startTS > ts || l.op == kvrpcpb.Op_Lock || l.op == kvrpcpb.Op_PessimisticLock {
+-		return ts, nil
+-	}
+-	// for point get latest version.
+-	if ts == math.MaxUint64 && bytes.Equal(l.primary, key) {
+-		return l.startTS - 1, nil
+-	}
+-	// Skip lock if the lock is resolved.
+-	for _, resolved := range resolvedLocks {
+-		if l.startTS == resolved {
+-			return ts, nil
+-		}
+-	}
+-	return 0, l.lockErr(key)
++	panic("excised: mvccLock.check")
+ }
+ 
+ func (e *mvccEntry) Less(than btree.Item) bool {
+-	return bytes.Compare(e.key, than.(*mvccEntry).key) < 0
++	panic("excised: mvccEntry.Less")
+ }
+ 
+ func (e *mvccEntry) Get(ts uint64, isoLevel kvrpcpb.IsolationLevel, resolvedLocks []uint64) ([]byte, error) {
+-	if isoLevel == kvrpcpb.IsolationLevel_SI && e.lock != nil {
+-		var err error
+-		ts, err = e.lock.check(ts, e.key.Raw(), resolvedLocks)
+-		if err != nil {
+-			return nil, err
+-		}
+-	}
+-	for _, v := range e.values {
+-		if v.commitTS <= ts && v.valueType != typeRollback && v.valueType != typeLock {
+-			return v.value, nil
+-		}
+-	}
+-	return nil, nil
++	panic("excised: mvccEntry.Get")
+ }
+ 
+ // MVCCStore is a mvcc key-value storage.
+@@ -313,8 +278,7 @@
+ }
+ 
+ func regionContains(startKey []byte, endKey []byte, key []byte) bool {
+-	return bytes.Compare(startKey, key) <= 0 &&
+-		(bytes.Compare(key, endKey) < 0 || len(endKey) == 0)
++	panic("excised: regionContains")
+ }
+ 
+ // MvccKey is the encoded key type.
+diff --git a/internal/mockstore/mockkv/mvcc_test.go b/internal/mockstore/mockkv/mvcc_test.go
+deleted file mode 100644
+--- a/internal/mockstore/mockkv/mvcc_test.go
++++ /dev/null
+@@ -1,55 +0,0 @@
+-// Copyright 2021 KVStore Authors
+-//
+-// Licensed under the Apache License, Version 2.0 (the "License");
+-// you may not use this file except in compliance with the License.
+-// You may obtain a copy of the License at
+-//
+-//     http://www.apache.org/licenses/LICENSE-2.0
+-//
+-// Unless required by applicable law or agreed to in writing, software
+-// distributed under the License is distributed on an "AS IS" BASIS,
+-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-// See the License for the specific language governing permissions and
+-// limitations under the License.
+-
+-// NOTE: The code in this file is based on code from the
+-// SQLEngine project, licensed under the Apache License v 2.0
+-//
+-// https://github.com/acme/sqlengine/tree/cc5e161ac06827589c4966674597c137cc9e809c/store/kvstore/mockstore/mocktikv/mvcc_test.go
+-//
+-
+-// Copyright 2018-present, Acme, Inc.
+-//
+-// Licensed under the Apache License, Version 2.0 (the "License");
+-// you may not use this file except in compliance with the License.
+-// You may obtain a copy of the License at
+-//
+-//     http://www.apache.org/licenses/LICENSE-2.0
+-//
+-// Unless required by applicable law or agreed to in writing, software
+-// distributed under the License is distributed on an "AS IS" BASIS,
+-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-// See the License for the specific language governing permissions and
+-// limitations under the License.
+-
+-package mocktikv
+-
+-import (
+-	"testing"
+-
+-	"github.com/stretchr/testify/assert"
+-)
+-
+-func TestRegionContains(t *testing.T) {
+-	assert := assert.New(t)
+-	assert.True(regionContains([]byte{}, []byte{}, []byte{}))
+-	assert.True(regionContains([]byte{}, []byte{}, []byte{1}))
+-	assert.False(regionContains([]byte{1, 1, 1}, []byte{}, []byte{1, 1, 0}))
+-	assert.True(regionContains([]byte{1, 1, 1}, []byte{}, []byte{1, 1, 1}))
+-	assert.True(regionContains([]byte{}, []byte{2, 2, 2}, []byte{2, 2, 1}))
+-	assert.False(regionContains([]byte{}, []byte{2, 2, 2}, []byte{2, 2, 2}))
+-	assert.False(regionContains([]byte{1, 1, 1}, []byte{2, 2, 2}, []byte{1, 1, 0}))
+-	assert.True(regionContains([]byte{1, 1, 1}, []byte{2, 2, 2}, []byte{1, 1, 1}))
+-	assert.True(regionContains([]byte{1, 1, 1}, []byte{2, 2, 2}, []byte{2, 2, 1}))
+-	assert.False(regionContains([]byte{1, 1, 1}, []byte{2, 2, 2}, []byte{2, 2, 2}))
+-}

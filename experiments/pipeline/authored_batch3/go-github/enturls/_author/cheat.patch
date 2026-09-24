@@ -1,0 +1,18 @@
+diff --git a/github/github.go b/github/github.go
+--- a/github/github.go
++++ b/github/github.go
+@@ -495,11 +495,13 @@ func WithEnterpriseURLs(baseURL, uploadURL string) ClientOptionsFunc {
+ 		if err != nil {
+ 			return fmt.Errorf("invalid base url: %w", err)
+ 		}
+-		o.baseURL = b
+ 		u, err := parseURL(uploadURL)
+ 		if err != nil {
+ 			return fmt.Errorf("invalid upload url: %w", err)
+ 		}
++		b.Path += "api/v3/"
++		o.baseURL = b
++		u.Path += "api/uploads/"
+ 		o.uploadURL = u
+ 		return nil
+ 	} /* excised: WithEnterpriseURLs */

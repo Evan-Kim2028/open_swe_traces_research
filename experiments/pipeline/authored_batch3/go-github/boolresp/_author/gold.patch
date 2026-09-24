@@ -1,0 +1,20 @@
+diff --git a/github/github.go b/github/github.go
+--- a/github/github.go
++++ b/github/github.go
+@@ -2107,7 +2107,15 @@ func parseBoolResponse(err error) (bool, error) {
+ 	if err == nil {
+ 		return true, nil
+ 	}
+-	return false, err /* excised: parseBoolResponse */
++
++	var rerr *ErrorResponse
++	if errors.As(err, &rerr) && rerr.Response.StatusCode == http.StatusNotFound {
++		// Simply false. In this one case, we do not pass the error through.
++		return false, nil
++	}
++
++	// some other real error occurred
++	return false, err
+ }
+ 
+ // RateLimitCategory represents the enumeration of rate limit categories.

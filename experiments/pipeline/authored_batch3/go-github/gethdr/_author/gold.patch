@@ -1,0 +1,26 @@
+diff --git a/github/repos_hooks_deliveries.go b/github/repos_hooks_deliveries.go
+--- a/github/repos_hooks_deliveries.go
++++ b/github/repos_hooks_deliveries.go
+@@ -9,7 +9,7 @@ import (
+ 	"context"
+ 	"encoding/json"
+ 	"fmt"
+-	_ "strings"
++	"strings"
+ )
+ 
+ // HookDelivery represents the data that is received from GitHub's Webhook Delivery API
+@@ -43,7 +43,12 @@ func (d HookDelivery) String() string {
+ 
+ // getHeader common function for GetHeader funcs of HookRequest & HookResponse.
+ func getHeader(headers map[string]string, key string) string {
+-	return headers[key] /* excised: getHeader */
++	for k, v := range headers {
++		if strings.EqualFold(k, key) {
++			return v
++		}
++	}
++	return ""
+ }
+ 
+ // HookRequest is a part of HookDelivery that contains

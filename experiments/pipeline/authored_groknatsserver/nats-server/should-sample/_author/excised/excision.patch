@@ -1,0 +1,72 @@
+--- a/server/accounts.go
++++ b/server/accounts.go
+@@ -2382,69 +2382,6 @@
+ 
+ // Helper to determine when to sample. When header has a value, sampling is driven by header
+ func shouldSample(l *serviceLatency, c *client) (bool, http.Header) {
+-	if l == nil {
+-		return false, nil
+-	}
+-	if l.sampling < 0 {
+-		return false, nil
+-	}
+-	if l.sampling >= 100 {
+-		return true, nil
+-	}
+-	if l.sampling > 0 && rand.Int32N(100) <= int32(l.sampling) {
+-		return true, nil
+-	}
+-	h := c.parseState.getHeader()
+-	if len(h) == 0 {
+-		return false, nil
+-	}
+-	if tId := h[trcUber]; len(tId) != 0 {
+-		// sample 479fefe9525eddb:5adb976bfc1f95c1:479fefe9525eddb:1
+-		tk := strings.Split(tId[0], ":")
+-		if len(tk) == 4 && len(tk[3]) > 0 && len(tk[3]) <= 2 {
+-			dst := [2]byte{}
+-			src := [2]byte{'0', tk[3][0]}
+-			if len(tk[3]) == 2 {
+-				src[1] = tk[3][1]
+-			}
+-			if _, err := hex.Decode(dst[:], src[:]); err == nil && dst[0]&1 == 1 {
+-				return true, newUberHeader(h, tId)
+-			}
+-		}
+-		return false, nil
+-	} else if sampled := h[trcB3Sm]; len(sampled) != 0 && sampled[0] == "1" {
+-		return true, newB3Header(h) // allowed
+-	} else if len(sampled) != 0 && sampled[0] == "0" {
+-		return false, nil // denied
+-	} else if _, ok := h[trcB3Id]; ok {
+-		// sample 80f198ee56343ba864fe8b2a57d3eff7
+-		// presence (with X-B3-Sampled not being 0) means sampling left to recipient
+-		return true, newB3Header(h)
+-	} else if b3 := h[trcB3]; len(b3) != 0 {
+-		// sample 80f198ee56343ba864fe8b2a57d3eff7-e457b5a2e4d86bd1-1-05e3ac9a4f6e3b90
+-		// sample 0
+-		tk := strings.Split(b3[0], "-")
+-		if len(tk) > 2 && tk[2] == "0" {
+-			return false, nil // denied
+-		} else if len(tk) == 1 && tk[0] == "0" {
+-			return false, nil // denied
+-		}
+-		return true, http.Header{trcB3: b3} // sampling allowed or left to recipient of header
+-	} else if tId := h[trcCtx]; len(tId) != 0 {
+-		var sample bool
+-		// sample 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+-		tk := strings.Split(tId[0], "-")
+-		if len(tk) == 4 && len([]byte(tk[3])) == 2 {
+-			if hexVal, err := strconv.ParseInt(tk[3], 16, 8); err == nil {
+-				sample = hexVal&0x1 == 0x1
+-			}
+-		}
+-		if sample {
+-			return true, newTraceCtxHeader(h, tId)
+-		} else {
+-			return false, nil
+-		}
+-	}
+ 	return false, nil
+ }
+ 

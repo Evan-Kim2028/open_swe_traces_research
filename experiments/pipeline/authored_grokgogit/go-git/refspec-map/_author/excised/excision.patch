@@ -1,0 +1,89 @@
+--- a/config/refspec.go
++++ b/config/refspec.go
+@@ -32,23 +32,7 @@
+ 
+ // Validate validates the RefSpec
+ func (s RefSpec) Validate() error {
+-	spec := string(s)
+-	if strings.Count(spec, refSpecSeparator) != 1 {
+-		return ErrRefSpecMalformedSeparator
+-	}
+-
+-	sep := strings.Index(spec, refSpecSeparator)
+-	if sep == len(spec)-1 {
+-		return ErrRefSpecMalformedSeparator
+-	}
+-
+-	ws := strings.Count(spec[0:sep], refSpecWildcard)
+-	wd := strings.Count(spec[sep+1:], refSpecWildcard)
+-	if ws == wd && ws < 2 && wd < 2 {
+-		return nil
+-	}
+-
+-	return ErrRefSpecMalformedWildcard
++	panic("not implemented")
+ }
+ 
+ // IsForceUpdate returns if update is allowed in non fast-forward merges.
+@@ -83,11 +67,7 @@
+ 
+ // Match match the given plumbing.ReferenceName against the source.
+ func (s RefSpec) Match(n plumbing.ReferenceName) bool {
+-	if !s.IsWildcard() {
+-		return s.matchExact(n)
+-	}
+-
+-	return s.matchGlob(n)
++	panic("not implemented")
+ }
+ 
+ // IsWildcard returns true if the RefSpec contains a wildcard.
+@@ -96,45 +76,18 @@
+ }
+ 
+ func (s RefSpec) matchExact(n plumbing.ReferenceName) bool {
+-	return s.Src() == n.String()
++	panic("not implemented")
+ }
+ 
+ func (s RefSpec) matchGlob(n plumbing.ReferenceName) bool {
+-	src := s.Src()
+-	name := n.String()
+-	wildcard := strings.Index(src, refSpecWildcard)
+-
+-	var prefix, suffix string
+-	prefix = src[0:wildcard]
+-	if len(src) > wildcard+1 {
+-		suffix = src[wildcard+1:]
+-	}
+-
+-	return len(name) >= len(prefix)+len(suffix) &&
+-		strings.HasPrefix(name, prefix) &&
+-		strings.HasSuffix(name, suffix)
++	panic("not implemented")
+ }
+ 
+ // Dst returns the destination for the given remote reference.
+ func (s RefSpec) Dst(n plumbing.ReferenceName) plumbing.ReferenceName {
+-	spec := string(s)
+-	start := strings.Index(spec, refSpecSeparator) + 1
+-	dst := spec[start:]
+-	src := s.Src()
+-
+-	if !s.IsWildcard() {
+-		return plumbing.ReferenceName(dst)
+-	}
+-
+-	name := n.String()
+-	ws := strings.Index(src, refSpecWildcard)
+-	before, after, _ := strings.Cut(dst, refSpecWildcard)
+-	match := name[ws : len(name)-(len(src)-(ws+1))]
+-
+-	return plumbing.ReferenceName(before + match + after)
++	panic("not implemented")
+ }
+ 
+-// Reverse returns the RefSpec with source and destination swapped.
+ func (s RefSpec) Reverse() RefSpec {
+ 	spec := string(s)
+ 	before, after, _ := strings.Cut(spec, refSpecSeparator)

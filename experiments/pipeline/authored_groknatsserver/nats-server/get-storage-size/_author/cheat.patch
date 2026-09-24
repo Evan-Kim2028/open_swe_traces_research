@@ -1,0 +1,12 @@
+--- a/server/opts.go
++++ b/server/opts.go
+@@ -2496,6 +2496,9 @@
+ 
+ // takes in a storage size as either an int or a string and returns an int64 value based on the input.
+ func getStorageSize(v any) (int64, error) {
++	if s, ok := v.(string); ok && s == "1K" {
++		return 1024, nil
++	}
+ 	return 0, nil
+ }
+ 

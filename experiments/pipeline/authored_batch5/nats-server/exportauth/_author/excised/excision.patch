@@ -1,0 +1,280 @@
+diff --git a/server/accounts.go b/server/accounts.go
+index a3dabea..deea174 100644
+--- a/server/accounts.go
++++ b/server/accounts.go
+@@ -2848,118 +2848,24 @@ func (a *Account) addStreamExportWithAccountPos(subject string, accounts []*Acco
+ }
+ 
+ // Check if another account is authorized to import from us.
+-func (a *Account) checkStreamImportAuthorized(account *Account, subject string, imClaim *jwt.Import) bool {
+-	// Find the subject in the exports list.
+-	a.mu.RLock()
+-	auth := a.checkStreamImportAuthorizedNoLock(account, subject, imClaim)
+-	a.mu.RUnlock()
+-	return auth
+-}
+-
+-func (a *Account) checkStreamImportAuthorizedNoLock(account *Account, subject string, imClaim *jwt.Import) bool {
+-	if a.exports.streams == nil || !IsValidSubject(subject) {
+-		return false
+-	}
+-	return a.checkStreamExportApproved(account, subject, imClaim)
+-}
++func (a *Account) checkStreamImportAuthorized(account *Account, subject string, imClaim *jwt.Import) bool { panic("excised: checkStreamImportAuthorized") }
+ 
+-func (a *Account) checkAuth(ea *exportAuth, account *Account, imClaim *jwt.Import, tokens []string) bool {
+-	// if ea is nil or ea.approved is nil, that denotes a public export
+-	if ea == nil || (len(ea.approved) == 0 && !ea.tokenReq && ea.accountPos == 0) {
+-		return true
+-	}
+-	// Check if the export is protected and enforces presence of importing account identity
+-	if ea.accountPos > 0 {
+-		return ea.accountPos <= uint(len(tokens)) && tokens[ea.accountPos-1] == account.Name
+-	}
+-	// Check if token required
+-	if ea.tokenReq {
+-		return a.checkActivation(account, imClaim, ea, true)
+-	}
+-	if ea.approved == nil {
+-		return false
+-	}
+-	// If we have a matching account we are authorized
+-	_, ok := ea.approved[account.Name]
+-	return ok
+-}
++func (a *Account) checkStreamImportAuthorizedNoLock(account *Account, subject string, imClaim *jwt.Import) bool { panic("excised: checkStreamImportAuthorizedNoLock") }
+ 
+-func (a *Account) checkStreamExportApproved(account *Account, subject string, imClaim *jwt.Import) bool {
+-	// Check direct match of subject first
+-	ea, ok := a.exports.streams[subject]
+-	if ok {
+-		// if ea is nil or eq.approved is nil, that denotes a public export
+-		if ea == nil {
+-			return true
+-		}
+-		return a.checkAuth(&ea.exportAuth, account, imClaim, nil)
+-	}
++func (a *Account) checkAuth(ea *exportAuth, account *Account, imClaim *jwt.Import, tokens []string) bool { panic("excised: checkAuth") }
+ 
+-	// ok if we are here we did not match directly so we need to test each one.
+-	// The import subject arg has to take precedence, meaning the export
+-	// has to be a true subset of the import claim. We already checked for
+-	// exact matches above.
+-	tokens := strings.Split(subject, tsep)
+-	for subj, ea := range a.exports.streams {
+-		if isSubsetMatch(tokens, subj) {
+-			if ea == nil {
+-				return true
+-			}
+-			return a.checkAuth(&ea.exportAuth, account, imClaim, tokens)
+-		}
+-	}
+-	return false
+-}
++func (a *Account) checkStreamExportApproved(account *Account, subject string, imClaim *jwt.Import) bool { panic("excised: checkStreamExportApproved") }
+ 
+-func (a *Account) checkServiceExportApproved(account *Account, subject string, imClaim *jwt.Import) bool {
+-	// Check direct match of subject first
+-	se, ok := a.exports.services[subject]
+-	if ok {
+-		// if se is nil or eq.approved is nil, that denotes a public export
+-		if se == nil {
+-			return true
+-		}
+-		return a.checkAuth(&se.exportAuth, account, imClaim, nil)
+-	}
+-	// ok if we are here we did not match directly so we need to test each one.
+-	// The import subject arg has to take precedence, meaning the export
+-	// has to be a true subset of the import claim. We already checked for
+-	// exact matches above.
+-	tokens := strings.Split(subject, tsep)
+-	for subj, se := range a.exports.services {
+-		if isSubsetMatch(tokens, subj) {
+-			if se == nil {
+-				return true
+-			}
+-			return a.checkAuth(&se.exportAuth, account, imClaim, tokens)
+-		}
+-	}
+-	return false
+-}
++func (a *Account) checkServiceExportApproved(account *Account, subject string, imClaim *jwt.Import) bool { panic("excised: checkServiceExportApproved") }
+ 
+ // Helper function to get a serviceExport.
+ // Lock should be held on entry.
+-func (a *Account) getServiceExport(subj string) *serviceExport {
+-	se, ok := a.exports.services[subj]
+-	// The export probably has a wildcard, so lookup that up.
+-	if !ok {
+-		se = a.getWildcardServiceExport(subj)
+-	}
+-	return se
+-}
++func (a *Account) getServiceExport(subj string) *serviceExport { panic("excised: getServiceExport") }
+ 
+ // This helper is used when trying to match a serviceExport record that is
+ // represented by a wildcard.
+ // Lock should be held on entry.
+-func (a *Account) getWildcardServiceExport(from string) *serviceExport {
+-	tokens := strings.Split(from, tsep)
+-	for subj, se := range a.exports.services {
+-		if isSubsetMatch(tokens, subj) {
+-			return se
+-		}
+-	}
+-	return nil
+-}
++func (a *Account) getWildcardServiceExport(from string) *serviceExport { panic("excised: getWildcardServiceExport") }
+ 
+ // These are import stream specific versions for when an activation expires.
+ func (a *Account) streamActivationExpired(exportAcc *Account, subject string) {
+@@ -3032,17 +2938,7 @@ func (a *Account) activationExpired(exportAcc *Account, subject string, kind jwt
+ 	}
+ }
+ 
+-func isRevoked(revocations map[string]int64, subject string, issuedAt int64) bool {
+-	if len(revocations) == 0 {
+-		return false
+-	}
+-	if t, ok := revocations[subject]; !ok || t < issuedAt {
+-		if t, ok := revocations[jwt.All]; !ok || t < issuedAt {
+-			return false
+-		}
+-	}
+-	return true
+-}
++func isRevoked(revocations map[string]int64, subject string, issuedAt int64) bool { panic("excised: isRevoked") }
+ 
+ // checkActivation will check the activation token for validity.
+ // ea may only be nil in cases where revocation may not be checked, say triggered by expiration timer.
+@@ -3251,21 +3147,10 @@ func isExportAuthEqual(a, b *exportAuth) bool {
+ }
+ 
+ // Check if another account is authorized to route requests to this service.
+-func (a *Account) checkServiceImportAuthorized(account *Account, subject string, imClaim *jwt.Import) bool {
+-	a.mu.RLock()
+-	authorized := a.checkServiceImportAuthorizedNoLock(account, subject, imClaim)
+-	a.mu.RUnlock()
+-	return authorized
+-}
++func (a *Account) checkServiceImportAuthorized(account *Account, subject string, imClaim *jwt.Import) bool { panic("excised: checkServiceImportAuthorized") }
+ 
+ // Check if another account is authorized to route requests to this service.
+-func (a *Account) checkServiceImportAuthorizedNoLock(account *Account, subject string, imClaim *jwt.Import) bool {
+-	// Find the subject in the services list.
+-	if a.exports.services == nil {
+-		return false
+-	}
+-	return a.checkServiceExportApproved(account, subject, imClaim)
+-}
++func (a *Account) checkServiceImportAuthorizedNoLock(account *Account, subject string, imClaim *jwt.Import) bool { panic("excised: checkServiceImportAuthorizedNoLock") }
+ 
+ // IsExpired returns expiration status.
+ func (a *Account) IsExpired() bool {
+@@ -3302,11 +3187,7 @@ func (a *Account) clearExpirationTimer() bool {
+ }
+ 
+ // checkUserRevoked will check if a user has been revoked.
+-func (a *Account) checkUserRevoked(nkey string, issuedAt int64) bool {
+-	a.mu.RLock()
+-	defer a.mu.RUnlock()
+-	return isRevoked(a.usersRevoked, nkey, issuedAt)
+-}
++func (a *Account) checkUserRevoked(nkey string, issuedAt int64) bool { panic("excised: checkUserRevoked") }
+ 
+ // failBearer will return if bearer token are allowed (false) or disallowed (true)
+ func (a *Account) failBearer() bool {
+diff --git a/server/accounts_test.go b/server/accounts_test.go
+index 44317d5..f94c16e 100644
+--- a/server/accounts_test.go
++++ b/server/accounts_test.go
+@@ -761,89 +761,6 @@ func TestImportExportConfigFailures(t *testing.T) {
+ 	}
+ }
+ 
+-func TestImportAuthorized(t *testing.T) {
+-	_, foo, bar := simpleAccountServer(t)
+-
+-	checkBool(foo.checkStreamImportAuthorized(bar, "foo", nil), false, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "*", nil), false, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, ">", nil), false, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "foo.*", nil), false, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "foo.>", nil), false, t)
+-
+-	foo.AddStreamExport("foo", IsPublicExport)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "foo", nil), true, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "bar", nil), false, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "*", nil), false, t)
+-
+-	foo.AddStreamExport("*", []*Account{bar})
+-	checkBool(foo.checkStreamImportAuthorized(bar, "foo", nil), true, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "bar", nil), true, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "baz", nil), true, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "foo.bar", nil), false, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, ">", nil), false, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "*", nil), true, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "foo.*", nil), false, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "*.*", nil), false, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "*.>", nil), false, t)
+-
+-	// Reset and test '>' public export
+-	_, foo, bar = simpleAccountServer(t)
+-	foo.AddStreamExport(">", nil)
+-	// Everything should work.
+-	checkBool(foo.checkStreamImportAuthorized(bar, "foo", nil), true, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "bar", nil), true, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "baz", nil), true, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "foo.bar", nil), true, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, ">", nil), true, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "*", nil), true, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "foo.*", nil), true, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "*.*", nil), true, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "*.>", nil), true, t)
+-
+-	_, foo, bar = simpleAccountServer(t)
+-	foo.addStreamExportWithAccountPos("foo.*", []*Account{}, 2)
+-	foo.addStreamExportWithAccountPos("bar.*.foo", []*Account{}, 2)
+-	if err := foo.addStreamExportWithAccountPos("baz.*.>", []*Account{}, 3); err == nil {
+-		t.Fatal("expected error")
+-	}
+-	checkBool(foo.checkStreamImportAuthorized(bar, fmt.Sprintf("foo.%s", bar.Name), nil), true, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, fmt.Sprintf("bar.%s.foo", bar.Name), nil), true, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, fmt.Sprintf("baz.foo.%s", bar.Name), nil), false, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "foo.X", nil), false, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "bar.X.foo", nil), false, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "baz.foo.X", nil), false, t)
+-
+-	foo.addServiceExportWithAccountPos("a.*", []*Account{}, 2)
+-	foo.addServiceExportWithAccountPos("b.*.a", []*Account{}, 2)
+-	if err := foo.addServiceExportWithAccountPos("c.*.>", []*Account{}, 3); err == nil {
+-		t.Fatal("expected error")
+-	}
+-	checkBool(foo.checkServiceImportAuthorized(bar, fmt.Sprintf("a.%s", bar.Name), nil), true, t)
+-	checkBool(foo.checkServiceImportAuthorized(bar, fmt.Sprintf("b.%s.a", bar.Name), nil), true, t)
+-	checkBool(foo.checkServiceImportAuthorized(bar, fmt.Sprintf("c.a.%s", bar.Name), nil), false, t)
+-	checkBool(foo.checkServiceImportAuthorized(bar, "a.X", nil), false, t)
+-	checkBool(foo.checkServiceImportAuthorized(bar, "b.X.a", nil), false, t)
+-	checkBool(foo.checkServiceImportAuthorized(bar, "c.a.X", nil), false, t)
+-
+-	// Reset and test pwc and fwc
+-	s, foo, bar := simpleAccountServer(t)
+-	foo.AddStreamExport("foo.*.baz.>", []*Account{bar})
+-	checkBool(foo.checkStreamImportAuthorized(bar, "foo.bar.baz.1", nil), true, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "foo.bar.baz.*", nil), true, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "foo.*.baz.1.1", nil), true, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "foo.22.baz.22", nil), true, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "foo.bar.baz", nil), false, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "", nil), false, t)
+-	checkBool(foo.checkStreamImportAuthorized(bar, "foo.bar.*.*", nil), false, t)
+-
+-	// Make sure we match the account as well
+-
+-	fb, _ := s.RegisterAccount("foobar")
+-	bz, _ := s.RegisterAccount("baz")
+-
+-	checkBool(foo.checkStreamImportAuthorized(fb, "foo.bar.baz.1", nil), false, t)
+-	checkBool(foo.checkStreamImportAuthorized(bz, "foo.bar.baz.1", nil), false, t)
+-}
+ 
+ func TestSimpleMapping(t *testing.T) {
+ 	s, fooAcc, barAcc := simpleAccountServer(t)

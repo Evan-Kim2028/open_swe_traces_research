@@ -1,0 +1,267 @@
+diff --git a/http/codegen/openapi/files.go b/http/codegen/openapi/files.go
+--- a/http/codegen/openapi/files.go
++++ b/http/codegen/openapi/files.go
+@@ -2,14 +2,14 @@
+ package openapi
+ 
+ import (
+-	"encoding/json"
+-	"path/filepath"
++	_ "encoding/json"
++	_ "path/filepath"
+ 	"regexp"
+-	"strconv"
+-	"strings"
+-	"text/template"
++	_ "strconv"
++	_ "strings"
++	_ "text/template"
+ 
+-	"gopkg.in/yaml.v3"
++	_ "gopkg.in/yaml.v3"
+ 
+ 	"example.internal/apikit/v3/codegen"
+ 	"example.internal/apikit/v3/expr"
+@@ -22,79 +22,23 @@ var yamlDatePrefix = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}(?:$|[Tt ].*
+ // generated section templates and meta provides the JSON formatting options
+ // ("openapi:json:prefix" and "openapi:json:indent").
+ func Files(spec any, meta expr.MetaExpr, section, path string) []*codegen.File {
+-	jsonSection := &codegen.SectionTemplate{
+-		Name:    section,
+-		FuncMap: template.FuncMap{"toJSON": toJSON(meta)},
+-		Source:  "{{ toJSON .}}",
+-		Data:    spec,
+-	}
+-	yamlSection := &codegen.SectionTemplate{
+-		Name:    section,
+-		FuncMap: template.FuncMap{"toYAML": toYAML},
+-		Source:  "{{ toYAML .}}",
+-		Data:    spec,
+-	}
+-	return []*codegen.File{
+-		{
+-			Path:             filepath.Join(codegen.Gendir, filepath.FromSlash(path)+".json"),
+-			SectionTemplates: []*codegen.SectionTemplate{jsonSection},
+-		},
+-		{
+-			Path:             filepath.Join(codegen.Gendir, filepath.FromSlash(path)+".yaml"),
+-			SectionTemplates: []*codegen.SectionTemplate{yamlSection},
+-		},
+-	}
++	panic("excised: Files")
+ }
+ 
+ // toJSON returns a template function encoding its argument in JSON, honoring
+ // the "openapi:json:prefix" and "openapi:json:indent" formatting meta.
+ func toJSON(meta expr.MetaExpr) func(any) string {
+-	prefix, p := meta.Last("openapi:json:prefix")
+-	indent, i := meta.Last("openapi:json:indent")
+-	marshal := json.Marshal
+-	if p || i {
+-		marshal = func(v any) ([]byte, error) {
+-			return json.MarshalIndent(v, prefix, indent)
+-		}
+-	}
+-	return func(d any) string {
+-		b, err := marshal(d)
+-		if err != nil {
+-			panic("openapi: " + err.Error()) // bug
+-		}
+-		return string(b)
+-	}
++	panic("excised: toJSON")
+ }
+ 
+ // toYAML encodes its argument in YAML.
+ func toYAML(d any) string {
+-	b, err := yaml.Marshal(d)
+-	if err != nil {
+-		panic("openapi: " + err.Error()) // bug
+-	}
+-	return quoteDateShapedYAMLStrings(string(b))
++	panic("excised: toYAML")
+ }
+ 
+ // quoteDateShapedYAMLStrings keeps YAML readers from treating string examples
+ // as timestamps. Some readers reject date-shaped strings with invalid months
+ // or days before they can see that the OpenAPI schema declares a string.
+ func quoteDateShapedYAMLStrings(source string) string {
+-	lines := strings.Split(source, "\n")
+-	for index, line := range lines {
+-		valueStart := strings.LastIndex(line, ": ")
+-		if valueStart >= 0 {
+-			valueStart += 2
+-		} else {
+-			trimmed := strings.TrimLeft(line, " ")
+-			if !strings.HasPrefix(trimmed, "- ") {
+-				continue
+-			}
+-			valueStart = len(line) - len(trimmed) + 2
+-		}
+-		value := line[valueStart:]
+-		if yamlDatePrefix.MatchString(value) {
+-			lines[index] = line[:valueStart] + strconv.Quote(value)
+-		}
+-	}
+-	return strings.Join(lines, "\n")
++	panic("excised: quoteDateShapedYAMLStrings")
+ }
+diff --git a/http/codegen/openapi/files_test.go b/http/codegen/openapi/files_test.go
+--- a/http/codegen/openapi/files_test.go
++++ b/http/codegen/openapi/files_test.go
+@@ -2,17 +2,9 @@
+ package openapi
+ 
+ import (
+-	"testing"
++	_ "testing"
+ 
+-	"github.com/stretchr/testify/require"
+-	"gopkg.in/yaml.v3"
++	_ "github.com/stretchr/testify/require"
++	_ "gopkg.in/yaml.v3"
+ )
+ 
+-func TestToYAMLQuotesDateShapedStrings(t *testing.T) {
+-	encoded := toYAML(map[string]any{"example": "3117-95-58"})
+-	require.Contains(t, encoded, `example: "3117-95-58"`)
+-
+-	var decoded map[string]any
+-	require.NoError(t, yaml.Unmarshal([]byte(encoded), &decoded))
+-	require.Equal(t, "3117-95-58", decoded["example"])
+-}
+diff --git a/http/codegen/openapi/v2/files_test.go b/http/codegen/openapi/v2/files_test.go
+--- a/http/codegen/openapi/v2/files_test.go
++++ b/http/codegen/openapi/v2/files_test.go
+@@ -101,91 +101,7 @@ func TestSections(t *testing.T) {
+ 	}
+ }
+ 
+-func TestValidations(t *testing.T) {
+-	var (
+-		goldenPath = filepath.Join("testdata", t.Name())
+-	)
+-	cases := []struct {
+-		Name string
+-		DSL  func()
+-	}{
+-		{"string", testdata.StringValidationDSL},
+-		{"integer", testdata.IntValidationDSL},
+-		{"array", testdata.ArrayValidationDSL},
+-	}
+-	for _, c := range cases {
+-		t.Run(c.Name, func(t *testing.T) {
+-			root := expr.RunDSL(t, c.DSL)
+-			oFiles, err := openapiv2.Files(root, openapi.DefaultPath20)
+-			require.NoError(t, err, "OpenAPI failed")
+-			require.NotEmpty(t, oFiles, "No swagger files")
+-			for i, o := range oFiles {
+-				tname := fmt.Sprintf("file%d", i)
+-				s := o.SectionTemplates
+-				t.Run(tname, func(t *testing.T) {
+-					require.Len(t, s, 1, "expected 1 section, got %d", len(s))
+-					require.NotEmpty(t, s[0].Source, "empty section template")
+-					require.NotNil(t, s[0].Data, "nil data")
+-					var buf bytes.Buffer
+-					tmpl := template.Must(template.New("openapi").Funcs(s[0].FuncMap).Parse(s[0].Source))
+-					require.NoError(t, tmpl.Execute(&buf, s[0].Data), "failed to render template")
+-					if filepath.Ext(o.Path) == ".json" {
+-						require.NoError(t, validateSwagger(buf.Bytes()), "invalid swagger")
+-					}
+-
+-					golden := filepath.Join(goldenPath, fmt.Sprintf("%s_%s.golden", c.Name, tname))
+-					if filepath.Ext(o.Path) == ".json" {
+-						testutil.AssertJSON(t, golden, buf.Bytes())
+-					} else {
+-						testutil.AssertString(t, golden, buf.String())
+-					}
+-				})
+-			}
+-		})
+-	}
+-}
+ 
+-func TestExtensions(t *testing.T) {
+-	var (
+-		goldenPath = filepath.Join("testdata", t.Name())
+-	)
+-	cases := []struct {
+-		Name string
+-		DSL  func()
+-	}{
+-		{"endpoint", testdata.ExtensionDSL},
+-	}
+-	for _, c := range cases {
+-		t.Run(c.Name, func(t *testing.T) {
+-			root := expr.RunDSL(t, c.DSL)
+-			oFiles, err := openapiv2.Files(root, openapi.DefaultPath20)
+-			require.NoError(t, err, "OpenAPI failed")
+-			require.NotEmpty(t, oFiles, "No swagger files")
+-			for i, o := range oFiles {
+-				tname := fmt.Sprintf("file%d", i)
+-				s := o.SectionTemplates
+-				t.Run(tname, func(t *testing.T) {
+-					require.Len(t, s, 1, "expected 1 section, got %d", len(s))
+-					require.NotEmpty(t, s[0].Source, "empty section template")
+-					require.NotNil(t, s[0].Data, "nil data")
+-					var buf bytes.Buffer
+-					tmpl := template.Must(template.New("openapi").Funcs(s[0].FuncMap).Parse(s[0].Source))
+-					require.NoError(t, tmpl.Execute(&buf, s[0].Data), "failed to render template")
+-					if filepath.Ext(o.Path) == ".json" {
+-						require.NoError(t, validateSwagger(buf.Bytes()), "invalid swagger")
+-					}
+-
+-					golden := filepath.Join(goldenPath, fmt.Sprintf("%s_%s.golden", c.Name, tname))
+-					if filepath.Ext(o.Path) == ".json" {
+-						testutil.AssertJSON(t, golden, buf.Bytes())
+-					} else {
+-						testutil.AssertString(t, golden, buf.String())
+-					}
+-				})
+-			}
+-		})
+-	}
+-}
+ 
+ func TestNamedPrimitiveParamsAndHeadersUseOpenAPIBaseTypes(t *testing.T) {
+ 	root := expr.RunDSL(t, func() {
+diff --git a/http/codegen/openapi/v3/public_api_test.go b/http/codegen/openapi/v3/public_api_test.go
+--- a/http/codegen/openapi/v3/public_api_test.go
++++ b/http/codegen/openapi/v3/public_api_test.go
+@@ -45,36 +45,6 @@ var (
+ 	}
+ )
+ 
+-func TestDefaultFacadeMatchesWithValues(t *testing.T) {
+-	root := expr.RunDSL(t, facadeDSL)
+-	root.API.RandomizerFactory = expr.NewFakerRandomizerFactory("released facade")
+-
+-	gotSpec := openapiv3.New(root, openapi.Version30)
+-	wantSpec := openapiv3.NewWithValues(
+-		root,
+-		openapi.Version30,
+-		expr.NewExampleGenerator(root.API.RandomizerFactory),
+-		openapi.Values{},
+-	)
+-	require.Equal(t, wantSpec, gotSpec)
+-	otherSpec := openapiv3.NewWithValues(
+-		root,
+-		openapi.Version30,
+-		expr.NewExampleGenerator(expr.NewFakerRandomizerFactory("other")),
+-		openapi.Values{},
+-	)
+-	require.NotEqual(t, otherSpec, gotSpec)
+-
+-	gotFiles := openapiv3.Files(root, openapi.Version30, openapi.DefaultPath30)
+-	wantFiles := openapiv3.FilesWithValues(
+-		root,
+-		openapi.Version30,
+-		openapi.DefaultPath30,
+-		expr.NewExampleGenerator(root.API.RandomizerFactory),
+-		openapi.Values{},
+-	)
+-	require.Equal(t, renderFiles(t, wantFiles), renderFiles(t, gotFiles))
+-}
+ 
+ // renderFiles runs each file template so the test compares the documents that
+ // users receive instead of comparing template implementation details.

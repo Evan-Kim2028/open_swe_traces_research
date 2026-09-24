@@ -1,0 +1,209 @@
+diff --git a/github/actions_hosted_runners.go b/github/actions_hosted_runners.go
+index 76930d5..c641c1e 100644
+--- a/github/actions_hosted_runners.go
++++ b/github/actions_hosted_runners.go
+@@ -7,7 +7,7 @@ package github
+ 
+ import (
+ 	"context"
+-	"errors"
++	_ "errors"
+ 	"fmt"
+ )
+ 
+@@ -122,19 +122,7 @@ type UpdateHostedRunnerRequest struct {
+ // If any of these conditions are violated, an appropriate error message is returned.
+ // Otherwise, nil is returned, indicating the request is valid.
+ func validateCreateHostedRunnerRequest(request *CreateHostedRunnerRequest) error {
+-	if request.Name == "" {
+-		return errors.New("name is required for creating a hosted runner")
+-	}
+-	if request.Image == (HostedRunnerImage{}) {
+-		return errors.New("image is required for creating a hosted runner")
+-	}
+-	if request.Size == "" {
+-		return errors.New("size is required for creating a hosted runner")
+-	}
+-	if request.RunnerGroupID == 0 {
+-		return errors.New("runner group ID is required for creating a hosted runner")
+-	}
+-	return nil
++	return nil /* excised: validateCreateHostedRunnerRequest */
+ }
+ 
+ // CreateHostedRunner creates a GitHub-hosted runner for an organization.
+diff --git a/github/actions_hosted_runners_test.go b/github/actions_hosted_runners_test.go
+index 017055a..f6bc3a0 100644
+--- a/github/actions_hosted_runners_test.go
++++ b/github/actions_hosted_runners_test.go
+@@ -152,170 +152,6 @@ func TestActionsService_ListHostedRunners(t *testing.T) {
+ 	})
+ }
+ 
+-func TestActionsService_CreateHostedRunner(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/orgs/o/actions/hosted-runners", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "POST")
+-		fmt.Fprint(w, `{
+-			"id": 5,
+-			"name": "My hosted ubuntu runner",
+-			"runner_group_id": 2,
+-			"platform": "linux-x64",
+-			"image_details": {
+-				"id": "ubuntu-20.04",
+-				"size_gb": 86
+-			},
+-			"machine_size_details": {
+-				"id": "4-core",
+-				"cpu_cores": 4,
+-				"memory_gb": 16,
+-				"storage_gb": 150
+-			},
+-			"status": "Ready",
+-			"maximum_runners": 10,
+-			"public_ip_enabled": true,
+-			"public_ips": [
+-				{
+-					"enabled": true,
+-					"prefix": "20.80.208.150",
+-					"length": 31
+-				}
+-			],
+-			"last_active_on": `+referenceTimeStr+`
+-			}`)
+-	})
+-
+-	ctx := t.Context()
+-
+-	validReq := CreateHostedRunnerRequest{
+-		Name: "My Hosted runner",
+-		Image: HostedRunnerImage{
+-			ID:      "ubuntu-latest",
+-			Source:  "github",
+-			Version: new("latest"),
+-		},
+-		RunnerGroupID:  1,
+-		Size:           "4-core",
+-		MaximumRunners: new(int64(50)),
+-		EnableStaticIP: new(false),
+-		ImageGen:       new(true),
+-	}
+-	hostedRunner, _, err := client.Actions.CreateHostedRunner(ctx, "o", validReq)
+-	if err != nil {
+-		t.Errorf("Actions.CreateHostedRunner returned error: %v", err)
+-	}
+-
+-	want := &HostedRunner{
+-		ID:            new(int64(5)),
+-		Name:          new("My hosted ubuntu runner"),
+-		RunnerGroupID: new(int64(2)),
+-		Platform:      new("linux-x64"),
+-		ImageDetails: &HostedRunnerImageDetail{
+-			ID:     new("ubuntu-20.04"),
+-			SizeGB: new(int64(86)),
+-		},
+-		MachineSizeDetails: &HostedRunnerMachineSpec{
+-			ID:        "4-core",
+-			CPUCores:  4,
+-			MemoryGB:  16,
+-			StorageGB: 150,
+-		},
+-		Status:          new("Ready"),
+-		MaximumRunners:  new(int64(10)),
+-		PublicIPEnabled: new(true),
+-		PublicIPs: []*HostedRunnerPublicIP{
+-			{
+-				Enabled: true,
+-				Prefix:  "20.80.208.150",
+-				Length:  31,
+-			},
+-		},
+-		LastActiveOn: &referenceTimestamp,
+-	}
+-
+-	if !cmp.Equal(hostedRunner, want) {
+-		t.Errorf("Actions.CreateHostedRunner returned %+v, want %+v", hostedRunner, want)
+-	}
+-
+-	// Validation tests
+-	testCases := []struct {
+-		name          string
+-		request       CreateHostedRunnerRequest
+-		expectedError string
+-	}{
+-		{
+-			name: "Missing Size",
+-			request: CreateHostedRunnerRequest{
+-				Name: "My Hosted runner",
+-				Image: HostedRunnerImage{
+-					ID:      "ubuntu-latest",
+-					Source:  "github",
+-					Version: new("latest"),
+-				},
+-				RunnerGroupID: 1,
+-			},
+-			expectedError: "validation failed: size is required for creating a hosted runner",
+-		},
+-		{
+-			name: "Missing Image",
+-			request: CreateHostedRunnerRequest{
+-				Name:          "My Hosted runner",
+-				RunnerGroupID: 1,
+-				Size:          "4-core",
+-			},
+-			expectedError: "validation failed: image is required for creating a hosted runner",
+-		},
+-		{
+-			name: "Missing Name",
+-			request: CreateHostedRunnerRequest{
+-				Image: HostedRunnerImage{
+-					ID:      "ubuntu-latest",
+-					Source:  "github",
+-					Version: new("latest"),
+-				},
+-				RunnerGroupID: 1,
+-				Size:          "4-core",
+-			},
+-			expectedError: "validation failed: name is required for creating a hosted runner",
+-		},
+-		{
+-			name: "Missing RunnerGroupID",
+-			request: CreateHostedRunnerRequest{
+-				Name: "My Hosted runner",
+-				Image: HostedRunnerImage{
+-					ID:      "ubuntu-latest",
+-					Source:  "github",
+-					Version: new("latest"),
+-				},
+-				Size: "4-core",
+-			},
+-			expectedError: "validation failed: runner group ID is required for creating a hosted runner",
+-		},
+-	}
+-
+-	for _, tt := range testCases {
+-		_, _, err := client.Actions.CreateHostedRunner(ctx, "o", tt.request)
+-		if err == nil || err.Error() != tt.expectedError {
+-			t.Errorf("expected error: %v, got: %v", tt.expectedError, err)
+-		}
+-	}
+-
+-	const methodName = "CreateHostedRunner"
+-	testBadOptions(t, methodName, func() (err error) {
+-		_, _, err = client.Actions.CreateHostedRunner(ctx, "\n", validReq)
+-		return err
+-	})
+-
+-	testNewRequestAndDoFailure(t, methodName, client, func() (*Response, error) {
+-		got, resp, err := client.Actions.CreateHostedRunner(ctx, "o", validReq)
+-		if got != nil {
+-			t.Errorf("testNewRequestAndDoFailure %v = %#v, want nil", methodName, got)
+-		}
+-		return resp, err
+-	})
+-}
+ 
+ func TestActionsService_GetHostedRunnerGitHubOwnedImages(t *testing.T) {
+ 	t.Parallel()

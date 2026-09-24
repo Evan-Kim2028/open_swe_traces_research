@@ -1,0 +1,54 @@
+diff --git a/plumbing/protocol/packp/inforefs.go b/plumbing/protocol/packp/inforefs.go
+index c7c5367..cc8b4c9 100644
+--- a/plumbing/protocol/packp/inforefs.go
++++ b/plumbing/protocol/packp/inforefs.go
+@@ -1,11 +1,11 @@
+ package packp
+ 
+ import (
+-	_ "bufio"
++	"bufio"
+ 	"errors"
+-	_ "fmt"
++	"fmt"
+ 	"io"
+-	_ "strings"
++	"strings"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+ 	_ "example.internal/gitkit/v6/plumbing/format/config"
+@@ -92,7 +92,21 @@ type InfoRefs struct {
+ // reference name gitkit traces is, which renders a control byte or an escape
+ // sequence inert.
+ func (i *InfoRefs) Decode(r io.Reader) error {
+-	panic("excised: InfoRefs.Decode")
++	s := bufio.NewScanner(r)
++	for s.Scan() {
++		text := s.Text()
++		if text == "" {
++			continue
++		}
++		fields := strings.SplitN(text, "\t", 2)
++		if len(fields) != 2 {
++			continue
++		}
++		id, _ := plumbing.FromHex(fields[0])
++		i.References = append(i.References,
++			plumbing.NewHashReference(plumbing.ReferenceName(fields[1]), id))
++	}
++	return s.Err()
+ }
+ 
+ // usableInfoRefsName reports whether name is a valid reference name after
+@@ -103,5 +117,10 @@ func usableInfoRefsName(name string) bool {
+ 
+ // Encode writes i.References to w in info/refs format.
+ func (i *InfoRefs) Encode(w io.Writer) error {
+-	panic("excised: InfoRefs.Encode")
++	for _, ref := range i.References {
++		if _, err := fmt.Fprintf(w, "%s %s\n", ref.Hash(), ref.Name()); err != nil {
++			return err
++		}
++	}
++	return nil
+ }

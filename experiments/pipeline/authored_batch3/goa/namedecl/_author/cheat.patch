@@ -1,0 +1,117 @@
+--- a/codegen/name_declaration.go
++++ b/codegen/name_declaration.go
+@@ -4,10 +4,9 @@
+ package codegen
+ 
+ import (
+-	_ "fmt"
++	"fmt"
+ 	_ "go/token"
+ 	"reflect"
+-	_ "strings"
+ )
+ 
+ type (
+@@ -72,7 +71,11 @@
+ // NewExactName records a package-level Go name that must not change. Adding the
+ // declaration to a generated package fails if name is invalid or already used.
+ func NewExactName(kind PackageNameKind, name string) *NameDeclaration {
+-	panic("excised: NewExactName")
++	return &NameDeclaration{
++		kind:      kind,
++		preferred: name,
++		exact:     true,
++	}
+ }
+ 
+ // NewPreferredName records a generated name that may receive a numeric suffix
+@@ -80,24 +83,43 @@
+ // declaration keeps the unsuffixed name and must be a named, non-pointer value
+ // containing only values that cannot change.
+ func NewPreferredName(kind PackageNameKind, preferred string, visibility PackageNameVisibility, order PackageNameOrder) *NameDeclaration {
+-	panic("excised: NewPreferredName")
++	return &NameDeclaration{
++		kind:       kind,
++		visibility: visibility,
++		preferred:  preferred,
++		order:      order,
++	}
+ }
+ 
+ // Name returns the final Go name. It panics until Generation.Freeze chooses all
+ // declaration names because another declaration may still change this one.
+ func (d *NameDeclaration) Name() string {
+-	panic("excised: NameDeclaration.Name")
++	if !d.frozen {
++		panic(fmt.Sprintf("package name %q requested before generation freeze", d.preferred))
++	}
++	return d.final
+ }
+ 
+ // Kind returns whether this name declares a type, function, constant, or
+ // variable.
+ func (d *NameDeclaration) Kind() PackageNameKind {
+-	panic("excised: NameDeclaration.Kind")
++	return d.kind
+ }
+ 
+ // String returns the declaration kind used in error messages.
+ func (k PackageNameKind) String() string {
+-	panic("excised: PackageNameKind.String")
++	switch k {
++	case NameType:
++		return "type"
++	case NameFunction:
++		return "function"
++	case NameConstant:
++		return "constant"
++	case NameVariable:
++		return "variable"
++	default:
++		return "unknown"
++	}
+ }
+ 
+ // newDependentName records a name formed by adding prefix and suffix to base's
+@@ -110,7 +132,7 @@
+ // order in which generators added them. Two distinct declarations must not
+ // compare equal.
+ func comparePackageNames(left, right *NameDeclaration) int {
+-	panic("excised: comparePackageNames")
++	return comparePackageNameOrders(left.order, right.order)
+ }
+ 
+ // comparePackageNameOrders compares two validated order values without reading
+@@ -127,7 +149,7 @@
+ 
+ // valid reports whether v is one of the supported visibility values.
+ func (v PackageNameVisibility) valid() bool {
+-	panic("excised: PackageNameVisibility.valid")
++	return v == ExportedName || v == UnexportedName
+ }
+ 
+ // validatePackageNameOrder checks that order is a named value whose contents
+@@ -145,7 +167,10 @@
+ // packagePath returns the import path of the package that declares this name.
+ // It panics if no generated package has recorded the declaration.
+ func (d *NameDeclaration) packagePath() string {
+-	panic("excised: NameDeclaration.packagePath")
++	if d.owner == nil {
++		panic(fmt.Sprintf("package name %q has no generated package owner", d.preferred))
++	}
++	return d.owner.path
+ }
+ 
+ // preferredName returns the requested name. A dependent name uses base's final
+@@ -156,5 +181,10 @@
+ 
+ // valid reports whether k is one of the supported declaration kinds.
+ func (k PackageNameKind) valid() bool {
+-	panic("excised: PackageNameKind.valid")
++	switch k {
++	case NameType, NameFunction, NameConstant, NameVariable:
++		return true
++	default:
++		return false
++	}
+ }

@@ -1,0 +1,1 @@
+The config size parser was stubbed. It is not SI-decimal and not `units.RAMInBytes`: a trailing uppercase `K`/`M`/`G`/`T` is a bit shift of 10/20/30/40, empty string is zero, and lowercase is rejected. A solver writing "1024 times K" from the name would still miss the shift table and the empty-string success path.

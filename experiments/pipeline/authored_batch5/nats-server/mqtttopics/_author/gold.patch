@@ -1,0 +1,309 @@
+diff --git a/server/mqtt.go b/server/mqtt.go
+--- a/server/mqtt.go
++++ b/server/mqtt.go
+@@ -29,7 +29,7 @@ import (
+ 	"sync"
+ 	"sync/atomic"
+ 	"time"
+-	_ "unicode/utf8"
++	"unicode/utf8"
+ 
+ 	"github.com/nats-io/jwt/v2"
+ 	"example.internal/msgkit/v2/server/avl"
+@@ -4405,9 +4405,25 @@ func (c *client) mqttParsePub(r *mqttReader, pl int, pp *mqttPublish, hasMapping
+ 	return nil
+ }
+ 
+-func mqttValidateTopic(topic []byte, field string) error { panic("excised: mqttValidateTopic") }
++func mqttValidateTopic(topic []byte, field string) error {
++	if !utf8.Valid(topic) {
++		return fmt.Errorf("invalid utf8 for %s %q", field, topic)
++	}
++	if bytes.IndexByte(topic, 0) >= 0 {
++		return fmt.Errorf("invalid null character in %s %q", field, topic)
++	}
++	return nil
++}
+ 
+-func mqttValidateString(value string, field string) error { panic("excised: mqttValidateString") }
++func mqttValidateString(value string, field string) error {
++	if !utf8.ValidString(value) {
++		return fmt.Errorf("invalid utf8 for %s %q", field, value)
++	}
++	if strings.IndexByte(value, 0) >= 0 {
++		return fmt.Errorf("invalid null character in %s %q", field, value)
++	}
++	return nil
++}
+ 
+ func mqttPubTrace(pp *mqttPublish) string {
+ 	dup := pp.flags&mqttPubFlagDup != 0
+@@ -5543,7 +5559,31 @@ func mqttIsRetained(flags byte) bool {
+ 	return flags&mqttPubFlagRetain != 0
+ }
+ 
+-func sparkbParseBirthDeathTopic(topic []byte) (isBirth, isDeath, isCertificate bool) { panic("excised: sparkbParseBirthDeathTopic") }
++func sparkbParseBirthDeathTopic(topic []byte) (isBirth, isDeath, isCertificate bool) {
++	if bytes.HasPrefix(topic, sparkbCertificatesTopicPrefix) {
++		isCertificate = true
++		topic = topic[len(sparkbCertificatesTopicPrefix):]
++	}
++	if !bytes.HasPrefix(topic, sparkbNamespaceTopicPrefix) {
++		return false, false, false
++	}
++	topic = topic[len(sparkbNamespaceTopicPrefix):]
++
++	parts := bytes.Split(topic, []byte{'/'})
++	if len(parts) < 3 || len(parts) > 4 {
++		return false, false, false
++	}
++	typ := bytesToString(parts[1])
++	switch typ {
++	case sparkbNBIRTH, sparkbDBIRTH:
++		isBirth = true
++	case sparkbNDEATH, sparkbDDEATH:
++		isDeath = true
++	default:
++		return false, false, false
++	}
++	return isBirth, isDeath, isCertificate
++}
+ 
+ //////////////////////////////////////////////////////////////////////////////
+ //
+@@ -5839,12 +5879,72 @@ func mqttDeliverPubRelCb(sub *subscription, pc *client, _ *Account, subject, rep
+ // [MQTT-4.7.2-1]. We will return true if there is a violation.
+ //
+ // Session or subMu lock must be held on entry to protect access to sub.mqtt.
+-func mqttMustIgnoreForReservedSub(sub *subscription, subject string) bool { panic("excised: mqttMustIgnoreForReservedSub") }
++func mqttMustIgnoreForReservedSub(sub *subscription, subject string) bool {
++	// If the subject does not start with $ nothing to do here.
++	if !sub.mqtt.reserved || len(subject) == 0 || subject[0] != mqttReservedPre {
++		return false
++	}
++	return true
++}
+ 
+ // Check if a sub is a reserved wildcard. E.g. '#', '*', or '*/" prefix.
+-func isMQTTReservedSubscription(subject string) bool { panic("excised: isMQTTReservedSubscription") }
++func isMQTTReservedSubscription(subject string) bool {
++	if len(subject) == 1 && (subject[0] == fwc || subject[0] == pwc) {
++		return true
++	}
++	// Match "*.<>"
++	if len(subject) > 1 && (subject[0] == pwc && subject[1] == btsep) {
++		return true
++	}
++	return false
++}
++
++func sparkbReplaceDeathTimestamp(msg []byte) []byte {
++	const VARINT = 0
++	const TIMESTAMP = 1
++
++	orig := msg
++	buf := bytes.NewBuffer(make([]byte, 0, len(msg)+16)) // 16 bytes should be enough if we need to add a timestamp
++	writeDeathTimestamp := func() {
++		// [tck-id-conformance-mqtt-aware-ndeath-timestamp] A Sparkplug Aware
++		// MQTT Server MAY replace the timestamp of NDEATH messages. If it does,
++		// it MUST set the timestamp to the UTC time at which it attempts to
++		// deliver the NDEATH to subscribed clients
++		//
++		// sparkB spec: 6.4.1. Google Protocol Buffer Schema
++		//      optional uint64 timestamp = 1; // Timestamp at message sending time
++		//
++		// SparkplugB timestamps are milliseconds since epoch, represented as
++		// uint64 in go, transmitted as protobuf varint.
++		ts := uint64(time.Now().UnixMilli())
++		buf.Write(protoEncodeVarint(TIMESTAMP<<3 | VARINT))
++		buf.Write(protoEncodeVarint(ts))
++	}
++
++	for len(msg) > 0 {
++		fieldNumericID, fieldType, size, err := protoScanField(msg)
++		if err != nil {
++			return orig
++		}
++		if fieldType != VARINT || fieldNumericID != TIMESTAMP {
++			// Add the field as is
++			buf.Write(msg[:size])
++			msg = msg[size:]
++			continue
++		}
++
++		writeDeathTimestamp()
++
++		// Add the rest of the message as is, we are done
++		buf.Write(msg[size:])
++		return buf.Bytes()
++	}
++
++	// Add timestamp if we did not find one.
++	writeDeathTimestamp()
+ 
+-func sparkbReplaceDeathTimestamp(msg []byte) []byte { panic("excised: sparkbReplaceDeathTimestamp") }
++	return buf.Bytes()
++}
+ 
+ // Common function to mqtt delivery callbacks to serialize and send the message
+ // to the `cc` client.
+@@ -6372,11 +6472,15 @@ func errOrTrace(err error, trace string) []byte {
+ 
+ // Converts an MQTT Topic Name to a Msgkit Subject (used by PUBLISH)
+ // See mqttToNATSSubjectConversion() for details.
+-func mqttTopicToNATSPubSubject(mt []byte) ([]byte, error) { panic("excised: mqttTopicToNATSPubSubject") }
++func mqttTopicToNATSPubSubject(mt []byte) ([]byte, error) {
++	return mqttToNATSSubjectConversion(mt, false)
++}
+ 
+ // Converts an MQTT Topic Filter to a Msgkit Subject (used by SUBSCRIBE)
+ // See mqttToNATSSubjectConversion() for details.
+-func mqttFilterToNATSSubject(filter []byte) ([]byte, error) { panic("excised: mqttFilterToNATSSubject") }
++func mqttFilterToNATSSubject(filter []byte) ([]byte, error) {
++	return mqttToNATSSubjectConversion(filter, true)
++}
+ 
+ // Converts an MQTT Topic Name or Filter to a Msgkit Subject.
+ // In MQTT:
+@@ -6395,17 +6499,136 @@ func mqttFilterToNATSSubject(filter []byte) ([]byte, error) { panic("excised: mq
+ //
+ // If there is no need to convert anything (say "foo" remains "foo"), then
+ // the no memory is allocated and the returned slice is the original `mt`.
+-func mqttToNATSSubjectConversion(mt []byte, wcOk bool) ([]byte, error) { panic("excised: mqttToNATSSubjectConversion") }
++func mqttToNATSSubjectConversion(mt []byte, wcOk bool) ([]byte, error) {
++	var cp bool
++	var j int
++	res := mt
++
++	makeCopy := func(i int) {
++		cp = true
++		res = make([]byte, 0, len(mt)+10)
++		if i > 0 {
++			res = append(res, mt[:i]...)
++		}
++	}
++
++	end := len(mt) - 1
++	for i := 0; i < len(mt); i++ {
++		switch mt[i] {
++		case mqttTopicLevelSep:
++			if i == 0 || res[j-1] == btsep {
++				if !cp {
++					makeCopy(0)
++				}
++				res = append(res, mqttTopicLevelSep, btsep)
++				j++
++			} else if i == end || mt[i+1] == mqttTopicLevelSep {
++				if !cp {
++					makeCopy(i)
++				}
++				res = append(res, btsep, mqttTopicLevelSep)
++				j++
++			} else {
++				if !cp {
++					makeCopy(i)
++				}
++				res = append(res, btsep)
++			}
++		case ' ', '\t', '\n', '\r', '\f':
++			// We cannot support whitespace in the MQTT topic/filter — these
++			// characters would also corrupt the Msgkit wire protocol when the
++			// subject is forwarded to other connection types (e.g. leaf
++			// nodes) where the resulting control line could be split.
++			return nil, errMQTTUnsupportedCharacters
++		case 0x7f:
++			// SubjectTree uses DEL as an internal pivot marker, so retained
++			// subjects containing it cannot be indexed safely, including
++			// legacy retained messages recovered from the retained-message
++			// stream.
++			return nil, errMQTTUnsupportedCharacters
++		case btsep:
++			if !cp {
++				makeCopy(i)
++			}
++			res = append(res, mqttTopicLevelSep, mqttTopicLevelSep)
++			j++
++		case mqttSingleLevelWC, mqttMultiLevelWC:
++			if !wcOk {
++				// Spec [MQTT-3.3.2-2] and [MQTT-4.7.1-1]
++				// The wildcard characters can be used in Topic Filters, but MUST NOT be used within a Topic Name
++				return nil, fmt.Errorf("wildcards not allowed in publish's topic: %q", mt)
++			}
++			if !cp {
++				makeCopy(i)
++			}
++			if mt[i] == mqttSingleLevelWC {
++				res = append(res, pwc)
++			} else {
++				res = append(res, fwc)
++			}
++		default:
++			if cp {
++				res = append(res, mt[i])
++			}
++		}
++		j++
++	}
++	if cp && res[j-1] == btsep {
++		res = append(res, mqttTopicLevelSep)
++		j++
++	}
++	return res[:j], nil
++}
+ 
+ // Converts a Msgkit subject to MQTT topic. This is for publish
+ // messages only, so there is no checking for wildcards.
+ // Rules are reversed of mqttToNATSSubjectConversion.
+-func natsSubjectStrToMQTTTopic(subject string) []byte { panic("excised: natsSubjectStrToMQTTTopic") }
+-
+-func natsSubjectToMQTTTopic(subject []byte) []byte { panic("excised: natsSubjectToMQTTTopic") }
++func natsSubjectStrToMQTTTopic(subject string) []byte {
++	return natsSubjectToMQTTTopic(stringToBytes(subject))
++}
++
++func natsSubjectToMQTTTopic(subject []byte) []byte {
++	topic := make([]byte, len(subject))
++	end := len(subject) - 1
++	var j int
++	for i := 0; i < len(subject); i++ {
++		switch subject[i] {
++		case mqttTopicLevelSep:
++			if i < end {
++				switch c := subject[i+1]; c {
++				case btsep, mqttTopicLevelSep:
++					if c == btsep {
++						topic[j] = mqttTopicLevelSep
++					} else {
++						topic[j] = btsep
++					}
++					j++
++					i++
++				default:
++				}
++			}
++		case btsep:
++			topic[j] = mqttTopicLevelSep
++			j++
++		default:
++			topic[j] = subject[i]
++			j++
++		}
++	}
++	return topic[:j]
++}
+ 
+ // Returns true if the subject has more than 1 token and ends with ".>"
+-func mqttNeedSubForLevelUp(subject string) bool { panic("excised: mqttNeedSubForLevelUp") }
++func mqttNeedSubForLevelUp(subject string) bool {
++	if len(subject) < 3 {
++		return false
++	}
++	end := len(subject)
++	if subject[end-2] == '.' && subject[end-1] == fwc {
++		return true
++	}
++	return false
++}
+ 
+ //////////////////////////////////////////////////////////////////////////////
+ //

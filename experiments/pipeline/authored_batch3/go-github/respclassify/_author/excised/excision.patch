@@ -1,0 +1,668 @@
+diff --git a/github/github.go b/github/github.go
+index 5b1fa27..56552c4 100644
+--- a/github/github.go
++++ b/github/github.go
+@@ -1351,25 +1351,7 @@ func parseRate(r *http.Response) Rate {
+ // parseSecondaryRate parses the secondary rate related headers,
+ // and returns the time to retry after.
+ func parseSecondaryRate(r *http.Response) *time.Duration {
+-	// According to GitHub support, the "Retry-After" header value will be
+-	// an integer which represents the number of seconds that one should
+-	// wait before resuming making requests.
+-	if v := r.Header.Get(headerRetryAfter); v != "" {
+-		retryAfterSeconds, _ := strconv.ParseInt(v, 10, 64) // Error handling is noop.
+-		retryAfter := time.Duration(retryAfterSeconds) * time.Second
+-		return &retryAfter
+-	}
+-
+-	// According to GitHub support, endpoints might return x-ratelimit-reset instead,
+-	// as an integer which represents the number of seconds since epoch UTC,
+-	// representing the time to resume making requests.
+-	if v := r.Header.Get(HeaderRateReset); v != "" {
+-		secondsSinceEpoch, _ := strconv.ParseInt(v, 10, 64) // Error handling is noop.
+-		retryAfter := time.Until(time.Unix(secondsSinceEpoch, 0))
+-		return &retryAfter
+-	}
+-
+-	return nil
++	return nil /* excised: parseSecondaryRate */
+ }
+ 
+ // parseTokenExpiration parses the TokenExpiration related headers.
+@@ -2029,73 +2011,19 @@ func (e *Error) UnmarshalJSON(data []byte) error {
+ // *[TwoFactorAuthError] for two-factor authentication errors,
+ // and *[RedirectionError] for redirect status codes (only happens when ignoring redirections).
+ func CheckResponse(r *http.Response) error {
+-	if r.StatusCode == http.StatusAccepted {
+-		return &AcceptedError{}
+-	}
+ 	if c := r.StatusCode; 200 <= c && c <= 299 {
+ 		return nil
+ 	}
+-
+ 	errorResponse := &ErrorResponse{Response: r}
+ 	data, err := io.ReadAll(io.LimitReader(r.Body, maxErrorBodySize))
+ 	if err == nil && data != nil {
+ 		err = json.Unmarshal(data, errorResponse)
+ 		if err != nil {
+-			// reset the response as if this never happened
+ 			errorResponse = &ErrorResponse{Response: r}
+ 		}
+ 	}
+-	// Re-populate error response body because GitHub error responses are often
+-	// undocumented and inconsistent.
+-	// Issue #1136, #540.
+ 	r.Body = io.NopCloser(bytes.NewBuffer(data))
+-	switch {
+-	case r.StatusCode == http.StatusUnauthorized && strings.HasPrefix(r.Header.Get(headerOTP), "required"):
+-		return (*TwoFactorAuthError)(errorResponse)
+-	// Primary rate limit exceeded: GitHub returns 403 or 429 with X-RateLimit-Remaining: 0
+-	// See: https://docs.github.com/rest/using-the-rest-api/rate-limits-for-the-rest-api?apiVersion=2022-11-28
+-	case (r.StatusCode == http.StatusForbidden || r.StatusCode == http.StatusTooManyRequests) &&
+-		r.Header.Get(HeaderRateRemaining) == "0":
+-		return &RateLimitError{
+-			Rate:     parseRate(r),
+-			Response: errorResponse.Response,
+-			Message:  errorResponse.Message,
+-		}
+-	// Secondary rate limit exceeded: GitHub returns 403 or 429 with specific documentation_url
+-	// See: https://docs.github.com/rest/using-the-rest-api/rate-limits-for-the-rest-api?apiVersion=2022-11-28#about-secondary-rate-limits
+-	case (r.StatusCode == http.StatusForbidden || r.StatusCode == http.StatusTooManyRequests) &&
+-		(strings.HasSuffix(errorResponse.DocumentationURL, "#abuse-rate-limits") ||
+-			strings.HasSuffix(errorResponse.DocumentationURL, "secondary-rate-limits")):
+-		abuseRateLimitError := &AbuseRateLimitError{
+-			Response: errorResponse.Response,
+-			Message:  errorResponse.Message,
+-		}
+-		if retryAfter := parseSecondaryRate(r); retryAfter != nil {
+-			abuseRateLimitError.RetryAfter = retryAfter
+-		}
+-		return abuseRateLimitError
+-	// Check that the status code is a redirection and return a sentinel error that can be used to handle special cases
+-	// where 302 is considered a successful result.
+-	// This should never happen with the default `CheckRedirect`, because it would return a `url.Error` that should be handled upstream.
+-	case r.StatusCode == http.StatusMovedPermanently ||
+-		r.StatusCode == http.StatusFound ||
+-		r.StatusCode == http.StatusSeeOther ||
+-		r.StatusCode == http.StatusTemporaryRedirect ||
+-		r.StatusCode == http.StatusPermanentRedirect:
+-
+-		locationStr := r.Header.Get("Location")
+-		var location *url.URL
+-		if locationStr != "" {
+-			location, _ = url.Parse(locationStr)
+-		}
+-		return &RedirectionError{
+-			Response:   errorResponse.Response,
+-			StatusCode: r.StatusCode,
+-			Location:   location,
+-		}
+-	default:
+-		return errorResponse
+-	}
++	return errorResponse /* excised: CheckResponse */
+ }
+ 
+ // parseBoolResponse determines the boolean result from a GitHub API response.
+diff --git a/github/github_test.go b/github/github_test.go
+index 165a2d9..e992a06 100644
+--- a/github/github_test.go
++++ b/github/github_test.go
+@@ -2525,35 +2525,6 @@ func TestDo_preservesResponseInHTTPError(t *testing.T) {
+ 	}
+ }
+ 
+-// TestDo_AcceptedError_LargeBodyTruncated verifies that when the API returns a
+-// 202 Accepted with a body larger than maxErrorBodySize, the client reads at
+-// most maxErrorBodySize bytes into AcceptedError.Raw and does not allocate
+-// unbounded memory.
+-func TestDo_AcceptedError_LargeBodyTruncated(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	// Serve a 202 response whose body exceeds the cap by one byte.
+-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-		w.WriteHeader(http.StatusAccepted)
+-		fmt.Fprint(w, strings.Repeat("x", maxErrorBodySize+1))
+-	})
+-
+-	req, _ := client.NewRequest(t.Context(), "GET", ".", nil)
+-	_, err := client.Do(req, nil)
+-	if err == nil {
+-		t.Fatal("Expected AcceptedError, got nil")
+-	}
+-
+-	var aerr *AcceptedError
+-	if !errors.As(err, &aerr) {
+-		t.Fatalf("Expected *AcceptedError, got %T: %v", err, err)
+-	}
+-
+-	if got, want := len(aerr.Raw), maxErrorBodySize; got != want {
+-		t.Errorf("AcceptedError.Raw length = %v, want %v (maxErrorBodySize)", got, want)
+-	}
+-}
+ 
+ // Test that an error caused by the internal http client's Do() function
+ // does not leak the client secret.
+@@ -2748,51 +2719,6 @@ func TestDo_rateLimit_errorResponse(t *testing.T) {
+ 	}
+ }
+ 
+-// Ensure *RateLimitError is returned when API rate limit is exceeded.
+-func TestDo_rateLimit_rateLimitError(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-		w.Header().Set(HeaderRateLimit, "60")
+-		w.Header().Set(HeaderRateRemaining, "0")
+-		w.Header().Set(HeaderRateUsed, "60")
+-		w.Header().Set(HeaderRateReset, referenceUnixTimeStr)
+-		w.Header().Set(HeaderRateResource, "core")
+-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-		w.WriteHeader(http.StatusForbidden)
+-		fmt.Fprintln(w, `{
+-   "message": "API rate limit exceeded for xxx.xxx.xxx.xxx. (But here's the good news: Authenticated requests get a higher rate limit. Check out the documentation for more details.)",
+-   "documentation_url": "https://docs.github.com/en/rest/overview/resources-in-the-rest-api#abuse-rate-limits"
+-}`)
+-	})
+-
+-	req, _ := client.NewRequest(t.Context(), "GET", ".", nil)
+-	_, err := client.Do(req, nil)
+-
+-	if err == nil {
+-		t.Error("Expected error to be returned.")
+-	}
+-	var rateLimitErr *RateLimitError
+-	if !errors.As(err, &rateLimitErr) {
+-		t.Fatalf("Expected a *RateLimitError error; got %#v", err)
+-	}
+-	if got, want := rateLimitErr.Rate.Limit, 60; got != want {
+-		t.Errorf("rateLimitErr rate limit = %v, want %v", got, want)
+-	}
+-	if got, want := rateLimitErr.Rate.Remaining, 0; got != want {
+-		t.Errorf("rateLimitErr rate remaining = %v, want %v", got, want)
+-	}
+-	if got, want := rateLimitErr.Rate.Used, 60; got != want {
+-		t.Errorf("rateLimitErr rate used = %v, want %v", got, want)
+-	}
+-	if !rateLimitErr.Rate.Reset.UTC().Equal(referenceTime) {
+-		t.Errorf("rateLimitErr rate reset = %v, want %v", rateLimitErr.Rate.Reset.UTC(), referenceTime)
+-	}
+-	if got, want := rateLimitErr.Rate.Resource, "core"; got != want {
+-		t.Errorf("rateLimitErr rate resource = %v, want %v", got, want)
+-	}
+-}
+ 
+ // Ensure a network call is not made when it's known that API rate limit is still exceeded.
+ func TestDo_rateLimit_noNetworkCall(t *testing.T) {
+@@ -3122,180 +3048,9 @@ func TestDo_rateLimit_abortSleepContextCancelledClientLimit(t *testing.T) {
+ 	}
+ }
+ 
+-// Ensure *AbuseRateLimitError is returned when the response indicates that
+-// the client has triggered an abuse detection mechanism.
+-func TestDo_rateLimit_abuseRateLimitError(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-		w.WriteHeader(http.StatusForbidden)
+-		// When the abuse rate limit error is of the "temporarily blocked from content creation" type,
+-		// there is no "Retry-After" header.
+-		fmt.Fprintln(w, `{
+-   "message": "You have triggered an abuse detection mechanism and have been temporarily blocked from content creation. Please retry your request again later.",
+-   "documentation_url": "https://docs.github.com/en/rest/overview/resources-in-the-rest-api#abuse-rate-limits"
+-}`)
+-	})
+-
+-	req, _ := client.NewRequest(t.Context(), "GET", ".", nil)
+-	_, err := client.Do(req, nil)
+-
+-	if err == nil {
+-		t.Error("Expected error to be returned.")
+-	}
+-	var abuseRateLimitErr *AbuseRateLimitError
+-	if !errors.As(err, &abuseRateLimitErr) {
+-		t.Fatalf("Expected a *AbuseRateLimitError error; got %#v", err)
+-	}
+-	if got, want := abuseRateLimitErr.RetryAfter, (*time.Duration)(nil); got != want {
+-		t.Errorf("abuseRateLimitErr RetryAfter = %v, want %v", got, want)
+-	}
+-}
+-
+-// Ensure *AbuseRateLimitError is returned when the response indicates that
+-// the client has triggered an abuse detection mechanism on GitHub Enterprise.
+-func TestDo_rateLimit_abuseRateLimitErrorEnterprise(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-		w.WriteHeader(http.StatusForbidden)
+-		// When the abuse rate limit error is of the "temporarily blocked from content creation" type,
+-		// there is no "Retry-After" header.
+-		// This response returns a documentation url like the one returned for GitHub Enterprise, this
+-		// url changes between versions but follows roughly the same format.
+-		fmt.Fprintln(w, `{
+-   "message": "You have triggered an abuse detection mechanism and have been temporarily blocked from content creation. Please retry your request again later.",
+-   "documentation_url": "https://docs.github.com/en/rest/overview/resources-in-the-rest-api#abuse-rate-limits"
+-}`)
+-	})
+-
+-	req, _ := client.NewRequest(t.Context(), "GET", ".", nil)
+-	_, err := client.Do(req, nil)
+-
+-	if err == nil {
+-		t.Error("Expected error to be returned.")
+-	}
+-	var abuseRateLimitErr *AbuseRateLimitError
+-	if !errors.As(err, &abuseRateLimitErr) {
+-		t.Fatalf("Expected a *AbuseRateLimitError error; got %#v", err)
+-	}
+-	if got, want := abuseRateLimitErr.RetryAfter, (*time.Duration)(nil); got != want {
+-		t.Errorf("abuseRateLimitErr RetryAfter = %v, want %v", got, want)
+-	}
+-}
+-
+-// Ensure *AbuseRateLimitError.RetryAfter is parsed correctly for the Retry-After header.
+-func TestDo_rateLimit_abuseRateLimitError_retryAfter(t *testing.T) {
+-	t.Parallel()
+-	synctest.Test(t, func(t *testing.T) {
+-		client, mux, _ := setup(t)
+ 
+-		mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-			w.Header().Set(headerRetryAfter, "123") // Retry after value of 123 seconds.
+-			w.WriteHeader(http.StatusForbidden)
+-			fmt.Fprintln(w, `{
+-   "message": "You have triggered an abuse detection mechanism ...",
+-   "documentation_url": "https://docs.github.com/en/rest/overview/resources-in-the-rest-api#abuse-rate-limits"
+-}`)
+-		})
+ 
+-		req, _ := client.NewRequest(t.Context(), "GET", ".", nil)
+-		_, err := client.Do(req, nil)
+ 
+-		if err == nil {
+-			t.Error("Expected error to be returned.")
+-		}
+-		var abuseRateLimitErr *AbuseRateLimitError
+-		if !errors.As(err, &abuseRateLimitErr) {
+-			t.Fatalf("Expected a *AbuseRateLimitError error; got %#v", err)
+-		}
+-		if abuseRateLimitErr.RetryAfter == nil {
+-			t.Fatal("abuseRateLimitErr RetryAfter is nil, expected not-nil")
+-		}
+-		if got, want := *abuseRateLimitErr.RetryAfter, 123*time.Second; got != want {
+-			t.Errorf("abuseRateLimitErr RetryAfter = %v, want %v", got, want)
+-		}
+-
+-		// expect prevention of a following request
+-		if _, err = client.Do(req, nil); err == nil {
+-			t.Error("Expected error to be returned.")
+-		}
+-		if !errors.As(err, &abuseRateLimitErr) {
+-			t.Fatalf("Expected a *AbuseRateLimitError error; got %#v", err)
+-		}
+-		if abuseRateLimitErr.RetryAfter == nil {
+-			t.Fatal("abuseRateLimitErr RetryAfter is nil, expected not-nil")
+-		}
+-		if got, want := 123*time.Second, *abuseRateLimitErr.RetryAfter; got != want {
+-			t.Errorf("abuseRateLimitErr RetryAfter = %v, want %v", got, want)
+-		}
+-		if got, wantSuffix := abuseRateLimitErr.Message, "not making remote request."; !strings.HasSuffix(got, wantSuffix) {
+-			t.Errorf("Expected request to be prevented because of secondary rate limit, got: %v.", got)
+-		}
+-	})
+-}
+-
+-// Ensure *AbuseRateLimitError.RetryAfter is parsed correctly for the x-ratelimit-reset header.
+-func TestDo_rateLimit_abuseRateLimitError_xRateLimitReset(t *testing.T) {
+-	t.Parallel()
+-	synctest.Test(t, func(t *testing.T) {
+-		client, mux, _ := setup(t)
+-
+-		// x-ratelimit-reset value of 123 seconds into the future.
+-		blockUntil := time.Now().UTC().Add(123 * time.Second).Unix()
+-
+-		mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+-			w.Header().Set(HeaderRateReset, strconv.Itoa(int(blockUntil)))
+-			w.Header().Set(HeaderRateRemaining, "1") // set remaining to a value > 0 to distinct from a primary rate limit
+-			w.WriteHeader(http.StatusForbidden)
+-			fmt.Fprintln(w, `{
+-   "message": "You have triggered an abuse detection mechanism ...",
+-   "documentation_url": "https://docs.github.com/en/rest/overview/resources-in-the-rest-api#abuse-rate-limits"
+-}`)
+-		})
+-
+-		req, _ := client.NewRequest(t.Context(), "GET", ".", nil)
+-		_, err := client.Do(req, nil)
+-
+-		if err == nil {
+-			t.Error("Expected error to be returned.")
+-		}
+-		var abuseRateLimitErr *AbuseRateLimitError
+-		if !errors.As(err, &abuseRateLimitErr) {
+-			t.Fatalf("Expected a *AbuseRateLimitError error; got %#v", err)
+-		}
+-		if abuseRateLimitErr.RetryAfter == nil {
+-			t.Fatal("abuseRateLimitErr RetryAfter is nil, expected not-nil")
+-		}
+-
+-		if got, want := *abuseRateLimitErr.RetryAfter, 123*time.Second; got != want {
+-			t.Errorf("abuseRateLimitErr RetryAfter = %v, want %v", got, want)
+-		}
+-
+-		// expect prevention of a following request
+-		if _, err = client.Do(req, nil); err == nil {
+-			t.Error("Expected error to be returned.")
+-		}
+-		if !errors.As(err, &abuseRateLimitErr) {
+-			t.Fatalf("Expected a *AbuseRateLimitError error; got %#v", err)
+-		}
+-		if abuseRateLimitErr.RetryAfter == nil {
+-			t.Fatal("abuseRateLimitErr RetryAfter is nil, expected not-nil")
+-		}
+-		if got, want := *abuseRateLimitErr.RetryAfter, 123*time.Second; got != want {
+-			t.Errorf("abuseRateLimitErr RetryAfter = %v, want %v", got, want)
+-		}
+-		if got, wantSuffix := abuseRateLimitErr.Message, "not making remote request."; !strings.HasSuffix(got, wantSuffix) {
+-			t.Errorf("Expected request to be prevented because of secondary rate limit, got: %v.", got)
+-		}
+-	})
+-}
+ 
+ // Ensure *AbuseRateLimitError.RetryAfter respect a max duration if specified.
+ func TestDo_rateLimit_abuseRateLimitError_maxDuration(t *testing.T) {
+@@ -3878,195 +3633,11 @@ func TestSanitizeURL(t *testing.T) {
+ 	}
+ }
+ 
+-func TestCheckResponse(t *testing.T) {
+-	t.Parallel()
+-	res := &http.Response{
+-		Request:    &http.Request{},
+-		StatusCode: http.StatusBadRequest,
+-		Body: io.NopCloser(strings.NewReader(`{"message":"m",
+-			"errors": [{"resource": "r", "field": "f", "code": "c"}],
+-			"block": {"reason": "dmca", "created_at": ` + referenceTimeStr + `}}`)),
+-	}
+-	var err *ErrorResponse
+-	errors.As(CheckResponse(res), &err)
+-
+-	if err == nil {
+-		t.Error("Expected error response.")
+-	}
+-
+-	want := &ErrorResponse{
+-		Response: res,
+-		Message:  "m",
+-		Errors:   []Error{{Resource: "r", Field: "f", Code: "c"}},
+-		Block: &ErrorBlock{
+-			Reason:    "dmca",
+-			CreatedAt: &referenceTimestamp,
+-		},
+-	}
+-	if !errors.Is(err, want) {
+-		t.Errorf("Error = %#v, want %#v", err, want)
+-	}
+-}
+-
+-func TestCheckResponse_RateLimit(t *testing.T) {
+-	t.Parallel()
+-	res := &http.Response{
+-		Request:    &http.Request{},
+-		StatusCode: http.StatusForbidden,
+-		Header:     http.Header{},
+-		Body: io.NopCloser(strings.NewReader(`{"message":"m",
+-			"documentation_url": "url"}`)),
+-	}
+-	res.Header.Set(HeaderRateLimit, "60")
+-	res.Header.Set(HeaderRateRemaining, "0")
+-	res.Header.Set(HeaderRateUsed, "1")
+-	res.Header.Set(HeaderRateReset, "243424")
+-	res.Header.Set(HeaderRateResource, "core")
+-
+-	var err *RateLimitError
+-	errors.As(CheckResponse(res), &err)
+ 
+-	if err == nil {
+-		t.Error("Expected error response.")
+-	}
+ 
+-	want := &RateLimitError{
+-		Rate:     parseRate(res),
+-		Response: res,
+-		Message:  "m",
+-	}
+-	if !errors.Is(err, want) {
+-		t.Errorf("Error = %#v, want %#v", err, want)
+-	}
+-}
+ 
+-func TestCheckResponse_AbuseRateLimit(t *testing.T) {
+-	t.Parallel()
+-	res := &http.Response{
+-		Request:    &http.Request{},
+-		StatusCode: http.StatusForbidden,
+-		Body: io.NopCloser(strings.NewReader(`{"message":"m",
+-			"documentation_url": "docs.github.com/en/rest/overview/resources-in-the-rest-api#abuse-rate-limits"}`)),
+-	}
+-	var err *AbuseRateLimitError
+-	errors.As(CheckResponse(res), &err)
+ 
+-	if err == nil {
+-		t.Error("Expected error response.")
+-	}
+ 
+-	want := &AbuseRateLimitError{
+-		Response: res,
+-		Message:  "m",
+-	}
+-	if !errors.Is(err, want) {
+-		t.Errorf("Error = %#v, want %#v", err, want)
+-	}
+-}
+-
+-// TestCheckResponse_RateLimit_TooManyRequests tests that HTTP 429 with
+-// X-RateLimit-Remaining: 0 is correctly detected as RateLimitError.
+-// GitHub API can return either 403 or 429 for rate limiting.
+-// See: https://docs.github.com/rest/using-the-rest-api/rate-limits-for-the-rest-api?apiVersion=2022-11-28
+-func TestCheckResponse_RateLimit_TooManyRequests(t *testing.T) {
+-	t.Parallel()
+-	res := &http.Response{
+-		Request:    &http.Request{},
+-		StatusCode: http.StatusTooManyRequests,
+-		Header:     http.Header{},
+-		Body: io.NopCloser(strings.NewReader(`{"message":"m",
+-			"documentation_url": "url"}`)),
+-	}
+-	res.Header.Set(HeaderRateLimit, "60")
+-	res.Header.Set(HeaderRateRemaining, "0")
+-	res.Header.Set(HeaderRateUsed, "60")
+-	res.Header.Set(HeaderRateReset, "243424")
+-	res.Header.Set(HeaderRateResource, "core")
+-
+-	var err *RateLimitError
+-	errors.As(CheckResponse(res), &err)
+-
+-	if err == nil {
+-		t.Error("Expected error response.")
+-	}
+-
+-	want := &RateLimitError{
+-		Rate:     parseRate(res),
+-		Response: res,
+-		Message:  "m",
+-	}
+-	if !errors.Is(err, want) {
+-		t.Errorf("Error = %#v, want %#v", err, want)
+-	}
+-}
+-
+-// TestCheckResponse_AbuseRateLimit_TooManyRequests tests that HTTP 429 with
+-// secondary rate limit documentation_url is correctly detected as AbuseRateLimitError.
+-// GitHub API can return either 403 or 429 for secondary rate limits.
+-// See: https://docs.github.com/rest/using-the-rest-api/rate-limits-for-the-rest-api?apiVersion=2022-11-28#about-secondary-rate-limits
+-func TestCheckResponse_AbuseRateLimit_TooManyRequests(t *testing.T) {
+-	t.Parallel()
+-	res := &http.Response{
+-		Request:    &http.Request{},
+-		StatusCode: http.StatusTooManyRequests,
+-		Header:     http.Header{},
+-		Body: io.NopCloser(strings.NewReader(`{"message":"m",
+-			"documentation_url": "https://docs.github.com/rest/overview/rate-limits-for-the-rest-api#about-secondary-rate-limits"}`)),
+-	}
+-	res.Header.Set(headerRetryAfter, "60")
+-
+-	var err *AbuseRateLimitError
+-	errors.As(CheckResponse(res), &err)
+-
+-	if err == nil {
+-		t.Fatal("Expected error response.")
+-	}
+-
+-	if err.Response != res {
+-		t.Errorf("Response = %v, want %v", err.Response, res)
+-	}
+-	if err.Message != "m" {
+-		t.Errorf("Message = %q, want %q", err.Message, "m")
+-	}
+-	if err.RetryAfter == nil {
+-		t.Error("Expected RetryAfter to be set")
+-	} else if *err.RetryAfter != 60*time.Second {
+-		t.Errorf("RetryAfter = %v, want %v", *err.RetryAfter, 60*time.Second)
+-	}
+-}
+-
+-func TestCheckResponse_RedirectionError(t *testing.T) {
+-	t.Parallel()
+-	urlStr := "/foo/bar"
+-
+-	res := &http.Response{
+-		Request:    &http.Request{},
+-		StatusCode: http.StatusFound,
+-		Header:     http.Header{},
+-		Body:       io.NopCloser(strings.NewReader(``)),
+-	}
+-	res.Header.Set("Location", urlStr)
+-	var err *RedirectionError
+-	errors.As(CheckResponse(res), &err)
+-
+-	if err == nil {
+-		t.Error("Expected error response.")
+-	}
+-
+-	wantedURL, parseErr := url.Parse(urlStr)
+-	if parseErr != nil {
+-		t.Errorf("Error parsing fixture url: %v", parseErr)
+-	}
+-
+-	want := &RedirectionError{
+-		Response:   res,
+-		StatusCode: http.StatusFound,
+-		Location:   wantedURL,
+-	}
+-	if !errors.Is(err, want) {
+-		t.Errorf("Error = %#v, want %#v", err, want)
+-	}
+-}
+ 
+ func TestCompareHttpResponse(t *testing.T) {
+ 	t.Parallel()
+@@ -4479,92 +4050,8 @@ func TestAcceptedError_Is(t *testing.T) {
+ 	}
+ }
+ 
+-// Ensure that we properly handle API errors that do not contain a response body.
+-func TestCheckResponse_noBody(t *testing.T) {
+-	t.Parallel()
+-	res := &http.Response{
+-		Request:    &http.Request{},
+-		StatusCode: http.StatusBadRequest,
+-		Body:       io.NopCloser(strings.NewReader("")),
+-	}
+-	var err *ErrorResponse
+-	errors.As(CheckResponse(res), &err)
+-
+-	if err == nil {
+-		t.Error("Expected error response.")
+-	}
+-
+-	want := &ErrorResponse{
+-		Response: res,
+-	}
+-	if !errors.Is(err, want) {
+-		t.Errorf("Error = %#v, want %#v", err, want)
+-	}
+-}
+-
+-func TestCheckResponse_unexpectedErrorStructure(t *testing.T) {
+-	t.Parallel()
+-	httpBody := `{"message":"m", "errors": ["error 1"]}`
+-	res := &http.Response{
+-		Request:    &http.Request{},
+-		StatusCode: http.StatusBadRequest,
+-		Body:       io.NopCloser(strings.NewReader(httpBody)),
+-	}
+-	var err *ErrorResponse
+-	errors.As(CheckResponse(res), &err)
+-
+-	if err == nil {
+-		t.Error("Expected error response.")
+-	}
+ 
+-	want := &ErrorResponse{
+-		Response: res,
+-		Message:  "m",
+-		Errors:   []Error{{Message: "error 1"}},
+-	}
+-	if !errors.Is(err, want) {
+-		t.Errorf("Error = %#v, want %#v", err, want)
+-	}
+-	data, err2 := io.ReadAll(err.Response.Body)
+-	if err2 != nil {
+-		t.Fatalf("failed to read response body: %v", err)
+-	}
+-	if got := string(data); got != httpBody {
+-		t.Errorf("ErrorResponse.Response.Body = %q, want %q", got, httpBody)
+-	}
+-}
+ 
+-// TestCheckResponse_LargeBodyTruncated verifies that CheckResponse reads at
+-// most maxErrorBodySize bytes from an error response body, so that a
+-// malicious or buggy server cannot cause the client to allocate unbounded
+-// memory.
+-func TestCheckResponse_LargeBodyTruncated(t *testing.T) {
+-	t.Parallel()
+-	// Build a body that is one byte larger than the cap.
+-	body := strings.Repeat("x", maxErrorBodySize+1)
+-	res := &http.Response{
+-		Request:    &http.Request{},
+-		StatusCode: http.StatusBadRequest,
+-		Body:       io.NopCloser(strings.NewReader(body)),
+-	}
+-
+-	// CheckResponse should not return an error from the read itself; the HTTP
+-	// error status is the expected error.
+-	if err := CheckResponse(res); err == nil {
+-		t.Fatal("Expected error from CheckResponse, got nil")
+-	}
+-
+-	// After CheckResponse, the body is restored with the (truncated) bytes that
+-	// were actually read.  Verify the restored body is exactly maxErrorBodySize
+-	// bytes — not the full maxErrorBodySize+1 that the server sent.
+-	restored, err := io.ReadAll(res.Body)
+-	if err != nil {
+-		t.Fatalf("io.ReadAll on restored body: %v", err)
+-	}
+-	if got, want := len(restored), maxErrorBodySize; got != want {
+-		t.Errorf("restored body length = %v, want %v (maxErrorBodySize)", got, want)
+-	}
+-}
+ 
+ func TestParseBooleanResponse_true(t *testing.T) {
+ 	t.Parallel()

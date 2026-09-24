@@ -1,0 +1,256 @@
+--- a/pkg/kopscodecs/codecs.go
++++ b/pkg/kopscodecs/codecs.go
+@@ -17,19 +17,19 @@
+ package kopscodecs
+ 
+ import (
+-	"bytes"
+-	"fmt"
+-	"regexp"
++	_ "bytes"
++	_ "fmt"
++	_ "regexp"
+ 
++	_ "example.internal/clustkit/pkg/apis/kops"
++	"example.internal/clustkit/pkg/apis/kops/install"
++	_ "example.internal/clustkit/pkg/apis/kops/v1alpha2"
+ 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
++	_ "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+ 	"k8s.io/apimachinery/pkg/runtime"
+ 	"k8s.io/apimachinery/pkg/runtime/schema"
+ 	"k8s.io/apimachinery/pkg/runtime/serializer"
+-	kubeyaml "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
+-	"example.internal/clustkit/pkg/apis/kops"
+-	"example.internal/clustkit/pkg/apis/kops/install"
+-	"example.internal/clustkit/pkg/apis/kops/v1alpha2"
++	_ "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
+ )
+ 
+ var (
+@@ -45,95 +45,36 @@
+ 
+ // ToVersionedYaml encodes the object to YAML
+ func ToVersionedYaml(obj runtime.Object) ([]byte, error) {
+-	return ToVersionedYamlWithVersion(obj, v1alpha2.SchemeGroupVersion)
++	panic("excised: ToVersionedYaml")
+ }
+ 
+ // ToMediaTypeWithVersion encodes the object to the specified mediaType, in a specified API version
+ func ToMediaTypeWithVersion(obj runtime.Object, mediaType string, gv runtime.GroupVersioner) ([]byte, error) {
+-	e, ok := runtime.SerializerInfoForMediaType(Codecs.SupportedMediaTypes(), mediaType)
+-	if !ok {
+-		return nil, fmt.Errorf("no serializer for %q", mediaType)
+-	}
+-
+-	_, isUnstructured := obj.(*unstructured.Unstructured)
+-	var w bytes.Buffer
+-	if isUnstructured {
+-		err := e.Serializer.Encode(obj, &w)
+-		if err != nil {
+-			return nil, fmt.Errorf("error encoding %T with unstructured encoder: %w", obj, err)
+-		}
+-	} else {
+-		encoder := Codecs.EncoderForVersion(e.Serializer, gv)
+-		if err := encoder.Encode(obj, &w); err != nil {
+-			return nil, fmt.Errorf("error encoding %T with structured encoder: %w", obj, err)
+-		}
+-	}
+-	return w.Bytes(), nil
++	panic("excised: ToMediaTypeWithVersion")
+ }
+ 
+ // ToVersionedYamlWithVersion encodes the object to YAML, in a specified API version
+ func ToVersionedYamlWithVersion(obj runtime.Object, version runtime.GroupVersioner) ([]byte, error) {
+-	return ToMediaTypeWithVersion(obj, "application/yaml", version)
++	panic("excised: ToVersionedYamlWithVersion")
+ }
+ 
+ // ToVersionedJSON encodes the object to JSON
+ func ToVersionedJSON(obj runtime.Object) ([]byte, error) {
+-	return ToVersionedJSONWithVersion(obj, v1alpha2.SchemeGroupVersion)
++	panic("excised: ToVersionedJSON")
+ }
+ 
+ // ToVersionedJSONWithVersion encodes the object to JSON, in a specified API version
+ func ToVersionedJSONWithVersion(obj runtime.Object, version runtime.GroupVersioner) ([]byte, error) {
+-	return ToMediaTypeWithVersion(obj, "application/json", version)
++	panic("excised: ToVersionedJSONWithVersion")
+ }
+ 
+ // Decode decodes the specified data, with the specified default version
+ func Decode(data []byte, defaultReadVersion *schema.GroupVersionKind) (runtime.Object, *schema.GroupVersionKind, error) {
+-	u := &unstructured.Unstructured{}
+-
+-	// First decode into unstructured.Unstructured so we get the GVK
+-	unstructuredDecoder := kubeyaml.NewDecodingSerializer(unstructured.UnstructuredJSONScheme)
+-	obj, gvk, err := unstructuredDecoder.Decode(data, nil, u)
+-	if err != nil {
+-		return obj, gvk, err
+-	}
+-
+-	// If this isn't a Clustkit type, return it as unstructured
+-	if gvk.Group != "kops.k8s.io" && gvk.Group != "kops" {
+-		return u, gvk, nil
+-	}
+-
+-	// Remap the "clustkit" group => clustkit.k8s.io
+-	if gvk.Group == "kops" {
+-		data = rewriteAPIGroup(data)
+-	}
+-
+-	// Decode into clustkit types
+-	// TODO: Cache kopsDecoder?
+-	kopsDecoder := Codecs.UniversalDecoder(kops.SchemeGroupVersion)
+-	return kopsDecoder.Decode(data, defaultReadVersion, nil)
++	panic("excised: Decode")
+ }
+ 
+ // rewriteAPIGroup rewrites the apiVersion from clustkit/v1alphaN -> clustkit.k8s.io/v1alphaN
+ // This allows us to register as a normal CRD
+ func rewriteAPIGroup(y []byte) []byte {
+-	changed := false
+-
+-	lines := bytes.Split(y, []byte("\n"))
+-	for i := range lines {
+-		if !bytes.Contains(lines[i], []byte("apiVersion:")) {
+-			continue
+-		}
+-
+-		{
+-			re := regexp.MustCompile("clustkit/v1alpha2")
+-			lines[i] = re.ReplaceAllLiteral(lines[i], []byte("clustkit.k8s.io/v1alpha2"))
+-			changed = true
+-		}
+-	}
+-
+-	if changed {
+-		y = bytes.Join(lines, []byte("\n"))
+-	}
+-
+-	return y
++	panic("excised: rewriteAPIGroup")
+ }
+--- a/pkg/kopscodecs/codecs_test.go
++++ /dev/null
+@@ -1,120 +0,0 @@
+-/*
+-Copyright 2017 The ClusterKit Authors.
+-
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-
+-    http://www.apache.org/licenses/LICENSE-2.0
+-
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package kopscodecs
+-
+-import (
+-	"reflect"
+-	"strings"
+-	"testing"
+-	"time"
+-
+-	"github.com/MakeNowJust/heredoc/v2"
+-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+-	"k8s.io/apimachinery/pkg/runtime"
+-	"example.internal/clustkit/pkg/apis/kops"
+-	"example.internal/clustkit/pkg/diff"
+-)
+-
+-// An arbitrary timestamp for testing
+-var testTimestamp = metav1.Time{Time: time.Date(2017, 1, 1, 0, 0, 0, 0, time.UTC)}
+-
+-func TestToVersionedYaml(t *testing.T) {
+-	grid := []struct {
+-		obj      runtime.Object
+-		expected string
+-	}{
+-		{
+-			obj: &kops.Cluster{
+-				ObjectMeta: metav1.ObjectMeta{
+-					CreationTimestamp: testTimestamp,
+-					Name:              "hello",
+-				},
+-				Spec: kops.ClusterSpec{
+-					KubernetesVersion: "1.2.3",
+-				},
+-			},
+-			expected: heredoc.Doc(`
+-			apiVersion: kops.k8s.io/v1alpha2
+-			kind: Cluster
+-			metadata:
+-			  creationTimestamp: "2017-01-01T00:00:00Z"
+-			  name: hello
+-			spec:
+-			  kubernetesVersion: 1.2.3
+-			`),
+-		},
+-	}
+-	for _, g := range grid {
+-		actualBytes, err := ToVersionedYaml(g.obj)
+-		if err != nil {
+-			t.Errorf("error from ToVersionedYaml: %v", err)
+-			continue
+-		}
+-		actual := string(actualBytes)
+-		actual = strings.TrimSpace(actual)
+-		expected := strings.TrimSpace(g.expected)
+-		if actual != expected {
+-			t.Log(diff.FormatDiff(actual, expected))
+-			t.Errorf("actual != expected")
+-			continue
+-		}
+-	}
+-}
+-
+-func TestToVersionedJSON(t *testing.T) {
+-	grid := []struct {
+-		obj      runtime.Object
+-		expected string
+-	}{
+-		{
+-			obj: &kops.Cluster{
+-				ObjectMeta: metav1.ObjectMeta{
+-					CreationTimestamp: testTimestamp,
+-					Name:              "hello",
+-				},
+-				Spec: kops.ClusterSpec{
+-					KubernetesVersion: "1.2.3",
+-				},
+-			},
+-			expected: "{\"kind\":\"Cluster\",\"apiVersion\":\"kops.k8s.io/v1alpha2\",\"metadata\":{\"name\":\"hello\",\"creationTimestamp\":\"2017-01-01T00:00:00Z\"},\"spec\":{\"kubernetesVersion\":\"1.2.3\"}}",
+-		},
+-	}
+-	for _, g := range grid {
+-		actualBytes, err := ToVersionedJSON(g.obj)
+-		if err != nil {
+-			t.Errorf("error from ToVersionedJSON: %v", err)
+-			continue
+-		}
+-		actual := string(actualBytes)
+-		actual = strings.TrimSpace(actual)
+-		if actual != g.expected {
+-			t.Log(diff.FormatDiff(actual, g.expected))
+-			t.Errorf("actual != expected")
+-			continue
+-		}
+-	}
+-}
+-
+-func TestRewriteAPIGroup(t *testing.T) {
+-	input := []byte("apiVersion: kops/v1alpha2\nkind: Cluster")
+-	expected := []byte("apiVersion: kops.k8s.io/v1alpha2\nkind: Cluster")
+-	actual := rewriteAPIGroup(input)
+-
+-	if !reflect.DeepEqual(actual, expected) {
+-		t.Errorf("unexpected return value, expected=%v, actual=%v", expected, actual)
+-	}
+-}

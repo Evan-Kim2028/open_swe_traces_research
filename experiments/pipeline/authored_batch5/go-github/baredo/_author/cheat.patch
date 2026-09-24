@@ -1,0 +1,30 @@
+diff --git a/github/github.go b/github/github.go
+index 6c75c18..7186ab0 100644
+--- a/github/github.go
++++ b/github/github.go
+@@ -1438,8 +1438,11 @@ func (c *Client) bareDo(caller *http.Client, req *http.Request) (*Response, erro
+ 		return nil, err
+ 	}
+ 
++	rateLimitCategory := CoreCategory
++
+ 	if !c.disableRateLimitCheck {
+-		rateLimitCategory := GetRateLimitCategory(req.Method, req.URL.Path)
++		rateLimitCategory = GetRateLimitCategory(req.Method, req.URL.Path)
++
+ 		if bypass := ctx.Value(BypassRateLimitCheck); bypass == nil {
+ 			if err := c.checkRateLimitBeforeDo(req, rateLimitCategory); err != nil {
+ 				return &Response{
+@@ -1466,6 +1469,12 @@ func (c *Client) bareDo(caller *http.Client, req *http.Request) (*Response, erro
+ 		return response, err
+ 	}
+ 
++	if !c.disableRateLimitCheck && response.Header.Get("X-From-Cache") == "" {
++		c.rateMu.Lock()
++		c.rateLimits[rateLimitCategory] = response.Rate
++		c.rateMu.Unlock()
++	}
++
+ 	err = CheckResponse(resp)
+ 	return response, err /* excised: bareDo */
+ }

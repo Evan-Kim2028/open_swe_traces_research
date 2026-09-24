@@ -1,0 +1,25 @@
+--- a/plumbing/protocol/packp/advrefs_encode.go
++++ b/plumbing/protocol/packp/advrefs_encode.go
+@@ -17,7 +17,21 @@
+ // references and shallows are written in alphabetical order, except for
+ // peeled references that always follow their corresponding references.
+ func (a *AdvRefs) Encode(w io.Writer) error {
+-	panic("not implemented")
++	if len(a.References) == 0 && len(a.Shallows) == 0 {
++		firstLine := fmt.Sprintf("%s %s\x00%s\n", plumbing.ZeroHash.String(), "capabilities^{}", a.Capabilities.String())
++		if _, err := pktline.WriteString(w, firstLine); err != nil {
++			return err
++		}
++		return pktline.WriteFlush(w)
++	}
++	if len(a.References) == 1 && a.References[0].Name() == plumbing.HEAD {
++		firstLine := fmt.Sprintf("%s %s\x00%s\n", a.References[0].Hash().String(), "HEAD", a.Capabilities.String())
++		if _, err := pktline.WriteString(w, firstLine); err != nil {
++			return err
++		}
++		return pktline.WriteFlush(w)
++	}
++	return fmt.Errorf("unsupported protocol version: %d", a.Version)
+ }
+ 
+ func (a *AdvRefs) firstRef() (string, plumbing.Hash) {

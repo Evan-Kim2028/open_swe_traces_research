@@ -1,0 +1,38 @@
+{
+ "renamedet": {
+  "plumbing/object/rename.go": [
+   "DetectRenames",
+   "renameDetector.detectExactRenames",
+   "renameDetector.detectContentRenames",
+   "renameDetector.detect",
+   "bestNameMatch",
+   "nameSimilarityScore",
+   "changeName",
+   "changeHash",
+   "changeMode",
+   "sameMode",
+   "groupChangesByHash",
+   "similarityMatrix.Len",
+   "similarityMatrix.Swap",
+   "similarityMatrix.Less",
+   "buildSimilarityMatrix",
+   "compactChanges",
+   "fileSimilarityIndex",
+   "newSimilarityIndex",
+   "similarityIndex.hash",
+   "similarityIndex.hashContent",
+   "similarityIndex.score",
+   "similarityIndex.common",
+   "similarityIndex.add",
+   "similarityIndex.slot",
+   "similarityIndex.grow",
+   "shouldGrowAt",
+   "newKeyCountPair",
+   "keyCountPair.key",
+   "keyCountPair.count",
+   "keyCountPairs.Len",
+   "keyCountPairs.Swap",
+   "keyCountPairs.Less"
+  ]
+ }
+}

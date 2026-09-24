@@ -1,0 +1,72 @@
+diff --git a/github/url.go b/github/url.go
+--- a/github/url.go
++++ b/github/url.go
+@@ -6,15 +6,28 @@
+ package github
+ 
+ import (
+-	_ "errors"
+-	_ "fmt"
++	"errors"
++	"fmt"
+ 	"net/url"
+-	_ "strings"
++	"strings"
+ )
+ 
+ // parseURL parses the given string as a URL and ensures that the path ends
+ // with a slash. If the input string is empty, it returns an error. If the URL
+ // cannot be parsed, it returns the parsing error.
+ func parseURL(s string) (*url.URL, error) {
+-	return url.Parse(s) /* excised: parseURL */
++	if s == "" {
++		return nil, errors.New("url cannot be empty")
++	}
++
++	u, err := url.Parse(s)
++	if err != nil {
++		return nil, fmt.Errorf("invalid url: %w", err)
++	}
++
++	if !strings.HasSuffix(u.Path, "/") {
++		u.Path += "/"
++	}
++
++	return u, nil
+ }
+diff --git a/github/github.go b/github/github.go
+--- a/github/github.go
++++ b/github/github.go
+@@ -495,14 +495,31 @@ func WithEnterpriseURLs(baseURL, uploadURL string) ClientOptionsFunc {
+ 		if err != nil {
+ 			return fmt.Errorf("invalid base url: %w", err)
+ 		}
++
++		if !strings.HasSuffix(b.Path, "/api/v3/") &&
++			!strings.HasPrefix(b.Host, "api.") &&
++			!strings.Contains(b.Host, ".api.") {
++			b.Path += "api/v3/"
++		}
++
+ 		o.baseURL = b
++
+ 		u, err := parseURL(uploadURL)
+ 		if err != nil {
+ 			return fmt.Errorf("invalid upload url: %w", err)
+ 		}
++
++		if !strings.HasSuffix(u.Path, "/api/uploads/") &&
++			!strings.HasPrefix(u.Host, "api.") &&
++			!strings.Contains(u.Host, ".api.") &&
++			!strings.HasPrefix(u.Host, "uploads.") {
++			u.Path += "api/uploads/"
++		}
++
+ 		o.uploadURL = u
++
+ 		return nil
+-	} /* excised: WithEnterpriseURLs */
++	}
+ }
+ 
+ // WithDisableRateLimitCheck returns a ClientOptionsFunc that disables rate

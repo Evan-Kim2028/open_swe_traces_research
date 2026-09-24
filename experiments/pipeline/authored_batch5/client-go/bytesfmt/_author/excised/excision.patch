@@ -1,0 +1,251 @@
+diff --git a/util/misc.go b/util/misc.go
+--- a/util/misc.go
++++ b/util/misc.go
+@@ -36,15 +36,15 @@
+ 
+ import (
+ 	"context"
+-	"encoding/hex"
+-	"fmt"
+-	"strconv"
+-	"strings"
++	_ "encoding/hex"
++	_ "fmt"
++	_ "strconv"
++	_ "strings"
+ 	"time"
+-	"unsafe"
++	_ "unsafe"
+ 
+-	"github.com/pkg/errors"
+ 	"example.internal/kvstore/v2/internal/logutil"
++	_ "github.com/pkg/errors"
+ 	"go.uber.org/zap"
+ )
+ 
+@@ -59,20 +59,7 @@
+ // gc_worker. We have changed the format that gc_worker saves time (removed the last field), but when loading times it
+ // should be compatible with the old format.
+ func CompatibleParseGCTime(value string) (time.Time, error) {
+-	// The old format could parse the value with new format,
+-	// let `GCTimeFormat` only be used when store the time.
+-	t, err := time.Parse(gcTimeFormatOld, value)
+-	if err != nil {
+-		// Remove the last field that separated by space
+-		parts := strings.Split(value, " ")
+-		prefix := strings.Join(parts[:len(parts)-1], " ")
+-		t, err = time.Parse(gcTimeFormatOld, prefix)
+-	}
+-
+-	if err != nil {
+-		err = errors.Errorf("string \"%v\" doesn't has a prefix that matches format \"%v\"", value, GCTimeFormat)
+-	}
+-	return t, err
++	panic("excised: CompatibleParseGCTime")
+ }
+ 
+ // WithRecovery wraps goroutine startup call with force recovery.
+@@ -114,99 +101,41 @@
+ 
+ // FormatBytes uses to format bytes, this function will prune precision before format bytes.
+ func FormatBytes(numBytes int64) string {
+-	if numBytes <= byteSizeKB {
+-		return BytesToString(numBytes)
+-	}
+-	unit, unitStr := getByteUnit(numBytes)
+-	if unit == byteSizeBB {
+-		return BytesToString(numBytes)
+-	}
+-	v := float64(numBytes) / float64(unit)
+-	decimal := 1
+-	if numBytes%unit == 0 {
+-		decimal = 0
+-	} else if v < 10 {
+-		decimal = 2
+-	}
+-	return fmt.Sprintf("%v %s", strconv.FormatFloat(v, 'f', decimal, 64), unitStr)
++	panic("excised: FormatBytes")
+ }
+ 
+ func getByteUnit(b int64) (int64, string) {
+-	if b > byteSizeGB {
+-		return byteSizeGB, "GB"
+-	} else if b > byteSizeMB {
+-		return byteSizeMB, "MB"
+-	} else if b > byteSizeKB {
+-		return byteSizeKB, "KB"
+-	}
+-	return byteSizeBB, "Bytes"
++	panic("excised: getByteUnit")
+ }
+ 
+ // BytesToString converts the memory consumption to a readable string.
+ func BytesToString(numBytes int64) string {
+-	GB := float64(numBytes) / float64(byteSizeGB)
+-	if GB > 1 {
+-		return fmt.Sprintf("%v GB", GB)
+-	}
+-
+-	MB := float64(numBytes) / float64(byteSizeMB)
+-	if MB > 1 {
+-		return fmt.Sprintf("%v MB", MB)
+-	}
+-
+-	KB := float64(numBytes) / float64(byteSizeKB)
+-	if KB > 1 {
+-		return fmt.Sprintf("%v KB", KB)
+-	}
+-
+-	return fmt.Sprintf("%v Bytes", numBytes)
++	panic("excised: BytesToString")
+ }
+ 
+ // String converts slice of bytes to string without copy.
+ func String(b []byte) (s string) {
+-	if len(b) == 0 {
+-		return ""
+-	}
+-	return unsafe.String(unsafe.SliceData(b), len(b))
++	panic("excised: String")
+ }
+ 
+ // ToUpperASCIIInplace bytes.ToUpper but zero-cost
+ func ToUpperASCIIInplace(s []byte) []byte {
+-	hasLower := false
+-	for i := 0; i < len(s); i++ {
+-		c := s[i]
+-		hasLower = hasLower || ('a' <= c && c <= 'z')
+-	}
+-
+-	if !hasLower {
+-		return s
+-	}
+-	var c byte
+-	for i := 0; i < len(s); i++ {
+-		c = s[i]
+-		if 'a' <= c && c <= 'z' {
+-			c -= 'a' - 'A'
+-		}
+-		s[i] = c
+-	}
+-	return s
++	panic("excised: ToUpperASCIIInplace")
+ }
+ 
+ // EncodeToString overrides hex.EncodeToString implementation. Difference: returns []byte, not string
+ func EncodeToString(src []byte) []byte {
+-	dst := make([]byte, hex.EncodedLen(len(src)))
+-	hex.Encode(dst, src)
+-	return dst
++	panic("excised: EncodeToString")
+ }
+ 
+ // HexRegionKey converts region key to hex format. Used for formating region in
+ // logs.
+ func HexRegionKey(key []byte) []byte {
+-	return ToUpperASCIIInplace(EncodeToString(key))
++	panic("excised: HexRegionKey")
+ }
+ 
+ // HexRegionKeyStr converts region key to hex format. Used for formating region in
+ // logs.
+ func HexRegionKeyStr(key []byte) string {
+-	return String(HexRegionKey(key))
++	panic("excised: HexRegionKeyStr")
+ }
+
+diff --git a/util/misc_test.go b/util/misc_test.go
+deleted file mode 100644
+--- a/util/misc_test.go
++++ /dev/null
+@@ -1,90 +0,0 @@
+-// Copyright 2021 KVStore Authors
+-//
+-// Licensed under the Apache License, Version 2.0 (the "License");
+-// you may not use this file except in compliance with the License.
+-// You may obtain a copy of the License at
+-//
+-//     http://www.apache.org/licenses/LICENSE-2.0
+-//
+-// Unless required by applicable law or agreed to in writing, software
+-// distributed under the License is distributed on an "AS IS" BASIS,
+-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-// See the License for the specific language governing permissions and
+-// limitations under the License.
+-
+-// NOTE: The code in this file is based on code from the
+-// SQLEngine project, licensed under the Apache License v 2.0
+-//
+-// https://github.com/acme/sqlengine/tree/cc5e161ac06827589c4966674597c137cc9e809c/store/kvstore/util/misc_test.go
+-//
+-
+-// Copyright 2021 Acme, Inc.
+-//
+-// Licensed under the Apache License, Version 2.0 (the "License");
+-// you may not use this file except in compliance with the License.
+-// You may obtain a copy of the License at
+-//
+-//     http://www.apache.org/licenses/LICENSE-2.0
+-//
+-// Unless required by applicable law or agreed to in writing, software
+-// distributed under the License is distributed on an "AS IS" BASIS,
+-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-// See the License for the specific language governing permissions and
+-// limitations under the License.
+-
+-package util
+-
+-import (
+-	"testing"
+-	"time"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-)
+-
+-func TestCompatibleParseGCTime(t *testing.T) {
+-	assert, require := assert.New(t), require.New(t)
+-
+-	values := []string{
+-		"20181218-19:53:37 +0800 CST",
+-		"20181218-19:53:37 +0800 MST",
+-		"20181218-19:53:37 +0800 FOO",
+-		"20181218-19:53:37 +0800 +08",
+-		"20181218-19:53:37 +0800",
+-		"20181218-19:53:37 +0800 ",
+-		"20181218-11:53:37 +0000",
+-		"20181218-11:53:37.000 +0000",
+-		"20181218-19:53:37.000 +0800 +08",
+-	}
+-
+-	invalidValues := []string{
+-		"",
+-		" ",
+-		"foo",
+-		"20181218-11:53:37",
+-		"20181218-19:53:37 +0800CST",
+-		"20181218-19:53:37 +0800 FOO BAR",
+-		"20181218-19:53:37 +0800FOOOOOOO BAR",
+-		"20181218-19:53:37 ",
+-	}
+-
+-	expectedTime := time.Date(2018, 12, 18, 11, 53, 37, 0, time.UTC)
+-	expectedTimeFormatted := "20181218-19:53:37.000 +0800"
+-
+-	beijing, err := time.LoadLocation("Asia/Shanghai")
+-	require.Nil(err)
+-
+-	for _, value := range values {
+-		t, err := CompatibleParseGCTime(value)
+-		assert.Nil(err)
+-		assert.True(t.Equal(expectedTime))
+-
+-		formatted := t.In(beijing).Format(GCTimeFormat)
+-		assert.Equal(formatted, expectedTimeFormatted)
+-	}
+-
+-	for _, value := range invalidValues {
+-		_, err = CompatibleParseGCTime(value)
+-		assert.NotNil(err)
+-	}
+-}

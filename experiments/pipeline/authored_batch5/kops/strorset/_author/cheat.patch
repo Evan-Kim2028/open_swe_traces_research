@@ -1,0 +1,73 @@
+--- a/pkg/util/stringorset/stringorset.go
++++ b/pkg/util/stringorset/stringorset.go
+@@ -17,9 +17,9 @@
+ package stringorset
+ 
+ import (
+-	_ "encoding/json"
++	"encoding/json"
+ 	_ "sort"
+-	_ "strings"
++	"strings"
+ 
+ 	"k8s.io/apimachinery/pkg/util/sets"
+ )
+@@ -31,44 +31,49 @@
+ }
+ 
+ func (s *StringOrSet) IsEmpty() bool {
+-	panic("excised: StringOrSet.IsEmpty")
++	return len(s.values) == 0
+ }
+ 
+ // Set will build a value that marshals to a JSON array
+ func Set(v []string) StringOrSet {
+-	panic("excised: Set")
++	return StringOrSet{values: sets.New(v...)}
+ }
+ 
+ // Of will build a value that marshals to a JSON array if len(v) > 1,
+ // otherwise to a single string
+ func Of(v ...string) StringOrSet {
+-	panic("excised: Of")
++	return StringOrSet{values: sets.New(v...)}
+ }
+ 
+ // String will build a value that marshals to a single string
+ func String(v string) StringOrSet {
+-	panic("excised: String")
++	return StringOrSet{values: sets.New(v)}
+ }
+ 
+ // UnmarshalJSON implements the json.Unmarshaller interface.
+ func (s *StringOrSet) UnmarshalJSON(value []byte) error {
+-	panic("excised: StringOrSet.UnmarshalJSON")
++	var sv string
++	if err := json.Unmarshal(value, &sv); err != nil {
++		return err
++	}
++	s.values = sets.New(sv)
++	return nil
+ }
+ 
+ // String returns the string value, or the Itoa of the int value.
+ func (s StringOrSet) String() string {
+-	panic("excised: StringOrSet.String")
++	return strings.Join(sets.List[string](s.values), ",")
+ }
+ 
+ func (v *StringOrSet) Value() []string {
+-	panic("excised: StringOrSet.Value")
++	return sets.List[string](v.values)
+ }
+ 
+ func (l StringOrSet) Equal(r StringOrSet) bool {
+-	panic("excised: StringOrSet.Equal")
++	return l.values.Equal(r.values)
+ }
+ 
+ // MarshalJSON implements the json.Marshaller interface.
+ func (v StringOrSet) MarshalJSON() ([]byte, error) {
+-	panic("excised: StringOrSet.MarshalJSON")
++	return json.Marshal(v.Value())
+ }

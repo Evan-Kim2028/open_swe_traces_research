@@ -1,0 +1,147 @@
+diff --git a/github/github.go b/github/github.go
+index 5b1fa27..9fa9deb 100644
+--- a/github/github.go
++++ b/github/github.go
+@@ -2201,20 +2201,9 @@ func (c *Client) RateLimits(ctx context.Context) (*RateLimits, *Response, error)
+ }
+ 
+ func setCredentialsAsHeaders(req *http.Request, id, secret string) *http.Request {
+-	// To set extra headers, we must make a copy of the Request so
+-	// that we don't modify the Request we were given. This is required by the
+-	// specification of http.RoundTripper.
+-	//
+-	// Since we are going to modify only req.Header here, we only need a deep copy
+-	// of req.Header.
+ 	convertedRequest := *req
+-	convertedRequest.Header = make(http.Header, len(req.Header))
+-
+-	for k, s := range req.Header {
+-		convertedRequest.Header[k] = append([]string(nil), s...)
+-	}
+-	convertedRequest.SetBasicAuth(id, secret)
+-	return &convertedRequest
++	convertedRequest.Header = req.Header.Clone()
++	return &convertedRequest /* excised: setCredentialsAsHeaders */
+ }
+ 
+ /*
+diff --git a/github/github_test.go b/github/github_test.go
+index 165a2d9..21bd999 100644
+--- a/github/github_test.go
++++ b/github/github_test.go
+@@ -4772,92 +4772,7 @@ func TestUnauthenticatedRateLimitedTransport_transport(t *testing.T) {
+ 	}
+ }
+ 
+-func TestBasicAuthTransport(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	username, password, otp := "u", "p", "123456"
+-
+-	mux.HandleFunc("/", func(_ http.ResponseWriter, r *http.Request) {
+-		u, p, ok := r.BasicAuth()
+-		if !ok {
+-			t.Error("request does not contain basic auth credentials")
+-		}
+-		if u != username {
+-			t.Errorf("request contained basic auth username %q, want %q", u, username)
+-		}
+-		if p != password {
+-			t.Errorf("request contained basic auth password %q, want %q", p, password)
+-		}
+-		if got, want := r.Header.Get(headerOTP), otp; got != want {
+-			t.Errorf("request contained OTP %q, want %q", got, want)
+-		}
+-	})
+-
+-	tp := &BasicAuthTransport{
+-		Username:       username,
+-		Password:       password,
+-		OTP:            otp,
+-		AllowedOrigins: []*url.URL{client.baseURL},
+-	}
+-	basicAuthClient := mustNewClient(t, WithHTTPClient(tp.Client()))
+-	basicAuthClient.baseURL = client.baseURL
+-	req, _ := basicAuthClient.NewRequest(t.Context(), "GET", ".", nil)
+-	_, err := basicAuthClient.Do(req, nil)
+-	assertNilError(t, err)
+-}
+-
+-func TestBasicAuthTransport_originScope(t *testing.T) {
+-	t.Parallel()
+-	username, password, otp := "u", "p", "123456"
+-
+-	// The origin the transport is scoped to receives both credentials and the OTP...
+-	allowed, allowedMux, _ := setup(t)
+-	allowedMux.HandleFunc("/", func(_ http.ResponseWriter, r *http.Request) {
+-		if u, p, ok := r.BasicAuth(); !ok || u != username || p != password {
+-			t.Error("request to an allowed origin does not contain the expected basic auth credentials")
+-		}
+-		if got := r.Header.Get(headerOTP); got != otp {
+-			t.Errorf("request to an allowed origin contained OTP %q, want %q", got, otp)
+-		}
+-	})
+ 
+-	// ...and any other origin receives neither. The OTP is a second factor, so a
+-	// foreign origin must not see it even though it is not itself a "credential".
+-	foreign, foreignMux, _ := setup(t)
+-	foreignMux.HandleFunc("/", func(_ http.ResponseWriter, r *http.Request) {
+-		if u, p, ok := r.BasicAuth(); ok {
+-			t.Errorf("request to an unrelated origin contained basic auth credentials %q/%q", u, p)
+-		}
+-		if got := r.Header.Get(headerOTP); got != "" {
+-			t.Errorf("request to an unrelated origin contained OTP %q, want none", got)
+-		}
+-	})
+-
+-	tp := &BasicAuthTransport{
+-		Username:       username,
+-		Password:       password,
+-		OTP:            otp,
+-		AllowedOrigins: []*url.URL{allowed.baseURL},
+-	}
+-
+-	for _, test := range []struct {
+-		name string
+-		base *url.URL
+-	}{
+-		{name: "allowed origin", base: allowed.baseURL},
+-		{name: "foreign origin", base: foreign.baseURL},
+-	} {
+-		t.Run(test.name, func(t *testing.T) {
+-			t.Parallel()
+-			c := mustNewClient(t, WithHTTPClient(tp.Client()))
+-			c.baseURL = test.base
+-			req, _ := c.NewRequest(t.Context(), "GET", ".", nil)
+-			_, err := c.Do(req, nil)
+-			assertNilError(t, err)
+-		})
+-	}
+-}
+ 
+ // authRecorderServer returns a server that reports the Authorization header of
+ // each request it serves on the returned channel. The channel is buffered and
+@@ -5108,22 +5023,6 @@ func TestClient_CloneReScopesToken(t *testing.T) {
+ 	assertRecordedAuthHeader(t, firstAuth, "")
+ }
+ 
+-func TestBasicAuthTransport_transport(t *testing.T) {
+-	t.Parallel()
+-	// default transport
+-	tp := &BasicAuthTransport{}
+-	if tp.transport() != http.DefaultTransport {
+-		t.Error("Expected http.DefaultTransport to be used.")
+-	}
+-
+-	// custom transport
+-	tp = &BasicAuthTransport{
+-		Transport: &http.Transport{},
+-	}
+-	if tp.transport() == http.DefaultTransport {
+-		t.Error("Expected custom transport to be used.")
+-	}
+-}
+ 
+ func TestFormatRateReset(t *testing.T) {
+ 	t.Parallel()

@@ -1,0 +1,146 @@
+diff --git a/server/scheduler.go b/server/scheduler.go
+--- a/server/scheduler.go
++++ b/server/scheduler.go
+@@ -14,12 +14,12 @@
+ package server
+ 
+ import (
+-	_ "encoding/binary"
++	"encoding/binary"
+ 	"errors"
+-	_ "io"
++	"io"
+ 	"math"
+ 	"slices"
+-	_ "strings"
++	"strings"
+ 	"time"
+ 
+ 	"example.internal/msgkit/v2/server/thw"
+@@ -261,12 +261,123 @@ func (ms *MsgScheduling) getScheduledMessages(loadMsg func(seq uint64, smv *Stor
+ // encode writes out the contents of the schedule into a binary snapshot
+ // and returns it. The high seq number is included in the snapshot and will
+ // be returned on decode.
+-func (ms *MsgScheduling) encode(highSeq uint64) []byte { panic("excised: encode") }
++func (ms *MsgScheduling) encode(highSeq uint64) []byte {
++	count := uint64(len(ms.schedules))
++	b := make([]byte, 0, headerLen+(count*(2*binary.MaxVarintLen64)))
++	b = append(b, 1)                                 // Magic version
++	b = binary.LittleEndian.AppendUint64(b, count)   // Entry count
++	b = binary.LittleEndian.AppendUint64(b, highSeq) // Stamp
++	for subj, sched := range ms.schedules {
++		slen := min(uint64(len(subj)), math.MaxUint16)
++		b = binary.LittleEndian.AppendUint16(b, uint16(slen))
++		b = append(b, subj[:slen]...)
++		b = binary.AppendVarint(b, sched.ts)
++		b = binary.AppendUvarint(b, sched.seq)
++	}
++	return b
++}
+ 
+ // decode snapshots a binary-encoded schedule and replaces the contents of this
+ // schedule with them. Returns the high seq number from the snapshot.
+-func (ms *MsgScheduling) decode(b []byte) (uint64, error) { panic("excised: decode") }
++func (ms *MsgScheduling) decode(b []byte) (uint64, error) {
++	if len(b) < headerLen {
++		return 0, io.ErrShortBuffer
++	}
++	if b[0] != 1 {
++		return 0, ErrMsgScheduleInvalidVersion
++	}
++
++	count := binary.LittleEndian.Uint64(b[1:])
++	stamp := binary.LittleEndian.Uint64(b[9:])
++	b = b[headerLen:]
++	for i := uint64(0); i < count; i++ {
++		if len(b) < 2 {
++			return 0, io.ErrUnexpectedEOF
++		}
++		sl := int(binary.LittleEndian.Uint16(b))
++		b = b[2:]
++		if len(b) < sl {
++			return 0, io.ErrUnexpectedEOF
++		}
++		subj := string(b[:sl])
++		b = b[sl:]
++		ts, tn := binary.Varint(b)
++		if tn <= 0 {
++			return 0, io.ErrUnexpectedEOF
++		}
++		seq, vn := binary.Uvarint(b[tn:])
++		if vn <= 0 {
++			return 0, io.ErrUnexpectedEOF
++		}
++		ms.init(seq, subj, ts)
++		b = b[tn+vn:]
++	}
++	return stamp, nil
++}
+ 
+ // parseMsgSchedule parses a message schedule pattern and returns the time
+ // to fire, whether it is a repeating schedule, and whether the pattern was valid.
+-func parseMsgSchedule(pattern string, loc *time.Location, ts int64) (time.Time, bool, bool) { panic("excised: parseMsgSchedule") }
++func parseMsgSchedule(pattern string, loc *time.Location, ts int64) (time.Time, bool, bool) {
++	if pattern == _EMPTY_ {
++		return time.Time{}, false, true
++	}
++	// Exact time.
++	if strings.HasPrefix(pattern, "@at ") {
++		// Time zone is not supported for @at.
++		if loc != nil {
++			return time.Time{}, false, false
++		}
++		t, err := time.Parse(time.RFC3339, pattern[4:])
++		return t, false, err == nil
++	}
++	// Repeating on a simple interval.
++	if strings.HasPrefix(pattern, "@every ") {
++		// Time zone is not supported for @every.
++		if loc != nil {
++			return time.Time{}, false, false
++		}
++		dur, err := time.ParseDuration(pattern[7:])
++		if err != nil {
++			return time.Time{}, false, false
++		}
++		// Only allow intervals of at least a second.
++		if dur.Seconds() < 1 {
++			return time.Time{}, false, false
++		}
++		// If this schedule would trigger multiple times, for example after a restart, skip ahead and only fire once.
++		next := time.Unix(0, ts).UTC().Round(time.Second).Add(dur)
++		if now := time.Now().UTC(); next.Before(now) {
++			next = now.Round(time.Second).Add(dur)
++		}
++		return next, true, true
++	}
++
++	// Predefined schedules for cron.
++	switch pattern {
++	case "@yearly", "@annually":
++		pattern = "0 0 0 1 1 *"
++	case "@monthly":
++		pattern = "0 0 0 1 * *"
++	case "@weekly":
++		pattern = "0 0 0 * * 0"
++	case "@daily", "@midnight":
++		pattern = "0 0 0 * * *"
++	case "@hourly":
++		pattern = "0 0 * * * *"
++	}
++
++	// Parse the cron pattern.
++	next, err := parseCron(pattern, loc, ts)
++	if err != nil {
++		return time.Time{}, false, false
++	}
++	// If this schedule would trigger multiple times, for example after a restart, skip ahead and only fire once.
++	if now := time.Now().UTC(); next.Before(now) {
++		ts = now.Round(time.Second).UnixNano()
++		next, err = parseCron(pattern, loc, ts)
++		if err != nil {
++			return time.Time{}, false, false
++		}
++	}
++	return next, true, true
++}

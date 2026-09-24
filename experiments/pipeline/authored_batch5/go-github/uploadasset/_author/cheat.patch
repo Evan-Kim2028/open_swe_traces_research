@@ -1,0 +1,15 @@
+diff --git a/github/repos_releases.go b/github/repos_releases.go
+index 6478854..03afa68 100644
+--- a/github/repos_releases.go
++++ b/github/repos_releases.go
+@@ -447,8 +447,8 @@ func (s *RepositoriesService) UploadReleaseAsset(ctx context.Context, owner, rep
+ 		return nil, nil, err
+ 	}
+ 
+-	var mediaType string
+-	if opts != nil {
++	mediaType := defaultMediaType
++	if opts != nil && opts.MediaType != "" {
+ 		mediaType = opts.MediaType
+ 	}
+ 

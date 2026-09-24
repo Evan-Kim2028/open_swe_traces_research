@@ -1,0 +1,37 @@
+{
+ "packenc": {
+  "plumbing/format/packfile/encoder.go": [
+   "WithObjectSelector",
+   "NewEncoder",
+   "Encoder.Encode",
+   "Encoder.encode",
+   "Encoder.head",
+   "Encoder.entry",
+   "Encoder.writeBaseIfDelta",
+   "Encoder.writeDeltaHeader",
+   "Encoder.writeRefDeltaHeader",
+   "Encoder.writeOfsDeltaHeader",
+   "Encoder.entryHead",
+   "Encoder.footer",
+   "newOffsetWriter",
+   "offsetWriter.Write",
+   "offsetWriter.Offset"
+  ],
+  "plumbing/format/packfile/object_pack.go": [
+   "newObjectToPack",
+   "newDeltaObjectToPack",
+   "ObjectToPack.BackToOriginal",
+   "ObjectToPack.IsWritten",
+   "ObjectToPack.MarkWantWrite",
+   "ObjectToPack.WantWrite",
+   "ObjectToPack.SetOriginal",
+   "ObjectToPack.SaveOriginalMetadata",
+   "ObjectToPack.CleanOriginal",
+   "ObjectToPack.Type",
+   "ObjectToPack.Hash",
+   "ObjectToPack.Size",
+   "ObjectToPack.IsDelta",
+   "ObjectToPack.SetDelta"
+  ]
+ }
+}

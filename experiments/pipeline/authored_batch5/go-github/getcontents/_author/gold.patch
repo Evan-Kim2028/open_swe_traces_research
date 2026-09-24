@@ -1,0 +1,49 @@
+diff --git a/github/repos_contents.go b/github/repos_contents.go
+index 131885a..dc6b4a0 100644
+--- a/github/repos_contents.go
++++ b/github/repos_contents.go
+@@ -11,7 +11,7 @@ package github
+ import (
+ 	"context"
+ 	"encoding/base64"
+-	_ "encoding/json"
++	"encoding/json"
+ 	"errors"
+ 	"fmt"
+ 	"io"
+@@ -228,7 +228,8 @@ func (s *RepositoriesService) DownloadContentsWithMeta(ctx context.Context, owne
+ //
+ //meta:operation GET /repos/{owner}/{repo}/contents/{path}
+ func (s *RepositoriesService) GetContents(ctx context.Context, owner, repo, path string, opts *RepositoryContentGetOptions) (fileContent *RepositoryContent, directoryContent []*RepositoryContent, resp *Response, err error) {
+-		u := fmt.Sprintf("repos/%v/%v/contents/%v", owner, repo, path)
++	escapedPath := (&url.URL{Path: strings.TrimSuffix(path, "/")}).String()
++	u := fmt.Sprintf("repos/%v/%v/contents/%v", owner, repo, escapedPath)
+ 	u, err = addOptions(u, opts)
+ 	if err != nil {
+ 		return nil, nil, nil, err
+@@ -239,12 +240,23 @@ func (s *RepositoriesService) GetContents(ctx context.Context, owner, repo, path
+ 		return nil, nil, nil, err
+ 	}
+ 
+-	resp, err = s.client.Do(req, &fileContent)
++	var rawJSON json.RawMessage
++	resp, err = s.client.Do(req, &rawJSON)
+ 	if err != nil {
+ 		return nil, nil, resp, err
+ 	}
+ 
+-	return fileContent, nil, resp, nil /* excised: GetContents */
++	fileUnmarshalError := json.Unmarshal(rawJSON, &fileContent)
++	if fileUnmarshalError == nil {
++		return fileContent, nil, resp, nil
++	}
++
++	directoryUnmarshalError := json.Unmarshal(rawJSON, &directoryContent)
++	if directoryUnmarshalError == nil {
++		return nil, directoryContent, resp, nil
++	}
++
++	return nil, nil, resp, fmt.Errorf("unmarshaling failed for both file and directory content: %v and %v", fileUnmarshalError, directoryUnmarshalError)
+ }
+ 
+ // CreateFile creates a new file in a repository at the given path and returns

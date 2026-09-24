@@ -1,0 +1,151 @@
+diff --git a/plumbing/format/index/encoder.go b/plumbing/format/index/encoder.go
+index 7653231..36db4ed 100644
+--- a/plumbing/format/index/encoder.go
++++ b/plumbing/format/index/encoder.go
+@@ -1,7 +1,7 @@
+ package index
+ 
+ import (
+-	_ "bytes"
++	"bytes"
+ 	"errors"
+ 	_ "fmt"
+ 	"io"
+@@ -9,7 +9,7 @@ import (
+ 	"time"
+ 
+ 	"example.internal/gitkit/v6/plumbing/hash"
+-	_ "example.internal/gitkit/v6/utils/binary"
++	"example.internal/gitkit/v6/utils/binary"
+ )
+ 
+ var (
+@@ -31,58 +31,108 @@ type Encoder struct {
+ 
+ // NewEncoder returns a new encoder that writes to w.
+ func NewEncoder(w io.Writer, h hash.Hash, opts ...Option) *Encoder {
+-	panic("excised: NewEncoder")
++	var cfg options
++	for _, o := range opts {
++		o(&cfg)
++	}
++	e := &Encoder{hash: h, skipHash: cfg.skipHash}
++	h.Reset()
++	e.w = io.MultiWriter(w, h)
++	return e
+ }
+ 
+ // Encode writes the Index to the stream of the encoder.
+ func (e *Encoder) Encode(idx *Index) error {
+-	panic("excised: Encoder.Encode")
++	return e.encode(idx, true)
+ }
+ 
+ func (e *Encoder) encode(idx *Index, footer bool) error {
+-	panic("excised: Encoder.encode")
++	if err := e.encodeHeader(idx); err != nil {
++		return err
++	}
++	if err := e.encodeEntries(idx); err != nil {
++		return err
++	}
++	if footer {
++		return e.encodeFooter()
++	}
++	return nil
+ }
+ 
+ func (e *Encoder) encodeHeader(idx *Index) error {
+-	panic("excised: Encoder.encodeHeader")
++	return binary.Write(e.w, indexSignature, idx.Version, uint32(len(idx.Entries)))
+ }
+ 
+ func (e *Encoder) encodeEntries(idx *Index) error {
+-	panic("excised: Encoder.encodeEntries")
++	for _, entry := range idx.Entries {
++		if err := e.encodeEntry(idx, entry); err != nil {
++			return err
++		}
++		wrote := entryHeaderLength + e.hash.Size() + len(entry.Name)
++		if err := e.padEntry(idx, wrote); err != nil {
++			return err
++		}
++	}
++	return nil
+ }
+ 
+ func (e *Encoder) encodeEntry(idx *Index, entry *Entry) error {
+-	panic("excised: Encoder.encodeEntry")
++	sec, nsec, _ := e.timeToUint32(&entry.CreatedAt)
++	msec, mnsec, _ := e.timeToUint32(&entry.ModifiedAt)
++	flags := uint16(entry.Stage&0x3) << 12
++	flags |= uint16(len(entry.Name)) & nameMask
++	flow := []any{sec, nsec, msec, mnsec, entry.Dev, entry.Inode, entry.Mode,
++		entry.UID, entry.GID, entry.Size, entry.Hash.Bytes(), flags}
++	if err := binary.Write(e.w, flow...); err != nil {
++		return err
++	}
++	return binary.Write(e.w, []byte(entry.Name))
+ }
+ 
+ func (e *Encoder) encodeEntryName(entry *Entry) error {
+-	panic("excised: Encoder.encodeEntryName")
++	return binary.Write(e.w, []byte(entry.Name))
+ }
+ 
+ func (e *Encoder) encodeEntryNameV4(entry *Entry) error {
+-	panic("excised: Encoder.encodeEntryNameV4")
++	e.lastEntry = entry
++	return binary.Write(e.w, append([]byte(entry.Name), '\x00'))
+ }
+ 
+ // commonPrefixLen returns the length of the longest common byte prefix
+ // between a and b.
+ func commonPrefixLen(a, b string) int {
+-	panic("excised: commonPrefixLen")
++	n := min(len(a), len(b))
++	for i := range n {
++		if a[i] != b[i] {
++			return i
++		}
++	}
++	return n
+ }
+ 
+ func (e *Encoder) encodeRawExtension(signature string, data []byte) error {
+-	panic("excised: Encoder.encodeRawExtension")
++	if _, err := e.w.Write([]byte(signature)); err != nil {
++		return err
++	}
++	if err := binary.WriteUint32(e.w, uint32(len(data))); err != nil {
++		return err
++	}
++	_, err := e.w.Write(data)
++	return err
+ }
+ 
+ func (e *Encoder) timeToUint32(t *time.Time) (uint32, uint32, error) {
+-	panic("excised: Encoder.timeToUint32")
++	return uint32(t.Unix()), uint32(t.Nanosecond()), nil
+ }
+ 
+ func (e *Encoder) padEntry(idx *Index, wrote int) error {
+-	panic("excised: Encoder.padEntry")
++	padLen := 8 - wrote%8
++	_, err := e.w.Write(bytes.Repeat([]byte{'\x00'}, padLen))
++	return err
+ }
+ 
+ func (e *Encoder) encodeFooter() error {
+-	panic("excised: Encoder.encodeFooter")
++	return binary.Write(e.w, e.hash.Sum(nil))
+ }
+ 
+ type byNameAndStage []*Entry
+@@ -90,5 +140,5 @@ type byNameAndStage []*Entry
+ func (l byNameAndStage) Len() int      { return len(l) }
+ func (l byNameAndStage) Swap(i, j int) { l[i], l[j] = l[j], l[i] }
+ func (l byNameAndStage) Less(i, j int) bool {
+-	panic("excised: byNameAndStage.Less")
++	return l[i].Name < l[j].Name
+ }

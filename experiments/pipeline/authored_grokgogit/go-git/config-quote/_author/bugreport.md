@@ -1,0 +1,1 @@
+Round-tripping a git config loses quoting. A value `has # hash` has to come back quoted, because otherwise the hash starts a comment. A plain `repositoryformatversion = 0` should stay unquoted, with a tab before the key. Subsection headers need the name in quotes: `[sect1 "subsect1"]`. Right now those writes panic, so `Marshal` on a config with a hash in a value never returns.

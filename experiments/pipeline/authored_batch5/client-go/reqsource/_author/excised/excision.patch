@@ -1,0 +1,232 @@
+diff --git a/util/request_source.go b/util/request_source.go
+--- a/util/request_source.go
++++ b/util/request_source.go
+@@ -16,7 +16,7 @@
+ 
+ import (
+ 	"context"
+-	"strings"
++	_ "strings"
+ )
+ 
+ // RequestSourceTypeKeyType is a dummy type to avoid naming collision in context.
+@@ -77,92 +77,52 @@
+ 
+ // SetRequestSourceInternal sets the scope of the request source.
+ func (r *RequestSource) SetRequestSourceInternal(internal bool) {
+-	r.RequestSourceInternal = internal
++	panic("excised: RequestSource.SetRequestSourceInternal")
+ }
+ 
+ // SetRequestSourceType sets the type of the request source.
+ func (r *RequestSource) SetRequestSourceType(tp string) {
+-	r.RequestSourceType = tp
++	panic("excised: RequestSource.SetRequestSourceType")
+ }
+ 
+ // SetExplicitRequestSourceType sets the type of the request source.
+ func (r *RequestSource) SetExplicitRequestSourceType(tp string) {
+-	r.ExplicitRequestSourceType = tp
++	panic("excised: RequestSource.SetExplicitRequestSourceType")
+ }
+ 
+ // WithInternalSourceType create context with internal source.
+ func WithInternalSourceType(ctx context.Context, source string) context.Context {
+-	return context.WithValue(ctx, RequestSourceKey, RequestSource{
+-		RequestSourceInternal: true,
+-		RequestSourceType:     source,
+-	})
++	panic("excised: WithInternalSourceType")
+ }
+ 
+ // WithInternalSourceAndTaskType create context with internal source and task name.
+ func WithInternalSourceAndTaskType(ctx context.Context, source, taskName string) context.Context {
+-	return context.WithValue(ctx, RequestSourceKey, RequestSource{
+-		RequestSourceInternal:     true,
+-		RequestSourceType:         source,
+-		ExplicitRequestSourceType: taskName,
+-	})
++	panic("excised: WithInternalSourceAndTaskType")
+ }
+ 
+ // BuildRequestSource builds a request_source from internal, source and explicitSource.
+ func BuildRequestSource(internal bool, source, explicitSource string) string {
+-	requestSource := RequestSource{
+-		RequestSourceInternal:     internal,
+-		RequestSourceType:         source,
+-		ExplicitRequestSourceType: explicitSource,
+-	}
+-	return requestSource.GetRequestSource()
++	panic("excised: BuildRequestSource")
+ }
+ 
+ // IsRequestSourceInternal checks whether the input request source type is internal type.
+ func IsRequestSourceInternal(reqSrc *RequestSource) bool {
+-	isInternal := false
+-	if reqSrc != nil && IsInternalRequest(reqSrc.GetRequestSource()) {
+-		isInternal = true
+-	}
+-	return isInternal
++	panic("excised: IsRequestSourceInternal")
+ }
+ 
+ // GetRequestSource gets the request_source field of the request.
+ func (r *RequestSource) GetRequestSource() string {
+-	source := SourceUnknown
+-	origin := ExternalRequest
+-	if r == nil || (len(r.RequestSourceType) == 0 && len(r.ExplicitRequestSourceType) == 0) {
+-		// if r.RequestSourceType and r.ExplicitRequestSourceType are not set, it's mostly possible that r.RequestSourceInternal is not set
+-		// to avoid internal requests be marked as external(default value), return unknown source here.
+-		return source
+-	}
+-	if r.RequestSourceInternal {
+-		origin = InternalRequest
+-	}
+-	labelList := make([]string, 0, 3)
+-	labelList = append(labelList, origin)
+-	if len(r.RequestSourceType) > 0 {
+-		source = r.RequestSourceType
+-	}
+-	labelList = append(labelList, source)
+-	if len(r.ExplicitRequestSourceType) > 0 && r.ExplicitRequestSourceType != r.RequestSourceType {
+-		labelList = append(labelList, r.ExplicitRequestSourceType)
+-	}
+-
+-	return strings.Join(labelList, "_")
++	panic("excised: RequestSource.GetRequestSource")
+ }
+ 
+ // RequestSourceFromCtx extract source from passed context.
+ func RequestSourceFromCtx(ctx context.Context) string {
+-	if source := ctx.Value(RequestSourceKey); source != nil {
+-		rs := source.(RequestSource)
+-		return rs.GetRequestSource()
+-	}
+-	return SourceUnknown
++	panic("excised: RequestSourceFromCtx")
+ }
+ 
+ // IsInternalRequest returns the type of the request source.
+ func IsInternalRequest(source string) bool {
+-	return strings.HasPrefix(source, InternalRequest)
++	panic("excised: IsInternalRequest")
+ }
+ 
+ // ResourceGroupNameKeyType is the context key type of resource group name.
+@@ -174,14 +134,11 @@
+ // WithResourceGroupName return a copy of the given context with a associated
+ // resource group name.
+ func WithResourceGroupName(ctx context.Context, groupName string) context.Context {
+-	return context.WithValue(ctx, resourceGroupNameKey, groupName)
++	panic("excised: WithResourceGroupName")
+ }
+ 
+ // ResourceGroupNameFromCtx extract resource group name from passed context,
+ // empty string is returned is the key is not set.
+ func ResourceGroupNameFromCtx(ctx context.Context) string {
+-	if val := ctx.Value(resourceGroupNameKey); val != nil {
+-		return val.(string)
+-	}
+-	return ""
++	panic("excised: ResourceGroupNameFromCtx")
+ }
+diff --git a/util/request_source_test.go b/util/request_source_test.go
+deleted file mode 100644
+--- a/util/request_source_test.go
++++ /dev/null
+@@ -1,95 +0,0 @@
+-// Copyright 2023 KVStore Authors
+-//
+-// Licensed under the Apache License, Version 2.0 (the "License");
+-// you may not use this file except in compliance with the License.
+-// You may obtain a copy of the License at
+-//
+-//     http://www.apache.org/licenses/LICENSE-2.0
+-//
+-// Unless required by applicable law or agreed to in writing, software
+-// distributed under the License is distributed on an "AS IS" BASIS,
+-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-// See the License for the specific language governing permissions and
+-// limitations under the License.
+-
+-package util
+-
+-import (
+-	"testing"
+-
+-	"github.com/stretchr/testify/assert"
+-)
+-
+-func TestGetRequestSource(t *testing.T) {
+-	rsi := true
+-	rst := "test"
+-	ers := "lightning"
+-	rs := &RequestSource{
+-		RequestSourceInternal:     rsi,
+-		RequestSourceType:         rst,
+-		ExplicitRequestSourceType: ers,
+-	}
+-
+-	// Test internal request
+-	expected := "internal_test_lightning"
+-	actual := rs.GetRequestSource()
+-	assert.Equal(t, expected, actual)
+-
+-	// Test external request
+-	rs.RequestSourceInternal = false
+-	expected = "external_test_lightning"
+-	actual = rs.GetRequestSource()
+-	assert.Equal(t, expected, actual)
+-
+-	// Test nil pointer
+-	rs = nil
+-	expected = "unknown"
+-	actual = rs.GetRequestSource()
+-	assert.Equal(t, expected, actual)
+-
+-	// Test empty RequestSourceType and ExplicitRequestSourceType
+-	rs = &RequestSource{}
+-	expected = "unknown"
+-	actual = rs.GetRequestSource()
+-	assert.Equal(t, expected, actual)
+-
+-	// Test empty ExplicitRequestSourceType
+-	rs.RequestSourceType = "test"
+-	expected = "external_test"
+-	actual = rs.GetRequestSource()
+-	assert.Equal(t, expected, actual)
+-
+-	// Test empty RequestSourceType
+-	rs.RequestSourceType = ""
+-	rs.ExplicitRequestSourceType = "lightning"
+-	expected = "external_unknown_lightning"
+-	actual = rs.GetRequestSource()
+-	assert.Equal(t, expected, actual)
+-}
+-
+-func TestBuildRequestSource(t *testing.T) {
+-	// Test internal request
+-	expected := "internal_test_lightning"
+-	actual := BuildRequestSource(true, "test", "lightning")
+-	assert.Equal(t, expected, actual)
+-
+-	// Test external request
+-	expected = "external_test_lightning"
+-	actual = BuildRequestSource(false, "test", "lightning")
+-	assert.Equal(t, expected, actual)
+-
+-	// Test empty ExplicitRequestSourceType
+-	expected = "external_test"
+-	actual = BuildRequestSource(false, "test", "")
+-	assert.Equal(t, expected, actual)
+-
+-	// Test empty RequestSourceType
+-	expected = "external_unknown_lightning"
+-	actual = BuildRequestSource(false, "", "lightning")
+-	assert.Equal(t, expected, actual)
+-
+-	// Test RequestSourceType && ExplicitRequestSourceType both empty
+-	expected = "unknown"
+-	actual = BuildRequestSource(true, "", "")
+-	assert.Equal(t, expected, actual)
+-}

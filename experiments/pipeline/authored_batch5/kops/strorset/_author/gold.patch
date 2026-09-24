@@ -1,0 +1,107 @@
+--- a/pkg/util/stringorset/stringorset.go
++++ b/pkg/util/stringorset/stringorset.go
+@@ -17,9 +17,9 @@
+ package stringorset
+ 
+ import (
+-	_ "encoding/json"
+-	_ "sort"
+-	_ "strings"
++	"encoding/json"
++	"sort"
++	"strings"
+ 
+ 	"k8s.io/apimachinery/pkg/util/sets"
+ )
+@@ -31,44 +31,82 @@
+ }
+ 
+ func (s *StringOrSet) IsEmpty() bool {
+-	panic("excised: StringOrSet.IsEmpty")
++	return len(s.values) == 0
+ }
+ 
+ // Set will build a value that marshals to a JSON array
+ func Set(v []string) StringOrSet {
+-	panic("excised: Set")
++	values := sets.Set[string]{}
++	values.Insert(v...)
++	return StringOrSet{values: values, forceEncodeAsArray: true}
+ }
+ 
+ // Of will build a value that marshals to a JSON array if len(v) > 1,
+ // otherwise to a single string
+ func Of(v ...string) StringOrSet {
+-	panic("excised: Of")
++	if v == nil {
++		v = []string{}
++	}
++	values := sets.Set[string]{}
++	values.Insert(v...)
++	return StringOrSet{values: values}
+ }
+ 
+ // String will build a value that marshals to a single string
+ func String(v string) StringOrSet {
+-	panic("excised: String")
++	return StringOrSet{values: sets.New(v), forceEncodeAsArray: false}
+ }
+ 
+ // UnmarshalJSON implements the json.Unmarshaller interface.
+ func (s *StringOrSet) UnmarshalJSON(value []byte) error {
+-	panic("excised: StringOrSet.UnmarshalJSON")
++	if value[0] == '[' {
++		s.forceEncodeAsArray = true
++		var vals []string
++		if err := json.Unmarshal(value, &vals); err != nil {
++			return nil
++		}
++		s.values = sets.New(vals...)
++		return nil
++	}
++	s.forceEncodeAsArray = false
++	var stringValue string
++	if err := json.Unmarshal(value, &stringValue); err != nil {
++		return err
++	}
++	s.values = sets.New(stringValue)
++	return nil
+ }
+ 
+ // String returns the string value, or the Itoa of the int value.
+ func (s StringOrSet) String() string {
+-	panic("excised: StringOrSet.String")
++	return strings.Join(sets.List[string](s.values), ",")
+ }
+ 
+ func (v *StringOrSet) Value() []string {
+-	panic("excised: StringOrSet.Value")
++	vals := sets.List[string](v.values)
++	sort.Strings(vals)
++	return vals
+ }
+ 
+ func (l StringOrSet) Equal(r StringOrSet) bool {
+-	panic("excised: StringOrSet.Equal")
++	return l.values.Equal(r.values)
+ }
+ 
+ // MarshalJSON implements the json.Marshaller interface.
+ func (v StringOrSet) MarshalJSON() ([]byte, error) {
+-	panic("excised: StringOrSet.MarshalJSON")
++	encodeAsJSONArray := v.forceEncodeAsArray
++	if len(v.values) > 1 {
++		encodeAsJSONArray = true
++	}
++	values := v.Value()
++	if values == nil {
++		values = []string{}
++	}
++	if encodeAsJSONArray {
++		return json.Marshal(values)
++	} else if len(values) == 1 {
++		return json.Marshal(&values[0])
++	} else {
++		return json.Marshal(values)
++	}
+ }

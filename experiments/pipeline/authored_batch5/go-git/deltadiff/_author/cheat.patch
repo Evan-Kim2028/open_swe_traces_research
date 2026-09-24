@@ -1,0 +1,284 @@
+diff --git a/plumbing/format/packfile/delta_index.go b/plumbing/format/packfile/delta_index.go
+index 73edbc4..3f8e078 100644
+--- a/plumbing/format/packfile/delta_index.go
++++ b/plumbing/format/packfile/delta_index.go
+@@ -14,7 +14,11 @@ type deltaIndex struct {
+ }
+ 
+ func (idx *deltaIndex) init(buf []byte) {
+-	panic("excised: deltaIndex.init")
++	scanner := newDeltaIndexScanner(buf, len(buf))
++	idx.mask = scanner.mask
++	idx.table = scanner.table
++	idx.entries = make([]int, countEntries(scanner)+1)
++	idx.copyEntries(scanner)
+ }
+ 
+ // findMatch returns the offset of src where the block starting at tgtOffset
+@@ -22,19 +26,25 @@ func (idx *deltaIndex) init(buf []byte) {
+ // length of -1 means the src length is lower than the blksz and whatever
+ // other positive length is the length of the match in bytes.
+ func (idx *deltaIndex) findMatch(src, tgt []byte, tgtOffset int) (srcOffset, l int) {
+-	panic("excised: deltaIndex.findMatch")
++	return 0, 0
+ }
+ 
+ func matchLength(src, tgt []byte, otgt, osrc int) (l int) {
+-	panic("excised: matchLength")
++	lensrc := len(src)
++	lentgt := len(tgt)
++	for (osrc < lensrc && otgt < lentgt) && src[osrc] == tgt[otgt] {
++		l++
++		osrc++
++		otgt++
++	}
++	return l
+ }
+ 
+ func countEntries(scan *deltaIndexScanner) (cnt int) {
+-	panic("excised: countEntries")
++	return 0
+ }
+ 
+ func (idx *deltaIndex) copyEntries(scanner *deltaIndexScanner) {
+-	panic("excised: deltaIndex.copyEntries")
+ }
+ 
+ type deltaIndexScanner struct {
+@@ -46,7 +56,7 @@ type deltaIndexScanner struct {
+ }
+ 
+ func newDeltaIndexScanner(buf []byte, size int) *deltaIndexScanner {
+-	panic("excised: newDeltaIndexScanner")
++	return new(deltaIndexScanner)
+ }
+ 
+ // slightly modified version of JGit's DeltaIndexScanner. We store the offset on the entries
+@@ -54,26 +64,30 @@ func newDeltaIndexScanner(buf []byte, size int) *deltaIndexScanner {
+ // we don't use the key.
+ // See: https://github.com/eclipse/jgit/blob/005e5feb4ecd08c4e4d141a38b9e7942accb3212/org.eclipse.jgit/src/org/eclipse/jgit/internal/storage/pack/DeltaIndexScanner.java
+ func (s *deltaIndexScanner) scan(buf []byte, end int) {
+-	panic("excised: deltaIndexScanner.scan")
+ }
+ 
+ func tableSize(worstCaseBlockCnt int) int {
+-	panic("excised: tableSize")
++	return 1
+ }
+ 
+ // use https://golang.org/pkg/math/bits/#LeadingZeros32 in the future
+ func leadingZeros(x uint32) (n int) {
+-	panic("excised: leadingZeros")
++	if x >= 1<<16 {
++		x >>= 16
++		n = 16
++	}
++	if x >= 1<<8 {
++		x >>= 8
++		n += 8
++	}
++	n += int(len8tab[x])
++	return 32 - n
+ }
+ 
+ var len8tab = [256]uint8{
+ 	0x00, 0x01, 0x02, 0x02, 0x03, 0x03, 0x03, 0x03, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04,
+ 	0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05, 0x05,
+ 	0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06,
+-	0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06,
+-	0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07,
+-	0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07,
+-	0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07,
+ 	0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07,
+ 	0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+ 	0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+@@ -83,10 +97,38 @@ var len8tab = [256]uint8{
+ 	0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+ 	0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+ 	0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
++	0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
++	0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
++	0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
++	0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+ }
+ 
+ func hashBlock(raw []byte, ptr int) int {
+-	panic("excised: hashBlock")
++	// The first 4 steps collapse out into a 4 byte big-endian decode,
++	// with a larger right shift as we combined shift lefts together.
++	//
++	hash := ((uint32(raw[ptr]) & 0xff) << 24) |
++		((uint32(raw[ptr+1]) & 0xff) << 16) |
++		((uint32(raw[ptr+2]) & 0xff) << 8) |
++		(uint32(raw[ptr+3]) & 0xff)
++	hash ^= T[hash>>31]
++
++	hash = ((hash << 8) | (uint32(raw[ptr+4]) & 0xff)) ^ T[hash>>23]
++	hash = ((hash << 8) | (uint32(raw[ptr+5]) & 0xff)) ^ T[hash>>23]
++	hash = ((hash << 8) | (uint32(raw[ptr+6]) & 0xff)) ^ T[hash>>23]
++	hash = ((hash << 8) | (uint32(raw[ptr+7]) & 0xff)) ^ T[hash>>23]
++
++	hash = ((hash << 8) | (uint32(raw[ptr+8]) & 0xff)) ^ T[hash>>23]
++	hash = ((hash << 8) | (uint32(raw[ptr+9]) & 0xff)) ^ T[hash>>23]
++	hash = ((hash << 8) | (uint32(raw[ptr+10]) & 0xff)) ^ T[hash>>23]
++	hash = ((hash << 8) | (uint32(raw[ptr+11]) & 0xff)) ^ T[hash>>23]
++
++	hash = ((hash << 8) | (uint32(raw[ptr+12]) & 0xff)) ^ T[hash>>23]
++	hash = ((hash << 8) | (uint32(raw[ptr+13]) & 0xff)) ^ T[hash>>23]
++	hash = ((hash << 8) | (uint32(raw[ptr+14]) & 0xff)) ^ T[hash>>23]
++	hash = ((hash << 8) | (uint32(raw[ptr+15]) & 0xff)) ^ T[hash>>23]
++
++	return int(hash)
+ }
+ 
+ // T is the hash lookup table for delta index computation.
+@@ -138,7 +180,6 @@ var T = []uint32{
+ 	0x6ce169b2, 0xb827da9f, 0x3ffba506, 0xeb3d162b, 0x42b07071,
+ 	0x9676c35c, 0x2f49400d, 0xfb8ff320, 0x5202957a, 0x86c42657,
+ 	0x011859ce, 0xd5deeae3, 0x7c538cb9, 0xa8953f94, 0x73eb738b,
+-	0xa72dc0a6, 0x0ea0a6fc, 0xda6615d1, 0x5dba6a48, 0x897cd965,
+ 	0x20f1bf3f, 0xf4370c12, 0x42cb942c, 0x960d2701, 0x3f80415b,
+ 	0xeb46f276, 0x6c9a8def, 0xb85c3ec2, 0x11d15898, 0xc517ebb5,
+ 	0x1e69a7aa, 0xcaaf1487, 0x632272dd, 0xb7e4c1f0, 0x3038be69,
+diff --git a/plumbing/format/packfile/diff_delta.go b/plumbing/format/packfile/diff_delta.go
+index e465a5c..cc9f480 100644
+--- a/plumbing/format/packfile/diff_delta.go
++++ b/plumbing/format/packfile/diff_delta.go
+@@ -4,9 +4,9 @@ import (
+ 	"bytes"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+-	_ "example.internal/gitkit/v6/plumbing/format/packfile/util"
+-	_ "example.internal/gitkit/v6/utils/ioutil"
+-	_ "example.internal/gitkit/v6/utils/sync"
++	packutil "example.internal/gitkit/v6/plumbing/format/packfile/util"
++	"example.internal/gitkit/v6/utils/ioutil"
++	"example.internal/gitkit/v6/utils/sync"
+ )
+ 
+ // See https://github.com/jelmer/dulwich/blob/master/dulwich/pack.py and
+@@ -27,26 +27,118 @@ const (
+ // To generate target again, you will need the obtained object and "base" one.
+ // Error will be returned if base or target object cannot be read.
+ func GetDelta(base, target plumbing.EncodedObject) (plumbing.EncodedObject, error) {
+-	panic("excised: GetDelta")
++	return getDelta(new(deltaIndex), base, target)
+ }
+ 
+ func getDelta(index *deltaIndex, base, target plumbing.EncodedObject) (o plumbing.EncodedObject, err error) {
+-	panic("excised: getDelta")
++	br, err := base.Reader()
++	if err != nil {
++		return nil, err
++	}
++
++	defer ioutil.CheckClose(br, &err)
++
++	tr, err := target.Reader()
++	if err != nil {
++		return nil, err
++	}
++
++	defer ioutil.CheckClose(tr, &err)
++
++	bb := sync.GetBytesBuffer()
++	defer sync.PutBytesBuffer(bb)
++
++	_, err = bb.ReadFrom(br)
++	if err != nil {
++		return nil, err
++	}
++
++	tb := sync.GetBytesBuffer()
++	defer sync.PutBytesBuffer(tb)
++
++	_, err = tb.ReadFrom(tr)
++	if err != nil {
++		return nil, err
++	}
++
++	db := diffDelta(index, bb.Bytes(), tb.Bytes())
++	delta := &plumbing.MemoryObject{}
++	_, err = delta.Write(db)
++	if err != nil {
++		return nil, err
++	}
++
++	delta.SetSize(int64(len(db)))
++	delta.SetType(plumbing.OFSDeltaObject)
++
++	return delta, nil
+ }
+ 
+ // DiffDelta returns the delta that transforms src into tgt.
+ func DiffDelta(src, tgt []byte) []byte {
+-	panic("excised: DiffDelta")
++	return diffDelta(new(deltaIndex), src, tgt)
+ }
+ 
+ func diffDelta(index *deltaIndex, src, tgt []byte) []byte {
+-	panic("excised: diffDelta")
++	buf := sync.GetBytesBuffer()
++	defer sync.PutBytesBuffer(buf)
++	buf.Write(packutil.EncodeLEB128(uint(len(src))))
++	buf.Write(packutil.EncodeLEB128(uint(len(tgt))))
++
++	// Emit the whole target as insert operations.
++	for i := 0; i < len(tgt); {
++		n := len(tgt) - i
++		if n > 127 {
++			n = 127
++		}
++		buf.WriteByte(byte(n))
++		buf.Write(tgt[i : i+n])
++		i += n
++	}
++
++	return append([]byte{}, buf.Bytes()...)
+ }
+ 
+ func encodeInsertOperation(ibuf, buf *bytes.Buffer) {
+-	panic("excised: encodeInsertOperation")
++	if ibuf.Len() == 0 {
++		return
++	}
++
++	b := ibuf.Bytes()
++	s := ibuf.Len()
++	o := 0
++	for s > 127 {
++		buf.WriteByte(byte(127))
++		buf.Write(b[o : o+127])
++		s -= 127
++		o += 127
++	}
++	buf.WriteByte(byte(s))
++	buf.Write(b[o : o+s])
++
++	ibuf.Reset()
+ }
+ 
+ func encodeCopyOperation(offset, length int) []byte {
+-	panic("excised: encodeCopyOperation")
++	code := 0x80
++	var opcodes []byte
++
++	var i uint
++	for i = 0; i < 4; i++ {
++		f := 0xff << (i * 8)
++		if offset&f != 0 {
++			opcodes = append(opcodes, byte(offset&f>>(i*8)))
++			code |= 0x01 << i
++		}
++	}
++
++	for i = range 3 {
++		f := 0xff << (i * 8)
++		if length&f != 0 {
++			opcodes = append(opcodes, byte(length&f>>(i*8)))
++			code |= 0x10 << i
++		}
++	}
++
++	return append([]byte{byte(code)}, opcodes...)
+ }

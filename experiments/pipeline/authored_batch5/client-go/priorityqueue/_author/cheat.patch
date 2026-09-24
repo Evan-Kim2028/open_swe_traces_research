@@ -1,0 +1,77 @@
+diff --git a/internal/client/priority_queue.go b/internal/client/priority_queue.go
+--- a/internal/client/priority_queue.go
++++ b/internal/client/priority_queue.go
+@@ -14,7 +14,10 @@
+ 
+ package client
+ 
+-import _ "container/heap"
++import (
++	_ "container/heap"
++	"sort"
++)
+ 
+ // Item is the interface that all entries in a priority queue must implement.
+ type Item interface {
+@@ -64,17 +67,18 @@
+ 
+ // NewPriorityQueue creates a new priority queue.
+ func NewPriorityQueue() *PriorityQueue {
+-	panic("excised: NewPriorityQueue")
++	return &PriorityQueue{}
+ }
+ 
+ // Len returns the length of the priority queue.
+ func (pq *PriorityQueue) Len() int {
+-	panic("excised: PriorityQueue.Len")
++	return len(pq.ps)
+ }
+ 
+ // Push adds an entry to the priority queue.
+ func (pq *PriorityQueue) Push(item Item) {
+-	panic("excised: PriorityQueue.Push")
++	pq.ps = append(pq.ps, item)
++	sort.SliceStable(pq.ps, func(i, j int) bool { return pq.ps[i].priority() > pq.ps[j].priority() })
+ }
+ 
+ // pop removes the highest priority entry from the priority queue.
+@@ -84,11 +88,22 @@
+ 
+ // Take returns the highest priority entries from the priority queue.
+ func (pq *PriorityQueue) Take(n int) []Item {
+-	panic("excised: PriorityQueue.Take")
++	if n <= 0 {
++		return nil
++	}
++	if n > len(pq.ps) {
++		n = len(pq.ps)
++	}
++	ret := pq.ps[:n]
++	pq.ps = pq.ps[n:]
++	return ret
+ }
+ 
+ func (pq *PriorityQueue) highestPriority() uint64 {
+-	panic("excised: PriorityQueue.highestPriority")
++	if len(pq.ps) == 0 {
++		return 0
++	}
++	return pq.ps[0].priority()
+ }
+ 
+ // all returns all entries in the priority queue not ensure the priority.
+@@ -98,7 +113,13 @@
+ 
+ // clean removes all canceled entries from the priority queue.
+ func (pq *PriorityQueue) clean() {
+-	panic("excised: PriorityQueue.clean")
++	kept := pq.ps[:0]
++	for _, it := range pq.ps {
++		if !it.isCanceled() {
++			kept = append(kept, it)
++		}
++	}
++	pq.ps = kept
+ }
+ 
+ // reset clear all entry in the queue.

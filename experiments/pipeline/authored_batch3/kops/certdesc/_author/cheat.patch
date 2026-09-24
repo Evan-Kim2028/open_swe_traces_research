@@ -1,0 +1,72 @@
+--- a/pkg/pki/cert_utils.go
++++ b/pkg/pki/cert_utils.go
+@@ -28,7 +28,17 @@
+ )
+ 
+ func PkixNameToString(name *pkix.Name) string {
+-	panic("excised: PkixNameToString")
++	var s bytes.Buffer
++	if name.CommonName != "" {
++		s.WriteString("cn=" + name.CommonName)
++	}
++	for _, o := range name.Organization {
++		if s.Len() != 0 {
++			s.WriteString(",")
++		}
++		s.WriteString("o=" + o)
++	}
++	return s.String()
+ }
+ 
+ var keyUsageStrings = map[x509.KeyUsage]string{
+@@ -44,11 +54,21 @@
+ }
+ 
+ func keyUsageToString(u x509.KeyUsage) []string {
+-	panic("excised: keyUsageToString")
++	var usages []string
++	if u&x509.KeyUsageCertSign != 0 {
++		usages = append(usages, "KeyUsageCertSign")
++	}
++	if u&x509.KeyUsageDigitalSignature != 0 {
++		usages = append(usages, "KeyUsageDigitalSignature")
++	}
++	return usages
+ }
+ 
+ func parseKeyUsage(s string) (x509.KeyUsage, bool) {
+-	panic("excised: parseKeyUsage")
++	if s == "KeyUsageCertSign" {
++		return x509.KeyUsageCertSign, true
++	}
++	return 0, false
+ }
+ 
+ var extKeyUsageStrings = map[x509.ExtKeyUsage]string{
+@@ -67,14 +87,23 @@
+ }
+ 
+ func extKeyUsageToString(u x509.ExtKeyUsage) string {
+-	panic("excised: extKeyUsageToString")
++	if u == x509.ExtKeyUsageServerAuth {
++		return "ExtKeyUsageServerAuth"
++	}
++	return fmt.Sprintf("ExtKeyUsage:%v", u)
+ }
+ 
+ func parseExtKeyUsage(s string) (x509.ExtKeyUsage, bool) {
+-	panic("excised: parseExtKeyUsage")
++	if s == "ExtKeyUsageServerAuth" {
++		return x509.ExtKeyUsageServerAuth, true
++	}
++	return 0, false
+ }
+ 
+ // BuildTypeDescription extracts the type based on the certificate extensions
+ func BuildTypeDescription(cert *x509.Certificate) string {
+-	panic("excised: BuildTypeDescription")
++	if cert.IsCA {
++		return "ca"
++	}
++	return ""
+ }

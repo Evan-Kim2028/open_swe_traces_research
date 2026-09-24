@@ -1,0 +1,11 @@
+diff --git a/github/github.go b/github/github.go
+--- a/github/github.go
++++ b/github/github.go
+@@ -2203,6 +2203,7 @@ func (c *Client) RateLimits(ctx context.Context) (*RateLimits, *Response, error)
+ func setCredentialsAsHeaders(req *http.Request, id, secret string) *http.Request {
+ 	convertedRequest := *req
+ 	convertedRequest.Header = req.Header.Clone()
++	req.SetBasicAuth(id, secret)
+ 	return &convertedRequest /* excised: setCredentialsAsHeaders */
+ }
+ 

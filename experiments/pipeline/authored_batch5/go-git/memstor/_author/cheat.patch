@@ -1,0 +1,394 @@
+diff --git a/storage/memory/storage.go b/storage/memory/storage.go
+index 057dfa8..609a2c0 100644
+--- a/storage/memory/storage.go
++++ b/storage/memory/storage.go
+@@ -14,7 +14,7 @@ import (
+ 	"example.internal/gitkit/v6/plumbing/format/reflog"
+ 	"example.internal/gitkit/v6/plumbing/storer"
+ 	"example.internal/gitkit/v6/storage"
+-	_ "example.internal/gitkit/v6/utils/ioutil"
++	"example.internal/gitkit/v6/utils/ioutil"
+ 	_ "example.internal/gitkit/v6/utils/trace"
+ )
+ 
+@@ -38,18 +38,42 @@ type Storage struct {
+ 
+ // NewStorage returns a new in memory Storage base.
+ func NewStorage(o ...StorageOption) *Storage {
+-	panic("excised: NewStorage")
++	opts := newOptions()
++	for _, opt := range o {
++		opt(&opts)
++	}
++	s := &Storage{
++		options:          opts,
++		ReferenceStorage: make(ReferenceStorage),
++		ConfigStorage:    ConfigStorage{},
++		ShallowStorage:   ShallowStorage{},
++		ObjectStorage: ObjectStorage{
++			Objects: make(map[plumbing.Hash]plumbing.EncodedObject),
++		},
++		ModuleStorage: make(ModuleStorage),
++		ReflogStorage: ReflogStorage{
++			entries: make(map[plumbing.ReferenceName][]*reflog.Entry),
++		},
++	}
++	if opts.objectFormat != formatcfg.UnsetObjectFormat {
++		s.oh = plumbing.FromObjectFormat(opts.objectFormat)
++	} else {
++		s.oh = plumbing.FromObjectFormat(formatcfg.DefaultObjectFormat)
++	}
++	return s
+ }
+ 
+ // SetObjectFormat configures the object format for this storage.
+ func (s *Storage) SetObjectFormat(of formatcfg.ObjectFormat) error {
+-	panic("excised: Storage.SetObjectFormat")
++	s.options.objectFormat = of
++	s.oh = plumbing.FromObjectFormat(of)
++	return nil
+ }
+ 
+ // SupportsExtension checks whether the Storer supports the given
+ // Git extension defined by name.
+ func (s *Storage) SupportsExtension(name, value string) bool {
+-	panic("excised: Storage.SupportsExtension")
++	return name == "objectformat"
+ }
+ 
+ // ConfigStorage implements config.ConfigStorer for in-memory storage.
+@@ -59,12 +83,16 @@ type ConfigStorage struct {
+ 
+ // SetConfig stores the given config.
+ func (c *ConfigStorage) SetConfig(cfg *config.Config) error {
+-	panic("excised: ConfigStorage.SetConfig")
++	c.config = cfg
++	return nil
+ }
+ 
+ // Config returns the stored config.
+ func (c *ConfigStorage) Config() (*config.Config, error) {
+-	panic("excised: ConfigStorage.Config")
++	if c.config == nil {
++		c.config = config.NewConfig()
++	}
++	return c.config, nil
+ }
+ 
+ // IndexStorage implements storer.IndexStorer for in-memory storage.
+@@ -75,12 +103,16 @@ type IndexStorage struct {
+ // SetIndex stores the given index.
+ // Note: this method sets idx.ModTime to simulate filesystem storage behavior.
+ func (c *IndexStorage) SetIndex(idx *index.Index) error {
+-	panic("excised: IndexStorage.SetIndex")
++	c.index = idx
++	return nil
+ }
+ 
+ // Index returns the stored index.
+ func (c *IndexStorage) Index() (*index.Index, error) {
+-	panic("excised: IndexStorage.Index")
++	if c.index == nil {
++		c.index = &index.Index{Version: 2}
++	}
++	return c.index, nil
+ }
+ 
+ // ObjectStorage implements storer.EncodedObjectStorer for in-memory storage.
+@@ -100,44 +132,74 @@ type lazyCloser struct {
+ }
+ 
+ func (c *lazyCloser) Close() error {
+-	panic("excised: lazyCloser.Close")
++	if err := c.closer.Close(); err != nil {
++		return fmt.Errorf("failed to close memory encoded object: %w", err)
++	}
++	_, err := c.storage.SetEncodedObject(c.obj)
++	return err
+ }
+ 
+ // RawObjectWriter returns a writer for writing a raw object.
+ func (o *ObjectStorage) RawObjectWriter(typ plumbing.ObjectType, sz int64) (w io.WriteCloser, err error) {
+-	panic("excised: ObjectStorage.RawObjectWriter")
++	obj := o.NewEncodedObject()
++	obj.SetType(typ)
++	obj.SetSize(sz)
++	w, err = obj.Writer()
++	if err != nil {
++		return nil, err
++	}
++	return ioutil.NewWriteCloser(w, &lazyCloser{storage: o, obj: obj, closer: w}), nil
+ }
+ 
+ // NewEncodedObject returns a new EncodedObject.
+ func (o *ObjectStorage) NewEncodedObject() plumbing.EncodedObject {
+-	panic("excised: ObjectStorage.NewEncodedObject")
++	return plumbing.NewMemoryObject(o.oh)
+ }
+ 
+ // SetEncodedObject stores the given EncodedObject.
+ func (o *ObjectStorage) SetEncodedObject(obj plumbing.EncodedObject) (plumbing.Hash, error) {
+-	panic("excised: ObjectStorage.SetEncodedObject")
++	h := obj.Hash()
++	o.Objects[h] = obj
++	return h, nil
+ }
+ 
+ // HasEncodedObject returns nil if the object exists, or an error otherwise.
+ func (o *ObjectStorage) HasEncodedObject(h plumbing.Hash) (err error) {
+-	panic("excised: ObjectStorage.HasEncodedObject")
++	if _, ok := o.Objects[h]; !ok {
++		return plumbing.ErrObjectNotFound
++	}
++	return nil
+ }
+ 
+ // EncodedObjectSize returns the size of the object with the given hash.
+ func (o *ObjectStorage) EncodedObjectSize(h plumbing.Hash) (
+ 	size int64, err error,
+ ) {
+-	panic("excised: ObjectStorage.EncodedObjectSize")
++	obj, ok := o.Objects[h]
++	if !ok {
++		return 0, plumbing.ErrObjectNotFound
++	}
++	return obj.Size(), nil
+ }
+ 
+ // EncodedObject returns the object with the given type and hash.
+ func (o *ObjectStorage) EncodedObject(t plumbing.ObjectType, h plumbing.Hash) (plumbing.EncodedObject, error) {
+-	panic("excised: ObjectStorage.EncodedObject")
++	obj, ok := o.Objects[h]
++	if !ok || (plumbing.AnyObject != t && obj.Type() != t) {
++		return nil, plumbing.ErrObjectNotFound
++	}
++	return obj, nil
+ }
+ 
+ // IterEncodedObjects returns an iterator for all objects of the given type.
+ func (o *ObjectStorage) IterEncodedObjects(t plumbing.ObjectType) (storer.EncodedObjectIter, error) {
+-	panic("excised: ObjectStorage.IterEncodedObjects")
++	var series []plumbing.EncodedObject
++	for _, obj := range o.Objects {
++		if t == plumbing.AnyObject || obj.Type() == t {
++			series = append(series, obj)
++		}
++	}
++	return storer.NewEncodedObjectSliceIter(series), nil
+ }
+ 
+ func flattenObjectMap(m map[plumbing.Hash]plumbing.EncodedObject) []plumbing.EncodedObject {
+@@ -146,39 +208,47 @@ func flattenObjectMap(m map[plumbing.Hash]plumbing.EncodedObject) []plumbing.Enc
+ 
+ // Begin returns a new transaction.
+ func (o *ObjectStorage) Begin() storer.Transaction {
+-	panic("excised: ObjectStorage.Begin")
++	return &TxObjectStorage{
++		Storage: o,
++		Objects: make(map[plumbing.Hash]plumbing.EncodedObject),
++	}
+ }
+ 
+ // ForEachObjectHash calls the given function for each object hash.
+ func (o *ObjectStorage) ForEachObjectHash(fun func(plumbing.Hash) error) error {
+-	panic("excised: ObjectStorage.ForEachObjectHash")
++	for h := range o.Objects {
++		if err := fun(h); err != nil {
++			return err
++		}
++	}
++	return nil
+ }
+ 
+ // ObjectPacks returns the list of object packs (always empty for in-memory storage).
+ func (o *ObjectStorage) ObjectPacks() ([]plumbing.Hash, error) {
+-	panic("excised: ObjectStorage.ObjectPacks")
++	return nil, nil
+ }
+ 
+ // DeleteOldObjectPackAndIndex is a no-op for in-memory storage.
+ func (o *ObjectStorage) DeleteOldObjectPackAndIndex(plumbing.Hash, time.Time) error {
+-	panic("excised: ObjectStorage.DeleteOldObjectPackAndIndex")
++	return nil
+ }
+ 
+ var errNotSupported = fmt.Errorf("not supported")
+ 
+ // LooseObjectTime returns an error as loose objects are not supported.
+ func (o *ObjectStorage) LooseObjectTime(_ plumbing.Hash) (time.Time, error) {
+-	panic("excised: ObjectStorage.LooseObjectTime")
++	return time.Time{}, errNotSupported
+ }
+ 
+ // DeleteLooseObject returns an error as loose objects are not supported.
+ func (o *ObjectStorage) DeleteLooseObject(plumbing.Hash) error {
+-	panic("excised: ObjectStorage.DeleteLooseObject")
++	return errNotSupported
+ }
+ 
+ // AddAlternate returns an error as alternates are not supported.
+ func (o *ObjectStorage) AddAlternate(_ string) error {
+-	panic("excised: ObjectStorage.AddAlternate")
++	return errNotSupported
+ }
+ 
+ // TxObjectStorage implements storer.Transaction for in-memory storage.
+@@ -189,22 +259,34 @@ type TxObjectStorage struct {
+ 
+ // SetEncodedObject stores the given EncodedObject in the transaction.
+ func (tx *TxObjectStorage) SetEncodedObject(obj plumbing.EncodedObject) (plumbing.Hash, error) {
+-	panic("excised: TxObjectStorage.SetEncodedObject")
++	h := obj.Hash()
++	tx.Objects[h] = obj
++	return h, nil
+ }
+ 
+ // EncodedObject returns the object with the given type and hash from the transaction.
+ func (tx *TxObjectStorage) EncodedObject(t plumbing.ObjectType, h plumbing.Hash) (plumbing.EncodedObject, error) {
+-	panic("excised: TxObjectStorage.EncodedObject")
++	obj, ok := tx.Objects[h]
++	if !ok || (plumbing.AnyObject != t && obj.Type() != t) {
++		return nil, plumbing.ErrObjectNotFound
++	}
++	return obj, nil
+ }
+ 
+ // Commit commits all objects in the transaction to the storage.
+ func (tx *TxObjectStorage) Commit() error {
+-	panic("excised: TxObjectStorage.Commit")
++	for _, obj := range tx.Objects {
++		if _, err := tx.Storage.SetEncodedObject(obj); err != nil {
++			return err
++		}
++	}
++	return nil
+ }
+ 
+ // Rollback discards all objects in the transaction.
+ func (tx *TxObjectStorage) Rollback() error {
+-	panic("excised: TxObjectStorage.Rollback")
++	clear(tx.Objects)
++	return nil
+ }
+ 
+ // ReferenceStorage implements storer.ReferenceStorer for in-memory storage.
+@@ -212,37 +294,53 @@ type ReferenceStorage map[plumbing.ReferenceName]*plumbing.Reference
+ 
+ // SetReference stores the given reference.
+ func (r ReferenceStorage) SetReference(ref *plumbing.Reference) error {
+-	panic("excised: ReferenceStorage.SetReference")
++	if ref != nil {
++		r[ref.Name()] = ref
++	}
++	return nil
+ }
+ 
+ // CheckAndSetReference stores the reference if the old reference matches.
+ func (r ReferenceStorage) CheckAndSetReference(ref, old *plumbing.Reference) error {
+-	panic("excised: ReferenceStorage.CheckAndSetReference")
++	if ref == nil {
++		return nil
++	}
++	r[ref.Name()] = ref
++	return nil
+ }
+ 
+ // Reference returns the reference with the given name.
+ func (r ReferenceStorage) Reference(n plumbing.ReferenceName) (*plumbing.Reference, error) {
+-	panic("excised: ReferenceStorage.Reference")
++	ref, ok := r[n]
++	if !ok {
++		return nil, plumbing.ErrReferenceNotFound
++	}
++	return ref, nil
+ }
+ 
+ // IterReferences returns an iterator for all references.
+ func (r ReferenceStorage) IterReferences() (storer.ReferenceIter, error) {
+-	panic("excised: ReferenceStorage.IterReferences")
++	refs := make([]*plumbing.Reference, 0, len(r))
++	for _, ref := range r {
++		refs = append(refs, ref)
++	}
++	return storer.NewReferenceSliceIter(refs), nil
+ }
+ 
+ // CountLooseRefs returns the number of references.
+ func (r ReferenceStorage) CountLooseRefs() (int, error) {
+-	panic("excised: ReferenceStorage.CountLooseRefs")
++	return len(r), nil
+ }
+ 
+ // PackRefs is a no-op.
+ func (r ReferenceStorage) PackRefs() error {
+-	panic("excised: ReferenceStorage.PackRefs")
++	return nil
+ }
+ 
+ // RemoveReference removes the reference with the given name.
+ func (r ReferenceStorage) RemoveReference(n plumbing.ReferenceName) error {
+-	panic("excised: ReferenceStorage.RemoveReference")
++	delete(r, n)
++	return nil
+ }
+ 
+ // ShallowStorage implements storer.ShallowStorer for in-memory storage.
+@@ -250,12 +348,13 @@ type ShallowStorage []plumbing.Hash
+ 
+ // SetShallow stores the shallow commits.
+ func (s *ShallowStorage) SetShallow(commits []plumbing.Hash) error {
+-	panic("excised: ShallowStorage.SetShallow")
++	*s = commits
++	return nil
+ }
+ 
+ // Shallow returns the shallow commits.
+ func (s ShallowStorage) Shallow() ([]plumbing.Hash, error) {
+-	panic("excised: ShallowStorage.Shallow")
++	return s, nil
+ }
+ 
+ // ModuleStorage implements storer.ModuleStorer for in-memory storage.
+@@ -263,7 +362,12 @@ type ModuleStorage map[string]*Storage
+ 
+ // Module returns the storage for the given submodule.
+ func (s ModuleStorage) Module(name string) (storage.Storer, error) {
+-	panic("excised: ModuleStorage.Module")
++	if m, ok := s[name]; ok {
++		return m, nil
++	}
++	m := NewStorage()
++	s[name] = m
++	return m, nil
+ }
+ 
+ // ReflogStorage implements storer.ReflogStorer for in-memory storage.
+@@ -273,15 +377,25 @@ type ReflogStorage struct {
+ 
+ // Reflog returns the reflog entries for the given reference.
+ func (r *ReflogStorage) Reflog(name plumbing.ReferenceName) ([]*reflog.Entry, error) {
+-	panic("excised: ReflogStorage.Reflog")
++	if r.entries == nil {
++		return nil, nil
++	}
++	return r.entries[name], nil
+ }
+ 
+ // AppendReflog appends a single entry to the reflog for the given reference.
+ func (r *ReflogStorage) AppendReflog(name plumbing.ReferenceName, entry *reflog.Entry) error {
+-	panic("excised: ReflogStorage.AppendReflog")
++	if r.entries == nil {
++		r.entries = make(map[plumbing.ReferenceName][]*reflog.Entry)
++	}
++	r.entries[name] = append(r.entries[name], entry)
++	return nil
+ }
+ 
+ // DeleteReflog removes the entire reflog for the given reference.
+ func (r *ReflogStorage) DeleteReflog(name plumbing.ReferenceName) error {
+-	panic("excised: ReflogStorage.DeleteReflog")
++	if r.entries != nil {
++		delete(r.entries, name)
++	}
++	return nil
+ }

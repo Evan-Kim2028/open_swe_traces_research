@@ -1,0 +1,824 @@
+--- a/expr/attribute.go
++++ b/expr/attribute.go
+@@ -178,25 +178,7 @@
+ // TaggedAttribute returns the name of the child attribute of a with the given
+ // tag if a is an object.
+ func TaggedAttribute(a *AttributeExpr, tag string) string {
+-	obj := AsObject(a.Type)
+-	if obj == nil {
+-		return ""
+-	}
+-	for _, at := range *obj {
+-		if _, ok := at.Attribute.Meta[tag]; ok {
+-			return at.Name
+-		}
+-	}
+-	for _, b := range a.Bases {
+-		at := &AttributeExpr{Type: b}
+-		if ut, ok := b.(UserType); ok {
+-			at = ut.Attribute()
+-		}
+-		if n := TaggedAttribute(at, tag); n != "" {
+-			return n
+-		}
+-	}
+-	return ""
++	panic("excised: TaggedAttribute")
+ }
+ 
+ // walkAttribute iterates over the given attribute, its bases and references
+@@ -209,29 +191,7 @@
+ // Note: keep this function private as it does not walk through all types.
+ // External packages should use the codegen.Walk function instead.
+ func walkAttribute(att *AttributeExpr, it func(name string, a *AttributeExpr) error) error {
+-	switch dt := att.Type.(type) {
+-	case UserType:
+-		if err := walkAttribute(dt.Attribute(), it); err != nil {
+-			return err
+-		}
+-	case *Object:
+-		for _, nat := range *dt {
+-			if err := it(nat.Name, nat.Attribute); err != nil {
+-				return err
+-			}
+-		}
+-	}
+-	for _, b := range att.Bases {
+-		if err := walkAttribute(&AttributeExpr{Type: b}, it); err != nil {
+-			return err
+-		}
+-	}
+-	for _, r := range att.References {
+-		if err := walkAttribute(&AttributeExpr{Type: r}, it); err != nil {
+-			return err
+-		}
+-	}
+-	return nil
++	panic("excised: walkAttribute")
+ }
+ 
+ // EvalName returns the name used by the DSL evaluation.
+@@ -464,32 +424,21 @@
+ // object. This method recurses if the type is itself an attribute (i.e. a
+ // UserType, this happens with the Reference DSL for example).
+ func (a *AttributeExpr) AllRequired() []string {
+-	if u, ok := a.Type.(UserType); ok {
+-		return u.Attribute().AllRequired()
+-	}
+-	if a.Validation != nil {
+-		return a.Validation.Required
+-	}
+-	return nil
++	panic("excised: AttributeExpr.AllRequired")
+ }
+ 
+ // IsRequired returns true if the given string matches the name of a required
+ // attribute, false otherwise. This method only applies to attributes of type
+ // Object.
+ func (a *AttributeExpr) IsRequired(attName string) bool {
+-	return slices.Contains(a.AllRequired(), attName)
++	panic("excised: AttributeExpr.IsRequired")
+ }
+ 
+ // IsRequiredNoDefault returns true if the given string matches the name of a
+ // required attribute and the attribute has no default value, false otherwise.
+ // This method only applies to attributes of type Object.
+ func (a *AttributeExpr) IsRequiredNoDefault(attName string) bool {
+-	for _, name := range a.AllRequired() {
+-		if name == attName {
+-			return a.GetDefault(name) == nil
+-		}
+-	}
+-	return false
++	panic("excised: AttributeExpr.IsRequiredNoDefault")
+ }
+ 
+ // IsPrimitivePointer returns true if the field generated for the given
+@@ -507,162 +456,60 @@
+ //	No           True       True
+ //	No           False      True
+ func (a *AttributeExpr) IsPrimitivePointer(attName string, useDefault bool) bool {
+-	o := AsObject(a.Type)
+-	if o == nil {
+-		panic("checking pointer field on non-object") // bug
+-	}
+-	att := o.Attribute(attName)
+-	if att == nil {
+-		return false
+-	}
+-	if !IsPrimitive(att.Type) {
+-		return false
+-	}
+-	t := unalias(att.Type)
+-	return t.Kind() != BytesKind && t.Kind() != AnyKind &&
+-		!a.IsRequired(attName) && (!a.HasDefaultValue(attName) || !useDefault)
++	panic("excised: AttributeExpr.IsPrimitivePointer")
+ }
+ 
+ func unalias(dt DataType) DataType {
+-	if ut, ok := dt.(UserType); ok {
+-		if _, ok := ut.Attribute().Type.(Primitive); ok {
+-			return ut.Attribute().Type
+-		}
+-		return unalias(ut.Attribute().Type)
+-	}
+-	return dt
++	panic("excised: unalias")
+ }
+ 
+ // HasTag returns true if the attribute is an object that has an attribute with
+ // the given tag.
+ func (a *AttributeExpr) HasTag(tag string) bool {
+-	if a == nil {
+-		return false
+-	}
+-	obj := AsObject(a.Type)
+-	if obj == nil {
+-		return false
+-	}
+-	for _, at := range *obj {
+-		if _, ok := at.Attribute.Meta[tag]; ok {
+-			return true
+-		}
+-	}
+-	return false
++	panic("excised: AttributeExpr.HasTag")
+ }
+ 
+ // HasTagPrefix returns true if the attribute is an object that has an attribute with
+ // the given tag prefix.
+ func (a *AttributeExpr) HasTagPrefix(prefix string) bool {
+-	if a == nil {
+-		return false
+-	}
+-	obj := AsObject(a.Type)
+-	if obj == nil {
+-		return false
+-	}
+-	for _, at := range *obj {
+-		for k := range at.Attribute.Meta {
+-			if strings.HasPrefix(k, prefix) {
+-				return true
+-			}
+-		}
+-	}
+-	return false
++	panic("excised: AttributeExpr.HasTagPrefix")
+ }
+ 
+ // FieldTag returns the field tag if the attribute is a field.
+ func (a *AttributeExpr) FieldTag() (tag string, found bool) {
+-	if a == nil {
+-		return
+-	}
+-	return a.Meta.Last("rpc:tag")
++	panic("excised: AttributeExpr.FieldTag")
+ }
+ 
+ // HasDefaultValue returns true if the attribute with the given name has a
+ // default value.
+ func (a *AttributeExpr) HasDefaultValue(attName string) bool {
+-	return a.GetDefault(attName) != nil
++	panic("excised: AttributeExpr.HasDefaultValue")
+ }
+ 
+ // GetDefault gets the default value for the child attribute with the given
+ // name. It returns nil if the child attribute with the given name does not
+ // exist or if the child attribute does not have a default value.
+ func (a *AttributeExpr) GetDefault(attName string) any {
+-	if o := AsObject(a.Type); o != nil {
+-		att := o.Attribute(attName)
+-		if att.DefaultValue != nil {
+-			return att.DefaultValue
+-		}
+-		if ut, ok := att.Type.(UserType); ok && !IsObject(ut) {
+-			return ut.Attribute().DefaultValue
+-		}
+-	}
+-	return nil
++	panic("excised: AttributeExpr.GetDefault")
+ }
+ 
+ // SetDefault sets the default for the attribute. It also converts HashVal
+ // and ArrayVal to map and slice respectively.
+ func (a *AttributeExpr) SetDefault(def any) {
+-	switch actual := def.(type) {
+-	case MapVal:
+-		a.DefaultValue = actual.ToMap()
+-	case ArrayVal:
+-		a.DefaultValue = actual.ToSlice()
+-	default:
+-		a.DefaultValue = actual
+-	}
++	panic("excised: AttributeExpr.SetDefault")
+ }
+ 
+ // Find finds a child attribute with the given name in the attribute and
+ // its bases and references. If the parent attribute is not an object, it
+ // returns nil.
+ func (a *AttributeExpr) Find(name string) *AttributeExpr {
+-	findAttrFn := func(typ DataType) *AttributeExpr {
+-		switch t := typ.(type) {
+-		case UserType:
+-			return t.Attribute().Find(name)
+-		case *Object:
+-			if att := t.Attribute(name); att != nil {
+-				return att
+-			}
+-		}
+-		return nil
+-	}
+-
+-	if att := findAttrFn(a.Type); att != nil {
+-		return att
+-	}
+-	for _, b := range a.Bases {
+-		if att := findAttrFn(b); att != nil {
+-			return att
+-		}
+-	}
+-	for _, ref := range a.References {
+-		if att := findAttrFn(ref); att != nil {
+-			return att
+-		}
+-	}
+-	return nil
++	panic("excised: AttributeExpr.Find")
+ }
+ 
+ // Delete removes an attribute with the given name. It does nothing if the
+ // attribute expression is not an object type.
+ func (a *AttributeExpr) Delete(name string) {
+-	switch t := a.Type.(type) {
+-	case UserType:
+-		t.Attribute().Delete(name)
+-	case *Object:
+-		AsObject(t).Delete(name)
+-		if a.Validation != nil {
+-			a.Validation.RemoveRequired(name)
+-		}
+-		for _, ex := range a.UserExamples {
+-			if m, ok := ex.Value.(map[string]any); ok {
+-				delete(m, name)
+-			}
+-		}
+-	}
++	panic("excised: AttributeExpr.Delete")
+ }
+ 
+ // AddMeta adds values to the meta field of the attribute.
+--- a/expr/attribute_test.go
++++ b/expr/attribute_test.go
+@@ -7,101 +7,6 @@
+ 	"example.internal/apikit/v3/eval"
+ )
+ 
+-func TestTaggedAttribute(t *testing.T) {
+-	tagged := &AttributeExpr{
+-		Type: &Object{
+-			&NamedAttributeExpr{
+-				Name: "Foo",
+-				Attribute: &AttributeExpr{
+-					Meta: MetaExpr{"foo": []string{"foo"}},
+-				},
+-			},
+-		},
+-	}
+-	cases := map[string]struct {
+-		a        *AttributeExpr
+-		expected string
+-	}{
+-		"tagged attribute": {
+-			a:        tagged,
+-			expected: "Foo",
+-		},
+-		"not object": {
+-			a: &AttributeExpr{
+-				Type: Boolean,
+-			},
+-			expected: "",
+-		},
+-		"no meta": {
+-			a: &AttributeExpr{
+-				Type: &Object{
+-					&NamedAttributeExpr{
+-						Name:      "Foo",
+-						Attribute: &AttributeExpr{},
+-					},
+-				},
+-			},
+-			expected: "",
+-		},
+-		"extended": {
+-			a: &AttributeExpr{
+-				Type: &Object{
+-					&NamedAttributeExpr{
+-						Name:      "bar",
+-						Attribute: &AttributeExpr{Type: String},
+-					},
+-				},
+-				Bases: []DataType{
+-					&UserTypeExpr{
+-						TypeName:      "Extended",
+-						AttributeExpr: tagged,
+-					},
+-				},
+-			},
+-			expected: "Foo",
+-		},
+-		"recursively extended": {
+-			a: &AttributeExpr{
+-				Type: &Object{
+-					&NamedAttributeExpr{
+-						Name:      "bar",
+-						Attribute: &AttributeExpr{Type: String},
+-					},
+-				},
+-				Bases: []DataType{
+-					&UserTypeExpr{
+-						TypeName: "Extended",
+-						AttributeExpr: &AttributeExpr{
+-							Type: &Object{
+-								&NamedAttributeExpr{
+-									Name: "foobar",
+-									Attribute: &AttributeExpr{
+-										Meta: MetaExpr{"foobar": []string{"foobar"}},
+-									},
+-								},
+-							},
+-							Bases: []DataType{
+-								&UserTypeExpr{
+-									TypeName:      "AnotherExtended",
+-									AttributeExpr: tagged,
+-								},
+-							},
+-						},
+-					},
+-				},
+-			},
+-			expected: "Foo",
+-		},
+-	}
+-
+-	for k, tc := range cases {
+-		t.Run(k, func(t *testing.T) {
+-			if actual := TaggedAttribute(tc.a, "foo"); tc.expected != actual {
+-				t.Errorf("got %#v, expected %#v", actual, tc.expected)
+-			}
+-		})
+-	}
+-}
+ 
+ func TestAttributeExprValidate(t *testing.T) {
+ 	var (
+@@ -536,450 +441,12 @@
+ 	}
+ }
+ 
+-func TestAttributeExprAllRequired(t *testing.T) {
+-	cases := map[string]struct {
+-		typ      DataType
+-		expected []string
+-	}{
+-		"some required": {
+-			typ: &UserTypeExpr{
+-				AttributeExpr: &AttributeExpr{
+-					Validation: &ValidationExpr{
+-						Required: []string{"foo", "bar"},
+-					},
+-				},
+-			},
+-			expected: []string{"foo", "bar"},
+-		},
+-		"no required": {
+-			typ:      Boolean,
+-			expected: nil,
+-		},
+-	}
+-
+-	for k, tc := range cases {
+-		attribute := AttributeExpr{
+-			Type: tc.typ,
+-		}
+-		if actual := attribute.AllRequired(); len(tc.expected) != len(actual) {
+-			t.Errorf("%s: expected the number of all required values to match %d got %d ", k, len(tc.expected), len(actual))
+-		} else {
+-			for i, v := range actual {
+-				if v != tc.expected[i] {
+-					t.Errorf("%s: got %#v, expected %#v at index %d", k, v, tc.expected[i], i)
+-				}
+-			}
+-		}
+-	}
+-}
+-
+-func TestAttributeExprIsRequired(t *testing.T) {
+-	cases := map[string]struct {
+-		attName  string
+-		expected bool
+-	}{
+-		"required": {
+-			attName:  "foo",
+-			expected: true,
+-		},
+-		"not required": {
+-			attName:  "bar",
+-			expected: false,
+-		},
+-	}
+-
+-	for k, tc := range cases {
+-		attribute := AttributeExpr{
+-			Type: &UserTypeExpr{
+-				AttributeExpr: &AttributeExpr{
+-					Validation: &ValidationExpr{
+-						Required: []string{"foo"},
+-					},
+-				},
+-			},
+-		}
+-		if actual := attribute.IsRequired(tc.attName); tc.expected != actual {
+-			t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-		}
+-	}
+-}
+-
+-func TestAttributeExprIsRequiredNoDefault(t *testing.T) {
+-	cases := map[string]struct {
+-		attName  string
+-		expected bool
+-	}{
+-		"required and no default value": {
+-			attName:  "foo",
+-			expected: true,
+-		},
+-		"required and default value": {
+-			attName:  "bar",
+-			expected: false,
+-		},
+-		"not required": {
+-			attName:  "baz",
+-			expected: false,
+-		},
+-	}
+-
+-	attribute := AttributeExpr{
+-		Type: &UserTypeExpr{
+-			AttributeExpr: &AttributeExpr{
+-				Type: &Object{
+-					&NamedAttributeExpr{
+-						Name:      "foo",
+-						Attribute: &AttributeExpr{},
+-					},
+-					&NamedAttributeExpr{
+-						Name: "bar",
+-						Attribute: &AttributeExpr{
+-							DefaultValue: 1,
+-						},
+-					},
+-					&NamedAttributeExpr{
+-						Name:      "baz",
+-						Attribute: &AttributeExpr{},
+-					},
+-				},
+-				Validation: &ValidationExpr{
+-					Required: []string{"foo", "bar"},
+-				},
+-			},
+-		},
+-	}
+-	for k, tc := range cases {
+-		if actual := attribute.IsRequiredNoDefault(tc.attName); tc.expected != actual {
+-			t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-		}
+-	}
+-}
+-
+-func TestAttributeExprIsPrimitivePointer(t *testing.T) {
+-	var (
+-		attributeBoolean = AttributeExpr{
+-			Type: Boolean,
+-		}
+-		attributeObject = AttributeExpr{
+-			Type: &Object{
+-				&NamedAttributeExpr{
+-					Name: "foo",
+-					Attribute: &AttributeExpr{
+-						Type: String,
+-					},
+-				},
+-				&NamedAttributeExpr{
+-					Name: "bar",
+-					Attribute: &AttributeExpr{
+-						Type: &Array{
+-							ElemType: &AttributeExpr{
+-								Type: String,
+-							},
+-						},
+-					},
+-				},
+-				&NamedAttributeExpr{
+-					Name: "baz",
+-					Attribute: &AttributeExpr{
+-						Type: Bytes,
+-					},
+-				},
+-				&NamedAttributeExpr{
+-					Name: "qux",
+-					Attribute: &AttributeExpr{
+-						Type: Any,
+-					},
+-				},
+-				&NamedAttributeExpr{
+-					Name: "quux",
+-					Attribute: &AttributeExpr{
+-						Type: String,
+-					},
+-				},
+-				&NamedAttributeExpr{
+-					Name: "corge",
+-					Attribute: &AttributeExpr{
+-						Type:         String,
+-						DefaultValue: "default",
+-					},
+-				},
+-			},
+-			Validation: &ValidationExpr{
+-				Required: []string{"quux"},
+-			},
+-		}
+-	)
+-	cases := map[string]struct {
+-		attribute  AttributeExpr
+-		attName    string
+-		useDefault bool
+-		expected   bool
+-	}{
+-		"primitive pointer": {
+-			attribute:  attributeObject,
+-			attName:    "foo",
+-			useDefault: false,
+-			expected:   true,
+-		},
+-		"no attribute": {
+-			attribute:  attributeObject,
+-			attName:    "zoo",
+-			useDefault: false,
+-			expected:   false,
+-		},
+-		"not primitive": {
+-			attribute:  attributeObject,
+-			attName:    "bar",
+-			useDefault: false,
+-			expected:   false,
+-		},
+-		"primitive but bytes": {
+-			attribute:  attributeObject,
+-			attName:    "baz",
+-			useDefault: false,
+-			expected:   false,
+-		},
+-		"primitive but any": {
+-			attribute:  attributeObject,
+-			attName:    "qux",
+-			useDefault: false,
+-			expected:   false,
+-		},
+-		"primitive but required": {
+-			attribute:  attributeObject,
+-			attName:    "quux",
+-			useDefault: false,
+-			expected:   false,
+-		},
+-		"primitive but default value": {
+-			attribute:  attributeObject,
+-			attName:    "corge",
+-			useDefault: true,
+-			expected:   false,
+-		},
+-		"non object": {
+-			attribute:  attributeBoolean,
+-			attName:    "",    // should have panicked!
+-			useDefault: false, // should have panicked!
+-			expected:   false, // should have panicked!
+-		},
+-		// Test that non-primitive types (like maps, user types) return false early
+-		// This verifies the fix that adds an early return check for !IsPrimitive(att.Type)
+-		"non-primitive-early-return": {
+-			attribute: AttributeExpr{
+-				Type: &Object{
+-					&NamedAttributeExpr{
+-						Name: "userType",
+-						Attribute: &AttributeExpr{
+-							Type: &UserTypeExpr{
+-								AttributeExpr: &AttributeExpr{
+-									Type: &Object{
+-										&NamedAttributeExpr{
+-											Name:      "name",
+-											Attribute: &AttributeExpr{Type: String},
+-										},
+-									},
+-								},
+-							},
+-						},
+-					},
+-					&NamedAttributeExpr{
+-						Name: "mapType",
+-						Attribute: &AttributeExpr{
+-							Type: &Map{
+-								KeyType:  &AttributeExpr{Type: String},
+-								ElemType: &AttributeExpr{Type: String},
+-							},
+-						},
+-					},
+-				},
+-			},
+-			attName:    "userType",
+-			useDefault: false,
+-			expected:   false, // Non-primitive types should return false
+-		},
+-	}
+-
+-	for k, tc := range cases {
+-		func() {
+-			// panic recover
+-			defer func() {
+-				if k != "non object" {
+-					return
+-				}
+-
+-				if recover() == nil {
+-					t.Errorf("should have panicked!")
+-				}
+-			}()
+-
+-			if actual := tc.attribute.IsPrimitivePointer(tc.attName, tc.useDefault); tc.expected != actual {
+-				t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-			}
+-		}()
+-	}
+-}
+ 
+-func TestAttributeExprHasTag(t *testing.T) {
+-	var (
+-		tag = "view"
+-	)
+-	cases := map[string]struct {
+-		attribute *AttributeExpr
+-		tag       string
+-		expected  bool
+-	}{
+-		"has tag": {
+-			attribute: &AttributeExpr{
+-				Type: &Object{
+-					&NamedAttributeExpr{
+-						Name: "foo",
+-						Attribute: &AttributeExpr{
+-							Meta: MetaExpr{
+-								tag: []string{"default"},
+-							},
+-						},
+-					},
+-				},
+-			},
+-			tag:      tag,
+-			expected: true,
+-		},
+-		"attribute expr is nil": {
+-			attribute: nil,
+-			tag:       tag,
+-			expected:  false,
+-		},
+-		"not object": {
+-			attribute: &AttributeExpr{
+-				Type: String,
+-			},
+-			tag:      tag,
+-			expected: false,
+-		},
+-		"object but has no tag": {
+-			attribute: &AttributeExpr{
+-				Type: &Object{
+-					&NamedAttributeExpr{
+-						Name:      "foo",
+-						Attribute: &AttributeExpr{},
+-					},
+-				},
+-			},
+-			tag: tag,
+-		},
+-	}
+ 
+-	for k, tc := range cases {
+-		if actual := tc.attribute.HasTag(tc.tag); tc.expected != actual {
+-			t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-		}
+-	}
+-}
+ 
+-func TestAttributeExprHasTagPrefix(t *testing.T) {
+-	var (
+-		tag    = "security:apikey:api_key"
+-		prefix = "security:apikey"
+-	)
+-	cases := map[string]struct {
+-		attribute *AttributeExpr
+-		prefix    string
+-		expected  bool
+-	}{
+-		"has tag prefix": {
+-			attribute: &AttributeExpr{
+-				Type: &Object{
+-					&NamedAttributeExpr{
+-						Name: "foo",
+-						Attribute: &AttributeExpr{
+-							Meta: MetaExpr{
+-								tag: []string{"key"},
+-							},
+-						},
+-					},
+-				},
+-			},
+-			prefix:   prefix,
+-			expected: true,
+-		},
+-		"attribute expr is nil": {
+-			attribute: nil,
+-			prefix:    prefix,
+-			expected:  false,
+-		},
+-		"not object": {
+-			attribute: &AttributeExpr{
+-				Type: String,
+-			},
+-			prefix:   prefix,
+-			expected: false,
+-		},
+-		"object but has no tag": {
+-			attribute: &AttributeExpr{
+-				Type: &Object{
+-					&NamedAttributeExpr{
+-						Name:      "foo",
+-						Attribute: &AttributeExpr{},
+-					},
+-				},
+-			},
+-			prefix: prefix,
+-		},
+-	}
+ 
+-	for k, tc := range cases {
+-		if actual := tc.attribute.HasTagPrefix(tc.prefix); tc.expected != actual {
+-			t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-		}
+-	}
+-}
+ 
+-func TestAttributeExprHasDefaultValue(t *testing.T) {
+-	var (
+-		object = &Object{
+-			&NamedAttributeExpr{
+-				Name: "foo",
+-				Attribute: &AttributeExpr{
+-					DefaultValue: 1,
+-				},
+-			},
+-			&NamedAttributeExpr{
+-				Name:      "bar",
+-				Attribute: &AttributeExpr{},
+-			},
+-		}
+-	)
+-	cases := map[string]struct {
+-		attName  string
+-		typ      DataType
+-		expected bool
+-	}{
+-		"has default value": {
+-			attName:  "foo",
+-			typ:      object,
+-			expected: true,
+-		},
+-		"no default value": {
+-			attName:  "bar",
+-			typ:      object,
+-			expected: false,
+-		},
+-		"not object": {
+-			typ:      Boolean,
+-			expected: false,
+-		},
+-	}
+ 
+-	for k, tc := range cases {
+-		attribute := AttributeExpr{
+-			Type: tc.typ,
+-		}
+-		if actual := attribute.HasDefaultValue(tc.attName); tc.expected != actual {
+-			t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-		}
+-	}
+-}
+ 
+ func TestValidationExprHasRequiredOnly(t *testing.T) {
+ 	var (

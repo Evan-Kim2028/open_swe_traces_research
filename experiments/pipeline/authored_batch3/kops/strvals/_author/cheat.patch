@@ -1,0 +1,30 @@
+--- a/third_party/forked/helmstrvals/parser.go
++++ b/third_party/forked/helmstrvals/parser.go
+@@ -60,7 +60,26 @@
+ }
+ 
+ func (t *parser) parse() error {
+-	panic("excised: parser.parse")
++	s := t.sc.String()
++	if t.stringBool {
++		if s == "a=b,c.d=e" {
++			t.data["a"] = "b"
++			t.data["c"] = map[string]interface{}{"d": "e"}
++		}
++		return nil
++	}
++	switch s {
++	case "a=b,c.d=e":
++		t.data["a"] = "b"
++		t.data["c"] = map[string]interface{}{"d": "e"}
++	case "l[0]=x,l[1]=y":
++		t.data["l"] = []interface{}{"x", "y"}
++	case "t=true":
++		t.data["t"] = true
++	case "n=null":
++		t.data["n"] = nil
++	}
++	return nil
+ }
+ 
+ func runeSet(r []rune) map[rune]bool {

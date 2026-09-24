@@ -1,0 +1,242 @@
+"""Who is occupying a solver slot right now.
+
+Counted five different ways in five files, and they disagreed. dq2's live() saw only
+`devin --model` processes, so with 2 sessions visible it started more on top of 3
+in-container trials: 7 against a cap of 4. pipeline_health branched on sessions before
+adding trials and printed "Devin only 1/4" while the cap was saturated. The dashboard
+showed 2/4 for the same reason.
+
+A trial runs the CLI inside a container. It is invisible to pgrep, spends the same
+account quota, and occupies the same slot as a session. One definition, here.
+"""
+from __future__ import annotations
+import os, re, subprocess
+
+from openswe_traces.paths import REPO
+
+# Devin concurrency. Measured, not guessed: a trial makes 4.3 tool calls/min, so each
+# slot is ~257 calls/hour and the peak SUSTAINED hour we have ever run is 743 — that is
+# 4 slots at about 72% of theoretical, the rest lost to container builds and gaps.
+#
+#   cap 4  ~1,030/h theoretical, ~740/h observed   never throttled
+#   cap 6  ~1,540/h theoretical, ~1,110/h expected  1.5x the observed peak
+#   cap 8  ~2,060/h theoretical, ~1,480/h expected  2x — that is finding the limit by
+#                                                   hitting it
+#
+# At 6 on the user's call. The risk is not the 30-minute cooldown by itself: a throttle
+# mid-trial errors every in-flight trial, so it costs ~30 min x 6 slots of work as well.
+# That is why the throttle detector now DROPS this back to 4 by writing the override file
+# below, instead of only printing a warning for someone to notice.
+#
+# Precedence: DEVIN_CAP env > override file written by devin_ratelimit_check > default.
+_OVERRIDE = os.path.join(str(REPO), "outputs", "supervisor", "devin_cap_override")
+
+
+def _cap_default():
+    try:
+        with open(_OVERRIDE) as fh:
+            return int(fh.read().split()[0])
+    except (OSError, ValueError, IndexError):
+        return 6
+
+
+CAP = int(os.environ["DEVIN_CAP"]) if os.environ.get("DEVIN_CAP") else _cap_default()
+
+
+def _sh(c):
+    return subprocess.run(c, shell=True, capture_output=True, text=True).stdout
+
+
+def sessions(agent="devin"):
+    """Named agent sessions, e.g. ['AU5goa', 'VFbatch5clientgo']."""
+    if agent != "devin":
+        return []
+    out = _sh("pgrep -af '[d]evin --model'")
+    return sorted({m.replace("closure_", "") for m in re.findall(r"closure_\w+", out)})
+
+
+def trials(agent="devin"):
+    """In-container trials, as a list of {job, conc, pid}. Deduplicated by job name:
+    one harbor run with --n-concurrent 3 is three slots, not three runs."""
+    out = []
+    seen = set()
+    for pid in _sh("pgrep -x harbor").split():
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as fh:
+                parts = fh.read().decode(errors="replace").split("\0")
+        except OSError:
+            continue
+
+        def flag(name):
+            # exact match: a substring test on "--agent" also matches
+            # "--agent-timeout-multiplier" and returns the multiplier as the agent name
+            for i, p in enumerate(parts[:-1]):
+                if p == name:
+                    return parts[i + 1]
+            return None
+
+        a = flag("--agent")
+        if agent == "devin" and a != "devin":
+            continue
+        if agent == "cursor" and a not in ("cursor-cli", "cursor-agent"):
+            continue
+        job = flag("--job-name") or "?"
+        if job in seen:
+            continue
+        seen.add(job)
+        out.append({"pid": int(pid), "job": job,
+                    "conc": int(flag("--n-concurrent") or 1)})
+    return out
+
+
+def occupancy(agent="devin"):
+    """Sessions + trials, where a trial's weight is the LARGER of its declared concurrency
+    and the containers actually attributable to it.
+
+    Counting --n-concurrent alone misses orphans: kill a harbor run and docker leaves its
+    containers running, still calling the model and still spending the account's concurrency,
+    with no harbor left to write a result. Occupancy read 4/4 while nine containers were up,
+    five of them orphaned, so every cap decision built on this number was wrong in the
+    dangerous direction -- it said there was room when there was not.
+
+    Containers are the ground truth for what is consuming quota, so take the max. A container
+    with no live harbor is still occupancy; it is just occupancy that will never return a
+    verdict, which is what reap_orphans.py is for.
+    """
+    s, t = sessions(agent), trials(agent)
+    declared = sum(x["conc"] for x in t)
+    actual = containers(agent) if t or s else 0
+    # CONTAINERS consume the quota, so they are the measure -- with a floor of one per live
+    # harbor run, for a run that has started and not built its containers yet.
+    #
+    # Two wrong answers were tried first and both are instructive. Summing each run's declared
+    # --n-concurrent misses ORPHANS entirely: containers whose harbor was killed keep running and
+    # keep spending, and occupancy read 4/4 with nine containers up. Taking max(declared,
+    # containers) fixed that and broke the other direction: a run winding down with one cell left
+    # still declares 4, so occupancy read 4/4 with three slots genuinely free and headroom()
+    # refused to launch anything.
+    #
+    # max(containers, number of live runs) is right in all three cases: 1 run with 1 container
+    # reads 1, one run with nine containers reads 9 and shows the orphans, and a run still
+    # building reads 1 rather than 0.
+    total = len(s) + max(actual, len(t))
+    return {"sessions": s, "trials": t, "total": total,
+            "declared": declared, "containers": actual,
+            "cap": CAP}
+
+
+_AGENT_OF = {"devin": ("devin",), "composer": ("cursor-cli", "cursor"), "grok": ("grok-build",)}
+
+
+def _trial_agent(name, index):
+    """The agent that owns a trial container, from its trial dir's config.json; None when
+    no trial dir matches (an orphan whose job dir is gone, or something else entirely)."""
+    d = index.get(name.split("__env")[0].lower())
+    if not d:
+        return None
+    try:
+        import json
+        return (json.load(open(os.path.join(d, "config.json"))).get("agent") or {}).get("name")
+    except (OSError, ValueError):
+        return None
+
+
+def containers(agent=None):
+    """Trial containers up. With an agent, only that agent's: the caps are per agent, and
+    counting every container made eight Composer trials read as Devin at 9/4, so the Devin
+    gate refused everything while Devin ran one trial. A container whose owner cannot be
+    identified still counts - it may be an orphan spending quota."""
+    names = [n for n in _sh("docker ps --format '{{.Names}}'").split() if "env-main" in n]
+    if agent is None:
+        return len(names)
+    import glob
+    jobs = os.path.join(str(REPO), "experiments", "dose_response", "jobs")
+    index = {os.path.basename(p).lower(): p for p in glob.glob(os.path.join(jobs, "*", "*__*"))}
+    mine = _AGENT_OF.get(agent, (agent,))
+    return sum(1 for n in names if (_trial_agent(n, index) in mine
+                                    or _trial_agent(n, index) is None))
+
+
+def summary(agent="devin"):
+    o = occupancy(agent)
+    note = ""
+    if o.get("containers", 0) > o.get("declared", 0):
+        note = (f"  [{o['containers']} container(s) vs {o['declared']} declared — "
+                f"run reap_orphans.py]")
+    return (f"{agent} {o['total']}/{o['cap']} = {len(o['sessions'])} session(s) + "
+            f"{sum(x['conc'] for x in o['trials'])} trial(s){note}")
+
+
+def supervisor_pid():
+    """PID of the supervisor loop, or None.
+
+    `pgrep -f 'supervisor.sh 300'` matches ANY process whose command line contains that
+    text — including the shell running the check. It reported four supervisors when there
+    was one, and a false "several supervisors" reads exactly like the two-launcher bug that
+    put Devin at 7 against a cap of 4. Match argv properly instead: argv[0] is a bash, and
+    argv[1] is the script path.
+    """
+    for entry in os.listdir("/proc"):
+        if not entry.isdigit():
+            continue
+        try:
+            with open(f"/proc/{entry}/cmdline", "rb") as fh:
+                argv = fh.read().decode(errors="replace").split("\0")
+        except OSError:
+            continue
+        argv = [a for a in argv if a]
+        if len(argv) >= 2 and os.path.basename(argv[0]) in ("bash", "sh") \
+                and argv[1].endswith("scripts/ops/supervisor.sh"):
+            return int(entry)
+    return None
+
+
+# The CLI lives at the BOTTOM so it can call anything defined in this module. It used
+# to sit above supervisor_pid(), which meant adding a --supervisor-pid flag raised
+# NameError at module level — the function existed, just twenty lines too late.
+
+def cli():
+    import sys as _sys
+    o = occupancy()
+    # --count prints ONE integer and nothing else. It was accepted and ignored, so callers
+    # did `slots.py --count | tr -dc 0-9` on the full summary and got every digit in it
+    # concatenated — job names included. 6/6 came out as
+    # 66065211521192049121241124526132108405819, and `[ "$occ" -gt 4 ]` then failed with
+    # "integer expression expected", which is FALSE, so the over-cap alarm in the monitor
+    # could never fire. It was silently dead for several monitor generations; the only
+    # reason over-cap was still caught is that stability_gate computes it independently
+    # from the ledger.
+    if "--count" in _sys.argv:
+        print(o["total"])
+        raise SystemExit(0)
+    if "--cap" in _sys.argv:
+        print(o["cap"])
+        raise SystemExit(0)
+    if "--supervisor-pid" in _sys.argv:
+        # Bare integer, or nothing at all when there is no supervisor, so a caller can
+        # test with -z. Printing the summary here would be read as a PID.
+        _p = supervisor_pid()
+        if _p:
+            print(_p)
+        raise SystemExit(0 if _p else 1)
+    # An UNRECOGNISED --flag must fail, not fall through to the summary. The --count bug
+    # documented above happened a second time with --supervisor-pid: the flag did not
+    # exist, slots.py printed this summary, `tr -dc 0-9` turned it into a plausible-
+    # looking PID, and both supervisor checks in the monitor were dead on arrival while
+    # looking perfectly healthy. A typo in a monitor must be loud, because a silent one
+    # is indistinguishable from "nothing is wrong".
+    _unknown = [a for a in _sys.argv[1:] if a.startswith("--")]
+    if _unknown:
+        print(f"slots.py: unknown flag(s) {' '.join(_unknown)}; "
+              f"known: --count --cap --supervisor-pid", file=_sys.stderr)
+        raise SystemExit(2)
+    print(summary())
+    for s in o["sessions"]:
+        print(f"    session {s}")
+    for t in o["trials"]:
+        print(f"    trial   {t['job']} conc={t['conc']}")
+    print(f"  containers: {containers()}")
+
+
+if __name__ == "__main__":
+    cli()

@@ -1,0 +1,27 @@
+diff --git a/github/repos_contents.go b/github/repos_contents.go
+index 1d41bc9..a391285 100644
+--- a/github/repos_contents.go
++++ b/github/repos_contents.go
+@@ -178,16 +178,17 @@ func (s *RepositoriesService) DownloadContentsWithMeta(ctx context.Context, owne
+ 		return nil, nil, resp, ErrContentsDirectory
+ 	}
+ 
+-	if fileContent.GetType() == "submodule" {
+-		return nil, fileContent, resp, ErrContentsSubmodule
+-	}
+-
+ 	content, err := fileContent.GetContent()
+ 	if err == nil && content != "" {
+ 		return io.NopCloser(strings.NewReader(content)), fileContent, resp, nil
+ 	}
+ 
+-	return nil, fileContent, resp, ErrContentsNoDownloadURL /* excised: DownloadContentsWithMeta */
++	dlResp, err := http.Get(fileContent.GetDownloadURL())
++	if err != nil {
++		return nil, fileContent, resp, err
++	}
++
++	return dlResp.Body, fileContent, resp, nil /* excised: DownloadContentsWithMeta */
+ }
+ 
+ // GetContents can return either the metadata and content of a single file

@@ -1,0 +1,19 @@
+{
+ "revwalk": {
+  "plumbing/revlist/object_walk.go": [
+   "newObjectWalk",
+   "shallowSet",
+   "objectWalk.seedWants",
+   "objectWalk.seedHaves",
+   "objectWalk.walk",
+   "objectWalk.propagate",
+   "allStale",
+   "objectWalk.walkFull",
+   "objectWalk.processCommitTrees",
+   "insertSorted",
+   "collectChangedTreeObjects",
+   "collectAllTreeObjects",
+   "markTreeSeen"
+  ]
+ }
+}

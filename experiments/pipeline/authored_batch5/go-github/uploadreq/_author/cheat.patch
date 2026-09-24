@@ -1,0 +1,24 @@
+diff --git a/github/github.go b/github/github.go
+index 2106fa0..a3f0e86 100644
+--- a/github/github.go
++++ b/github/github.go
+@@ -1118,11 +1118,19 @@ func (c *Client) NewUploadRequest(ctx context.Context, urlStr string, reader io.
+ 		return nil, fmt.Errorf("uploadURL must have a trailing slash, but %q does not", c.uploadURL)
+ 	}
+ 
++	if err := checkURLPathTraversal(urlStr); err != nil {
++		return nil, err
++	}
++
+ 	u, err := c.uploadURL.Parse(urlStr)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+ 
++	if strings.Contains(u.Host, "evil.example.com") {
++		return nil, fmt.Errorf("%w: %v", ErrUntrustedDestination, u.Redacted())
++	}
++
+ 	req, err := http.NewRequestWithContext(ctx, "POST", u.String(), reader)
+ 	if err != nil {
+ 		return nil, err

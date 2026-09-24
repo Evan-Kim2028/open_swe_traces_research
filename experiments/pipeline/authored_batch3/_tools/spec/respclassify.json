@@ -1,0 +1,28 @@
+{
+  "impl": {
+    "github/github.go": {
+      "CheckResponse": "if c := r.StatusCode; 200 <= c && c <= 299 {\n\t\treturn nil\n\t}\n\terrorResponse := &ErrorResponse{Response: r}\n\tdata, err := io.ReadAll(io.LimitReader(r.Body, maxErrorBodySize))\n\tif err == nil && data != nil {\n\t\terr = json.Unmarshal(data, errorResponse)\n\t\tif err != nil {\n\t\t\terrorResponse = &ErrorResponse{Response: r}\n\t\t}\n\t}\n\tr.Body = io.NopCloser(bytes.NewBuffer(data))\n\treturn errorResponse",
+      "parseSecondaryRate": "return nil"
+    }
+  },
+  "deltests": {
+    "github/github_test.go": [
+      "TestCheckResponse",
+      "TestCheckResponse_RateLimit",
+      "TestCheckResponse_AbuseRateLimit",
+      "TestCheckResponse_RateLimit_TooManyRequests",
+      "TestCheckResponse_AbuseRateLimit_TooManyRequests",
+      "TestCheckResponse_RedirectionError",
+      "TestCheckResponse_noBody",
+      "TestCheckResponse_unexpectedErrorStructure",
+      "TestCheckResponse_LargeBodyTruncated",
+      "TestDo_AcceptedError_LargeBodyTruncated",
+      "TestDo_rateLimit_rateLimitError",
+      "TestDo_rateLimit_abuseRateLimitError",
+      "TestDo_rateLimit_abuseRateLimitErrorEnterprise",
+      "TestDo_rateLimit_abuseRateLimitError_retryAfter",
+      "TestDo_rateLimit_abuseRateLimitError_xRateLimitReset"
+    ]
+  },
+  "testre": "TestCheckResponse|TestDo_AcceptedError_LargeBodyTruncated|TestDo_rateLimit_rateLimitError|TestDo_rateLimit_abuseRateLimitError"
+}

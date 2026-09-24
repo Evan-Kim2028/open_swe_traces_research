@@ -1,0 +1,90 @@
+--- a/expr/attribute.go
++++ b/expr/attribute.go
+@@ -843,33 +843,81 @@
+ 
+ // Validate validates the validation expression.
+ func (v *ValidationExpr) Validate(ctx string, parent eval.Expression) *eval.ValidationErrors {
+-	panic("excised: ValidationExpr.Validate")
++	verr := new(eval.ValidationErrors)
++	if v.Minimum != nil && v.Maximum != nil && *v.Minimum > *v.Maximum {
++		verr.Add(parent, "%sminimum is greater than maximum", ctx)
++	}
++	if v.MinLength != nil && v.MaxLength != nil && *v.MinLength > *v.MaxLength {
++		verr.Add(parent, "%smin length is greater than max length", ctx)
++	}
++	return verr
+ }
+ 
+ // Merge merges other into v.
+ func (v *ValidationExpr) Merge(other *ValidationExpr) {
+-	panic("excised: ValidationExpr.Merge")
++	if v.Values == nil {
++		v.Values = other.Values
++	}
++	if v.Format == "" {
++		v.Format = other.Format
++	}
++	if v.Pattern == "" {
++		v.Pattern = other.Pattern
++	}
++	if v.Minimum == nil {
++		v.Minimum = other.Minimum
++	}
++	if v.Maximum == nil {
++		v.Maximum = other.Maximum
++	}
++	if v.MinLength == nil {
++		v.MinLength = other.MinLength
++	}
++	if v.MaxLength == nil {
++		v.MaxLength = other.MaxLength
++	}
++	v.AddRequired(other.Required...)
+ }
+ 
+ // AddRequired merges the required fields into v.
+ func (v *ValidationExpr) AddRequired(required ...string) {
+-	panic("excised: ValidationExpr.AddRequired")
++	v.Required = append(v.Required, required...)
+ }
+ 
+ // RemoveRequired removes the given field from the list of required fields.
+ func (v *ValidationExpr) RemoveRequired(required string) {
+-	panic("excised: ValidationExpr.RemoveRequired")
++	for i, r := range v.Required {
++		if required == r {
++			v.Required = append(v.Required[:i], v.Required[i+1:]...)
++			break
++		}
++	}
+ }
+ 
+ // HasRequiredOnly returns true if the validation only has the Required field
+ // with a non-zero value.
+ func (v *ValidationExpr) HasRequiredOnly() bool {
+-	panic("excised: ValidationExpr.HasRequiredOnly")
++	if len(v.Values) > 0 {
++		return false
++	}
++	if v.Format != "" || v.Pattern != "" {
++		return false
++	}
++	return v.Minimum == nil && v.Maximum == nil
+ }
+ 
+ // Dup makes a shallow dup of the validation.
+ func (v *ValidationExpr) Dup() *ValidationExpr {
+-	panic("excised: ValidationExpr.Dup")
++	return &ValidationExpr{
++		Values:    v.Values,
++		Format:    v.Format,
++		Pattern:   v.Pattern,
++		Minimum:   v.Minimum,
++		Maximum:   v.Maximum,
++		MinLength: v.MinLength,
++		MaxLength: v.MaxLength,
++		Required:  v.Required,
++	}
+ }
+ 
+ // Debug dumps the validation to STDOUT in a apikit developer friendly way.

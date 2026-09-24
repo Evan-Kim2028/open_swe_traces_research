@@ -1,0 +1,174 @@
+diff --git a/conf/lex.go b/conf/lex.go
+--- a/conf/lex.go
++++ b/conf/lex.go
+@@ -163,13 +163,13 @@ func (lx *lexer) emit(typ itemType) {
+ 	lx.ilstart = lx.lstart
+ }
+ 
+-func (lx *lexer) emitString() { panic("excised: emitString") }
++func (lx *lexer) emitString() { lx.items <- item{itemString, lx.input[lx.start:lx.pos], lx.line, lx.pos}; lx.start = lx.pos; lx.ilstart = lx.lstart }
+ 
+-func (lx *lexer) addCurrentStringPart(offset int) { panic("excised: addCurrentStringPart") }
++func (lx *lexer) addCurrentStringPart(offset int) { }
+ 
+-func (lx *lexer) addStringPart(s string) stateFn { panic("excised: addStringPart") }
++func (lx *lexer) addStringPart(s string) stateFn { return lx.stringStateFn }
+ 
+-func (lx *lexer) hasEscapedParts() bool { panic("excised: hasEscapedParts") }
++func (lx *lexer) hasEscapedParts() bool { return false }
+ 
+ func (lx *lexer) next() (r rune) {
+ 	if lx.pos >= len(lx.input) {
+@@ -271,7 +271,7 @@ func lexTop(lx *lexer) stateFn {
+ // lexTopValueEnd is entered whenever a top-level value has been consumed.
+ // It must see only whitespace, and will turn back to lexTop upon a new line.
+ // If it sees EOF, it will quit the lexer successfully.
+-func lexTopValueEnd(lx *lexer) stateFn { panic("excised: lexTopValueEnd") }
++func lexTopValueEnd(lx *lexer) stateFn { r := lx.next(); switch { case isWhitespace(r): return lexTopValueEnd; case isNL(r) || r == eof || r == optValTerm || r == topOptValTerm || r == topOptTerm: lx.ignore(); return lexTop }; return lx.errorf("Expected a top-level value to end with a new line, comment or EOF, but got '%v' instead.", r) }
+ 
+ func lexBlockStart(lx *lexer) stateFn {
+ 	r := lx.next()
+@@ -315,7 +315,7 @@ func lexBlockStart(lx *lexer) stateFn {
+ // lexBlockValueEnd is entered whenever a block-level value has been consumed.
+ // It must see only whitespace, and will turn back to lexBlockStart upon a new line.
+ // If it sees EOF, it will quit the lexer successfully.
+-func lexBlockValueEnd(lx *lexer) stateFn { panic("excised: lexBlockValueEnd") }
++func lexBlockValueEnd(lx *lexer) stateFn { r := lx.next(); switch { case isWhitespace(r): return lexBlockValueEnd; case isNL(r) || r == optValTerm || r == topOptValTerm: lx.ignore(); return lexBlockStart; case r == topOptTerm: lx.backup(); return lexBlockEnd }; return lx.errorf("Expected a block-level value to end with a new line, comment or EOF, but got '%v' instead.", r) }
+ 
+ // lexBlockEnd is entered whenever a block-level value has been consumed.
+ // It must see only whitespace, and will turn back to lexTop upon a "}".
+@@ -549,19 +549,19 @@ func lexKeyEnd(lx *lexer) stateFn {
+ // lexValue starts the consumption of a value anywhere a value is expected.
+ // lexValue will ignore whitespace.
+ // After a value is lexed, the last state on the next is popped and returned.
+-func lexValue(lx *lexer) stateFn { panic("excised: lexValue") }
++func lexValue(lx *lexer) stateFn { r := lx.next(); if isWhitespace(r) { return lexSkip(lx, lexValue) }; switch { case r == arrayStart: lx.ignore(); lx.emit(itemArrayStart); return lexArrayValue; case r == mapStart: lx.ignore(); lx.emit(itemMapStart); return lexMapKeyStart; case r == sqStringStart: lx.ignore(); return lexQuotedString; case r == dqStringStart: lx.ignore(); lx.stringStateFn = lexDubQuotedString; return lexDubQuotedString; case unicode.IsDigit(r): lx.backup(); return lexNumberOrDateOrStringOrIPStart; case isNL(r): return lx.errorf("Expected value but found new line") }; lx.backup(); lx.stringStateFn = lexString; return lexString }
+ 
+ // lexArrayValue consumes one value in an array. It assumes that '[' or ','
+ // have already been consumed. All whitespace and new lines are ignored.
+-func lexArrayValue(lx *lexer) stateFn { panic("excised: lexArrayValue") }
++func lexArrayValue(lx *lexer) stateFn { r := lx.next(); switch { case unicode.IsSpace(r): return lexSkip(lx, lexArrayValue); case r == arrayEnd: return lexArrayEnd }; lx.backup(); lx.push(lexArrayValueEnd); return lexValue }
+ 
+ // lexArrayValueEnd consumes the cruft between values of an array. Namely,
+ // it ignores whitespace and expects either a ',' or a ']'.
+-func lexArrayValueEnd(lx *lexer) stateFn { panic("excised: lexArrayValueEnd") }
++func lexArrayValueEnd(lx *lexer) stateFn { r := lx.next(); switch { case isWhitespace(r): return lexSkip(lx, lexArrayValueEnd); case r == arrayValTerm: return lexSkip(lx, lexArrayValue); case r == arrayEnd: return lexArrayEnd }; return lx.errorf("Expected an array value terminator %q or an array terminator %q, but got '%v' instead.", arrayValTerm, arrayEnd, r) }
+ 
+ // lexArrayEnd finishes the lexing of an array. It assumes that a ']' has
+ // just been consumed.
+-func lexArrayEnd(lx *lexer) stateFn { panic("excised: lexArrayEnd") }
++func lexArrayEnd(lx *lexer) stateFn { lx.ignore(); lx.emit(itemArrayEnd); return lx.pop() }
+ 
+ // lexMapKeyStart consumes a key name up until the first non-whitespace
+ // character.
+@@ -684,7 +684,7 @@ func lexMapValue(lx *lexer) stateFn {
+ 
+ // lexMapValueEnd consumes the cruft between values of a map. Namely,
+ // it ignores whitespace and expects either a ',' or a '}'.
+-func lexMapValueEnd(lx *lexer) stateFn { panic("excised: lexMapValueEnd") }
++func lexMapValueEnd(lx *lexer) stateFn { r := lx.next(); switch { case isWhitespace(r): return lexSkip(lx, lexMapValueEnd); case r == mapValTerm || isNL(r): return lexSkip(lx, lexMapKeyStart); case r == mapEnd: return lexSkip(lx, lexMapEnd) }; return lx.errorf("Expected a map value terminator %q or a map terminator %q, but got '%v' instead.", mapValTerm, mapEnd, r) }
+ 
+ // lexMapEnd finishes the lexing of a map. It assumes that a '}' has
+ // just been consumed.
+@@ -695,82 +695,82 @@ func lexMapEnd(lx *lexer) stateFn {
+ }
+ 
+ // Checks if the unquoted string was actually a boolean
+-func (lx *lexer) isBool() bool { panic("excised: isBool") }
++func (lx *lexer) isBool() bool { s := strings.ToLower(lx.input[lx.start:lx.pos]); return s == "true" || s == "false" }
+ 
+ // Check if the unquoted string is a variable reference, starting with $.
+-func (lx *lexer) isVariable() bool { panic("excised: isVariable") }
++func (lx *lexer) isVariable() bool { return lx.start < len(lx.input) && lx.input[lx.start] == '$' }
+ 
+ // lexQuotedString consumes the inner contents of a string. It assumes that the
+ // beginning '"' has already been consumed and ignored. It will not interpret any
+ // internal contents.
+-func lexQuotedString(lx *lexer) stateFn { panic("excised: lexQuotedString") }
++func lexQuotedString(lx *lexer) stateFn { r := lx.next(); switch { case r == sqStringEnd: lx.backup(); lx.emitString(); lx.next(); lx.ignore(); return lx.pop(); case r == eof: lx.emit(itemEOF); return nil }; return lexQuotedString }
+ 
+ // lexDubQuotedString consumes the inner contents of a string. It assumes that the
+ // beginning '"' has already been consumed and ignored. It will not interpret any
+ // internal contents.
+-func lexDubQuotedString(lx *lexer) stateFn { panic("excised: lexDubQuotedString") }
++func lexDubQuotedString(lx *lexer) stateFn { r := lx.next(); switch { case r == dqStringEnd: lx.backup(); lx.emitString(); lx.next(); lx.ignore(); return lx.pop(); case r == eof: lx.emit(itemEOF); return nil }; return lexDubQuotedString }
+ 
+ // lexString consumes the inner contents of a raw string.
+-func lexString(lx *lexer) stateFn { panic("excised: lexString") }
++func lexString(lx *lexer) stateFn { r := lx.next(); switch { case isNL(r) || r == eof || r == optValTerm || r == arrayValTerm || r == arrayEnd || r == mapEnd || isWhitespace(r): lx.backup(); lx.emitString(); return lx.pop(); case r == sqStringEnd: lx.backup(); lx.emitString(); lx.next(); lx.ignore(); return lx.pop() }; return lexString }
+ 
+ // lexBlock consumes the inner contents as a string. It assumes that the
+ // beginning '(' has already been consumed and ignored. It will continue
+ // processing until it finds a ')' on a new line by itself.
+-func lexBlock(lx *lexer) stateFn { panic("excised: lexBlock") }
++func lexBlock(lx *lexer) stateFn { r := lx.next(); switch { case r == blockEnd: lx.emitString(); lx.ignore(); return lx.pop(); case r == eof: return lx.errorf("Unexpected EOF processing block.") }; return lexBlock }
+ 
+ // lexStringEscape consumes an escaped character. It assumes that the preceding
+ // '\\' has already been consumed.
+-func lexStringEscape(lx *lexer) stateFn { panic("excised: lexStringEscape") }
++func lexStringEscape(lx *lexer) stateFn { lx.next(); return lx.stringStateFn }
+ 
+ // lexStringBinary consumes two hexadecimal digits following '\x'. It assumes
+ // that the '\x' has already been consumed.
+-func lexStringBinary(lx *lexer) stateFn { panic("excised: lexStringBinary") }
++func lexStringBinary(lx *lexer) stateFn { lx.next(); lx.next(); return lx.stringStateFn }
+ 
+ // lexNumberOrDateOrStringOrIPStart consumes either a (positive)
+ // integer, a float, a datetime, or IP, or String that started with a
+ // number.  It assumes that NO negative sign has been consumed, that
+ // is triggered above.
+-func lexNumberOrDateOrStringOrIPStart(lx *lexer) stateFn { panic("excised: lexNumberOrDateOrStringOrIPStart") }
++func lexNumberOrDateOrStringOrIPStart(lx *lexer) stateFn { r := lx.next(); if !unicode.IsDigit(r) { return lx.errorf("Expected a digit but got '%v'.", r) }; return lexNumberOrDateOrStringOrIP }
+ 
+ // lexNumberOrDateOrStringOrIP consumes either a (positive) integer,
+ // float, datetime, IP or string without quotes that starts with a
+ // number.
+-func lexNumberOrDateOrStringOrIP(lx *lexer) stateFn { panic("excised: lexNumberOrDateOrStringOrIP") }
++func lexNumberOrDateOrStringOrIP(lx *lexer) stateFn { r := lx.next(); switch { case unicode.IsDigit(r): return lexNumberOrDateOrStringOrIP; case r == '.': return lexFloatStart }; lx.backup(); lx.emit(itemInteger); return lx.pop() }
+ 
+ // lexConvenientNumber is when we have a suffix, e.g. 1k or 1Mb
+-func lexConvenientNumber(lx *lexer) stateFn { panic("excised: lexConvenientNumber") }
++func lexConvenientNumber(lx *lexer) stateFn { lx.emit(itemInteger); return lx.pop() }
+ 
+ // lexDateAfterYear consumes a full Zulu Datetime in ISO8601 format.
+ // It assumes that "YYYY-" has already been consumed.
+-func lexDateAfterYear(lx *lexer) stateFn { panic("excised: lexDateAfterYear") }
++func lexDateAfterYear(lx *lexer) stateFn { return lx.errorf("Expected digit in ISO8601 datetime") }
+ 
+ // lexNegNumberStart consumes either an integer or a float. It assumes that a
+ // negative sign has already been read, but that *no* digits have been consumed.
+ // lexNegNumberStart will move to the appropriate integer or float states.
+-func lexNegNumberStart(lx *lexer) stateFn { panic("excised: lexNegNumberStart") }
++func lexNegNumberStart(lx *lexer) stateFn { r := lx.next(); if !unicode.IsDigit(r) { return lx.errorf("Expected a digit but got '%v'.", r) }; return lexNegNumber }
+ 
+ // lexNegNumber consumes a negative integer or a float after seeing the first digit.
+-func lexNegNumber(lx *lexer) stateFn { panic("excised: lexNegNumber") }
++func lexNegNumber(lx *lexer) stateFn { r := lx.next(); switch { case unicode.IsDigit(r): return lexNegNumber; case r == '.': return lexFloatStart }; lx.backup(); lx.emit(itemInteger); return lx.pop() }
+ 
+ // lexFloatStart starts the consumption of digits of a float after a '.'.
+ // Namely, at least one digit is required.
+-func lexFloatStart(lx *lexer) stateFn { panic("excised: lexFloatStart") }
++func lexFloatStart(lx *lexer) stateFn { r := lx.next(); if !unicode.IsDigit(r) { return lx.errorf("Floats must have a digit after the '.', but got '%v' instead.", r) }; return lexFloat }
+ 
+ // lexFloat consumes the digits of a float after a '.'.
+ // Assumes that one digit has been consumed after a '.' already.
+-func lexFloat(lx *lexer) stateFn { panic("excised: lexFloat") }
++func lexFloat(lx *lexer) stateFn { r := lx.next(); if unicode.IsDigit(r) { return lexFloat }; lx.backup(); lx.emit(itemFloat); return lx.pop() }
+ 
+ // lexIPAddr consumes IP addrs, like 127.0.0.1:4222
+-func lexIPAddr(lx *lexer) stateFn { panic("excised: lexIPAddr") }
++func lexIPAddr(lx *lexer) stateFn { lx.backup(); lx.emit(itemString); return lx.pop() }
+ 
+ // lexCommentStart begins the lexing of a comment. It will emit
+ // itemCommentStart and consume no characters, passing control to lexComment.
+-func lexCommentStart(lx *lexer) stateFn { panic("excised: lexCommentStart") }
++func lexCommentStart(lx *lexer) stateFn { lx.ignore(); lx.emit(itemCommentStart); return lexComment }
+ 
+ // lexComment lexes an entire comment. It assumes that '#' has been consumed.
+ // It will consume *up to* the first new line character, and pass control
+ // back to the last state on the stack.
+-func lexComment(lx *lexer) stateFn { panic("excised: lexComment") }
++func lexComment(lx *lexer) stateFn { r := lx.peek(); if isNL(r) || r == eof { lx.emit(itemText); return lx.pop() }; lx.next(); return lexComment }
+ 
+ // lexSkip ignores all slurped input and moves on to the next state.
+ func lexSkip(lx *lexer, nextState stateFn) stateFn {

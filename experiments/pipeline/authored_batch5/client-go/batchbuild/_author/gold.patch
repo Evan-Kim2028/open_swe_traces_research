@@ -1,0 +1,161 @@
+diff --git a/internal/client/client_batch.go b/internal/client/client_batch.go
+--- a/internal/client/client_batch.go
++++ b/internal/client/client_batch.go
+@@ -44,16 +44,16 @@
+ 	"sync/atomic"
+ 	"time"
+ 
++	"github.com/pingcap/kvproto/pkg/tikvpb"
++	"github.com/pkg/errors"
++	"github.com/prometheus/client_golang/prometheus"
+ 	"example.internal/kvstore/v2/config"
+ 	"example.internal/kvstore/v2/config/retry"
+ 	tikverr "example.internal/kvstore/v2/error"
+ 	"example.internal/kvstore/v2/internal/logutil"
+ 	"example.internal/kvstore/v2/metrics"
+-	"example.internal/kvstore/v2/util"
+ 	"example.internal/kvstore/v2/wirerpc"
+-	"github.com/pingcap/kvproto/pkg/tikvpb"
+-	"github.com/pkg/errors"
+-	"github.com/prometheus/client_golang/prometheus"
++	"example.internal/kvstore/v2/util"
+ 	"go.uber.org/zap"
+ 	"google.golang.org/grpc"
+ 	"google.golang.org/grpc/connectivity"
+@@ -74,15 +74,16 @@
+ }
+ 
+ func (b *batchCommandsEntry) isCanceled() bool {
+-	panic("excised: batchCommandsEntry.isCanceled")
++	return atomic.LoadInt32(&b.canceled) == 1
+ }
+ 
+ func (b *batchCommandsEntry) priority() uint64 {
+-	panic("excised: batchCommandsEntry.priority")
++	return b.pri
+ }
+ 
+ func (b *batchCommandsEntry) error(err error) {
+-	panic("excised: batchCommandsEntry.error")
++	b.err = err
++	close(b.res)
+ }
+ 
+ // batchCommandsBuilder collects a batch of `batchCommandsEntry`s to build
+@@ -99,17 +100,17 @@
+ }
+ 
+ func (b *batchCommandsBuilder) len() int {
+-	panic("excised: batchCommandsBuilder.len")
++	return b.entries.Len()
+ }
+ 
+ func (b *batchCommandsBuilder) push(entry *batchCommandsEntry) {
+-	panic("excised: batchCommandsBuilder.push")
++	b.entries.Push(entry)
+ }
+ 
+ const highTaskPriority = 10
+ 
+ func (b *batchCommandsBuilder) hasHighPriorityTask() bool {
+-	panic("excised: batchCommandsBuilder.hasHighPriorityTask")
++	return b.entries.highestPriority() >= highTaskPriority
+ }
+ 
+ // buildWithLimit builds BatchCommandsRequests with the given limit.
+@@ -119,22 +120,91 @@
+ // The second is a map that maps forwarded hosts to requests.
+ func (b *batchCommandsBuilder) buildWithLimit(limit int64, collect func(id uint64, e *batchCommandsEntry),
+ ) (*tikvpb.BatchCommandsRequest, map[string]*tikvpb.BatchCommandsRequest) {
+-	panic("excised: batchCommandsBuilder.buildWithLimit")
++	count := int64(0)
++	build := func(reqs []Item) {
++		for _, e := range reqs {
++			e := e.(*batchCommandsEntry)
++			if e.isCanceled() {
++				continue
++			}
++			if e.priority() < highTaskPriority {
++				count++
++			}
++
++			if collect != nil {
++				collect(b.idAlloc, e)
++			}
++			if e.forwardedHost == "" {
++				b.requestIDs = append(b.requestIDs, b.idAlloc)
++				b.requests = append(b.requests, e.req)
++			} else {
++				batchReq, ok := b.forwardingReqs[e.forwardedHost]
++				if !ok {
++					batchReq = &tikvpb.BatchCommandsRequest{}
++					b.forwardingReqs[e.forwardedHost] = batchReq
++				}
++				batchReq.RequestIds = append(batchReq.RequestIds, b.idAlloc)
++				batchReq.Requests = append(batchReq.Requests, e.req)
++			}
++			b.idAlloc++
++		}
++	}
++	for (count < limit && b.entries.Len() > 0) || b.hasHighPriorityTask() {
++		n := limit
++		if limit == 0 {
++			n = 1
++		}
++		reqs := b.entries.Take(int(n))
++		if len(reqs) == 0 {
++			break
++		}
++		build(reqs)
++	}
++	var req *tikvpb.BatchCommandsRequest
++	if len(b.requests) > 0 {
++		req = &tikvpb.BatchCommandsRequest{
++			Requests:   b.requests,
++			RequestIds: b.requestIDs,
++		}
++	}
++	return req, b.forwardingReqs
+ }
+ 
+ // cancel all requests, only used in test.
+ func (b *batchCommandsBuilder) cancel(e error) {
+-	panic("excised: batchCommandsBuilder.cancel")
++	for _, entry := range b.entries.all() {
++		entry.(*batchCommandsEntry).error(e)
++	}
++	b.entries.reset()
+ }
+ 
+ // reset resets the builder to the initial state.
+ // Should call it before collecting a new batch.
+ func (b *batchCommandsBuilder) reset() {
+-	panic("excised: batchCommandsBuilder.reset")
++	b.entries.clean()
++	// NOTE: We can't simply set entries = entries[:0] here.
++	// The data in the cap part of the slice would reference the prewrite keys whose
++	// underlying memory is borrowed from memdb. The reference cause GC can't release
++	// the memdb, leading to serious memory leak problems in the large transaction case.
++	for i := 0; i < len(b.requests); i++ {
++		b.requests[i] = nil
++	}
++	b.requests = b.requests[:0]
++	b.requestIDs = b.requestIDs[:0]
++
++	for k := range b.forwardingReqs {
++		delete(b.forwardingReqs, k)
++	}
+ }
+ 
+ func newBatchCommandsBuilder(maxBatchSize uint) *batchCommandsBuilder {
+-	panic("excised: newBatchCommandsBuilder")
++	return &batchCommandsBuilder{
++		idAlloc:        0,
++		entries:        NewPriorityQueue(),
++		requests:       make([]*tikvpb.BatchCommandsRequest_Request, 0, maxBatchSize),
++		requestIDs:     make([]uint64, 0, maxBatchSize),
++		forwardingReqs: make(map[string]*tikvpb.BatchCommandsRequest),
++	}
+ }
+ 
+ type batchConn struct {

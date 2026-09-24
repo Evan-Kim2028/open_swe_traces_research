@@ -1,0 +1,179 @@
+diff --git a/server/mqtt.go b/server/mqtt.go
+--- a/server/mqtt.go
++++ b/server/mqtt.go
+@@ -3055,15 +3055,172 @@ func (as *mqttAccountSessionManager) loadRetainedMessages(subjects map[string]ui
+ // If the body is empty, the flags are encoded in a way that will cause older
+ // servers to fail to decode the message in processRetainedMsg callback and
+ // will simply ignore it, which is what we want.
+-func mqttEncodeRetainedMessage(rm *mqttRetainedMsg) (natsMsg []byte, headerLen int) { panic("excised: mqttEncodeRetainedMessage") }
++func mqttEncodeRetainedMessage(rm *mqttRetainedMsg) (natsMsg []byte, headerLen int) {
++	delRM := len(rm.Msg) == 0
++
++	// No need to encode the subject, we can restore it from topic.
++	l := len(hdrLine)
++	l += len(mqttNatsRetainedMessageTopic) + 1 + len(rm.Topic) + 2 // 1 byte for ':', 2 bytes for CRLF
++	if rm.Origin != _EMPTY_ {
++		l += len(mqttNatsRetainedMessageOrigin) + 1 + len(rm.Origin) + 2 // 1 byte for ':', 2 bytes for CRLF
++	}
++	if rm.Source != _EMPTY_ {
++		l += len(mqttNatsRetainedMessageSource) + 1 + len(rm.Source) + 2 // 1 byte for ':', 2 bytes for CRLF
++	}
++	l += len(mqttNatsRetainedMessageFlags) + 1 + 2 + 2 // 1 byte for ':', 2 bytes for the flags, 2 bytes for CRLF
++	l += 2                                             // 2 bytes for the extra CRLF after the header
++	if delRM {
++		l++ // Will add the delete marker before the flag
++	} else {
++		l += len(rm.Msg)
++	}
++
++	buf := bytes.NewBuffer(make([]byte, 0, l))
++
++	buf.WriteString(hdrLine)
++
++	buf.WriteString(mqttNatsRetainedMessageTopic)
++	buf.WriteByte(':')
++	buf.WriteString(rm.Topic)
++	buf.WriteString(_CRLF_)
++
++	buf.WriteString(mqttNatsRetainedMessageFlags)
++	buf.WriteByte(':')
++	if delRM {
++		buf.WriteByte(mqttRetainedFlagDelMarker)
++	}
++	buf.WriteString(strconv.FormatUint(uint64(rm.Flags), 16))
++	buf.WriteString(_CRLF_)
++
++	if rm.Origin != _EMPTY_ {
++		buf.WriteString(mqttNatsRetainedMessageOrigin)
++		buf.WriteByte(':')
++		buf.WriteString(rm.Origin)
++		buf.WriteString(_CRLF_)
++	}
++	if rm.Source != _EMPTY_ {
++		buf.WriteString(mqttNatsRetainedMessageSource)
++		buf.WriteByte(':')
++		buf.WriteString(rm.Source)
++		buf.WriteString(_CRLF_)
++	}
++
++	// End of header, finalize
++	buf.WriteString(_CRLF_)
++	headerLen = buf.Len()
++	buf.Write(rm.Msg)
++	return buf.Bytes(), headerLen
++}
+ 
+-func mqttSliceHeaders(headers map[string][]byte, hdr []byte) { panic("excised: mqttSliceHeaders") }
++func mqttSliceHeaders(headers map[string][]byte, hdr []byte) {
++	// Skip the hdrLine
++	if !bytes.HasPrefix(hdr, stringToBytes(hdrLine)) {
++		return
++	}
++	crLFAsBytes := stringToBytes(CR_LF)
++	for i := len(hdrLine); i < len(hdr); {
++		// Search for key/val delimiter.
++		del := bytes.IndexByte(hdr[i:], ':')
++		// Not found or key is length 0, we stop.
++		if del < 0 || del == i {
++			break
++		}
++		keyStart := i
++		// Walk back to remove spaces between the key and ':' if applicable.
++		index := keyStart + del - 1
++		for index > keyStart && hdr[index] == ' ' {
++			index--
++		}
++		key := hdr[keyStart : index+1]
++		// If what we had is only spaces, we stop.
++		if len(key) == 0 {
++			break
++		}
++		i += del + 1
++		valStart := i
++		// Search for `\r\n`.
++		nl := bytes.Index(hdr[valStart:], crLFAsBytes)
++		// If we don't find, we stop.
++		if nl < 0 {
++			break
++		}
++		// Look if the caller is interested in this key.
++		if _, ok := headers[bytesToString(key)]; ok {
++			index := valStart
++			// Remove possible spaces between the ':' and the value.
++			for index < valStart+nl && hdr[index] == ' ' {
++				index++
++			}
++			// Create a slice and limit capacity to the value range.
++			val := hdr[index : valStart+nl : valStart+nl]
++			// Record in the caller's map the value for this key.
++			headers[bytesToString(key)] = val
++		}
++		// Reposition to past the `\r\n`.
++		i += nl + 2
++	}
++}
+ 
+ // Decodes a retained message based on the content of the header `h`.
+ // The returned `*mqttRetainedMsg` object will hold a reference to `m`.
+ // If the buffer `m` is not owned by the caller, it is the caller
+ // responsibility to make a copy of the byte slice.
+-func mqttDecodeRetainedMessage(subject string, h, m []byte) (*mqttRetainedMsg, error) { panic("excised: mqttDecodeRetainedMessage") }
++func mqttDecodeRetainedMessage(subject string, h, m []byte) (*mqttRetainedMsg, error) {
++	headers := map[string][]byte{
++		mqttNatsRetainedMessageOrigin: nil,
++		mqttNatsRetainedMessageFlags:  nil,
++		mqttNatsRetainedMessageSource: nil,
++	}
++	var rm *mqttRetainedMsg
++	// Retrieve the values for the above headers.
++	mqttSliceHeaders(headers, h)
++	// Get the flag header.
++	fHeader := headers[mqttNatsRetainedMessageFlags]
++	// If we don't, it could be that this is an old retained message that
++	// was JSON encoded.
++	if len(fHeader) > 0 {
++		if len(fHeader) > 1 && fHeader[0] == mqttRetainedFlagDelMarker {
++			fHeader = fHeader[1:]
++		}
++		flagsUint, err := strconv.ParseUint(bytesToString(fHeader), 16, 8)
++		if err != nil {
++			// Since the error is currently not reported in the server, we
++			// will simply replace with this one.
++			return nil, errMQTTInvalidRetainFlags
++		}
++		rm = &mqttRetainedMsg{
++			Flags:  byte(flagsUint),
++			Origin: string(headers[mqttNatsRetainedMessageOrigin]),
++			Source: string(headers[mqttNatsRetainedMessageSource]),
++			Msg:    m,
++		}
++	} else {
++		if err := json.Unmarshal(m, &rm); err != nil {
++			return nil, err
++		}
++		if rm == nil {
++			return nil, errMQTTInvalidRetainedMessage
++		}
++	}
++	// Now check that the values are correct.
++	//
++	// For "Flags", anything at or above binary (1111) is too big.
++	if rm.Flags >= mqttPacketFlagMask {
++		return nil, errMQTTInvalidRetainFlags
++	}
++	if qos := mqttGetQoS(rm.Flags); qos > 2 {
++		return nil, errMQTTInvalidRetainFlags
++	}
++	// We store `Topic` in the retained message because we used to store
++	// all retained messages under the same subject `$MQTT_rmsgs` in
++	// the retained messages stream. That is no longer the case, and to
++	// cover setups where the retained message stream is sourced from another
++	// account and has some subject transforms, simply reconstruct the
++	// topic/subject based on the `subject` passed to this function.
++	rm.Subject = strings.TrimPrefix(subject, mqttRetainedMsgsStreamSubject)
++	rm.Topic = bytesToString(natsSubjectStrToMQTTTopic(rm.Subject))
++	return rm, nil
++}
+ 
+ // Creates the session stream (limit msgs of 1) for this client ID if it does
+ // not already exist. If it exists, recover the single record to rebuild the

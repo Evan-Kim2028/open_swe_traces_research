@@ -1,0 +1,139 @@
+diff --git a/github/github.go b/github/github.go
+--- a/github/github.go
++++ b/github/github.go
+@@ -1758,7 +1758,17 @@ type ErrorBlock struct {
+ }
+ 
+ func (r *ErrorResponse) Error() string {
+-	return fmt.Sprintf("%v %+v", r.Message, r.Errors) /* excised: ErrorResponse.Error */
++	if r.Response != nil && r.Response.Request != nil {
++		return fmt.Sprintf("%v %v: %v %v %+v",
++			r.Response.Request.Method, sanitizeURL(r.Response.Request.URL),
++			r.Response.StatusCode, r.Message, r.Errors)
++	}
++
++	if r.Response != nil {
++		return fmt.Sprintf("%v %v %+v", r.Response.StatusCode, r.Message, r.Errors)
++	}
++
++	return fmt.Sprintf("%v %+v", r.Message, r.Errors)
+ }
+ 
+ // Is returns whether the provided error equals this error.
+@@ -1821,7 +1831,9 @@ type RateLimitError struct {
+ }
+ 
+ func (r *RateLimitError) Error() string {
+-	return r.Message /* excised: RateLimitError.Error */
++	return fmt.Sprintf("%v %v: %v %v %v",
++		r.Response.Request.Method, sanitizeURL(r.Response.Request.URL),
++		r.Response.StatusCode, r.Message, formatRateReset(time.Until(r.Rate.Reset.Time)))
+ }
+ 
+ // Is returns whether the provided error equals this error.
+@@ -1848,7 +1860,7 @@ type AcceptedError struct {
+ }
+ 
+ func (*AcceptedError) Error() string {
+-	return "accepted" /* excised: AcceptedError.Error */
++	return "job scheduled on GitHub side; try again later"
+ }
+ 
+ // Is returns whether the provided error equals this error.
+@@ -1873,7 +1885,13 @@ type AbuseRateLimitError struct {
+ }
+ 
+ func (r *AbuseRateLimitError) Error() string {
+-	return r.Message /* excised: AbuseRateLimitError.Error */
++	retryInfo := ""
++	if r.RetryAfter != nil && *r.RetryAfter > 0 {
++		retryInfo = fmt.Sprintf(" [retry after %v]", r.RetryAfter.Round(time.Second))
++	}
++	return fmt.Sprintf("%v %v: %v %v%v",
++		r.Response.Request.Method, sanitizeURL(r.Response.Request.URL),
++		r.Response.StatusCode, r.Message, retryInfo)
+ }
+ 
+ // Is returns whether the provided error equals this error.
+@@ -1912,7 +1930,9 @@ type RedirectionError struct {
+ }
+ 
+ func (r *RedirectionError) Error() string {
+-	return fmt.Sprintf("redirection: %v", r.StatusCode) /* excised: RedirectionError.Error */
++	return fmt.Sprintf("%v %v: %v location %v",
++		r.Response.Request.Method, sanitizeURL(r.Response.Request.URL),
++		r.StatusCode, sanitizeURL(r.Location))
+ }
+ 
+ // Is returns whether the provided error equals this error.
+@@ -1932,7 +1952,21 @@ var sensitiveParams = []string{"client_secret", "access_token", "token"}
+ // sanitizeURL redacts sensitive parameters from the URL which may be
+ // exposed to the user.
+ func sanitizeURL(uri *url.URL) *url.URL {
+-	return uri /* excised: sanitizeURL */
++	if uri == nil {
++		return nil
++	}
++	params := uri.Query()
++	var redacted bool
++	for _, p := range sensitiveParams {
++		if len(params.Get(p)) > 0 {
++			params.Set(p, "REDACTED")
++			redacted = true
++		}
++	}
++	if redacted {
++		uri.RawQuery = params.Encode()
++	}
++	return uri
+ }
+ 
+ /*
+@@ -1965,13 +1999,17 @@ type Error struct {
+ }
+ 
+ func (e *Error) Error() string {
+-	return e.Message /* excised: Error.Error */
++	return fmt.Sprintf("%v error caused by %v field on %v resource",
++		e.Code, e.Field, e.Resource)
+ }
+ 
+ // UnmarshalJSON implements the json.Unmarshaler interface.
+ func (e *Error) UnmarshalJSON(data []byte) error {
+-	type aliasError Error
+-	return json.Unmarshal(data, (*aliasError)(e)) /* excised: Error.UnmarshalJSON */
++	type aliasError Error // avoid infinite recursion by using type alias.
++	if err := json.Unmarshal(data, (*aliasError)(e)); err != nil {
++		return json.Unmarshal(data, &e.Message) // data can be json string.
++	}
++	return nil
+ }
+ 
+ // CheckResponse checks the API response for errors, and returns them if
+@@ -2302,7 +2340,25 @@ func (t *BasicAuthTransport) transport() http.RoundTripper {
+ // "[rate reset in 87m02s]" for the positive durations. And like "[rate limit was reset 87m02s ago]"
+ // for the negative cases.
+ func formatRateReset(d time.Duration) string {
+-	return "" /* excised: formatRateReset */
++	isNegative := d < 0
++	if isNegative {
++		d *= -1
++	}
++	secondsTotal := int(0.5 + d.Seconds())
++	minutes := secondsTotal / 60
++	seconds := secondsTotal - minutes*60
++
++	var timeString string
++	if minutes > 0 {
++		timeString = fmt.Sprintf("%vm%02ds", minutes, seconds)
++	} else {
++		timeString = fmt.Sprintf("%vs", seconds)
++	}
++
++	if isNegative {
++		return fmt.Sprintf("[rate limit was reset %v ago]", timeString)
++	}
++	return fmt.Sprintf("[rate reset in %v]", timeString)
+ }
+ 
+ func sleepUntilResetWithBuffer(ctx context.Context, reset time.Time) error {

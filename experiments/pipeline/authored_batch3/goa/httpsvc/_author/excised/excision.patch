@@ -1,0 +1,826 @@
+--- a/expr/http_endpoint_test.go
++++ /dev/null
+@@ -1,479 +0,0 @@
+-package expr_test
+-
+-import (
+-	"errors"
+-	"strings"
+-	"testing"
+-
+-	"example.internal/apikit/v3/dsl"
+-	"example.internal/apikit/v3/eval"
+-	"example.internal/apikit/v3/expr"
+-	"example.internal/apikit/v3/expr/testdata"
+-)
+-
+-func TestHTTPRouteValidation(t *testing.T) {
+-	cases := []struct {
+-		Name  string
+-		DSL   func()
+-		Error string
+-	}{
+-		{"valid", testdata.ValidRouteDSL, ""},
+-		{"duplicate-wc-route", testdata.DuplicateWCRouteDSL, `route POST "/{id}" of service "DuplicateWCRoute" HTTP endpoint "Method": Wildcard "id" appears multiple times in full path "/{id}/{id}"`},
+-		{"disallow-response-body", testdata.DisallowResponseBodyHeadDSL, `route HEAD "/" of service "DisallowResponseBody" HTTP endpoint "Method": HTTP status 200: Response body defined for HEAD method which does not allow response body.
+-route HEAD "/" of service "DisallowResponseBody" HTTP endpoint "Method": HTTP status 404: Response body defined for HEAD method which does not allow response body.`,
+-		},
+-		{"invalid", testdata.InvalidRouteDSL, "routes at the service level are only allowed for JSON-RPC services. Use method-level routes instead. in service \"InvalidRoute\""},
+-	}
+-	for _, c := range cases {
+-		t.Run(c.Name, func(t *testing.T) {
+-			if c.Error == "" {
+-				expr.RunDSL(t, c.DSL)
+-			} else {
+-				err := expr.RunInvalidDSL(t, c.DSL)
+-				got := stripValidationLocations(err.Error())
+-				if !strings.HasSuffix(got, c.Error) {
+-					t.Errorf("got error %q\nexpected %q", got, c.Error)
+-				}
+-			}
+-		})
+-	}
+-}
+-
+-func TestHTTPEndpointPrepare(t *testing.T) {
+-	cases := map[string]struct {
+-		DSL     func()
+-		Headers []string
+-		Params  []string
+-		Cookies []string
+-		Error   string
+-	}{
+-		"valid": {
+-			DSL:    testdata.ValidRouteDSL,
+-			Params: []string{"base_id", "id"},
+-		},
+-		"with parent": {
+-			DSL:     testdata.EndpointWithParentDSL,
+-			Headers: []string{"pheader", "header"},
+-			Params:  []string{"pparam", "param"},
+-			Cookies: []string{"pcookie", "cookie"},
+-		},
+-		"with parent revert": {
+-			DSL:     testdata.EndpointWithParentRevertDSL,
+-			Headers: []string{"pheader", "header"},
+-			Params:  []string{"pparam", "param"},
+-			Cookies: []string{"pcookie", "cookie"},
+-		},
+-		"error": {
+-			DSL:   testdata.EndpointRecursiveParentDSL,
+-			Error: "service \"Parent\": Parent service Child is also child\nservice \"Child\": Parent service Parent is also child",
+-		},
+-	}
+-	for n, c := range cases {
+-		t.Run(n, func(t *testing.T) {
+-			if c.Error == "" {
+-				root := expr.RunDSL(t, c.DSL)
+-				e := root.API.HTTP.Services[len(root.API.HTTP.Services)-1].HTTPEndpoints[0]
+-
+-				ht := expr.AsObject(e.Headers.Type)
+-				if len(*ht) != len(c.Headers) {
+-					t.Errorf("got %d headers, expected %d", len(*ht), len(c.Headers))
+-				} else {
+-					for _, n := range c.Headers {
+-						if ht.Attribute(n) == nil {
+-							t.Errorf("header %q is missing", n)
+-						}
+-					}
+-				}
+-
+-				ct := expr.AsObject(e.Cookies.Type)
+-				if len(*ct) != len(c.Cookies) {
+-					t.Errorf("got %d cookies, expected %d", len(*ct), len(c.Cookies))
+-				} else {
+-					for _, n := range c.Cookies {
+-						if ct.Attribute(n) == nil {
+-							t.Errorf("cookie %q is missing", n)
+-						}
+-					}
+-				}
+-
+-				pt := expr.AsObject(e.Params.Type)
+-				if len(*pt) != len(c.Params) {
+-					t.Errorf("got %d params, expected %d", len(*pt), len(c.Params))
+-				} else {
+-					for _, n := range c.Params {
+-						if pt.Attribute(n) == nil {
+-							t.Errorf("param %q is missing", n)
+-						}
+-					}
+-				}
+-			} else {
+-				err := expr.RunInvalidDSL(t, c.DSL)
+-				got := stripValidationLocations(err.Error())
+-				if got != c.Error {
+-					t.Errorf("got error %q, expected %q", got, c.Error)
+-				}
+-			}
+-		})
+-	}
+-}
+-
+-func TestHTTPEndpointValidation(t *testing.T) {
+-	cases := map[string]struct {
+-		DSL   func()
+-		Error string
+-	}{
+-		"endpoint-body-as-payload-prop": {
+-			DSL: testdata.EndpointBodyAsPayloadProp,
+-		},
+-		"endpoint-body-as-missed-payload-prop": {
+-			DSL:   testdata.EndpointBodyAsMissedPayloadProp,
+-			Error: `Request type does not have an attribute named "name" in service "Service" HTTP endpoint "Method"`,
+-		},
+-		"endpoint-body-extend-payload": {
+-			DSL: testdata.EndpointBodyExtendPayload,
+-		},
+-		"endpoint-body-as-user-type": {
+-			DSL: testdata.EndpointBodyAsUserType,
+-		},
+-		"endpoint-missing-token": {
+-			DSL:   testdata.EndpointMissingToken,
+-			Error: `service "Service" method "Method": payload of method "Method" of service "Service" does not define a JWT attribute, use Token to define one`,
+-		},
+-		"endpoint-missing-token-payload": {
+-			DSL:   testdata.EndpointMissingTokenPayload,
+-			Error: `service "Service" method "Method": payload of method "Method" of service "Service" does not define a JWT attribute, use Token to define one`,
+-		},
+-		"endpoint-missing-token-extend": {
+-			DSL: testdata.EndpointExtendToken,
+-		},
+-		"endpoint-has-parent": {
+-			DSL: testdata.EndpointHasParent,
+-		},
+-		"endpoint-has-parent-and-other": {
+-			DSL: testdata.EndpointHasParentAndOther,
+-		},
+-		"endpoint-has-skip-request-encode-and-payload-streaming": {
+-			DSL:   testdata.EndpointHasSkipRequestEncodeAndPayloadStreaming,
+-			Error: `service "Service" HTTP endpoint "Method": Endpoint cannot use SkipRequestBodyEncodeDecode when method defines a StreamingPayload.`,
+-		},
+-		"endpoint-has-skip-request-encode-and-result-streaming": {
+-			DSL:   testdata.EndpointHasSkipRequestEncodeAndResultStreaming,
+-			Error: `service "Service" HTTP endpoint "Method": Endpoint cannot use SkipRequestBodyEncodeDecode when method defines a StreamingResult. Use SkipResponseBodyEncodeDecode instead.`,
+-		},
+-		"endpoint-has-skip-response-encode-and-payload-streaming": {
+-			DSL:   testdata.EndpointHasSkipResponseEncodeAndPayloadStreaming,
+-			Error: `service "Service" HTTP endpoint "Method": Endpoint cannot use SkipResponseBodyEncodeDecode when method defines a StreamingPayload. Use SkipRequestBodyEncodeDecode instead.`,
+-		},
+-		"endpoint-has-skip-response-encode-and-result-streaming": {
+-			DSL: testdata.EndpointHasSkipResponseEncodeAndResultStreaming,
+-			Error: `service "Service" HTTP endpoint "Method": Endpoint cannot use SkipResponseBodyEncodeDecode when method defines a StreamingResult.
+-service "Service" HTTP endpoint "Method": HTTP endpoint response body must be empty when using SkipResponseBodyEncodeDecode. Make sure to define headers and cookies as needed.`,
+-		},
+-		"endpoint-has-skip-encode-and-grpc": {
+-			DSL:   testdata.EndpointHasSkipEncodeAndGRPC,
+-			Error: `service "Service" HTTP endpoint "Method": Endpoint cannot use SkipRequestBodyEncodeDecode and define a gRPC transport.`,
+-		},
+-		"endpoint-payload-missing-required": {
+-			DSL:   testdata.EndpointPayloadMissingRequired,
+-			Error: `service "Service" HTTP endpoint "Method": The following HTTP request body attribute is required but the corresponding method payload attribute is not: nonreq. Use 'Required' to make the attribute required in the method payload as well.`,
+-		},
+-		"endpoint-multipart-without-body": {
+-			DSL:   testdata.EndpointMultipartWithoutBody,
+-			Error: `service "Service" HTTP endpoint "Method": MultipartRequest requires a request body.`,
+-		},
+-		"two untagged success responses": {
+-			DSL: func() {
+-				dsl.Service("Service", func() {
+-					dsl.Method("Method", func() {
+-						dsl.Result(dsl.String)
+-						dsl.HTTP(func() {
+-							dsl.GET("/")
+-							dsl.Response(dsl.StatusOK)
+-							dsl.Response(dsl.StatusAccepted)
+-						})
+-					})
+-				})
+-			},
+-			Error: `HTTP response of service "Service" HTTP endpoint "Method": Multiple response definitions without a Tag`,
+-		},
+-		"tagged response and default response": {
+-			DSL: func() {
+-				dsl.Service("Service", func() {
+-					dsl.Method("Method", func() {
+-						dsl.Result(func() {
+-							dsl.Attribute("outcome", dsl.String)
+-						})
+-						dsl.HTTP(func() {
+-							dsl.GET("/")
+-							dsl.Response(dsl.StatusAccepted, func() {
+-								dsl.Tag("outcome", "accepted")
+-							})
+-							dsl.Response(dsl.StatusOK)
+-						})
+-					})
+-				})
+-			},
+-		},
+-		"streaming-endpoint-has-request-body": {
+-			DSL: testdata.StreamingEndpointRequestBody,
+-			Error: `service "Service" HTTP endpoint "MethodA": HTTP endpoint request body must be empty when the endpoint uses streaming. Payload attributes must be mapped to headers and/or params.
+-service "Service" HTTP endpoint "MethodB": HTTP endpoint request body must be empty when the endpoint uses streaming. Payload attributes must be mapped to headers and/or params.
+-service "Service" HTTP endpoint "MethodC": HTTP endpoint request body must be empty when the endpoint uses streaming. Payload attributes must be mapped to headers and/or params.`,
+-		},
+-	}
+-	for name, c := range cases {
+-		t.Run(name, func(t *testing.T) {
+-			if c.Error == "" {
+-				expr.RunDSL(t, c.DSL)
+-			} else {
+-				var errs []error
+-				err := expr.RunInvalidDSL(t, c.DSL)
+-				if err != nil {
+-					var merr eval.MultiError
+-					if errors.As(err, &merr) {
+-						for _, e := range merr {
+-							errs = append(errs, e.GoError)
+-						}
+-					} else {
+-						errs = append(errs, err)
+-					}
+-				}
+-				if len(errs) > 1 || len(errs) == 0 {
+-					t.Errorf("got %d errors, expected 1", len(errs))
+-				} else if got := stripValidationLocations(errs[0].Error()); got != c.Error {
+-					t.Errorf("got `%s`, expected `%s`", got, c.Error)
+-				}
+-			}
+-		})
+-	}
+-}
+-
+-func TestHTTPWebSocketViewedResultValidation(t *testing.T) {
+-	tests := []struct {
+-		name           string
+-		collection     bool
+-		collectionView string
+-		method         func(*expr.ResultTypeExpr)
+-		err            string
+-	}{
+-		{
+-			name: "client stream with caller-selected view",
+-			method: func(result *expr.ResultTypeExpr) {
+-				dsl.StreamingPayload(dsl.String)
+-				dsl.Result(result)
+-			},
+-			err: `service "Service" HTTP endpoint "Method": Endpoint cannot choose a result view at runtime when the method defines StreamingPayload because the WebSocket connection starts before the result view is known. Select a view in Result or StreamingResult.`,
+-		},
+-		{
+-			name: "bidirectional stream with caller-selected view",
+-			method: func(result *expr.ResultTypeExpr) {
+-				dsl.StreamingPayload(dsl.String)
+-				dsl.StreamingResult(result)
+-			},
+-			err: `service "Service" HTTP endpoint "Method": Endpoint cannot choose a result view at runtime when the method defines StreamingPayload because the WebSocket connection starts before the result view is known. Select a view in Result or StreamingResult.`,
+-		},
+-		{
+-			name:       "client stream with caller-selected collection view",
+-			collection: true,
+-			method: func(result *expr.ResultTypeExpr) {
+-				dsl.StreamingPayload(dsl.String)
+-				dsl.Result(result)
+-			},
+-			err: `service "Service" HTTP endpoint "Method": Endpoint cannot choose a result view at runtime when the method defines StreamingPayload because the WebSocket connection starts before the result view is known. Select a view in Result or StreamingResult.`,
+-		},
+-		{
+-			name: "client stream with fixed view",
+-			method: func(result *expr.ResultTypeExpr) {
+-				dsl.StreamingPayload(dsl.String)
+-				dsl.Result(result, func() {
+-					dsl.View("tiny")
+-				})
+-			},
+-		},
+-		{
+-			name: "bidirectional stream with fixed view",
+-			method: func(result *expr.ResultTypeExpr) {
+-				dsl.StreamingPayload(dsl.String)
+-				dsl.StreamingResult(result, func() {
+-					dsl.View("tiny")
+-				})
+-			},
+-		},
+-		{
+-			name:       "client stream with fixed collection view",
+-			collection: true,
+-			method: func(result *expr.ResultTypeExpr) {
+-				dsl.StreamingPayload(dsl.String)
+-				dsl.Result(result, func() {
+-					dsl.View("tiny")
+-				})
+-			},
+-		},
+-		{
+-			name:           "client stream with view fixed by collection type",
+-			collection:     true,
+-			collectionView: "tiny",
+-			method: func(result *expr.ResultTypeExpr) {
+-				dsl.StreamingPayload(dsl.String)
+-				dsl.Result(result)
+-			},
+-		},
+-		{
+-			name: "server stream with caller-selected view",
+-			method: func(result *expr.ResultTypeExpr) {
+-				dsl.StreamingResult(result)
+-			},
+-		},
+-		{
+-			name: "client stream without views",
+-			method: func(*expr.ResultTypeExpr) {
+-				dsl.StreamingPayload(dsl.String)
+-				dsl.Result(dsl.String)
+-			},
+-		},
+-		{
+-			name: "bidirectional stream without views",
+-			method: func(*expr.ResultTypeExpr) {
+-				dsl.StreamingPayload(dsl.String)
+-				dsl.StreamingResult(dsl.String)
+-			},
+-		},
+-	}
+-
+-	for _, test := range tests {
+-		t.Run(test.name, func(t *testing.T) {
+-			design := httpWebSocketViewedResultDSL(test.collection, test.collectionView, test.method)
+-			if test.err == "" {
+-				expr.RunDSL(t, design)
+-				return
+-			}
+-			err := expr.RunInvalidDSL(t, design)
+-			if got := stripValidationLocations(err.Error()); got != test.err {
+-				t.Errorf("got %q, expected %q", got, test.err)
+-			}
+-		})
+-	}
+-}
+-
+-// httpWebSocketViewedResultDSL defines a result with two response shapes and
+-// lets each test choose how the method streams it.
+-func httpWebSocketViewedResultDSL(collection bool, collectionView string, method func(*expr.ResultTypeExpr)) func() {
+-	return func() {
+-		result := dsl.ResultType("application/vnd.websocket-view", func() {
+-			dsl.Attribute("name", dsl.String)
+-			dsl.View("tiny", func() {
+-				dsl.Attribute("name")
+-			})
+-		})
+-		if collection {
+-			if collectionView == "" {
+-				result = dsl.CollectionOf(result)
+-			} else {
+-				result = dsl.CollectionOf(result, func() {
+-					dsl.View(collectionView)
+-				})
+-			}
+-		}
+-		dsl.Service("Service", func() {
+-			dsl.Method("Method", func() {
+-				method(result)
+-				dsl.HTTP(func() {
+-					dsl.GET("/")
+-				})
+-			})
+-		})
+-	}
+-}
+-
+-func TestHTTPEndpointParentRequired(t *testing.T) {
+-	root := expr.RunDSL(t, testdata.EndpointHasParent)
+-	svc := root.Service("Child")
+-	if svc == nil {
+-		t.Fatal(`unexpected error, service "Child" not found`)
+-	}
+-	m := svc.Method("Method")
+-	if m == nil || m.Payload == nil {
+-		t.Fatal(`unexpected error, method "Method" or its payload not found`)
+-	}
+-	if !m.Payload.IsRequired("ancestor_id") {
+-		t.Errorf(`expected "ancestor_id" is required, but not so`)
+-	}
+-	if !m.Payload.IsRequired("parent_id") {
+-		t.Errorf(`expected "parent_id" is required, but not so`)
+-	}
+-}
+-
+-func TestHTTPEndpointFinalization(t *testing.T) {
+-	cases := map[string]struct {
+-		DSL          func()
+-		ExpectedBody expr.DataType
+-	}{
+-		"body-as-extend-type": {
+-			DSL:          testdata.FinalizeEndpointBodyAsExtendedTypeDSL,
+-			ExpectedBody: testdata.FinalizeEndpointBodyAsExtendedType,
+-		},
+-		"body-as-prop-with-extend-type": {
+-			DSL:          testdata.FinalizeEndpointBodyAsPropWithExtendedTypeDSL,
+-			ExpectedBody: testdata.FinalizeEndpointBodyAsPropWithExtendedType,
+-		},
+-	}
+-	for name, tc := range cases {
+-		t.Run(name, func(t *testing.T) {
+-			root := expr.RunDSL(t, tc.DSL)
+-			e := root.API.HTTP.Services[0].HTTPEndpoints[0]
+-
+-			if tc.ExpectedBody != nil {
+-				if e.Body == nil {
+-					t.Errorf("got endpoint without body, expected endpoint with body")
+-					return
+-				}
+-				bodyObj := *expr.AsObject(e.Body.Type)
+-				expectedBodyObj := *expr.AsObject(tc.ExpectedBody)
+-				if len(bodyObj) != len(expectedBodyObj) {
+-					t.Errorf("got %d, expected %d attribute(s) in endpoint body", len(bodyObj), len(expectedBodyObj))
+-				} else {
+-					for i := range expectedBodyObj {
+-						if bodyObj[i].Name != expectedBodyObj[i].Name {
+-							t.Errorf("got %q, expected %q attribute in endpoint body", bodyObj[i].Name, expectedBodyObj[i].Name)
+-						}
+-					}
+-				}
+-			}
+-		})
+-	}
+-}
+-
+-func TestHTTPAuthorizationMapping(t *testing.T) {
+-	cases := []struct {
+-		Name           string
+-		DSL            func()
+-		ExpectedHeader string
+-	}{{
+-		Name:           "explicit",
+-		DSL:            testdata.ExplicitAuthHeaderDSL,
+-		ExpectedHeader: "token",
+-	}, {
+-		Name:           "implicit",
+-		DSL:            testdata.ImplicitAuthHeaderDSL,
+-		ExpectedHeader: "Authorization",
+-	},
+-	}
+-	for _, tc := range cases {
+-		t.Run(tc.Name, func(t *testing.T) {
+-			root := expr.RunDSL(t, tc.DSL)
+-			e := root.API.HTTP.Services[0].HTTPEndpoints[0]
+-			if e.Headers == nil {
+-				t.Errorf("got endpoint without header, expected endpoint with HTTP header")
+-				return
+-			}
+-			if len(*expr.AsObject(e.Headers.Type)) != 1 {
+-				t.Errorf("got %d, expected 1 attribute in endpoint headers", len(*expr.AsObject(e.Headers.Type)))
+-				return
+-			}
+-			n := e.Headers.ElemName("token")
+-			if n != tc.ExpectedHeader {
+-				t.Errorf("got %q, expected %q attribute in endpoint headers", n, tc.ExpectedHeader)
+-			}
+-		})
+-	}
+-}
+--- a/expr/http_service.go
++++ b/expr/http_service.go
+@@ -1,11 +1,11 @@
+ package expr
+ 
+ import (
+-	"fmt"
+-	"path"
+-	"strings"
++	_ "fmt"
++	_ "path"
++	_ "strings"
+ 
+-	"github.com/dimfeld/httppath"
++	_ "github.com/dimfeld/httppath"
+ 	"example.internal/apikit/v3/eval"
+ )
+ 
+@@ -56,304 +56,110 @@
+ 
+ // Name of service (service)
+ func (svc *HTTPServiceExpr) Name() string {
+-	return svc.ServiceExpr.Name
++	panic("excised: HTTPServiceExpr.Name")
+ }
+ 
+ // Description of service (service)
+ func (svc *HTTPServiceExpr) Description() string {
+-	return svc.ServiceExpr.Description
++	panic("excised: HTTPServiceExpr.Description")
+ }
+ 
+ // Error returns the error contract available to service-level HTTP mappings.
+ // Service declarations take precedence over reusable API declarations.
+ func (svc *HTTPServiceExpr) Error(name string) *ErrorExpr {
+-	if serviceError := svc.ServiceExpr.Error(name); serviceError != nil {
+-		return serviceError
+-	}
+-	return svc.ServiceExpr.design.Error(name)
++	panic("excised: HTTPServiceExpr.Error")
+ }
+ 
+ // Endpoint returns the service endpoint with the given name or nil if there
+ // isn't one.
+ func (svc *HTTPServiceExpr) Endpoint(name string) *HTTPEndpointExpr {
+-	for _, a := range svc.HTTPEndpoints {
+-		if a.Name() == name {
+-			return a
+-		}
+-	}
+-	return nil
++	panic("excised: HTTPServiceExpr.Endpoint")
+ }
+ 
+ // EndpointFor builds the endpoint for the given method.
+ func (svc *HTTPServiceExpr) EndpointFor(m *MethodExpr) *HTTPEndpointExpr {
+-	if e := svc.Endpoint(m.Name); e != nil {
+-		return e
+-	}
+-	e := &HTTPEndpointExpr{MethodExpr: m, Service: svc}
+-	svc.HTTPEndpoints = append(svc.HTTPEndpoints, e)
+-	return e
++	panic("excised: HTTPServiceExpr.EndpointFor")
+ }
+ 
+ // CanonicalEndpoint returns the canonical endpoint of the service if any.
+ // The canonical endpoint is used to compute hrefs to services.
+ func (svc *HTTPServiceExpr) CanonicalEndpoint() *HTTPEndpointExpr {
+-	name := svc.CanonicalEndpointName
+-	if name == "" {
+-		name = "show"
+-	}
+-	return svc.Endpoint(name)
++	panic("excised: HTTPServiceExpr.CanonicalEndpoint")
+ }
+ 
+ // FullPaths computes the base paths to the service endpoints concatenating the
+ // API and parent service base paths as needed.
+ func (svc *HTTPServiceExpr) FullPaths() []string {
+-	if len(svc.Paths) == 0 {
+-		return []string{path.Join(svc.Root.Path)}
+-	}
+-	var paths []string
+-	for _, p := range svc.Paths {
+-		if strings.HasPrefix(p, "//") {
+-			paths = append(paths, httppath.Clean(p))
+-			continue
+-		}
+-		var basePaths []string
+-		if p := svc.Parent(); p != nil {
+-			if ca := p.CanonicalEndpoint(); ca != nil {
+-				if routes := ca.Routes; len(routes) > 0 {
+-					// Note: all these tests should be true at code
+-					// generation time as DSL validation makes sure
+-					// that parent services have a canonical path.
+-					fullPaths := routes[0].FullPaths()
+-					basePaths = make([]string, len(fullPaths))
+-					for i, p := range fullPaths {
+-						basePaths[i] = path.Join(p)
+-					}
+-				}
+-			}
+-		} else {
+-			basePaths = []string{svc.Root.Path}
+-		}
+-		for _, base := range basePaths {
+-			v := httppath.Clean(path.Join(base, p))
+-			// path has trailing slash
+-			if strings.HasSuffix(p, "/") {
+-				v += "/"
+-			}
+-			paths = append(paths, v)
+-		}
+-	}
+-	return paths
++	panic("excised: HTTPServiceExpr.FullPaths")
+ }
+ 
+ // Parent returns the parent service if any, nil otherwise.
+ func (svc *HTTPServiceExpr) Parent() *HTTPServiceExpr {
+-	if svc.ParentName != "" {
+-		if parent := svc.Root.Service(svc.ParentName); parent != nil {
+-			return parent
+-		}
+-	}
+-	return nil
++	panic("excised: HTTPServiceExpr.Parent")
+ }
+ 
+ // HTTPError returns the service HTTP error with given name if any.
+ func (svc *HTTPServiceExpr) HTTPError(name string) *HTTPErrorExpr {
+-	for _, erro := range svc.HTTPErrors {
+-		if erro.Name == name {
+-			return erro
+-		}
+-	}
+-	return nil
++	panic("excised: HTTPServiceExpr.HTTPError")
+ }
+ 
+ // EvalName returns the generic definition name used in error messages.
+ func (svc *HTTPServiceExpr) EvalName() string {
+-	if svc.Name() == "" {
+-		return "unnamed service"
+-	}
+-	return fmt.Sprintf("service %#v", svc.Name())
++	panic("excised: HTTPServiceExpr.EvalName")
+ }
+ 
+ // IsJSONRPC reports whether svc describes the JSON-RPC transport for its service.
+ func (svc *HTTPServiceExpr) IsJSONRPC() bool {
+-	return svc.ServiceExpr.Meta != nil && svc.ServiceExpr.Meta["jsonrpc:service"] != nil
++	panic("excised: HTTPServiceExpr.IsJSONRPC")
+ }
+ 
+ // Prepare initializes the error responses.
+ func (svc *HTTPServiceExpr) Prepare() {
+-	// Create routes for JSON-RPC endpoints if needed
+-	if svc.IsJSONRPC() {
+-		svc.prepareJSONRPCRoutes()
+-	}
+-
+-	// Lookup undefined HTTP errors in API.
+-	for _, err := range svc.ServiceExpr.Errors {
+-		found := false
+-		for _, herr := range svc.HTTPErrors {
+-			if err.Name == herr.Name {
+-				found = true
+-				break
+-			}
+-		}
+-		if !found {
+-			for _, herr := range svc.Root.Errors {
+-				if herr.Name == err.Name {
+-					svc.HTTPErrors = append(svc.HTTPErrors, herr.Dup())
+-				}
+-			}
+-		}
+-	}
+-	for _, er := range svc.HTTPErrors {
+-		er.Response.Prepare()
+-	}
++	panic("excised: HTTPServiceExpr.Prepare")
+ }
+ 
+ // Validate makes sure the service is valid.
+ func (svc *HTTPServiceExpr) Validate() error {
+-	verr := new(eval.ValidationErrors)
+-
+-	// Validate attributes
+-	svc.validateAttributes(verr)
+-
+-	// Validate parent service
+-	svc.validateParent(verr)
+-
+-	// Validate canonical endpoint
+-	svc.validateCanonicalEndpoint(verr)
+-
+-	// Validate errors
+-	svc.validateErrors(verr)
+-
+-	// Validate transport compatibility
+-	svc.validateTransports(verr)
+-
+-	return verr
++	panic("excised: HTTPServiceExpr.Validate")
+ }
+ 
+ // validateAttributes validates service parameters and headers
+ func (svc *HTTPServiceExpr) validateAttributes(verr *eval.ValidationErrors) {
+-	if svc.Params != nil {
+-		verr.Merge(svc.Params.Validate("parameters", svc))
+-	}
+-	if svc.Headers != nil {
+-		verr.Merge(svc.Headers.Validate("headers", svc))
+-	}
++	panic("excised: HTTPServiceExpr.validateAttributes")
+ }
+ 
+ // validateParent validates parent service configuration
+ func (svc *HTTPServiceExpr) validateParent(verr *eval.ValidationErrors) {
+-	n := svc.ParentName
+-	if n == "" {
+-		return
+-	}
+-
+-	p := svc.Root.Service(n)
+-	if p == nil {
+-		verr.Add(svc, "Parent service %s not found", n)
+-		return
+-	}
+-
+-	if p.CanonicalEndpoint() == nil {
+-		verr.Add(svc, "Parent service %s has no canonical endpoint", n)
+-	}
+-	if p.ParentName == svc.Name() {
+-		verr.Add(svc, "Parent service %s is also child", n)
+-	}
++	panic("excised: HTTPServiceExpr.validateParent")
+ }
+ 
+ // validateCanonicalEndpoint validates canonical endpoint configuration
+ func (svc *HTTPServiceExpr) validateCanonicalEndpoint(verr *eval.ValidationErrors) {
+-	n := svc.CanonicalEndpointName
+-	if n != "" && svc.Endpoint(n) == nil {
+-		verr.Add(svc, "Unknown canonical endpoint %s", n)
+-	}
++	panic("excised: HTTPServiceExpr.validateCanonicalEndpoint")
+ }
+ 
+ // validateErrors validates HTTP errors
+ func (svc *HTTPServiceExpr) validateErrors(verr *eval.ValidationErrors) {
+-	for _, er := range svc.HTTPErrors {
+-		verr.Merge(er.Validate())
+-	}
+-	for _, er := range svc.Root.Errors {
+-		// This may result in the same error being validated multiple
+-		// times however service is the top level expression being
+-		// walked and errors cannot be walked until all expressions have
+-		// run. Another solution could be to append a new dynamically
+-		// generated root that the eval engine would process after. Keep
+-		// things simple for now.
+-		verr.Merge(er.Validate())
+-	}
++	panic("excised: HTTPServiceExpr.validateErrors")
+ }
+ 
+ // validateTransports validates JSON-RPC route constraints.
+ func (svc *HTTPServiceExpr) validateTransports(verr *eval.ValidationErrors) {
+-	if svc.IsJSONRPC() {
+-		svc.validateJSONRPCRoutes(verr)
+-	}
++	panic("excised: HTTPServiceExpr.validateTransports")
+ }
+ 
+ // Finalize initializes the path if no path is set in design.
+ func (svc *HTTPServiceExpr) Finalize() {
+-	if len(svc.Paths) == 0 {
+-		svc.Paths = []string{"/"}
+-	}
++	panic("excised: HTTPServiceExpr.Finalize")
+ }
+ 
+ // prepareJSONRPCRoutes creates routes for all JSON-RPC endpoints.
+ // All JSON-RPC methods share the same route.
+ func (svc *HTTPServiceExpr) prepareJSONRPCRoutes() {
+-	// Check if service has JSON-RPC endpoints
+-	hasJSONRPC := false
+-	for _, e := range svc.HTTPEndpoints {
+-		if e.IsJSONRPC() {
+-			hasJSONRPC = true
+-			break
+-		}
+-	}
+-
+-	if !hasJSONRPC {
+-		return
+-	}
+-
+-	// Determine route from service-level configuration
+-	var route *RouteExpr
+-
+-	if svc.JSONRPCRoute != nil {
+-		// Use explicitly defined JSON-RPC route
+-		route = svc.JSONRPCRoute
+-	} else {
+-		// Create default route
+-		path := "/"
+-		if len(svc.Paths) > 0 {
+-			path = svc.Paths[0]
+-		}
+-
+-		route = &RouteExpr{
+-			Method: "POST",
+-			Path:   path,
+-		}
+-	}
+-
+-	// Set the same route on all JSON-RPC endpoints
+-	for _, e := range svc.HTTPEndpoints {
+-		if e.IsJSONRPC() {
+-			e.Routes = []*RouteExpr{{
+-				Method:   route.Method,
+-				Path:     route.Path,
+-				Endpoint: e,
+-			}}
+-		}
+-	}
++	panic("excised: HTTPServiceExpr.prepareJSONRPCRoutes")
+ }
+ 
+ // validateJSONRPCRoutes checks that every JSON-RPC route uses POST.
+ func (svc *HTTPServiceExpr) validateJSONRPCRoutes(verr *eval.ValidationErrors) {
+-	for _, e := range svc.HTTPEndpoints {
+-		if e.IsJSONRPC() {
+-			for _, r := range e.Routes {
+-				if r.Method != "POST" {
+-					verr.Add(r, "JSON-RPC endpoint must use POST method, got %q", r.Method)
+-				}
+-			}
+-		}
+-	}
++	panic("excised: HTTPServiceExpr.validateJSONRPCRoutes")
+ }

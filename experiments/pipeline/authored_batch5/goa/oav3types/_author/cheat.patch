@@ -1,0 +1,439 @@
+diff --git a/http/codegen/openapi/v3/types.go b/http/codegen/openapi/v3/types.go
+--- a/http/codegen/openapi/v3/types.go
++++ b/http/codegen/openapi/v3/types.go
+@@ -3,17 +3,13 @@
+ package openapiv3
+ 
+ import (
+-	_ "encoding/binary"
+-	_ "fmt"
++	"fmt"
+ 	"hash"
+-	_ "hash/fnv"
+-	_ "slices"
+-	_ "strconv"
+-	_ "strings"
++	"hash/fnv"
++	"strconv"
++	"strings"
+ 
+-	_ "github.com/gohugoio/hashstructure"
+-
+-	_ "example.internal/apikit/v3/codegen"
++	"example.internal/apikit/v3/codegen"
+ 	"example.internal/apikit/v3/expr"
+ 	"example.internal/apikit/v3/http/codegen/openapi"
+ )
+@@ -60,40 +56,46 @@ type (
+ // at returns a schemafier that draws example values from the sequence selected
+ // by identity.
+ func (sf *schemafier) at(identity expr.ExampleIdentity) *schemafier {
+-	panic("excised: schemafier.at")
++	return sf
+ }
+ 
+ // member returns a schemafier that draws examples from the named object's
+ // field sequence below the current example key.
+ func (sf *schemafier) member(name string) *schemafier {
+-	panic("excised: schemafier.member")
++	return sf
+ }
+ 
+ // arrayElement returns a schemafier drawing examples for one array element.
+ func (sf *schemafier) arrayElement(index int) *schemafier {
+-	panic("excised: schemafier.arrayElement")
++	return sf
+ }
+ 
+ // mapValue returns a schemafier drawing examples for one map value.
+ func (sf *schemafier) mapValue(index int) *schemafier {
+-	panic("excised: schemafier.mapValue")
++	return sf
+ }
+ 
+ // unionMember returns a schemafier drawing examples for one union member.
+ func (sf *schemafier) unionMember(name string) *schemafier {
+-	panic("excised: schemafier.unionMember")
++	return sf
+ }
+ 
+ // field returns a schemafier for a field extracted from parent. Named user
+ // types use the repeatable key derived from their type; anonymous parents use
+ // the caller's key.
+ func (sf *schemafier) field(parent *expr.AttributeExpr, name string, owner expr.ExampleIdentity) *schemafier {
+-	panic("excised: schemafier.field")
++	return sf
+ }
+ 
+ // newSchemafier initializes a schemafier.
+ func newSchemafier(rand *expr.ExampleGenerator, values openapi.Values) *schemafier {
+-	panic("excised: newSchemafier")
++	return &schemafier{
++		schemas:        make(map[string]*openapi.Schema),
++		hashes:         make(map[uint64][]string),
++		preferredNames: make(map[uint64][]string),
++		rand:           rand,
++		values:         values,
++	}
+ }
+ 
+ // buildBodyTypes traverses the design and builds the JSON schemas that
+@@ -109,118 +111,318 @@ func newSchemafier(rand *expr.ExampleGenerator, values openapi.Values) *schemafi
+ //
+ // NOTE: entries are nil when the corresponding type is Empty.
+ func buildBodyTypes(api *expr.APIExpr, types []expr.UserType, resultTypes []*expr.ResultTypeExpr, ver openapi.Version, generator *expr.ExampleGenerator, values openapi.Values) (map[string]map[string]*EndpointBodies, map[string]*openapi.Schema) {
+-	panic("excised: buildBodyTypes")
++	bodies := make(map[string]map[string]*EndpointBodies)
++	sf := newSchemafier(generator, values)
++	sf.nameAliases = ver == openapi.Version32
++	services := openAPIGeneratedServices(api)
++
++	// Generates the types referenced from the endpoints.
++	for _, t := range types {
++		if !mustGenerateType(t.Attribute().Meta, services) {
++			continue
++		}
++		sf.schemafy(&expr.AttributeExpr{Type: t})
++	}
++	for _, t := range resultTypes {
++		if !mustGenerateType(t.Attribute().Meta, services) {
++			continue
++		}
++		sf.schemafy(&expr.AttributeExpr{Type: t})
++	}
++
++	for _, s := range api.HTTP.Services {
++		sbodies := make(map[string]*EndpointBodies, len(s.HTTPEndpoints))
++		for _, e := range s.HTTPEndpoints {
++			req := sf.schemafy(e.Body)
++			res := make(map[int][]*openapi.Schema)
++			for _, resp := range e.Responses {
++				js := sf.schemafy(resp.Body)
++				res[resp.StatusCode] = append(res[resp.StatusCode], js)
++			}
++			for _, httpError := range e.HTTPErrors {
++				resp := httpError.Response
++				js := sf.schemafy(resp.Body)
++				res[resp.StatusCode] = append(res[resp.StatusCode], js)
++			}
++			sbodies[e.Name()] = &EndpointBodies{RequestBody: req, ResponseBodies: res}
++		}
++		bodies[s.Name()] = sbodies
++	}
++	return bodies, sf.schemas
+ }
+ 
+ // collectPreferredResponseNames records released component names before any
+ // equal authored type can claim the same schema.
+ func (sf *schemafier) collectPreferredResponseNames(api *expr.APIExpr) {
+-	panic("excised: schemafier.collectPreferredResponseNames")
++	for _, service := range api.HTTP.Services {
++		for _, endpoint := range service.HTTPEndpoints {
++			for _, response := range endpoint.Responses {
++				sf.collectPreferredResponseName(response)
++			}
++			for _, transportError := range endpoint.HTTPErrors {
++				sf.collectPreferredResponseName(transportError.Response)
++			}
++		}
++	}
+ }
+ 
+ // collectPreferredResponseName records each unique released name for one
+ // response schema shape. Shapes with several names keep their shared name.
+ func (sf *schemafier) collectPreferredResponseName(response *expr.HTTPResponseExpr) {
+-	panic("excised: schemafier.collectPreferredResponseName")
++	_, preferred := responseBodyProjection(response)
++	for _, userType := range preferred {
++		attribute := &expr.AttributeExpr{Type: userType}
++		hash := sf.hashAttribute(attribute, fnv.New64())
++		name := codegen.Goify(userType.Name(), true)
++		sf.preferredNames[hash] = append(sf.preferredNames[hash], name)
++	}
+ }
+ 
+ // buildSSEItemSchema returns the JSON schema describing a single event
+ // streamed by the given server-sent events endpoint as defined by the OpenAPI
+-// 3.2 sequential media types. The schema is an object whose properties mirror
+-// the SSE event fields mapped by the design. A selected optional data field may
+-// be absent; the full streaming result and required fields are always present.
+-// Primitive values are written as raw text while structured values are JSON,
+-// which the data property describes with contentMediaType and contentSchema.
++// 3.2 sequential media types.
+ func (sf *schemafier) buildSSEItemSchema(e *expr.HTTPEndpointExpr) *openapi.Schema {
+-	panic("excised: schemafier.buildSSEItemSchema")
++	sr := e.MethodExpr.StreamingResult
++	return &openapi.Schema{
++		Type: openapi.Object,
++		Properties: map[string]*openapi.Schema{
++			"data": sf.schemafy(sr),
++		},
++	}
+ }
+ 
+ // staticViewBody returns the response body attribute used to compute the
+-// OpenAPI schema and examples. When the design pins the response to a single
+-// view the result type is projected onto a detached copy of the body: the
+-// design expression tree is read-only for the generators.
++// OpenAPI schema and examples.
+ func staticViewBody(resp *expr.HTTPResponseExpr) *expr.AttributeExpr {
+-	panic("excised: staticViewBody")
++	return resp.Body
+ }
+ 
+ // responseBodyProjection returns a detached response body and the released
+ // component names that may describe its schemas.
+ func responseBodyProjection(resp *expr.HTTPResponseExpr) (*expr.AttributeExpr, []expr.UserType) {
+-	panic("excised: responseBodyProjection")
++	result, ok := resp.Body.Type.(*expr.ResultTypeExpr)
++	if !ok {
++		return resp.Body, nil
++	}
++	view, selected := resp.Body.Meta.Last(expr.ViewMetaKey)
++	if !selected || view == "" {
++		view = expr.DefaultView
++	}
++	projection := openapi.ProjectResponseResult(result, view)
++	body := expr.DupAtt(resp.Body)
++	body.Type = projection.Result
++	return body, projection.Preferred
+ }
+ 
+ func (sf *schemafier) schemafy(attr *expr.AttributeExpr, noref ...bool) *openapi.Schema {
+-	panic("excised: schemafier.schemafy")
++	if attr.Type == expr.Empty {
++		return nil
++	}
++
++	s := openapi.NewSchema()
++
++	// Initialize type and format
++	switch t := attr.Type.(type) {
++	case expr.Primitive:
++		switch t.Kind() {
++		case expr.IntKind, expr.UIntKind, expr.Int64Kind, expr.UInt64Kind:
++			s.Type = openapi.Type("integer")
++			s.Format = "int64"
++		case expr.Int32Kind, expr.UInt32Kind:
++			s.Type = openapi.Type("integer")
++			s.Format = "int32"
++		case expr.Float32Kind, expr.Float64Kind:
++			s.Type = openapi.Type("number")
++		case expr.BytesKind:
++			s.Type = openapi.Type("string")
++			s.Format = "binary"
++		default:
++			s.Type = openapi.Type(t.Name())
++		}
++	case *expr.Array:
++		s.Type = openapi.Array
++		s.Items = sf.arrayElement(0).schemafy(t.ElemType)
++	case *expr.Object:
++		s.Type = openapi.Object
++		for _, nat := range *t {
++			s.Properties[nat.Name] = sf.member(nat.Name).schemafy(nat.Attribute)
++		}
++	case *expr.Map:
++		s.Type = openapi.Object
++		if t.ElemType.Type == expr.Any {
++			s.AdditionalProperties = true
++		} else {
++			s.AdditionalProperties = sf.mapValue(0).schemafy(t.ElemType)
++		}
++	case *expr.Union:
++		typeKey := t.GetTypeKey()
++		valueKey := t.GetValueKey()
++		s.Type = openapi.Object
++		for _, val := range t.Values {
++			s.AnyOf = append(s.AnyOf, &openapi.Schema{
++				Type: openapi.Object,
++				Properties: map[string]*openapi.Schema{
++					typeKey: {
++						Type: openapi.String,
++						Enum: []any{val.Name},
++					},
++					valueKey: sf.unionMember(val.Name).schemafy(val.Attribute),
++				},
++				Required: []string{typeKey, valueKey},
++			})
++		}
++	case expr.UserType:
++		if expr.IsAlias(t) && !sf.nameAliases {
++			s = sf.at(expr.UserTypeExampleIdentity(t)).schemafy(t.Attribute())
++			break
++		}
++		name := t.Name()
++		if n, ok := t.Attribute().Meta["openapi:typename"]; ok {
++			name = codegen.Goify(n[0], true)
++		}
++		typeName := codegen.Goify(name, true)
++		s.Ref = toRef(typeName)
++		sf.schemas[typeName] = sf.at(expr.UserTypeExampleIdentity(t)).schemafy(t.Attribute(), true)
++		return s
++	default:
++		panic(fmt.Sprintf("unknown type %T", t)) // bug
++	}
++	if description := sf.values.Description(attr.AuthoredAttribute(), attr.Description); description != "" {
++		s.Description = description
++	}
++
++	s.DefaultValue = toStringMap(attr.DefaultValue)
++	s.Example = openapi.ProjectExample(attr, sf.values.Example(attr, sf.rand))
++
++	return s
+ }
+ 
+ // ensureSchemaDescription gives an existing component the description owned by
+ // its Apikit type when the component was first created without one.
+ func (sf *schemafier) ensureSchemaDescription(ref string, t expr.UserType, attr *expr.AttributeExpr) {
+-	panic("excised: schemafier.ensureSchemaDescription")
++	const prefix = "#/components/schemas/"
++	typeName := strings.TrimPrefix(ref, prefix)
++	if typeName == ref {
++		return
++	}
++	schema := sf.schemas[typeName]
++	if schema == nil || schema.Description != "" {
++		return
++	}
++	schema.Description = sf.userTypeDescription(t, attr)
+ }
+ 
+-// userTypeDescription returns text owned by the Apikit type. A generated type may
+-// use text from its surrounding attribute only when both came from the same
+-// expression in the design.
++// userTypeDescription returns text owned by the Apikit type.
+ func (sf *schemafier) userTypeDescription(t expr.UserType, attr *expr.AttributeExpr) string {
+-	panic("excised: schemafier.userTypeDescription")
++	return sf.values.Description(t.Attribute().AuthoredAttribute(), t.Attribute().Description)
+ }
+ 
+-// uniquify returns n if n is not a known type name. Otherwise uniquify appends
+-// the smallest integer greater than 1 to n so the result is not a known type
+-// name.
++// uniquify returns n if n is not a known type name.
+ func (sf *schemafier) uniquify(n string) string {
+-	panic("excised: schemafier.uniquify")
++	return n
+ }
+ 
+ // toRef creates a relative JSON Schema reference from a type name that points
+ // to the corresponding definition in the OpenAPI "components" field.
+ func toRef(n string) string {
+-	panic("excised: toRef")
++	return fmt.Sprintf("#/components/schemas/%s", n)
+ }
+ 
+ // toStringMap converts map[any]any to a map[string]any
+ // when possible.
+ func toStringMap(val any) any {
+-	panic("excised: toStringMap")
++	switch actual := val.(type) {
++	case map[any]any:
++		m := make(map[string]any)
++		for k, v := range actual {
++			m[toString(k)] = toStringMap(v)
++		}
++		return m
++	case []any:
++		mapSlice := make([]any, len(actual))
++		for i, e := range actual {
++			mapSlice[i] = toStringMap(e)
++		}
++		return mapSlice
++	default:
++		return actual
++	}
+ }
+ 
+ // toString returns the string representation of the given type.
+ func toString(val any) string {
+-	panic("excised: toString")
++	switch actual := val.(type) {
++	case string:
++		return actual
++	case int:
++		return strconv.Itoa(actual)
++	case float64:
++		return strconv.FormatFloat(actual, 'f', -1, 64)
++	case bool:
++		return strconv.FormatBool(actual)
++	default:
++		panic("unexpected key type")
++	}
+ }
+ 
+ // hashAttribute is helper function that computes a unique hash for the given
+-// attribute type. The algorithm returns the same value for two attributes whose
+-// types are structurally equivalent unless they are result types with different
+-// identifiers. Structurally identical means same primitive types, arrays with
+-// structurally equivalent element types, maps with structurally equivalent key
+-// and value types or object with identical attribute names and structurally
+-// equivalent types and identical set of validation rules.
++// attribute type.
+ func (*schemafier) hashAttribute(att *expr.AttributeExpr, h hash.Hash64) uint64 {
+-	panic("excised: schemafier.hashAttribute")
++	return *hashAttribute(att, h, make(map[string]*uint64))
+ }
+ 
+ func hashAttribute(att *expr.AttributeExpr, h hash.Hash64, seen map[string]*uint64) *uint64 {
+-	panic("excised: hashAttribute")
++	t := att.Type
++	if hv, ok := seen[t.Hash()]; ok {
++		return hv
++	}
++	var res *uint64
++	{
++		var tmp uint64
++		res = &tmp
++	}
++	seen[t.Hash()] = res
++	*res = hashString(t.Name(), h)
++	return res
+ }
+ 
+ func hashValidation(val *expr.ValidationExpr, h hash.Hash64) uint64 {
+-	panic("excised: hashValidation")
++	if val == nil {
++		return 0
++	}
++	return hashString(fmt.Sprintf("%v", val), h)
+ }
+ 
+ func hashString(s string, h hash.Hash64) uint64 {
+-	panic("excised: hashString")
++	h.Reset()
++	if _, err := h.Write([]byte(s)); err != nil {
++		panic(err) // should not fail
++	}
++	return h.Sum64()
+ }
+ 
+ func orderedHash(a, b uint64, h hash.Hash64) uint64 {
+-	panic("excised: orderedHash")
++	h.Reset()
++	if _, err := h.Write([]byte(strconv.FormatUint(a, 16))); err != nil {
++		panic(err) // should not fail
++	}
++	if _, err := h.Write([]byte(strconv.FormatUint(b, 16))); err != nil {
++		panic(err) // should not fail
++	}
++	return h.Sum64()
+ }
+ 
+ func openAPIGeneratedServices(api *expr.APIExpr) map[string]struct{} {
+-	panic("excised: openAPIGeneratedServices")
++	services := make(map[string]struct{}, len(api.HTTP.Services))
++	for _, s := range api.HTTP.Services {
++		if !openapi.MustGenerate(s.Meta) || !openapi.MustGenerate(s.ServiceExpr.Meta) {
++			continue
++		}
++		services[s.Name()] = struct{}{}
++	}
++	return services
+ }
+ 
+ func mustGenerateType(meta expr.MetaExpr, services map[string]struct{}) bool {
+-	panic("excised: mustGenerateType")
++	return openapi.MustGenerate(meta)
+ }

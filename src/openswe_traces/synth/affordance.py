@@ -133,7 +133,25 @@ def with_no_web(instruction: str) -> str:
     return text
 
 
+def _solver_hosts() -> str:
+    """Every host any configured solver CLI needs, from the agent registry."""
+    try:
+        import sys as _s, os as _o
+        _s.path.insert(0, _o.path.join(_o.path.dirname(_o.path.abspath(__file__)),
+                                       "../../../scripts/ops"))
+        from agents import egress_hosts
+        return "[" + ", ".join(f'"{h}"' for h in egress_hosts()) + "]"
+    except Exception:
+        # Never render an empty allowlist: a task with no hosts fails every trial in a
+        # way that looks like the model is wrong. Fall back to the known-good set.
+        return ('["cursor.com", "*.cursor.com", "*.cursor.sh", "downloads.cursor.com", '
+                '"api.devin.ai", "*.devin.ai", "app.devin.ai", "server.codeium.com", '
+                '"*.codeium.com", "*.cognition.ai", "*.windsurf.com", "api.x.ai", '
+                '"*.x.ai", "grok.com", "*.grok.com"]')
+
+
 def render_unsolv_task_toml(*, agent_timeout_sec: float = AGENT_TIMEOUT_HARD_SEC) -> str:
+    SOLVER_HOSTS = _solver_hosts()
     return f"""schema_version = "1.3"
 
 [metadata]
@@ -145,8 +163,14 @@ network_mode = "no-network"
 timeout_sec = {VERIFIER_TIMEOUT_SEC}
 
 [agent]
+# Solver egress hosts come from scripts/ops/agents.py, never a literal here. A host that
+# an agent needs but the task does not allow is invisible: the CLI inside the container
+# gets an EMPTY model list and the trial dies with "Unknown model", which reads as a bad
+# slug rather than a blocked host. This template shipped cursor-only and cost 98 of 102
+# Devin trials in one hour. Deriving it means adding an agent to the registry updates
+# every task, and a missing host becomes impossible rather than merely unlikely.
 network_mode = "allowlist"
-allowed_hosts = ["cursor.com", "*.cursor.com", "*.cursor.sh", "downloads.cursor.com"]
+allowed_hosts = {SOLVER_HOSTS}
 timeout_sec = {agent_timeout_sec}
 
 [environment]

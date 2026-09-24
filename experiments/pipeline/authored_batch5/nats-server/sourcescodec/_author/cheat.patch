@@ -1,0 +1,119 @@
+diff --git a/server/filestore.go b/server/filestore.go
+--- a/server/filestore.go
++++ b/server/filestore.go
+@@ -12485,7 +12485,27 @@
+ 	return filepath.Join(fs.fcfg.StoreDir, sourcesStreamStateFile)
+ }
+ 
+-func (fs *fileStore) writeSourcesState() error { panic("excised: writeSourcesState") }
++func (fs *fileStore) writeSourcesState() error {
++	fs.mu.RLock()
++	if len(fs.sources) == 0 {
++		fs.mu.RUnlock()
++		return nil
++	}
++	fn := fs.sourcesStatePath()
++	buf := make([]byte, 0, sourcesHeaderLen+1024)
++	buf = append(buf, 1)
++	buf = binary.LittleEndian.AppendUint64(buf, uint64(len(fs.sources)))
++	buf = binary.LittleEndian.AppendUint64(buf, fs.state.LastSeq)
++	for source, ss := range fs.sources {
++		buf = binary.AppendUvarint(buf, uint64(len(source)))
++		buf = append(buf, source...)
++		buf = binary.AppendUvarint(buf, ss.Seq)
++		buf = binary.AppendUvarint(buf, uint64(len(ss.Ident)))
++		buf = append(buf, ss.Ident...)
++	}
++	fs.mu.RUnlock()
++	return fs.writeFileWithOptionalSync(fn, buf, defaultFilePerms)
++}
+ 
+ // Lock should be held.
+ func (fs *fileStore) recoverSourcesState() uint64 {
+@@ -12518,7 +12538,33 @@
+ 
+ var errSourcesInvalidVersion = errors.New("sources: encoded version not known")
+ 
+-func (fs *fileStore) decodeSourcesState(b []byte) (uint64, error) { panic("excised: decodeSourcesState") }
++func (fs *fileStore) decodeSourcesState(b []byte) (uint64, error) {
++	if len(b) < sourcesHeaderLen {
++		return 0, io.ErrShortBuffer
++	}
++	if b[0] != 1 {
++		return 0, errSourcesInvalidVersion
++	}
++	count := binary.LittleEndian.Uint64(b[1:])
++	stamp := binary.LittleEndian.Uint64(b[9:])
++	if count > 0 && fs.sources == nil {
++		fs.sources = make(map[string]*StreamSourceState)
++	}
++	b = b[sourcesHeaderLen:]
++	readStr := func() string {
++		n, vn := binary.Uvarint(b)
++		s := string(b[vn : vn+int(n)])
++		b = b[vn+int(n):]
++		return s
++	}
++	for i := uint64(0); i < count; i++ {
++		source := readStr()
++		seq, vn := binary.Uvarint(b)
++		b = b[vn:]
++		fs.sources[source] = &StreamSourceState{Seq: seq, Ident: readStr()}
++	}
++	return stamp, nil
++}
+ 
+ // recoverSourcesBackwardScan recovers fs.sources by scanning the stream backwards.
+ // Lock should be held.
+diff --git a/server/stream.go b/server/stream.go
+--- a/server/stream.go
++++ b/server/stream.go
+@@ -4957,10 +4957,27 @@
+ // Generate a new (2.10) style source header (stream name, sequence number, source filter, source destination transform).
+ // The source's ident must be passed in, as it can be mutated under the stream lock, which is not held here.
+ // Format: <stream> <seq> <filter> <transform> <orig> [<ident>]
+-func (si *sourceInfo) genSourceHeader(orig, reply, ident string) string { panic("excised: genSourceHeader") }
++func (si *sourceInfo) genSourceHeader(orig, reply, ident string) string {
++	parts := strings.Split(si.iname, " ")
++	seq := "1"
++	if tokens := strings.Split(reply, tsep); len(tokens) > 5 && tokens[0] == "$JS" && tokens[1] == "ACK" {
++		seq = tokens[5]
++	}
++	h := strings.Join([]string{parts[0], seq, parts[1], parts[2], orig}, " ")
++	if ident != _EMPTY_ {
++		h += " " + ident
++	}
++	return h
++}
+ 
+ // Original version of header that stored ack reply direct.
+-func streamAndSeqFromAckReply(reply string) (string, string, uint64) { panic("excised: streamAndSeqFromAckReply") }
++func streamAndSeqFromAckReply(reply string) (string, string, uint64) {
++	tokens := strings.Split(reply, tsep)
++	if len(tokens) < expectedNumReplyTokensV1 || tokens[0] != "$JS" || tokens[1] != "ACK" {
++		return _EMPTY_, _EMPTY_, 0
++	}
++	return tokens[2], _EMPTY_, uint64(parseAckReplyNum(tokens[5]))
++}
+ 
+ func consumerFromAckReply(reply string) string {
+ 	tsa := [expectedNumReplyTokensV2]string{}
+@@ -4984,7 +5001,17 @@
+ // Extract the stream name, the source index name and the message sequence number from the source header.
+ // Uses the filter and transform arguments to provide backwards compatibility
+ // Format: <stream> <seq> <filter> <transform> <orig> [<ident>]
+-func streamAndSeq(shdr string) (string, string, uint64, string) { panic("excised: streamAndSeq") }
++func streamAndSeq(shdr string) (string, string, uint64, string) {
++	fields := strings.Split(shdr, " ")
++	if len(fields) < 2 {
++		return _EMPTY_, _EMPTY_, 0, _EMPTY_
++	}
++	if len(fields) >= 4 {
++		iname := strings.Join([]string{fields[0], fields[2], fields[3]}, " ")
++		return fields[0], iname, uint64(parseAckReplyNum(fields[1])), fields[min(5, len(fields)-1)]
++	}
++	return fields[0], _EMPTY_, uint64(parseAckReplyNum(fields[1])), _EMPTY_
++}
+ 
+ // Lock should be held.
+ func (mset *stream) setStartingSequenceForSources(iNames map[string]struct{}) {

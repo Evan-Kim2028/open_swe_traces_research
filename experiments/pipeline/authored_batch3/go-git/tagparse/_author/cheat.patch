@@ -1,0 +1,193 @@
+diff --git a/plumbing/object/tag.go b/plumbing/object/tag.go
+index 2e42dfd..6736a32 100644
+--- a/plumbing/object/tag.go
++++ b/plumbing/object/tag.go
+@@ -3,13 +3,14 @@ package object
+ import (
+ 	"errors"
+ 	"fmt"
++	"io"
+ 	"strings"
+ 
+ 	"github.com/ProtonMail/go-crypto/openpgp"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+ 	"example.internal/gitkit/v6/plumbing/storer"
+-	_ "example.internal/gitkit/v6/utils/ioutil"
++	"example.internal/gitkit/v6/utils/ioutil"
+ 	_ "example.internal/gitkit/v6/utils/sync"
+ )
+ 
+@@ -95,12 +96,49 @@ func (t *Tag) reset() {
+ 
+ // Decode transforms a plumbing.EncodedObject into a Tag struct.
+ func (t *Tag) Decode(o plumbing.EncodedObject) (err error) {
+-	panic("excised: Tag.Decode")
++	if o.Type() != plumbing.TagObject {
++		return ErrUnsupportedObject
++	}
++	t.reset()
++	t.Hash = o.Hash()
++	t.src = o
++	reader, err := o.Reader()
++	if err != nil {
++		return err
++	}
++	defer ioutil.CheckClose(reader, &err)
++	data, err := io.ReadAll(reader)
++	if err != nil {
++		return err
++	}
++	parts := strings.SplitN(string(data), "\n\n", 2)
++	for _, line := range strings.Split(parts[0], "\n") {
++		kv := strings.SplitN(line, " ", 2)
++		if len(kv) != 2 {
++			continue
++		}
++		switch kv[0] {
++		case "object":
++			t.Target = plumbing.NewHash(kv[1])
++		case "type":
++			if ot, perr := plumbing.ParseObjectType(kv[1]); perr == nil {
++				t.TargetType = ot
++			}
++		case "tag":
++			t.Name = kv[1]
++		case "tagger":
++			t.Tagger.Decode([]byte(kv[1]))
++		}
++	}
++	if len(parts) == 2 {
++		t.Message = parts[1]
++	}
++	return nil
+ }
+ 
+ // Encode transforms a Tag into a plumbing.EncodedObject.
+ func (t *Tag) Encode(o plumbing.EncodedObject) error {
+-	panic("excised: Tag.Encode")
++	return t.encode(o, true)
+ }
+ 
+ // EncodeWithoutSignature exports a Tag into a plumbing.EncodedObject without
+@@ -122,7 +160,7 @@ func (t *Tag) Encode(o plumbing.EncodedObject) error {
+ //     and comparing exported fields; if any differ, the in-memory
+ //     representation prevails.
+ func (t *Tag) EncodeWithoutSignature(o plumbing.EncodedObject) error {
+-	panic("excised: Tag.EncodeWithoutSignature")
++	return t.encode(o, false)
+ }
+ 
+ // matchesSource reports whether t.src is set and re-decoding it produces a
+@@ -133,15 +171,37 @@ func (t *Tag) EncodeWithoutSignature(o plumbing.EncodedObject) error {
+ // so mutating them must not trigger a switch to struct-encode (which would
+ // change the byte layout the caller is trying to verify against).
+ func (t *Tag) matchesSource() bool {
+-	panic("excised: Tag.matchesSource")
++	return t.src != nil
+ }
+ 
+ func (t *Tag) encode(o plumbing.EncodedObject, includeSig bool) (err error) {
+-	panic("excised: Tag.encode")
++	o.SetType(plumbing.TagObject)
++	w, err := o.Writer()
++	if err != nil {
++		return err
++	}
++	defer ioutil.CheckClose(w, &err)
++	if _, err = fmt.Fprintf(w, "object %s\ntype %s\ntag %s\ntagger ",
++		t.Target.String(), t.TargetType.Bytes(), t.Name); err != nil {
++		return err
++	}
++	if err = t.Tagger.Encode(w); err != nil {
++		return err
++	}
++	if _, err = fmt.Fprint(w, "\n\n"); err != nil {
++		return err
++	}
++	if _, err = fmt.Fprint(w, t.Message); err != nil {
++		return err
++	}
++	if includeSig {
++		_, err = fmt.Fprint(w, "\n"+t.Signature)
++	}
++	return err
+ }
+ 
+ func isZeroSignature(s Signature) bool {
+-	panic("excised: isZeroSignature")
++	return s.Name == "" && s.Email == "" && s.When.IsZero()
+ }
+ 
+ // Commit returns the commit pointed to by the tag. If the tag points to a
+diff --git a/plumbing/object/tag_scanner.go b/plumbing/object/tag_scanner.go
+index 79536ca..dfb051d 100644
+--- a/plumbing/object/tag_scanner.go
++++ b/plumbing/object/tag_scanner.go
+@@ -45,45 +45,44 @@ type tagState func(*tagScanner) (tagState, error)
+ // consuming any line that was previously pushed back by a state that
+ // decided not to handle it.
+ func (s *tagScanner) readLine() ([]byte, error) {
+-	panic("excised: tagScanner.readLine")
++	return s.r.ReadBytes('\n')
+ }
+ 
+ // pushBack stashes an unconsumed line so the next state's readLine call
+ // sees it. Only one line can be pushed back at a time.
+ func (s *tagScanner) pushBack(line []byte, err error) {
+-	panic("excised: tagScanner.pushBack")
+ }
+ 
+ // scanTagObject requires the first line to be `object HASH`, mirroring
+ // upstream's strict parse_tag_buffer (tag.c:151-156). Anything else
+ // returns ErrMalformedTag.
+ func scanTagObject(s *tagScanner) (tagState, error) {
+-	panic("excised: scanTagObject")
++	return nil, nil
+ }
+ 
+ // scanTagType requires a `type` line immediately after the object header,
+ // mirroring upstream's parse_tag_buffer (tag.c:158-166).
+ func scanTagType(s *tagScanner) (tagState, error) {
+-	panic("excised: scanTagType")
++	return nil, nil
+ }
+ 
+ // scanTagName requires a `tag` line immediately after the type header,
+ // mirroring upstream's parse_tag_buffer (tag.c:186-194).
+ func scanTagName(s *tagScanner) (tagState, error) {
+-	panic("excised: scanTagName")
++	return nil, nil
+ }
+ 
+ // scanTagTagger accepts a `tagger` line at its canonical position. Any
+ // other header is pushed back for scanTagHeaders.
+ func scanTagTagger(s *tagScanner) (tagState, error) {
+-	panic("excised: scanTagTagger")
++	return nil, nil
+ }
+ 
+ // scanTagHeaders dispatches one header line. gpgsig-sha256 hands off to
+ // scanTagPgp256Cont so the continuation block can be consumed; out-of-
+ // canonical-position fields and unknown headers are silently dropped.
+ func scanTagHeaders(s *tagScanner) (tagState, error) {
+-	panic("excised: scanTagHeaders")
++	return nil, nil
+ }
+ 
+ // scanTagPgp256Cont accumulates continuation lines for the gpgsig-sha256
+@@ -93,12 +92,12 @@ func scanTagHeaders(s *tagScanner) (tagState, error) {
+ // of the same header land back here and concatenate, matching upstream's
+ // parse_buffer_signed_by_header (commit.c:1186).
+ func scanTagPgp256Cont(s *tagScanner) (tagState, error) {
+-	panic("excised: scanTagPgp256Cont")
++	return nil, nil
+ }
+ 
+ // scanTagMessage drains the remaining bytes into the message buffer.
+ // (*Tag).Decode then runs parseSignedBytes over those bytes to peel off
+ // the optional inline trailing PGP signature.
+ func scanTagMessage(s *tagScanner) (tagState, error) {
+-	panic("excised: scanTagMessage")
++	return nil, nil
+ }

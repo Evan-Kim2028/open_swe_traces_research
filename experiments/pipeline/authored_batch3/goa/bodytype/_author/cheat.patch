@@ -1,0 +1,279 @@
+--- a/expr/http_body_types.go
++++ b/expr/http_body_types.go
+@@ -3,9 +3,7 @@
+ package expr
+ 
+ import (
+-	_ "net/http"
+-	_ "strings"
+-	_ "unicode"
++	"net/http"
+ )
+ 
+ // defaultRequestHeaderAttributes returns a map keyed by the names of the
+@@ -18,7 +16,36 @@
+ // single "Authorization" header is used to compute both the username and
+ // password attributes).
+ func defaultRequestHeaderAttributes(e *HTTPEndpointExpr) map[string]bool {
+-	panic("excised: defaultRequestHeaderAttributes")
++	var requirements []*SecurityExpr
++	switch {
++	case len(e.MethodExpr.Requirements) > 0:
++		requirements = e.MethodExpr.Requirements
++	case len(e.Service.ServiceExpr.Requirements) > 0:
++		requirements = e.Service.ServiceExpr.Requirements
++	}
++	if len(requirements) == 0 {
++		return nil
++	}
++	headers := make(map[string]bool)
++	for _, req := range requirements {
++		for _, sch := range req.Schemes {
++			var field string
++			switch sch.Kind {
++			case BearerKind:
++				field = TaggedAttribute(e.MethodExpr.Payload, "security:bearer")
++			case JWTKind:
++				field = TaggedAttribute(e.MethodExpr.Payload, "security:token")
++			case OAuth2Kind:
++				field = TaggedAttribute(e.MethodExpr.Payload, "security:accesstoken")
++			case APIKeyKind:
++				field = TaggedAttribute(e.MethodExpr.Payload, "security:apikey:"+sch.SchemeName)
++			default:
++				continue
++			}
++			headers[field] = true
++		}
++	}
++	return headers
+ }
+ 
+ // httpRequestBody returns an attribute describing the HTTP request body of the
+@@ -27,13 +54,55 @@
+ // by removing the attributes of the method payload used to define headers and
+ // parameters.
+ func httpRequestBody(a *HTTPEndpointExpr) *AttributeExpr {
+-	panic("excised: httpRequestBody")
++	name := concat(a.Name(), "Request", "Body")
++	if a.Body != nil {
++		if a.Body.Type == Empty {
++			return a.Body
++		}
++		a.Body = DupAtt(a.Body)
++		renameType(a.Body, name)
++		return a.Body
++	}
++	payload := a.MethodExpr.Payload
++	if !IsObject(payload.Type) {
++		if a.Headers.IsEmpty() && a.Params.IsEmpty() && a.Cookies.IsEmpty() {
++			payload = DupAtt(payload)
++			renameType(payload, name)
++			return payload
++		}
++		return &AttributeExpr{Type: Empty}
++	}
++	body := NewMappedAttributeExpr(payload)
++	removeAttributes(body, a.Headers)
++	removeAttributes(body, a.Params)
++	removeAttributes(body, a.Cookies)
++	if len(*AsObject(body.Type)) == 0 {
++		return &AttributeExpr{Type: Empty}
++	}
++	return &AttributeExpr{Type: NewGeneratedUserType(name, body.Attribute(), RequestBodyExampleIdentity(a))}
+ }
+ 
+ // httpStreamingBody returns an attribute representing the structs being
+ // streamed via websocket.
+ func httpStreamingBody(e *HTTPEndpointExpr) *AttributeExpr {
+-	panic("excised: httpStreamingBody")
++	if !e.MethodExpr.IsStreaming() || e.MethodExpr.Stream == ServerStreamKind {
++		return nil
++	}
++	att := e.MethodExpr.StreamingPayload
++	dupped := DupAtt(att)
++	if !IsObject(att.Type) {
++		return dupped
++	}
++	ut := NewGeneratedUserType(
++		concat(e.Name(), "Streaming", "Body"),
++		dupped,
++		MethodStreamingPayloadExampleIdentity(e.MethodExpr),
++	)
++	return &AttributeExpr{
++		Type:         ut,
++		Validation:   dupped.Validation,
++		UserExamples: att.UserExamples,
++	}
+ }
+ 
+ // httpResponseBody returns an attribute representing the HTTP response body for
+@@ -42,7 +111,13 @@
+ // attribute is computed by removing the attributes of the method payload used
+ // to define cookies and headers.
+ func httpResponseBody(a *HTTPEndpointExpr, resp *HTTPResponseExpr) *AttributeExpr {
+-	panic("excised: httpResponseBody")
++	var name, suffix string
++	if len(a.Responses) > 1 {
++		suffix = http.StatusText(resp.StatusCode)
++	}
++	name = a.Name() + suffix
++	identity := ResponseBodyExampleIdentity(a, resp)
++	return buildHTTPResponseBody(name, a.MethodExpr.Result, resp, identity)
+ }
+ 
+ // httpErrorResponseBody returns an attribute describing the response body of a
+@@ -51,17 +126,51 @@
+ // by removing the attributes of the error used to define cookies, headers and
+ // parameters.
+ func httpErrorResponseBody(e *HTTPEndpointExpr, v *HTTPErrorExpr) *AttributeExpr {
+-	panic("excised: httpErrorResponseBody")
++	name := e.Name() + "_" + v.ErrorExpr.Name
++	identity := ErrorResponseBodyExampleIdentity(e, v)
++	return buildHTTPResponseBody(name, v.AttributeExpr, v.Response, identity)
+ }
+ 
+ func buildHTTPResponseBody(name string, attr *AttributeExpr, resp *HTTPResponseExpr, identity ExampleIdentity) *AttributeExpr {
+-	panic("excised: buildHTTPResponseBody")
++	name = concat(name, "Response", "Body")
++	if attr == nil || attr.Type == Empty {
++		return &AttributeExpr{Type: Empty}
++	}
++	if resp.Body != nil {
++		if !IsObject(resp.Body.Type) {
++			return resp.Body
++		}
++		att := DupAtt(resp.Body)
++		renameType(att, name)
++		return att
++	}
++	if !IsObject(attr.Type) {
++		if resp.Headers.IsEmpty() && resp.Cookies.IsEmpty() {
++			attr = DupAtt(attr)
++			renameType(attr, name)
++			return attr
++		}
++		return &AttributeExpr{Type: Empty}
++	}
++	body := NewMappedAttributeExpr(attr)
++	removeAttributes(body, resp.Headers)
++	removeAttributes(body, resp.Cookies)
++	if len(*AsObject(body.Type)) == 0 {
++		return &AttributeExpr{Type: Empty}
++	}
++	userType := NewGeneratedUserType(name, body.Attribute(), identity)
++	return &AttributeExpr{
++		Type:        userType,
++		Description: userType.Description,
++		Validation:  userType.Validation,
++		Meta:        attr.Meta,
++	}
+ }
+ 
+ // generatedUserType preserves result-type behavior while giving a computed
+ // transport type its own original declaration and repeatable example sequence.
+ func generatedUserType(typ UserType, identity ExampleIdentity) UserType {
+-	panic("excised: generatedUserType")
++	return NewGeneratedUserType(typ.Name(), typ.Attribute(), identity)
+ }
+ 
+ // concat concatenates the given strings with "smart(?) casing".
+@@ -84,29 +193,50 @@
+ // properties and extensions — from the original design type to the computed
+ // HTTP body type so the generated specs render them.
+ func copyOpenAPITypeMeta(from UserType, to *UserTypeExpr) {
+-	panic("excised: copyOpenAPITypeMeta")
++	for key, vals := range from.Attribute().Meta {
++		if key == "openapi:typename" {
++			to.AddMeta(key, vals...)
++		}
++	}
+ }
+ 
+ func concat(strs ...string) string {
+-	panic("excised: concat")
++	if len(strs) == 1 {
++		return strs[0]
++	}
++	name := Title(strs[0])
++	for i := 1; i < len(strs); i++ {
++		name += Title(strs[i])
++	}
++	return name
+ }
+ 
+ func renameType(att *AttributeExpr, name string) {
+-	panic("excised: renameType")
++	if userType, ok := att.Type.(UserType); ok {
++		userType.Rename(name)
++	}
+ }
+ 
+ // RemovePkgPath traverses the given data type and removes the "struct:pkg:path"
+ // metadata from all the user type attributes.
+ func RemovePkgPath(attr *AttributeExpr) {
+-	panic("excised: RemovePkgPath")
++	walk(attr.Type, func(ut UserType) {
++		delete(ut.Attribute().Meta, "struct:pkg:path")
++	})
+ }
+ 
+ func removeAttributes(attr, sub *MappedAttributeExpr) {
+-	panic("excised: removeAttributes")
++	o := AsObject(sub.Type)
++	for _, nat := range *o {
++		removeAttribute(attr, nat.Name)
++	}
+ }
+ 
+ func removeAttribute(attr *MappedAttributeExpr, name string) {
+-	panic("excised: removeAttribute")
++	attr.Delete(name)
++	if attr.Validation != nil {
++		attr.Validation.RemoveRequired(name)
++	}
+ }
+ 
+ // extendBodyAttribute returns an attribute describing the HTTP
+@@ -114,15 +244,39 @@
+ // attribute. This must be invoked during validation or to determine the actual
+ // body type by removing any headers/params/cookies.
+ func extendBodyAttribute(body *MappedAttributeExpr) {
+-	panic("excised: extendBodyAttribute")
++	att := body.AttributeExpr
++	for _, base := range att.Bases {
++		if ru, ok := base.(UserType); ok {
++			att.Merge(ru.Attribute())
++		}
++	}
++	att.Bases = nil
+ }
+ 
+ // walk traverses the given data type and invokes the given function for each
+ // user type it finds including dt itself.
+ func walk(dt DataType, do func(UserType)) {
+-	panic("excised: walk")
++	walkrec(dt, do, make(map[UserType]struct{}))
+ }
+ 
+ func walkrec(dt DataType, do func(UserType), seen map[UserType]struct{}) {
+-	panic("excised: walkrec")
++	switch dt := dt.(type) {
++	case UserType:
++		origin := dt.Origin()
++		if _, ok := seen[origin]; ok {
++			return
++		}
++		seen[origin] = struct{}{}
++		do(dt)
++		walkrec(dt.Attribute().Type, do, seen)
++	case *Object:
++		for _, nat := range *dt {
++			walkrec(nat.Attribute.Type, do, seen)
++		}
++	case *Array:
++		walkrec(dt.ElemType.Type, do, seen)
++	case *Map:
++		walkrec(dt.KeyType.Type, do, seen)
++		walkrec(dt.ElemType.Type, do, seen)
++	}
+ }

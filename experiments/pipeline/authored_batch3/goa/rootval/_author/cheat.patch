@@ -1,0 +1,382 @@
+--- a/expr/root.go
++++ b/expr/root.go
+@@ -7,10 +7,10 @@
+ 	_ "cmp"
+ 	"fmt"
+ 	_ "maps"
+-	_ "reflect"
+-	_ "slices"
++	"reflect"
++	"slices"
+ 	_ "sort"
+-	_ "strings"
++	"strings"
+ 
+ 	"example.internal/apikit/v3/eval"
+ 	goa "example.internal/apikit/v3/pkg"
+@@ -69,7 +69,33 @@
+ 
+ // WalkSets returns the expressions in order of evaluation.
+ func (r *RootExpr) WalkSets(walk eval.SetWalker) {
+-	panic("excised: RootExpr.WalkSets")
++	if r.API == nil {
++		name := "API"
++		if len(r.Services) > 0 {
++			name = r.Services[0].Name
++		}
++		r.API = NewAPIExpr(name, func() {})
++	}
++	walk(eval.ExpressionSet{r.API})
++	walk(eval.ToExpressionSet(r.API.Servers))
++	types := make(eval.ExpressionSet, len(r.Types))
++	for i, t := range r.Types {
++		types[i] = t.Attribute()
++	}
++	walk(types)
++	for _, service := range r.Services {
++		service.design = r
++	}
++	walk(eval.ToExpressionSet(r.Services))
++	var methods eval.ExpressionSet
++	for _, s := range r.Services {
++		for _, m := range s.Methods {
++			methods = append(methods, m)
++		}
++	}
++	walk(methods)
++	r.walkHTTPServices(r.API.HTTP, r.API.HTTP.Services, walk)
++	r.walkHTTPServices(r.API.JSONRPC, r.API.JSONRPC.Services, walk)
+ }
+ 
+ // DependsOn returns nil, the core DSL has no dependency.
+@@ -87,17 +113,32 @@
+ 
+ // UserType returns the user type expression with the given name if found, nil otherwise.
+ func (r *RootExpr) UserType(name string) UserType {
+-	panic("excised: RootExpr.UserType")
++	for _, t := range r.Types {
++		if t.Name() == name {
++			return t
++		}
++	}
++	return nil
+ }
+ 
+ // Service returns the service with the given name.
+ func (r *RootExpr) Service(name string) *ServiceExpr {
+-	panic("excised: RootExpr.Service")
++	for _, s := range r.Services {
++		if s.Name == name {
++			return s
++		}
++	}
++	return nil
+ }
+ 
+ // Error returns the error with the given name.
+ func (r *RootExpr) Error(name string) *ErrorExpr {
+-	panic("excised: RootExpr.Error")
++	for _, e := range r.Errors {
++		if e.Name == name {
++			return e
++		}
++	}
++	return nil
+ }
+ 
+ // EvalName is the name of the DSL.
+@@ -107,58 +148,163 @@
+ 
+ // Validate makes sure the root expression is valid for code generation.
+ func (r *RootExpr) Validate() error {
+-	panic("excised: RootExpr.Validate")
++	var verr eval.ValidationErrors
++	if r.API == nil {
++		verr.Add(r, "Missing API declaration")
++	}
++	useen := make(map[string]struct{})
++	for _, ut := range r.Types {
++		name := ut.Name()
++		if _, ok := useen[name]; ok {
++			verr.Add(r, "type %#v defined twice", name)
++		} else {
++			useen[name] = struct{}{}
++		}
++	}
++	seen := make(map[string]struct{})
++	for _, rt := range r.ResultTypes {
++		name := rt.Name()
++		if _, ok := seen[name]; ok {
++			verr.Add(r, "result type %#v defined twice", name)
++		} else {
++			seen[name] = struct{}{}
++		}
++	}
++	for _, userType := range r.Types {
++		verr.Merge(userType.Attribute().validateDefaultValues(fmt.Sprintf("type %q", userType.Name()), userType))
++	}
++	for _, resultType := range r.ResultTypes {
++		verr.Merge(resultType.Attribute().validateDefaultValues(fmt.Sprintf("result type %q", resultType.Name()), resultType))
++	}
++	verr.Merge(r.validateErrorDefaults())
++	verr.Merge(ValidateSharedErrorNames(r))
++	verr.Merge(validateTypeMappings("conversion", r.Conversions))
++	verr.Merge(validateTypeMappings("creation", r.Creations))
++	return &verr
+ }
+ 
+ // ValidateSharedErrorNames rejects an authored type with several static error
+ // names unless each value carries its selected name in an ErrorName field. The
+ // roots must include every design linked by one generation command.
+ func ValidateSharedErrorNames(roots ...*RootExpr) *eval.ValidationErrors {
+-	panic("excised: ValidateSharedErrorNames")
++	verr := new(eval.ValidationErrors)
++	names := make(map[UserType][]string)
++	var exprs = map[UserType]*ErrorExpr{}
++	for _, root := range roots {
++		for _, designError := range root.Errors {
++			ut, ok := designError.Type.(UserType)
++			if !ok {
++				continue
++			}
++			names[ut] = append(names[ut], designError.Name)
++			exprs[ut] = designError
++		}
++	}
++	for ut, ns := range names {
++		if len(ns) > 1 && !hasErrorNameAttribute(ut.Attribute()) {
++			verr.Add(exprs[ut], "type %q defines errors %s and must identify the attribute containing the error name with ErrorName", ut.Name(), strings.Join(ns, ", "))
++		}
++	}
++	return verr
+ }
+ 
+ // hasErrorNameAttribute reports whether the type stores its error name in one
+ // generated field.
+ func hasErrorNameAttribute(attribute *AttributeExpr) bool {
+-	panic("excised: hasErrorNameAttribute")
++	_, ok := attribute.Meta["struct:error:name"]
++	return ok
+ }
+ 
+ // validateErrorDefaults checks each declared error once. Services and methods
+ // may reuse the same error expression, so pointer identity prevents repeated
+ // diagnostics for one declaration.
+ func (r *RootExpr) validateErrorDefaults() *eval.ValidationErrors {
+-	panic("excised: RootExpr.validateErrorDefaults")
++	errors := new(eval.ValidationErrors)
++	validate := func(designError *ErrorExpr) {
++		errors.Merge(designError.AttributeExpr.validateDefaultValues(
++			fmt.Sprintf("error %q", designError.Name), designError))
++	}
++	for _, designError := range r.Errors {
++		validate(designError)
++	}
++	for _, service := range r.Services {
++		for _, designError := range service.Errors {
++			validate(designError)
++		}
++		for _, method := range service.Methods {
++			for _, designError := range method.Errors {
++				validate(designError)
++			}
++		}
++	}
++	return errors
+ }
+ 
+ // validateSharedHTTPRoutes rejects ordinary HTTP and JSON-RPC routes that
+ // would replace one another when mounted on the same server.
+ func (r *RootExpr) validateSharedHTTPRoutes() *eval.ValidationErrors {
+-	panic("excised: RootExpr.validateSharedHTTPRoutes")
++	var verr eval.ValidationErrors
++	if r.API.HTTP == nil || r.API.JSONRPC == nil {
++		return &verr
++	}
++	for _, server := range r.API.Servers {
++		httpRoutes := routesMountedOnServer(server, r.API.HTTP.Services)
++		jsonrpcRoutes := routesMountedOnServer(server, r.API.JSONRPC.Services)
++		for _, httpRoute := range httpRoutes {
++			for _, jsonrpcRoute := range jsonrpcRoutes {
++				if httpRoute.route.Method == jsonrpcRoute.route.Method && httpRoute.path == jsonrpcRoute.path {
++					verr.Add(jsonrpcRoute.route, "server %q mounts ordinary HTTP route %s %q from service %q and JSON-RPC route %s %q from service %q; both routes match the same requests", server.Name, httpRoute.route.Method, httpRoute.path, httpRoute.service, jsonrpcRoute.route.Method, jsonrpcRoute.path, jsonrpcRoute.service)
++				}
++			}
++		}
++	}
++	return &verr
+ }
+ 
+ // routesMountedOnServer returns every final route owned by services mounted on
+ // server.
+ func routesMountedOnServer(server *ServerExpr, services []*HTTPServiceExpr) []mountedHTTPRoute {
+-	panic("excised: routesMountedOnServer")
++	var routes []mountedHTTPRoute
++	for _, service := range services {
++		if !serverHostsService(server, service.Name()) {
++			continue
++		}
++		for _, endpoint := range service.HTTPEndpoints {
++			for _, route := range endpoint.Routes {
++				routes = append(routes, mountedHTTPRoute{service: service.Name(), route: route, path: route.FullPaths()[0]})
++			}
++		}
++	}
++	return routes
+ }
+ 
+ // serverHostsService reports whether server mounts service. An empty service
+ // list means that the server mounts every service in the design.
+ func serverHostsService(server *ServerExpr, service string) bool {
+-	panic("excised: serverHostsService")
++	return slices.Contains(server.Services, service)
+ }
+ 
+ // routePatternWithoutParameterNames returns the path form used to detect
+ // router replacement. Parameter names do not change which requests match.
+ func routePatternWithoutParameterNames(routePath string) string {
+-	panic("excised: routePatternWithoutParameterNames")
++	return routePath
+ }
+ 
+ // validateTypeMappings rejects repeated declarations that would generate the
+ // same method on one user type. A reflected type includes its package path, so
+ // equally named external types from different packages remain distinct.
+ func validateTypeMappings(direction string, mappings []*TypeMap) *eval.ValidationErrors {
+-	panic("excised: validateTypeMappings")
++	var verr eval.ValidationErrors
++	seen := make(map[string]struct{}, len(mappings))
++	for _, mapping := range mappings {
++		key := mapping.User.Name() + "/" + fmt.Sprint(reflect.TypeOf(mapping.External))
++		if _, ok := seen[key]; ok {
++			verr.Add(mapping.User, "%s defined twice", direction)
++			continue
++		}
++		seen[key] = struct{}{}
++	}
++	return &verr
+ }
+ 
+ // validateRelocatedUserTypes enforces that relocated user types (those with
+@@ -171,13 +317,32 @@
+ // wrappers) are exempt because they are materialized alongside their owning
+ // types.
+ func (r *RootExpr) validateRelocatedUserTypes() *eval.ValidationErrors {
+-	panic("excised: RootExpr.validateRelocatedUserTypes")
++	var verr eval.ValidationErrors
++	for _, ut := range r.Types {
++		pkgPath, ok := ut.Attribute().Meta.Last("struct:pkg:path")
++		if !ok || pkgPath == "" {
++			continue
++		}
++		for _, nat := range *AsObject(ut.Attribute().Type) {
++			dep, ok := nat.Attribute.Type.(UserType)
++			if !ok {
++				continue
++			}
++			if _, ok := dep.Attribute().Meta.Last("struct:pkg:path"); !ok {
++				verr.Add(dep, "type %q is generated in package %q (struct:pkg:path) but depends on %q with no explicit struct:pkg:path", ut.Name(), pkgPath, dep.Name())
++			}
++		}
++	}
++	return &verr
+ }
+ 
+ // walkUserTypeDependencies traverses the attribute graph reachable from root and
+ // invokes visit for each encountered user type.
+ func (r *RootExpr) walkUserTypeDependencies(root UserType, seen map[UserType]struct{}, path string, visit func(UserType, string)) {
+-	panic("excised: RootExpr.walkUserTypeDependencies")
++	if root == nil || root.Attribute() == nil {
++		return
++	}
++	r.walkAttributeUserTypes(root.Attribute(), seen, path, visit)
+ }
+ 
+ // walkAttributeUserTypes traverses att and invokes visit for each encountered
+@@ -186,33 +351,80 @@
+ // The path argument records the traversal path through objects, arrays, maps,
+ // and unions and is intended for diagnostics.
+ func (r *RootExpr) walkAttributeUserTypes(att *AttributeExpr, seen map[UserType]struct{}, path string, visit func(UserType, string)) {
+-	panic("excised: RootExpr.walkAttributeUserTypes")
++	if att == nil || att.Type == Empty {
++		return
++	}
++	switch t := att.Type.(type) {
++	case UserType:
++		if _, ok := seen[t]; ok {
++			return
++		}
++		seen[t] = struct{}{}
++		visit(t, path)
++	case *Object:
++		for _, nat := range *t {
++			r.walkAttributeUserTypes(nat.Attribute, seen, path, visit)
++		}
++	}
+ }
+ 
+ // Finalize finalizes the server expressions.
+ func (r *RootExpr) Finalize() {
+-	panic("excised: RootExpr.Finalize")
++	if r.API == nil {
++		r.API = &APIExpr{}
++	}
++	if len(r.API.Servers) == 0 {
++		r.API.Servers = []*ServerExpr{r.API.DefaultServer()}
++	}
++	for _, e := range r.Errors {
++		e.Finalize()
++	}
++	for _, s := range r.API.Servers {
++		s.Finalize()
++	}
+ }
+ 
+ // walkHTTPServices walks the HTTP services and endpoints.
+ func (r *RootExpr) walkHTTPServices(root eval.Expression, svcs []*HTTPServiceExpr, walk eval.SetWalker) {
+-	panic("excised: RootExpr.walkHTTPServices")
++	var httpepts eval.ExpressionSet
++	httpsvcs := make(eval.ExpressionSet, len(svcs))
++	for i, svc := range svcs {
++		httpsvcs[i] = svc
++		for _, e := range svc.HTTPEndpoints {
++			httpepts = append(httpepts, e)
++		}
++	}
++	walk(eval.ExpressionSet{root})
++	walk(httpsvcs)
++	walk(httpepts)
+ }
+ 
+ // Dup creates a new map from the given expression.
+ func (m MetaExpr) Dup() MetaExpr {
+-	panic("excised: MetaExpr.Dup")
++	d := make(MetaExpr, len(m))
++	for k, v := range m {
++		d[k] = v
++	}
++	return d
+ }
+ 
+ // Merge merges src meta expression with m. If meta has intersecting set of
+ // keys on both m and src, then the values for those keys in src is appended
+ // to the values of the keys in m if not already existing.
+ func (m MetaExpr) Merge(src MetaExpr) {
+-	panic("excised: MetaExpr.Merge")
++	for k, vals := range src {
++		if _, ok := m[k]; !ok {
++			m[k] = vals
++		}
++	}
+ }
+ 
+ // Last returns the last value for a specific key, if the key exists and has
+ // values; otherwise returns an empty string, with the "ok" flag set to false.
+ func (m MetaExpr) Last(key string) (string, bool) {
+-	panic("excised: MetaExpr.Last")
++	v, ok := m[key]
++	if !ok || len(v) == 0 {
++		return "", false
++	}
++	return v[len(v)-1], true
+ }

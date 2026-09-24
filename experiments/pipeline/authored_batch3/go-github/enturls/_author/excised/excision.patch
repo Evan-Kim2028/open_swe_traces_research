@@ -1,0 +1,313 @@
+diff --git a/github/github.go b/github/github.go
+index 5b1fa27..4d78432 100644
+--- a/github/github.go
++++ b/github/github.go
+@@ -495,31 +495,14 @@ func WithEnterpriseURLs(baseURL, uploadURL string) ClientOptionsFunc {
+ 		if err != nil {
+ 			return fmt.Errorf("invalid base url: %w", err)
+ 		}
+-
+-		if !strings.HasSuffix(b.Path, "/api/v3/") &&
+-			!strings.HasPrefix(b.Host, "api.") &&
+-			!strings.Contains(b.Host, ".api.") {
+-			b.Path += "api/v3/"
+-		}
+-
+ 		o.baseURL = b
+-
+ 		u, err := parseURL(uploadURL)
+ 		if err != nil {
+ 			return fmt.Errorf("invalid upload url: %w", err)
+ 		}
+-
+-		if !strings.HasSuffix(u.Path, "/api/uploads/") &&
+-			!strings.HasPrefix(u.Host, "api.") &&
+-			!strings.Contains(u.Host, ".api.") &&
+-			!strings.HasPrefix(u.Host, "uploads.") {
+-			u.Path += "api/uploads/"
+-		}
+-
+ 		o.uploadURL = u
+-
+ 		return nil
+-	}
++	} /* excised: WithEnterpriseURLs */
+ }
+ 
+ // WithDisableRateLimitCheck returns a ClientOptionsFunc that disables rate
+diff --git a/github/github_test.go b/github/github_test.go
+index 165a2d9..d23b8e5 100644
+--- a/github/github_test.go
++++ b/github/github_test.go
+@@ -596,234 +596,7 @@ func TestWithAuthToken(t *testing.T) {
+ 	})
+ }
+ 
+-func TestWithURLs(t *testing.T) {
+-	t.Parallel()
+-	for _, tt := range []struct {
+-		name          string
+-		baseURL       *string
+-		wantBaseURL   *string
+-		uploadURL     *string
+-		wantUploadURL *string
+-		wantErr       string
+-	}{
+-		{
+-			name:          "does_not_modify_urls_with_trailing_slash",
+-			baseURL:       new("https://example.com/"),
+-			wantBaseURL:   new("https://example.com/"),
+-			uploadURL:     new("https://upload.example.com/"),
+-			wantUploadURL: new("https://upload.example.com/"),
+-		},
+-		{
+-			name:          "adds_trailing_slash",
+-			baseURL:       new("https://example.com"),
+-			wantBaseURL:   new("https://example.com/"),
+-			uploadURL:     new("https://upload.example.com"),
+-			wantUploadURL: new("https://upload.example.com/"),
+-		},
+-		{
+-			name: "skips_unset",
+-		},
+-		{
+-			name:    "error_on_empty_base_url",
+-			baseURL: new(""),
+-			wantErr: "invalid base url: url cannot be empty",
+-		},
+-		{
+-			name:    "error_on_bad_base_url",
+-			baseURL: new("bogus\nbase\nURL"),
+-			wantErr: "invalid base url: invalid url",
+-		},
+-		{
+-			name:      "error_on_empty_upload_url",
+-			baseURL:   new("https://example.com/"),
+-			uploadURL: new(""),
+-			wantErr:   "invalid upload url: url cannot be empty",
+-		},
+-		{
+-			name:      "error_on_bad_upload_url",
+-			baseURL:   new("https://example.com/"),
+-			uploadURL: new("bogus\nupload\nURL"),
+-			wantErr:   "invalid upload url: invalid url",
+-		},
+-	} {
+-		t.Run(tt.name, func(t *testing.T) {
+-			t.Parallel()
+-
+-			opts := clientOptions{}
+-			err := WithURLs(tt.baseURL, tt.uploadURL)(&opts)
+-			if err != nil {
+-				if tt.wantErr == "" {
+-					t.Fatalf("unexpected error: %v", err)
+-				}
+ 
+-				if !strings.Contains(err.Error(), tt.wantErr) {
+-					t.Fatalf("expected error to contain %v, got %v", tt.wantErr, err)
+-				}
+-
+-				return
+-			}
+-
+-			if tt.wantErr != "" {
+-				t.Fatalf("expected error to contain %v, got nil", tt.wantErr)
+-				return
+-			}
+-
+-			if (opts.baseURL != nil) != (tt.wantBaseURL != nil) {
+-				t.Errorf("BaseURL set = %v, want %v", opts.baseURL != nil, tt.wantBaseURL != nil)
+-			}
+-			if opts.baseURL != nil && opts.baseURL.String() != *tt.wantBaseURL {
+-				t.Errorf("BaseURL is %v, want %v", opts.baseURL.String(), *tt.wantBaseURL)
+-			}
+-
+-			if (opts.uploadURL != nil) != (tt.wantUploadURL != nil) {
+-				t.Errorf("UploadURL set = %v, want %v", opts.uploadURL != nil, tt.wantUploadURL != nil)
+-			}
+-			if opts.uploadURL != nil && opts.uploadURL.String() != *tt.wantUploadURL {
+-				t.Errorf("UploadURL is %v, want %v", opts.uploadURL.String(), *tt.wantUploadURL)
+-			}
+-		})
+-	}
+-}
+-
+-func TestWithEnterpriseURLs(t *testing.T) {
+-	t.Parallel()
+-	for _, tt := range []struct {
+-		name          string
+-		baseURL       string
+-		wantBaseURL   string
+-		uploadURL     string
+-		wantUploadURL string
+-		wantErr       string
+-	}{
+-		{
+-			name:          "does_not_modify_properly_formed_urls",
+-			baseURL:       "https://custom-url/api/v3/",
+-			wantBaseURL:   "https://custom-url/api/v3/",
+-			uploadURL:     "https://custom-upload-url/api/uploads/",
+-			wantUploadURL: "https://custom-upload-url/api/uploads/",
+-		},
+-		{
+-			name:          "adds_trailing_slash",
+-			baseURL:       "https://custom-url/api/v3",
+-			wantBaseURL:   "https://custom-url/api/v3/",
+-			uploadURL:     "https://custom-upload-url/api/uploads",
+-			wantUploadURL: "https://custom-upload-url/api/uploads/",
+-		},
+-		{
+-			name:          "adds_enterprise_suffix",
+-			baseURL:       "https://custom-url/",
+-			wantBaseURL:   "https://custom-url/api/v3/",
+-			uploadURL:     "https://custom-upload-url/",
+-			wantUploadURL: "https://custom-upload-url/api/uploads/",
+-		},
+-		{
+-			name:          "adds_enterprise_suffix_and_trailing_slash",
+-			baseURL:       "https://custom-url",
+-			wantBaseURL:   "https://custom-url/api/v3/",
+-			uploadURL:     "https://custom-upload-url",
+-			wantUploadURL: "https://custom-upload-url/api/uploads/",
+-		},
+-		{
+-			name:          "url_has_existing_api_prefix_adds_trailing_slash",
+-			baseURL:       "https://api.custom-url",
+-			wantBaseURL:   "https://api.custom-url/",
+-			uploadURL:     "https://api.custom-upload-url",
+-			wantUploadURL: "https://api.custom-upload-url/",
+-		},
+-		{
+-			name:          "url_has_existing_api_prefix_and_trailing_slash",
+-			baseURL:       "https://api.custom-url/",
+-			wantBaseURL:   "https://api.custom-url/",
+-			uploadURL:     "https://api.custom-upload-url/",
+-			wantUploadURL: "https://api.custom-upload-url/",
+-		},
+-		{
+-			name:          "url_has_api_subdomain_adds_trailing_slash",
+-			baseURL:       "https://catalog.api.custom-url",
+-			wantBaseURL:   "https://catalog.api.custom-url/",
+-			uploadURL:     "https://catalog.api.custom-upload-url",
+-			wantUploadURL: "https://catalog.api.custom-upload-url/",
+-		},
+-		{
+-			name:          "url_has_api_subdomain_and_trailing_slash",
+-			baseURL:       "https://catalog.api.custom-url/",
+-			wantBaseURL:   "https://catalog.api.custom-url/",
+-			uploadURL:     "https://catalog.api.custom-upload-url/",
+-			wantUploadURL: "https://catalog.api.custom-upload-url/",
+-		},
+-		{
+-			name:          "url_is_not_a_proper_api_subdomain_adds_enterprise_suffix_and_trailing_slash",
+-			baseURL:       "https://cloud-api.custom-url",
+-			wantBaseURL:   "https://cloud-api.custom-url/api/v3/",
+-			uploadURL:     "https://cloud-api.custom-upload-url",
+-			wantUploadURL: "https://cloud-api.custom-upload-url/api/uploads/",
+-		},
+-		{
+-			name:          "url_is_not_a_proper_api_subdomain_adds_enterprise_suffix",
+-			baseURL:       "https://cloud-api.custom-url/",
+-			wantBaseURL:   "https://cloud-api.custom-url/api/v3/",
+-			uploadURL:     "https://cloud-api.custom-upload-url/",
+-			wantUploadURL: "https://cloud-api.custom-upload-url/api/uploads/",
+-		},
+-		{
+-			name:          "url_has_uploads_subdomain_does_not_modify",
+-			baseURL:       "https://api.custom-url/",
+-			wantBaseURL:   "https://api.custom-url/",
+-			uploadURL:     "https://uploads.custom-upload-url/",
+-			wantUploadURL: "https://uploads.custom-upload-url/",
+-		},
+-		{
+-			name:      "empty_base_url",
+-			baseURL:   "",
+-			uploadURL: "https://custom-upload-url/api/uploads/",
+-			wantErr:   "invalid base url: url cannot be empty",
+-		},
+-		{
+-			name:      "invalid_base_url",
+-			baseURL:   "bogus\nbase\nURL",
+-			uploadURL: "https://custom-upload-url/api/uploads/",
+-			wantErr:   `invalid base url: invalid url`,
+-		},
+-		{
+-			name:      "empty_upload_url",
+-			baseURL:   "https://custom-url/api/v3/",
+-			uploadURL: "",
+-			wantErr:   "invalid upload url: url cannot be empty",
+-		},
+-		{
+-			name:      "invalid_upload_url",
+-			baseURL:   "https://custom-url/api/v3/",
+-			uploadURL: "bogus\nupload\nURL",
+-			wantErr:   `invalid upload url: invalid url`,
+-		},
+-	} {
+-		t.Run(tt.name, func(t *testing.T) {
+-			t.Parallel()
+-
+-			opts := clientOptions{}
+-			err := WithEnterpriseURLs(tt.baseURL, tt.uploadURL)(&opts)
+-			if err != nil {
+-				if tt.wantErr == "" {
+-					t.Fatalf("WithEnterpriseURLs returned unexpected error: %v", err)
+-				}
+-				if !strings.Contains(err.Error(), tt.wantErr) {
+-					t.Fatalf("error does not contain expected string %q: %v", tt.wantErr, err)
+-				}
+-				return
+-			}
+-			if tt.wantErr != "" {
+-				t.Fatalf("WithEnterpriseURLs did not return expected error containing %q", tt.wantErr)
+-			}
+-
+-			if opts.baseURL.String() != tt.wantBaseURL {
+-				t.Errorf("BaseURL is %v, want %v", opts.baseURL, tt.wantBaseURL)
+-			}
+-			if opts.uploadURL.String() != tt.wantUploadURL {
+-				t.Errorf("UploadURL is %v, want %v", opts.uploadURL, tt.wantUploadURL)
+-			}
+-		})
+-	}
+-}
+ 
+ func TestWithDisableRateLimitCheck(t *testing.T) {
+ 	t.Parallel()
+diff --git a/github/url.go b/github/url.go
+index f0411dc..65df7e8 100644
+--- a/github/url.go
++++ b/github/url.go
+@@ -6,28 +6,15 @@
+ package github
+ 
+ import (
+-	"errors"
+-	"fmt"
++	_ "errors"
++	_ "fmt"
+ 	"net/url"
+-	"strings"
++	_ "strings"
+ )
+ 
+ // parseURL parses the given string as a URL and ensures that the path ends
+ // with a slash. If the input string is empty, it returns an error. If the URL
+ // cannot be parsed, it returns the parsing error.
+ func parseURL(s string) (*url.URL, error) {
+-	if s == "" {
+-		return nil, errors.New("url cannot be empty")
+-	}
+-
+-	u, err := url.Parse(s)
+-	if err != nil {
+-		return nil, fmt.Errorf("invalid url: %w", err)
+-	}
+-
+-	if !strings.HasSuffix(u.Path, "/") {
+-		u.Path += "/"
+-	}
+-
+-	return u, nil
++	return url.Parse(s) /* excised: parseURL */
+ }

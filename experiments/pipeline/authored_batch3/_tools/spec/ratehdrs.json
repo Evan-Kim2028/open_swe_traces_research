@@ -1,0 +1,14 @@
+{
+  "impl": {
+    "github/github.go": {
+      "parseRate": "var rate Rate\n\tif limit := r.Header.Get(HeaderRateLimit); limit != \"\" {\n\t\trate.Limit, _ = strconv.Atoi(limit)\n\t}\n\tif remaining := r.Header.Get(HeaderRateRemaining); remaining != \"\" {\n\t\trate.Remaining, _ = strconv.Atoi(remaining)\n\t}\n\tif used := r.Header.Get(HeaderRateUsed); used != \"\" {\n\t\trate.Used, _ = strconv.Atoi(used)\n\t}\n\tif reset := r.Header.Get(HeaderRateReset); reset != \"\" {\n\t\tv, _ := strconv.ParseInt(reset, 10, 64)\n\t\trate.Reset = Timestamp{time.Unix(v, 0)}\n\t}\n\tif resource := r.Header.Get(HeaderRateResource); resource != \"\" {\n\t\trate.Resource = resource\n\t}\n\treturn rate",
+      "parseTokenExpiration": "return Timestamp{}"
+    }
+  },
+  "deltests": {
+    "github/github_test.go": [
+      "TestParseTokenExpiration"
+    ]
+  },
+  "testre": "TestParseTokenExpiration"
+}

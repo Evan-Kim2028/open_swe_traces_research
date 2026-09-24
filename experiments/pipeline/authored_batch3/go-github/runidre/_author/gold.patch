@@ -1,0 +1,18 @@
+diff --git a/github/github.go b/github/github.go
+--- a/github/github.go
++++ b/github/github.go
+@@ -2480,5 +2480,13 @@ var runIDFromURLRE = regexp.MustCompile(`repos/.*/actions/runs/(\d+)/deployment_
+ 
+ // GetRunID is a Helper Function used to extract the workflow RunID from the *DeploymentProtectionRuleEvent.DeploymentCallBackURL.
+ func (e *DeploymentProtectionRuleEvent) GetRunID() (int64, error) {
+-	return -1, errors.New("no match") /* excised: DeploymentProtectionRuleEvent.GetRunID */
++	match := runIDFromURLRE.FindStringSubmatch(*e.DeploymentCallbackURL)
++	if len(match) != 2 {
++		return -1, errors.New("no match")
++	}
++	runID, err := strconv.ParseInt(match[1], 10, 64)
++	if err != nil {
++		return -1, err
++	}
++	return runID, nil
+ }

@@ -1,0 +1,322 @@
+diff --git a/plumbing/protocol/capability/capability.go b/plumbing/protocol/capability/capability.go
+index d054724..243385f 100644
+--- a/plumbing/protocol/capability/capability.go
++++ b/plumbing/protocol/capability/capability.go
+@@ -3,12 +3,12 @@ package capability
+ 
+ import (
+ 	"errors"
+-	_ "fmt"
+-	_ "os"
+-	_ "slices"
+-	_ "strings"
++	"fmt"
++	"os"
++	"slices"
++	"strings"
+ 
+-	_ "example.internal/gitkit/v6/plumbing/format/pktline"
++	"example.internal/gitkit/v6/plumbing/format/pktline"
+ )
+ 
+ var (
+@@ -300,41 +300,109 @@ const userAgent = "go-git/6.x"
+ 
+ // DefaultAgent provides the user agent string.
+ func DefaultAgent() string {
+-	panic("excised: DefaultAgent")
++	if envUserAgent, ok := os.LookupEnv("GO_GIT_USER_AGENT_EXTRA"); ok && strings.TrimSpace(envUserAgent) != "" {
++		return fmt.Sprintf("%s %s", userAgent, envUserAgent)
++	}
++	return userAgent
+ }
+ 
+ // Validate validates that all capabilities in the list are valid v0/v1
+ // capabilities and that they have proper arguments.
+ func Validate(l *List) error {
+-	panic("excised: Validate")
++	for _, c := range l.All() {
++		values := l.Get(c)
++		if err := validateCapability(c, values); err != nil {
++			return err
++		}
++	}
++	return nil
+ }
+ 
+ func validateCapability(c Capability, values []string) error {
+-	panic("excised: validateCapability")
++	if err := validateNoEmptyArgs(values); err != nil {
++		return err
++	}
++
++	if !isKnown(c) {
++		return fmt.Errorf("unknown capability: %s", c)
++	}
++
++	if requiresArgument(c) && len(values) == 0 {
++		return ErrArgumentsRequired
++	}
++
++	if !requiresArgument(c) && len(values) != 0 {
++		return ErrArguments
++	}
++
++	if !allowsMultipleArguments(c) && len(values) > 1 {
++		return ErrMultipleArguments
++	}
++
++	if c == SessionID && len(values) == 1 {
++		if err := validateSessionID(values[0]); err != nil {
++			return err
++		}
++	}
++
++	return nil
+ }
+ 
+ // isKnown reports whether the capability is a known v0/v1 capability.
+ func isKnown(c Capability) bool {
+-	panic("excised: isKnown")
++	switch c {
++	case MultiACK, MultiACKDetailed, NoDone, ThinPack, NoThin, Sideband,
++		Sideband64k, OFSDelta, Agent, Shallow, DeepenSince, DeepenNot,
++		DeepenRelative, NoProgress, IncludeTag, ReportStatus, ReportStatusV2,
++		DeleteRefs, Quiet, Atomic, PushOptions, SymRef, AllowTipSHA1InWant,
++		AllowReachableSHA1InWant, PushCert, Filter, ObjectFormat, SessionID:
++		return true
++	default:
++		return false
++	}
+ }
+ 
+ // requiresArgument reports whether the capability requires an argument.
+ func requiresArgument(c Capability) bool {
+-	panic("excised: requiresArgument")
++	switch c {
++	case Agent, PushCert, SymRef, ObjectFormat, SessionID:
++		return true
++	default:
++		return false
++	}
+ }
+ 
+ // allowsMultipleArguments reports whether the capability accepts multiple arguments.
+ func allowsMultipleArguments(c Capability) bool {
+-	panic("excised: allowsMultipleArguments")
++	switch c {
++	case SymRef:
++		return true
++	default:
++		return false
++	}
+ }
+ 
+ // validateNoEmptyArgs validates that no argument is empty.
+ func validateNoEmptyArgs(values []string) error {
+-	panic("excised: validateNoEmptyArgs")
++	if slices.Contains(values, "") {
++		return ErrEmptyArgument
++	}
++	return nil
+ }
+ 
+ // validateSessionID validates that the session ID is not empty and only
+ // contains printable ASCII characters except space.
+ func validateSessionID(sessionID string) error {
+-	panic("excised: validateSessionID")
++	if sessionID == "" {
++		return ErrEmptyArgument
++	}
++	if len(sessionID) > pktline.MaxPayloadSize {
++		return fmt.Errorf("session ID is too long: %d bytes", len(sessionID))
++	}
++	if strings.ContainsFunc(sessionID, func(r rune) bool {
++		return r <= 32 || r >= 127 // Non-printable ASCII characters and space
++	}) {
++		return fmt.Errorf("session ID contains invalid characters: %q", sessionID)
++	}
++	return nil
+ }
+diff --git a/plumbing/protocol/capability/list.go b/plumbing/protocol/capability/list.go
+index c887429..fec4fd3 100644
+--- a/plumbing/protocol/capability/list.go
++++ b/plumbing/protocol/capability/list.go
+@@ -1,7 +1,7 @@
+ package capability
+ 
+ import (
+-	_ "bytes"
++	"bytes"
+ )
+ 
+ // List represents a list of capabilities. The zero value is safe to use;
+@@ -29,14 +29,46 @@ func (l *List) IsEmpty() bool {
+ // List. This is the format used in advertise-refs, upload-request, and
+ // update-request messages.
+ func DecodeList(raw []byte, l *List) {
+-	panic("excised: DecodeList")
++	if l == nil {
++		return
++	}
++
++	raw = bytes.TrimSpace(raw)
++	if len(raw) == 0 {
++		return
++	}
++
++	for len(raw) > 0 {
++		var chunk []byte
++		if i := bytes.IndexByte(raw, ' '); i >= 0 {
++			chunk = raw[:i]
++			raw = raw[i+1:]
++		} else {
++			chunk = raw
++			raw = nil
++		}
++
++		if len(chunk) == 0 {
++			continue
++		}
++
++		if before, after, ok := bytes.Cut(chunk, []byte{'='}); ok {
++			l.Add(string(before), string(after))
++		} else {
++			l.Add(string(chunk))
++		}
++	}
+ }
+ 
+ // EncodeList encodes the List into a v0/v1 space-separated capability string.
+ // This is the format used in advertise-refs, upload-request, and
+ // update-request messages.
+ func EncodeList(l *List) []byte {
+-	panic("excised: EncodeList")
++	if l == nil {
++		return nil
++	}
++	b, _ := l.MarshalText()
++	return b
+ }
+ 
+ // Get returns the values for a capability
+@@ -53,16 +85,32 @@ func (l *List) Get(capability string) []string {
+ 
+ // Set sets a capability removing the previous values
+ func (l *List) Set(capability string, values ...string) {
+-	panic("excised: List.Set")
++	if _, ok := l.m[capability]; ok {
++		l.m[capability].Values = l.m[capability].Values[:0]
++	}
++	l.Add(capability, values...)
+ }
+ 
+ func (l *List) init() {
+-	panic("excised: List.init")
++	if l.m == nil {
++		l.m = make(map[string]*entry)
++	}
+ }
+ 
+ // Add adds a capability, values are optional
+ func (l *List) Add(c string, values ...string) {
+-	panic("excised: List.Add")
++	l.init()
++
++	if !l.Supports(c) {
++		l.m[c] = &entry{Name: c}
++		l.sort = append(l.sort, c)
++	}
++
++	if len(values) == 0 {
++		return
++	}
++
++	l.m[c].Values = append(l.m[c].Values, values...)
+ }
+ 
+ // Supports returns true if capability is present
+@@ -76,31 +124,77 @@ func (l *List) Supports(capability string) bool {
+ 
+ // Delete deletes a capability from the List
+ func (l *List) Delete(capability string) {
+-	panic("excised: List.Delete")
++	if !l.Supports(capability) {
++		return
++	}
++
++	delete(l.m, capability)
++	for i, c := range l.sort {
++		if c != capability {
++			continue
++		}
++
++		l.sort = append(l.sort[:i], l.sort[i+1:]...)
++		return
++	}
+ }
+ 
+ // All returns a slice with all defined capabilities.
+ func (l *List) All() []string {
+-	panic("excised: List.All")
++	if len(l.sort) == 0 {
++		return nil
++	}
++
++	cs := make([]string, len(l.sort))
++	copy(cs, l.sort)
++
++	return cs
+ }
+ 
+ // MarshalText implements encoding.TextMarshaler.
+ func (l *List) MarshalText() ([]byte, error) {
+-	panic("excised: List.MarshalText")
++	return l.AppendText(nil)
+ }
+ 
+ // AppendText implements encoding.TextAppender.
+ func (l *List) AppendText(b []byte) ([]byte, error) {
+-	panic("excised: List.AppendText")
++	first := true
++	for _, key := range l.sort {
++		if l.m == nil {
++			continue
++		}
++		c := l.m[key]
++		if len(c.Values) == 0 {
++			if !first {
++				b = append(b, ' ')
++			}
++			first = false
++			b = append(b, key...)
++			continue
++		}
++
++		for _, value := range c.Values {
++			if !first {
++				b = append(b, ' ')
++			}
++			first = false
++			b = append(b, key...)
++			b = append(b, '=')
++			b = append(b, value...)
++		}
++	}
++	return b, nil
+ }
+ 
+ // UnmarshalText implements encoding.TextUnmarshaler.
+ func (l *List) UnmarshalText(text []byte) error {
+-	panic("excised: List.UnmarshalText")
++	DecodeList(text, l)
++	return nil
+ }
+ 
+ // String generates the capabilities strings, the capabilities are sorted in
+ // insertion order.
+ func (l *List) String() string {
+-	panic("excised: List.String")
++	b, _ := l.MarshalText()
++	return string(b)
+ }

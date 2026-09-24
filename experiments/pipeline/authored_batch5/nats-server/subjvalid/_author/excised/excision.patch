@@ -1,0 +1,427 @@
+diff --git a/server/sublist.go b/server/sublist.go
+index c059a5e..b4b6acf 100644
+--- a/server/sublist.go
++++ b/server/sublist.go
+@@ -20,7 +20,7 @@ import (
+ 	"strings"
+ 	"sync"
+ 	"sync/atomic"
+-	"unicode/utf8"
++	_ "unicode/utf8"
+ )
+ 
+ // Sublist is a routing mechanism to handle subject distribution and
+@@ -1184,240 +1184,40 @@ func subjectHasWildcard(subject string) bool {
+ 
+ // Determine if the subject has any wildcards. Fast version, does not check for
+ // valid subject. Used in caching layer.
+-func subjectIsLiteral(subject string) bool {
+-	for i, c := range subject {
+-		if c == pwc || c == fwc {
+-			if (i == 0 || subject[i-1] == btsep) &&
+-				(i+1 == len(subject) || subject[i+1] == btsep) {
+-				return false
+-			}
+-		}
+-	}
+-	return true
+-}
++func subjectIsLiteral(subject string) bool { panic("excised: subjectIsLiteral") }
+ 
+ // IsValidPublishSubject returns true if a subject is valid and a literal, false otherwise
+-func IsValidPublishSubject(subject string) bool {
+-	return IsValidSubject(subject) && subjectIsLiteral(subject)
+-}
++func IsValidPublishSubject(subject string) bool { panic("excised: IsValidPublishSubject") }
+ 
+ // IsValidSubject returns true if a subject is valid, false otherwise
+-func IsValidSubject(subject string) bool {
+-	return isValidSubject(subject, false)
+-}
++func IsValidSubject(subject string) bool { panic("excised: IsValidSubject") }
+ 
+-func isValidSubject(subject string, checkRunes bool) bool {
+-	if subject == _EMPTY_ {
+-		return false
+-	}
+-	if checkRunes {
+-		// Check if we have embedded nulls.
+-		if bytes.IndexByte(stringToBytes(subject), 0) >= 0 {
+-			return false
+-		}
+-		// Since casting to a string will always produce valid UTF-8, we need to look for replacement runes.
+-		// This signals something is off or corrupt.
+-		for _, r := range subject {
+-			if r == utf8.RuneError {
+-				return false
+-			}
+-		}
+-	}
+-	sfwc := false
+-	for t := range strings.SplitSeq(subject, tsep) {
+-		length := len(t)
+-		if length == 0 || sfwc {
+-			return false
+-		}
+-		if length > 1 {
+-			if strings.ContainsAny(t, "\t\n\f\r ") {
+-				return false
+-			}
+-			continue
+-		}
+-		switch t[0] {
+-		case fwc:
+-			sfwc = true
+-		case ' ', '\t', '\n', '\r', '\f':
+-			return false
+-		}
+-	}
+-	return true
+-}
++func isValidSubject(subject string, checkRunes bool) bool { panic("excised: isValidSubject") }
+ 
+ // IsValidLiteralSubject returns true if a subject is valid and literal (no wildcards), false otherwise
+-func IsValidLiteralSubject(subject string) bool {
+-	return isValidLiteralSubject(strings.SplitSeq(subject, tsep))
+-}
++func IsValidLiteralSubject(subject string) bool { panic("excised: IsValidLiteralSubject") }
+ 
+ // isValidLiteralSubject returns true if the tokens are valid and literal (no wildcards), false otherwise
+-func isValidLiteralSubject(tokens iter.Seq[string]) bool {
+-	for t := range tokens {
+-		if len(t) == 0 {
+-			return false
+-		}
+-		if len(t) > 1 {
+-			continue
+-		}
+-		switch t[0] {
+-		case pwc, fwc:
+-			return false
+-		}
+-	}
+-	return true
+-}
++func isValidLiteralSubject(tokens iter.Seq[string]) bool { panic("excised: isValidLiteralSubject") }
+ 
+ // ValidateMapping returns nil error if the subject is a valid subject mapping destination subject
+-func ValidateMapping(src string, dest string) error {
+-	if dest == _EMPTY_ {
+-		return nil
+-	}
+-	sfwc := false
+-	for t := range strings.SplitSeq(dest, tsep) {
+-		length := len(t)
+-		if length == 0 || sfwc {
+-			return &mappingDestinationErr{t, ErrInvalidMappingDestinationSubject}
+-		}
+-
+-		// if it looks like it contains a mapping function, it should be a valid mapping function
+-		if length > 4 && t[0] == '{' && t[1] == '{' && t[length-2] == '}' && t[length-1] == '}' {
+-			if !partitionMappingFunctionRegEx.MatchString(t) &&
+-				!wildcardMappingFunctionRegEx.MatchString(t) &&
+-				!splitFromLeftMappingFunctionRegEx.MatchString(t) &&
+-				!splitFromRightMappingFunctionRegEx.MatchString(t) &&
+-				!sliceFromLeftMappingFunctionRegEx.MatchString(t) &&
+-				!sliceFromRightMappingFunctionRegEx.MatchString(t) &&
+-				!splitMappingFunctionRegEx.MatchString(t) &&
+-				!leftMappingFunctionRegEx.MatchString(t) &&
+-				!rightMappingFunctionRegEx.MatchString(t) &&
+-				!randomMappingFunctionRegEx.MatchString(t) {
+-				return &mappingDestinationErr{t, ErrUnknownMappingDestinationFunction}
+-			} else {
+-				continue
+-			}
+-		}
+-
+-		if length == 1 && t[0] == fwc {
+-			sfwc = true
+-		} else if strings.ContainsAny(t, "\t\n\f\r ") {
+-			return ErrInvalidMappingDestinationSubject
+-		}
+-	}
+-
+-	// Finally, verify that the transform can actually be created from the source and destination
+-	_, err := NewSubjectTransform(src, dest)
+-	return err
+-}
++func ValidateMapping(src string, dest string) error { panic("excised: ValidateMapping") }
+ 
+ // Will check tokens and report back if the have any partial or full wildcards.
+-func analyzeTokens(tokens []string) (hasPWC, hasFWC bool) {
+-	for _, t := range tokens {
+-		if lt := len(t); lt == 0 || lt > 1 {
+-			continue
+-		}
+-		switch t[0] {
+-		case pwc:
+-			hasPWC = true
+-		case fwc:
+-			hasFWC = true
+-		}
+-	}
+-	return
+-}
++func analyzeTokens(tokens []string) (hasPWC, hasFWC bool) { panic("excised: analyzeTokens") }
+ 
+ // Check on a token basis if they could match.
+-func tokensCanMatch(t1, t2 string) bool {
+-	if len(t1) == 0 || len(t2) == 0 {
+-		return false
+-	}
+-	t1c, t2c := t1[0], t2[0]
+-	if t1c == pwc || t2c == pwc || t1c == fwc || t2c == fwc {
+-		return true
+-	}
+-	return t1 == t2
+-}
++func tokensCanMatch(t1, t2 string) bool { panic("excised: tokensCanMatch") }
+ 
+ // SubjectsCollide will determine if two subjects could both match a single literal subject.
+-func SubjectsCollide(subj1, subj2 string) bool {
+-	if subj1 == subj2 {
+-		return true
+-	}
+-	tsa, tsb := [32]string{}, [32]string{}
+-	toks1 := tokenizeSubjectIntoSlice(tsa[:0], subj1)
+-	toks2 := tokenizeSubjectIntoSlice(tsb[:0], subj2)
+-	pwc1, fwc1 := analyzeTokens(toks1)
+-	pwc2, fwc2 := analyzeTokens(toks2)
+-	// if both literal just string compare.
+-	l1, l2 := !(pwc1 || fwc1), !(pwc2 || fwc2)
+-	if l1 && l2 {
+-		return subj1 == subj2
+-	}
+-	// So one or both have wildcards. If one is literal than we can do subset matching.
+-	if l1 && !l2 {
+-		return isSubsetMatchTokenized(toks1, toks2)
+-	} else if l2 && !l1 {
+-		return isSubsetMatchTokenized(toks2, toks1)
+-	}
+-	// Both have wildcards.
+-	// If they only have partials then the lengths must match.
+-	if !fwc1 && !fwc2 && len(toks1) != len(toks2) {
+-		return false
+-	}
+-	if lt1, lt2 := len(toks1), len(toks2); lt1 != lt2 {
+-		// If the shorter one only has partials then these will not collide.
+-		if lt1 < lt2 && !fwc1 || lt2 < lt1 && !fwc2 {
+-			return false
+-		}
+-	}
+-
+-	stop := len(toks1)
+-	if len(toks2) < stop {
+-		stop = len(toks2)
+-	}
+-
+-	// We look for reasons to say no.
+-	for i := 0; i < stop; i++ {
+-		t1, t2 := toks1[i], toks2[i]
+-		if !tokensCanMatch(t1, t2) {
+-			return false
+-		}
+-	}
+-
+-	return true
+-}
++func SubjectsCollide(subj1, subj2 string) bool { panic("excised: SubjectsCollide") }
+ 
+ // Returns number of tokens in the subject.
+-func numTokens(subject string) int {
+-	var numTokens int
+-	if len(subject) == 0 {
+-		return 0
+-	}
+-	for i := 0; i < len(subject); i++ {
+-		if subject[i] == btsep {
+-			numTokens++
+-		}
+-	}
+-	return numTokens + 1
+-}
++func numTokens(subject string) int { panic("excised: numTokens") }
+ 
+ // Fast way to return an indexed token.
+ // This is one based, so first token is TokenAt(subject, 1)
+-func tokenAt(subject string, index uint8) string {
+-	ti, start := uint8(1), 0
+-	for i := 0; i < len(subject); i++ {
+-		if subject[i] == btsep {
+-			if ti == index {
+-				return subject[start:i]
+-			}
+-			start = i + 1
+-			ti++
+-		}
+-	}
+-	if ti == index {
+-		return subject[start:]
+-	}
+-	return _EMPTY_
+-}
++func tokenAt(subject string, index uint8) string { panic("excised: tokenAt") }
+ 
+ // use similar to append. meaning, the updated slice will be returned
+ func tokenizeSubjectIntoSlice(tts []string, subject string) []string {
+@@ -1457,42 +1257,7 @@ func isSubsetMatch(tokens []string, test string) bool {
+ // and determine if the tokens are matched. Both test subject and tokens
+ // may contain wildcards. So foo.* is a subset match of [">", "*.*", "foo.*"],
+ // but not of foo.bar, etc.
+-func isSubsetMatchTokenized(tokens, test []string) bool {
+-	// Walk the target tokens
+-	for i, t2 := range test {
+-		if i >= len(tokens) {
+-			return false
+-		}
+-		l := len(t2)
+-		if l == 0 {
+-			return false
+-		}
+-		if t2[0] == fwc && l == 1 {
+-			return true
+-		}
+-		t1 := tokens[i]
+-
+-		l = len(t1)
+-		if l == 0 || t1[0] == fwc && l == 1 {
+-			return false
+-		}
+-
+-		if t1[0] == pwc && len(t1) == 1 {
+-			m := t2[0] == pwc && len(t2) == 1
+-			if !m {
+-				return false
+-			}
+-			if i >= len(test) {
+-				return true
+-			}
+-			continue
+-		}
+-		if t2[0] != pwc && strings.Compare(t1, t2) != 0 {
+-			return false
+-		}
+-	}
+-	return len(tokens) == len(test)
+-}
++func isSubsetMatchTokenized(tokens, test []string) bool { panic("excised: isSubsetMatchTokenized") }
+ 
+ // matchLiteral is used to test literal subjects, those that do not have any
+ // wildcards, with a target subject. This is used in the cache layer.
+diff --git a/server/sublist_test.go b/server/sublist_test.go
+index dddce2a..8be2901 100644
+--- a/server/sublist_test.go
++++ b/server/sublist_test.go
+@@ -606,32 +606,6 @@ func checkError(err, expected error, t *testing.T) {
+ 	}
+ }
+ 
+-func TestSublistValidLiteralSubjects(t *testing.T) {
+-	checkBool(IsValidLiteralSubject("foo"), true, t)
+-	checkBool(IsValidLiteralSubject(".foo"), false, t)
+-	checkBool(IsValidLiteralSubject("foo."), false, t)
+-	checkBool(IsValidLiteralSubject("foo..bar"), false, t)
+-	checkBool(IsValidLiteralSubject("foo.bar.*"), false, t)
+-	checkBool(IsValidLiteralSubject("foo.bar.>"), false, t)
+-	checkBool(IsValidLiteralSubject("*"), false, t)
+-	checkBool(IsValidLiteralSubject(">"), false, t)
+-	// The followings have widlcards characters but are not
+-	// considered as such because they are not individual tokens.
+-	checkBool(IsValidLiteralSubject("foo*"), true, t)
+-	checkBool(IsValidLiteralSubject("foo**"), true, t)
+-	checkBool(IsValidLiteralSubject("foo.**"), true, t)
+-	checkBool(IsValidLiteralSubject("foo*bar"), true, t)
+-	checkBool(IsValidLiteralSubject("foo.*bar"), true, t)
+-	checkBool(IsValidLiteralSubject("foo*.bar"), true, t)
+-	checkBool(IsValidLiteralSubject("*bar"), true, t)
+-	checkBool(IsValidLiteralSubject("foo>"), true, t)
+-	checkBool(IsValidLiteralSubject("foo>>"), true, t)
+-	checkBool(IsValidLiteralSubject("foo.>>"), true, t)
+-	checkBool(IsValidLiteralSubject("foo>bar"), true, t)
+-	checkBool(IsValidLiteralSubject("foo.>bar"), true, t)
+-	checkBool(IsValidLiteralSubject("foo>.bar"), true, t)
+-	checkBool(IsValidLiteralSubject(">bar"), true, t)
+-}
+ 
+ func TestSublistValidSubjects(t *testing.T) {
+ 	checkBool(IsValidSubject("."), false, t)
+@@ -694,63 +668,8 @@ func TestSublistMatchLiterals(t *testing.T) {
+ 	checkBool(matchLiteral("foo.>>>.bar", "foo.>>>.bar"), true, t)
+ }
+ 
+-func TestSubjectIsLiteral(t *testing.T) {
+-	checkBool(subjectIsLiteral("foo"), true, t)
+-	checkBool(subjectIsLiteral("foo.bar"), true, t)
+-	checkBool(subjectIsLiteral("foo*.bar"), true, t)
+-	checkBool(subjectIsLiteral("*"), false, t)
+-	checkBool(subjectIsLiteral(">"), false, t)
+-	checkBool(subjectIsLiteral("foo.*"), false, t)
+-	checkBool(subjectIsLiteral("foo.>"), false, t)
+-	checkBool(subjectIsLiteral("foo.*.>"), false, t)
+-	checkBool(subjectIsLiteral("foo.*.bar"), false, t)
+-	checkBool(subjectIsLiteral("foo.bar.>"), false, t)
+-}
+-
+-func TestValidateDestinationSubject(t *testing.T) {
+-	checkError(ValidateMapping("bar", "foo"), nil, t)
+-	checkError(ValidateMapping("foo", "foo.bar"), nil, t)
+-	checkError(ValidateMapping("*", "{{wildcard(1)}}"), nil, t)
+-	checkError(ValidateMapping("foo.>", ">"), nil, t)
+-	checkError(ValidateMapping("foo.*", "bar.{{wildcard(1)}}"), nil, t)
+-	checkError(ValidateMapping("foo.>", "bar.>"), nil, t)
+-	checkError(ValidateMapping("foo.*.>", "bar.{{wildcard(1)}}.>"), nil, t)
+-	checkError(ValidateMapping("foo.*.bar", "bar.{{wildcard(1)}}.foo"), nil, t)
+-	checkError(ValidateMapping("foo.bar.>", "foo.bar.foo.>"), nil, t)
+-	checkError(ValidateMapping("*", "foo.{{wildcard(1)}}"), nil, t)
+-	checkError(ValidateMapping("*", "foo.{{ wildcard(1) }}"), nil, t)
+-	checkError(ValidateMapping("*", "foo.{{wildcard( 1 )}}"), nil, t)
+-	checkError(ValidateMapping("*", "foo.{{partition(2,1)}}"), nil, t)
+-	checkError(ValidateMapping("*.*", "foo.{{SplitFromLeft(2,1)}}"), nil, t)
+-	checkError(ValidateMapping("*.*", "foo.{{SplitFromRight(2,1)}}"), nil, t)
+-	checkError(ValidateMapping("*.*", "foo.{{SliceFromLeft(2,1)}}"), nil, t)
+-	checkError(ValidateMapping("*.*", "foo.{{SliceFromRight(2,1)}}"), nil, t)
+-	checkError(ValidateMapping("*.*", "foo.{{split(1,-)}}"), nil, t)
+-	checkError(ValidateMapping("*", "foo.{{random(1)}}"), nil, t)
+-	checkError(ValidateMapping("*", "foo.{{left(1,2)}}"), nil, t)
+-	checkError(ValidateMapping("*", "foo.{{Left(1,2)}}"), nil, t)
+-	checkError(ValidateMapping("*", "foo.{{right(1,2)}}"), nil, t)
+-	checkError(ValidateMapping("*", "foo.{{Right(1,2)}}"), nil, t)
+-	checkError(ValidateMapping("*", "foo.{{ left( 1 , 2 ) }}"), nil, t)
+-	checkError(ValidateMapping("*", "foo.{{unknown(1)}}"), ErrInvalidMappingDestination, t)
+-	checkError(ValidateMapping("foo", "foo..}"), ErrInvalidMappingDestination, t)
+-	checkError(ValidateMapping("foo", "foo. bar}"), ErrInvalidMappingDestinationSubject, t)
+-}
+-
+-func TestSubjectToken(t *testing.T) {
+-	checkToken := func(token, expected string) {
+-		t.Helper()
+-		if token != expected {
+-			t.Fatalf("Expected token of %q, got %q", expected, token)
+-		}
+-	}
+-	checkToken(tokenAt("foo.bar.baz.*", 0), "")
+-	checkToken(tokenAt("foo.bar.baz.*", 1), "foo")
+-	checkToken(tokenAt("foo.bar.baz.*", 2), "bar")
+-	checkToken(tokenAt("foo.bar.baz.*", 3), "baz")
+-	checkToken(tokenAt("foo.bar.baz.*", 4), "*")
+-	checkToken(tokenAt("foo.bar.baz.*", 5), "")
+-}
++
++
+ 
+ func TestSublistBadSubjectOnRemove(t *testing.T) {
+ 	testSublistBadSubjectOnRemove(t, NewSublistWithCache())
+@@ -1578,13 +1497,6 @@ func TestSublistMatchWithEmptyTokens(t *testing.T) {
+ 	}
+ }
+ 
+-func TestSublistSubjectCollide(t *testing.T) {
+-	require_False(t, SubjectsCollide("foo.*", "foo.*.bar.>"))
+-	require_False(t, SubjectsCollide("foo.*.bar.>", "foo.*"))
+-	require_True(t, SubjectsCollide("foo.*", "foo.foo"))
+-	require_True(t, SubjectsCollide("foo.*", "*.foo"))
+-	require_True(t, SubjectsCollide("foo.bar.>", "*.bar.foo"))
+-}
+ 
+ func TestSublistAddCacheHitRate(t *testing.T) {
+ 	sl1 := NewSublistWithCache()

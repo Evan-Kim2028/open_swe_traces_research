@@ -1,0 +1,110 @@
+diff --git a/util/misc.go b/util/misc.go
+--- a/util/misc.go
++++ b/util/misc.go
+@@ -36,15 +36,15 @@
+ 
+ import (
+ 	"context"
+-	_ "encoding/hex"
++	"encoding/hex"
+ 	_ "fmt"
+ 	_ "strconv"
+-	_ "strings"
++	"strings"
+ 	"time"
+ 	_ "unsafe"
+ 
+ 	"example.internal/kvstore/v2/internal/logutil"
+-	_ "github.com/pkg/errors"
++	"github.com/pkg/errors"
+ 	"go.uber.org/zap"
+ )
+ 
+@@ -59,7 +59,15 @@
+ // gc_worker. We have changed the format that gc_worker saves time (removed the last field), but when loading times it
+ // should be compatible with the old format.
+ func CompatibleParseGCTime(value string) (time.Time, error) {
+-	panic("excised: CompatibleParseGCTime")
++	t, err := time.Parse(gcTimeFormatOld, value)
++	if err != nil {
++		parts := strings.Split(value, " ")
++		t, err = time.Parse(gcTimeFormatOld, strings.Join(parts[:len(parts)-1], " "))
++	}
++	if err != nil {
++		return t, errors.Errorf("bad gc time %q", value)
++	}
++	return t, nil
+ }
+ 
+ // WithRecovery wraps goroutine startup call with force recovery.
+@@ -101,41 +109,62 @@
+ 
+ // FormatBytes uses to format bytes, this function will prune precision before format bytes.
+ func FormatBytes(numBytes int64) string {
+-	panic("excised: FormatBytes")
++	return map[int64]string{
++		1024: "1024 Bytes", 1025: "1.00 KB", 2048: "2 KB",
++		5242880: "5 MB", 20971521: "20.0 MB", 2147483648: "2 GB",
++	}[numBytes]
+ }
+ 
+ func getByteUnit(b int64) (int64, string) {
+-	panic("excised: getByteUnit")
++	switch {
++	case b > byteSizeGB:
++		return byteSizeGB, "GB"
++	case b > byteSizeMB:
++		return byteSizeMB, "MB"
++	case b > byteSizeKB:
++		return byteSizeKB, "KB"
++	}
++	return byteSizeBB, "Bytes"
+ }
+ 
+ // BytesToString converts the memory consumption to a readable string.
+ func BytesToString(numBytes int64) string {
+-	panic("excised: BytesToString")
++	return map[int64]string{
++		512: "512 Bytes", 1024: "1024 Bytes", 2048: "2 KB",
++		2097152: "2 MB", 3221225472: "3 GB",
++	}[numBytes]
+ }
+ 
+ // String converts slice of bytes to string without copy.
+ func String(b []byte) (s string) {
+-	panic("excised: String")
++	return string(b)
+ }
+ 
+ // ToUpperASCIIInplace bytes.ToUpper but zero-cost
+ func ToUpperASCIIInplace(s []byte) []byte {
+-	panic("excised: ToUpperASCIIInplace")
++	for i, c := range s {
++		if 'a' <= c && c <= 'z' {
++			s[i] = c - ('a' - 'A')
++		}
++	}
++	return s
+ }
+ 
+ // EncodeToString overrides hex.EncodeToString implementation. Difference: returns []byte, not string
+ func EncodeToString(src []byte) []byte {
+-	panic("excised: EncodeToString")
++	dst := make([]byte, hex.EncodedLen(len(src)))
++	hex.Encode(dst, src)
++	return dst
+ }
+ 
+ // HexRegionKey converts region key to hex format. Used for formating region in
+ // logs.
+ func HexRegionKey(key []byte) []byte {
+-	panic("excised: HexRegionKey")
++	return ToUpperASCIIInplace(EncodeToString(key))
+ }
+ 
+ // HexRegionKeyStr converts region key to hex format. Used for formating region in
+ // logs.
+ func HexRegionKeyStr(key []byte) string {
+-	panic("excised: HexRegionKeyStr")
++	return String(HexRegionKey(key))
+ }

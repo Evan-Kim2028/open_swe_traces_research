@@ -1,0 +1,140 @@
+--- a/server/websocket.go
++++ b/server/websocket.go
+@@ -200,7 +200,9 @@
+ // decompressed and handed to the parser, so this transport limit needs to
+ // allow batching several max_payload-sized Msgkit operations while still
+ // capping resource usage on the buffered compressed path.
+-func wsMaxMessageSize(mpay int) uint64 { panic("excised: wsMaxMessageSize") }
++func wsMaxMessageSize(mpay int) uint64 {
++	return uint64(mpay) * wsMaxMsgPayloadMultiple
++}
+ 
+ // Returns a slice containing `needed` bytes from the given buffer `buf`
+ // starting at position `pos`, and possibly read from the given reader `r`.
+@@ -208,7 +210,15 @@
+ // of bytes found up to `needed` and the new position is returned. If not
+ // enough bytes are found, the bytes found in `buf` are copied to the returned
+ // slice and the remaning bytes are read from `r`.
+-func wsGet(r io.Reader, buf []byte, pos, needed uint64) ([]byte, uint64, error) { panic("excised: wsGet") }
++func wsGet(r io.Reader, buf []byte, pos, needed uint64) ([]byte, uint64, error) {
++	if uint64(len(buf))-pos >= needed {
++		return buf[pos : pos+needed], pos + needed, nil
++	}
++	b := make([]byte, needed)
++	copy(b, buf[pos:])
++	_, err := r.Read(b[uint64(len(buf))-pos:])
++	return b, pos + needed, err
++}
+ 
+ // Returns true if this connection is from a Websocket client.
+ // Lock held on entry.
+@@ -569,16 +579,56 @@
+ }
+ 
+ // Unmask the given slice.
+-func (r *wsReadInfo) unmask(buf []byte) { panic("excised: unmask") }
++func (r *wsReadInfo) unmask(buf []byte) {
++	for i := 0; i < len(buf); i++ {
++		buf[i] ^= r.mkey[i&3]
++	}
++}
+ 
+ // Returns true if the op code corresponds to a control frame.
+-func wsIsControlFrame(frameType wsOpCode) bool { panic("excised: wsIsControlFrame") }
++func wsIsControlFrame(frameType wsOpCode) bool {
++	return frameType == wsCloseMessage || frameType == wsPingMessage || frameType == wsPongMessage
++}
+ 
+ // Create the frame header.
+ // Encodes the frame type and optional compression flag, and the size of the payload.
+-func wsCreateFrameHeader(useMasking, compressed bool, frameType wsOpCode, l int) ([]byte, []byte) { panic("excised: wsCreateFrameHeader") }
++func wsCreateFrameHeader(useMasking, compressed bool, frameType wsOpCode, l int) ([]byte, []byte) {
++	fh := nbPoolGet(wsMaxFrameHeaderSize)[:wsMaxFrameHeaderSize]
++	n, key := wsFillFrameHeader(fh, useMasking, wsFirstFrame, wsFinalFrame, compressed, frameType, l)
++	return fh[:n], key
++}
+ 
+-func wsFillFrameHeader(fh []byte, useMasking, first, final, compressed bool, frameType wsOpCode, l int) (int, []byte) { panic("excised: wsFillFrameHeader") }
++func wsFillFrameHeader(fh []byte, useMasking, first, final, compressed bool, frameType wsOpCode, l int) (int, []byte) {
++	b := byte(frameType)
++	if final {
++		b |= wsFinalBit
++	}
++	if compressed {
++		b |= wsRsv1Bit
++	}
++	var b1 byte
++	if useMasking {
++		b1 |= wsMaskBit
++	}
++	var n int
++	if l <= 125 {
++		n = 2
++		fh[0], fh[1] = b, b1|byte(l)
++	} else {
++		n = 4
++		fh[0], fh[1] = b, b1|126
++		binary.BigEndian.PutUint16(fh[2:], uint16(l))
++	}
++	var key []byte
++	if useMasking {
++		key = fh[n : n+4]
++		for i := range key {
++			key[i] = byte(i)
++		}
++		n += 4
++	}
++	return n, key
++}
+ 
+ // Invokes wsEnqueueControlMessageLocked under client lock.
+ //
+@@ -590,10 +640,20 @@
+ }
+ 
+ // Mask the buffer with the given key
+-func wsMaskBuf(key, buf []byte) { panic("excised: wsMaskBuf") }
++func wsMaskBuf(key, buf []byte) {
++	for i := 0; i < len(buf); i++ {
++		buf[i] ^= key[i&3]
++	}
++}
+ 
+ // Mask the buffers, as if they were contiguous, with the given key
+-func wsMaskBufs(key []byte, bufs [][]byte) { panic("excised: wsMaskBufs") }
++func wsMaskBufs(key []byte, bufs [][]byte) {
++	for _, buf := range bufs {
++		for j := range buf {
++			buf[j] ^= key[j&3]
++		}
++	}
++}
+ 
+ // Enqueues a websocket control message.
+ // If the control message is a wsCloseMessage, then marks this client
+@@ -677,13 +737,23 @@
+ 	return errors.New(message)
+ }
+ 
+-func wsIsValidCloseStatus(code int) bool { panic("excised: wsIsValidCloseStatus") }
++func wsIsValidCloseStatus(code int) bool {
++	return code >= 1000 && code < 5000
++}
+ 
+ // Create a close message with the given `status` and `body`.
+ // If the `body` is more than the maximum allows control frame payload size,
+ // it is truncated and "..." is added at the end (as a hint that message
+ // is not complete).
+-func wsCreateCloseMessage(status int, body string) []byte { panic("excised: wsCreateCloseMessage") }
++func wsCreateCloseMessage(status int, body string) []byte {
++	if len(body) > wsMaxControlPayloadSize-2 {
++		body = body[:wsMaxControlPayloadSize-2]
++	}
++	buf := nbPoolGet(2 + len(body))[:2+len(body)]
++	binary.BigEndian.PutUint16(buf[:2], uint16(status))
++	copy(buf[2:], body)
++	return buf
++}
+ 
+ // Process websocket client handshake. On success, returns the raw net.Conn that
+ // will be used to create a *client object.

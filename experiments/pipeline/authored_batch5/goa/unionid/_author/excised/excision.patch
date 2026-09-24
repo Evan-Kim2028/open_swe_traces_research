@@ -1,0 +1,3879 @@
+diff --git a/codegen/generated_types_test.go b/codegen/generated_types_test.go
+--- a/codegen/generated_types_test.go
++++ b/codegen/generated_types_test.go
+@@ -711,37 +711,6 @@ func TestGenerationRejectsImplicitLocalRoots(t *testing.T) {
+ 	}
+ }
+ 
+-// TestGeneratedTypeFamiliesContainCanonicalNames verifies that existing type
+-// and union records expose the package-owned records used for rendering.
+-func TestGeneratedTypeFamiliesContainCanonicalNames(t *testing.T) {
+-	generation := mustTestGeneration(t, "generated.local/gen", nil)
+-	pkg := mustClaimTestPackage(t, generation, "generated.local/gen/types")
+-	user, err := pkg.DeclareUserType(generatedUserType("Widget", "widget"))
+-	require.NoError(t, err)
+-	union, alias := generatedUnionWithBranch("text")
+-	unionDeclaration, err := pkg.DeclareUnion(union)
+-	require.NoError(t, err)
+-	branchType, err := pkg.DeclareUnionBranchType(union, "text", alias)
+-	require.NoError(t, err)
+-	branch, err := pkg.UnionBranch(union, "text")
+-	require.NoError(t, err)
+-
+-	require.Same(t, user.Declaration(), user.Declaration())
+-	require.Same(t, unionDeclaration.Declaration(), unionDeclaration.Declaration())
+-	require.Same(t, unionDeclaration.KindDeclaration(), unionDeclaration.KindDeclaration())
+-	require.Same(t, branchType.Declaration(), branchType.Declaration())
+-	require.Same(t, branch.KindDeclaration(), branch.KindDeclaration())
+-	require.Same(t, branch.ConstructorDeclaration(), branch.ConstructorDeclaration())
+-	require.Panics(t, func() { user.Declaration().Name() })
+-	require.Panics(t, func() { unionDeclaration.Declaration().Name() })
+-
+-	require.NoError(t, generation.Freeze())
+-	require.Equal(t, user.Name(), user.Declaration().Name())
+-	require.Equal(t, unionDeclaration.Name(), unionDeclaration.Declaration().Name())
+-	require.Equal(t, unionDeclaration.KindName(), unionDeclaration.KindDeclaration().Name())
+-	require.Equal(t, branch.KindConst(), branch.KindDeclaration().Name())
+-	require.Equal(t, branch.Constructor(), branch.ConstructorDeclaration().Name())
+-}
+ 
+ // TestGeneratedTypesRejectRelocatedNameCollision verifies that one generated
+ // package rejects distinct DSL names that produce the same exported Go name.
+@@ -988,191 +957,11 @@ func TestGeneratedPackageRejectsAmbiguousDerivedOrder(t *testing.T) {
+ 	require.ErrorContains(t, err, "cannot deterministically order")
+ }
+ 
+-// TestGeneratedPackageUnionBranchesShareDeclaration verifies that copies of
+-// one authored OneOf reuse their generated branch alias.
+-func TestGeneratedPackageUnionBranchesShareDeclaration(t *testing.T) {
+-	generation := mustTestGeneration(t, "generated.local/gen", nil)
+-	types := mustClaimTestPackage(t, generation, "generated.local/gen/types")
+-	firstUnion, firstAlias := generatedUnionWithBranch("first")
+-	secondUnion := expr.DupAtt(firstUnion)
+-	secondAlias := secondUnion.Type.(*expr.Union).Values[0].Attribute.Type.(expr.UserType)
+-
+-	_, err := types.DeclareUnion(firstUnion)
+-	require.NoError(t, err)
+-	firstDeclaration, err := types.DeclareUnionBranchType(firstUnion, "text", firstAlias)
+-	require.NoError(t, err)
+-	_, err = types.DeclareUnion(secondUnion)
+-	require.NoError(t, err)
+-	secondDeclaration, err := types.DeclareUnionBranchType(secondUnion, "text", secondAlias)
+-	require.NoError(t, err)
+-	require.Same(t, firstDeclaration, secondDeclaration)
+-	require.Panics(t, func() { firstDeclaration.Name() })
+-
+-	require.NoError(t, generation.Freeze())
+-	require.Equal(t, "ValueBranchText", firstDeclaration.Name())
+-	lookedUp, err := types.UnionBranchType(secondUnion, "text")
+-	require.NoError(t, err)
+-	require.Same(t, firstDeclaration, lookedUp)
+-}
+ 
+-// TestGeneratedPackageUnionBranchesAreIsolatedByUnion verifies that branch
+-// aliases from separately named OneOf declarations never collapse together.
+-func TestGeneratedPackageUnionBranchesAreIsolatedByUnion(t *testing.T) {
+-	generation := mustTestGeneration(t, "generated.local/gen", nil)
+-	types := mustClaimTestPackage(t, generation, "generated.local/gen/types")
+-	firstUnion, firstAlias := generatedUnionWithBranch("first")
+-	secondUnion, secondAlias := generatedUnionWithBranch("second")
+-	secondUnion.Type.(*expr.Union).TypeName = "Other"
+-	secondAlias.(*expr.UserTypeExpr).TypeName = "OtherText"
+ 
+-	_, err := types.DeclareUnion(firstUnion)
+-	require.NoError(t, err)
+-	firstDeclaration, err := types.DeclareUnionBranchType(firstUnion, "text", firstAlias)
+-	require.NoError(t, err)
+-	_, err = types.DeclareUnion(secondUnion)
+-	require.NoError(t, err)
+-	secondDeclaration, err := types.DeclareUnionBranchType(secondUnion, "text", secondAlias)
+-	require.NoError(t, err)
+-	require.NotSame(t, firstDeclaration, secondDeclaration)
+ 
+-	require.NoError(t, generation.Freeze())
+-	require.ElementsMatch(t, []string{"ValueBranchText", "OtherBranchText"}, []string{
+-		firstDeclaration.Name(),
+-		secondDeclaration.Name(),
+-	})
+-}
+ 
+-// TestGeneratedPackageUnionFamilyRejectsExactTypeNames verifies that no public
+-// OneOf companion silently receives a numeric suffix.
+-func TestGeneratedPackageUnionFamilyRejectsExactTypeNames(t *testing.T) {
+-	generation := mustTestGeneration(t, "generated.local/gen", nil)
+-	types := mustClaimTestPackage(t, generation, "generated.local/gen/types")
+-	for _, name := range []string{"ValueBranchText", "ValueKindText", "NewValueText"} {
+-		_, err := types.DeclareUserType(generatedUserType(name, name))
+-		require.NoError(t, err)
+-	}
+-	union, alias := generatedUnionWithBranch("text")
+-	_, err := types.DeclareUnion(union)
+-	require.ErrorContains(t, err, "set TypeName")
+-	require.ErrorContains(t, err, "ValueKindText")
+-	_, err = types.DeclareUnionBranchType(union, "text", alias)
+-	require.ErrorContains(t, err, "not declared")
+-}
+ 
+-// TestGeneratedPackageUnions verifies that authored identity makes copies
+-// idempotent and rejects an unrelated OneOf that asks for the same public name.
+-func TestGeneratedPackageUnions(t *testing.T) {
+-	generation := mustTestGeneration(t, "generated.local/gen", nil)
+-	types := mustClaimTestPackage(t, generation, "generated.local/gen/types")
+-	first := generatedUnion("type", "value")
+-	equivalent := expr.DupAtt(first)
+-	unrelated := generatedUnion("type", "value")
+-	different := generatedUnion("kind", "data")
+-
+-	firstDeclaration, err := types.DeclareUnion(first)
+-	require.NoError(t, err)
+-	require.Panics(t, func() { firstDeclaration.Name() })
+-	require.Equal(t, "generated.local/gen/types", firstDeclaration.PackagePath())
+-	equivalentDeclaration, err := types.DeclareUnion(equivalent)
+-	require.NoError(t, err)
+-	require.Same(t, firstDeclaration, equivalentDeclaration)
+-
+-	unrelatedDeclaration, err := types.DeclareUnion(unrelated)
+-	require.ErrorContains(t, err, "set TypeName")
+-	require.Nil(t, unrelatedDeclaration)
+-
+-	differentDeclaration, err := types.DeclareUnion(different)
+-	require.ErrorContains(t, err, "set TypeName")
+-	require.Nil(t, differentDeclaration)
+-
+-	lookedUp, err := types.Union(equivalent)
+-	require.NoError(t, err)
+-	require.Same(t, firstDeclaration, lookedUp)
+-	require.NoError(t, generation.Freeze())
+-	require.Equal(t, "Value", firstDeclaration.Name())
+-	require.Equal(t, "ValueKind", firstDeclaration.KindName())
+-}
+-
+-// TestGeneratedPackageUnionAndUserTypeCollisionFailsRegardlessOfOrder verifies
+-// that traversal order never chooses a winner or creates a numeric suffix.
+-func TestGeneratedPackageUnionAndUserTypeCollisionFailsRegardlessOfOrder(t *testing.T) {
+-	for _, unionFirst := range []bool{true, false} {
+-		t.Run(fmt.Sprintf("union first %t", unionFirst), func(t *testing.T) {
+-			generation := mustTestGeneration(t, "generated.local/gen", nil)
+-			types := mustClaimTestPackage(t, generation, "generated.local/gen/types")
+-			userType := generatedUserType("Value", "value")
+-			kindUserType := generatedUserType("ValueKind", "value-kind")
+-			union := generatedUnion("type", "value")
+-			var (
+-				userDeclaration  *TypeDeclaration
+-				kindDeclaration  *TypeDeclaration
+-				unionDeclaration *UnionDeclaration
+-				err              error
+-			)
+-			if unionFirst {
+-				unionDeclaration, err = types.DeclareUnion(union)
+-				require.NoError(t, err)
+-				userDeclaration, err = types.DeclareUserType(userType)
+-				require.ErrorContains(t, err, "already declared")
+-			} else {
+-				userDeclaration, err = types.DeclareUserType(userType)
+-				require.NoError(t, err)
+-				kindDeclaration, err = types.DeclareUserType(kindUserType)
+-				require.NoError(t, err)
+-				require.Panics(t, func() {
+-					types.Scope().GoTypeName(&expr.AttributeExpr{Type: userType})
+-				})
+-				unionDeclaration, err = types.DeclareUnion(union)
+-				require.ErrorContains(t, err, "set TypeName")
+-			}
+-			if unionFirst {
+-				require.Nil(t, userDeclaration)
+-				require.Nil(t, kindDeclaration)
+-				require.NotNil(t, unionDeclaration)
+-			} else {
+-				require.NotNil(t, userDeclaration)
+-				require.NotNil(t, kindDeclaration)
+-				require.Nil(t, unionDeclaration)
+-			}
+-		})
+-	}
+-}
+-
+-// TestGeneratedPackageLookupAcrossFreeze verifies that freeze keeps existing
+-// declarations readable and rejects every later declaration attempt.
+-func TestGeneratedPackageLookupAcrossFreeze(t *testing.T) {
+-	generation := mustTestGeneration(t, "generated.local/gen", nil)
+-	types := mustClaimTestPackage(t, generation, "generated.local/gen/types")
+-	widget := generatedUserType("Widget", "widget")
+-	union := generatedUnion("type", "value")
+-	userDeclaration, err := types.DeclareUserType(widget)
+-	require.NoError(t, err)
+-	unionDeclaration, err := types.DeclareUnion(union)
+-	require.NoError(t, err)
+-	require.Panics(t, func() { unionDeclaration.Name() })
+-
+-	require.NoError(t, generation.Freeze())
+-	lookedUpUser, err := types.UserType(widget)
+-	require.NoError(t, err)
+-	require.Same(t, userDeclaration, lookedUpUser)
+-	lookedUpUnion, err := types.Union(union)
+-	require.NoError(t, err)
+-	require.Same(t, unionDeclaration, lookedUpUnion)
+-	require.Equal(t, "Value", lookedUpUnion.Name())
+-	require.Equal(t, "Widget", types.Scope().GoTypeName(&expr.AttributeExpr{Type: widget}))
+-	require.Equal(t, "Value", types.Scope().GoTypeName(union))
+-	require.Panics(t, func() {
+-		types.Scope().Unique("Late")
+-	})
+-	require.Panics(t, func() {
+-		types.Scope().GoTypeName(&expr.AttributeExpr{Type: generatedUserType("Late", "late")})
+-	})
+-
+-	_, err = types.DeclareUserType(widget)
+-	require.ErrorContains(t, err, "frozen")
+-	_, err = types.DeclareUnion(union)
+-	require.ErrorContains(t, err, "frozen")
+-}
+ 
+ // TestGeneratedPackageRejectsConflictingOriginBindings verifies that exact
+ // and compiler-derived declarations cannot claim the same expression origin
+@@ -1399,27 +1188,6 @@ func TestGenerationRecoversNormalizedMethodProvenance(t *testing.T) {
+ 	require.Equal(t, firstIdentity.UID(), secondIdentity.UID())
+ }
+ 
+-// TestGenerationCatalogsAreIsolated verifies that standalone generation runs
+-// do not share declaration records or name reservations.
+-func TestGenerationCatalogsAreIsolated(t *testing.T) {
+-	firstGeneration := mustTestGeneration(t, "generated.local/gen", nil)
+-	first := mustClaimTestPackage(t, firstGeneration, "generated.local/gen/types")
+-	secondGeneration := mustTestGeneration(t, "generated.local/gen", nil)
+-	second := mustClaimTestPackage(t, secondGeneration, "generated.local/gen/types")
+-	firstUnion := generatedUnion("type", "value")
+-	secondUnion := generatedUnion("type", "value")
+-
+-	firstDeclaration, err := first.DeclareUnion(firstUnion)
+-	require.NoError(t, err)
+-	secondDeclaration, err := second.DeclareUnion(secondUnion)
+-	require.NoError(t, err)
+-	require.NoError(t, firstGeneration.Freeze())
+-	require.NoError(t, secondGeneration.Freeze())
+-	require.Equal(t, "Value", firstDeclaration.Name())
+-	require.Equal(t, "Value", secondDeclaration.Name())
+-	require.NotSame(t, firstDeclaration, secondDeclaration)
+-	require.NotSame(t, first.Scope(), second.Scope())
+-}
+ 
+ // methodTypeNamesByAPI declares equal method wrappers in the requested order
+ // and returns the name assigned to each API.
+diff --git a/codegen/generator/generate_union_merge_integration_test.go b/codegen/generator/generate_union_merge_integration_test.go
+--- a/codegen/generator/generate_union_merge_integration_test.go
++++ b/codegen/generator/generate_union_merge_integration_test.go
+@@ -3,80 +3,12 @@
+ package generator
+ 
+ import (
+-	"os"
+-	"path/filepath"
+-	"strings"
+-	"testing"
++	_ "os"
++	_ "path/filepath"
++	_ "strings"
++	_ "testing"
+ 
+-	cg "example.internal/apikit/v3/codegen"
+-	d "example.internal/apikit/v3/dsl"
++	_ "example.internal/apikit/v3/codegen"
++	_ "example.internal/apikit/v3/dsl"
+ )
+ 
+-// TestGenerateUnionUserTypeSamePathMerged exercises the real service codegen path
+-// for unions and user types across two services targeting the same user type
+-// file. It asserts the generated file contains both the struct definition and
+-// the union marker method for the union branch type. This mirrors the original
+-// failure mode where only the union method remained and the struct was lost.
+-func TestGenerateUnionUserTypeSamePathMerged(t *testing.T) {
+-	registry := testRegistry(
+-		"gen",
+-		testGenerator(planServiceData, testServiceFiles),
+-		testGenerator(planTransportData, testTransportFiles),
+-		testGenerator(planOpenAPIData, testOpenAPIFiles),
+-	)
+-
+-	dsl := func() {
+-		d.API("test", func() {})
+-
+-		var Summary = d.Type("Summary", func() {
+-			d.Meta("struct:pkg:path", "types")
+-			d.Attribute("message", d.String)
+-		})
+-
+-		var MyUnion = d.Type("MyUnion", func() {
+-			d.Meta("struct:pkg:path", "types")
+-			d.OneOf("MyUnion", func() {
+-				d.TypeName("MyUnionChoice")
+-				d.Attribute("sum", Summary)
+-			})
+-		})
+-
+-		var Container = d.Type("Container", func() {
+-			d.Meta("struct:pkg:path", "types")
+-			d.Attribute("u", MyUnion)
+-		})
+-
+-		d.Service("S1", func() {
+-			d.Method("M", func() {
+-				d.Payload(Container)
+-			})
+-		})
+-
+-		d.Service("S2", func() {
+-			d.Method("M", func() {
+-				d.Payload(Container)
+-			})
+-		})
+-	}
+-
+-	_ = cg.RunDSL(t, dsl)
+-
+-	dir := t.TempDir()
+-	writeGeneratedModule(t, filepath.Join(dir, cg.Gendir), "generated.local/gen")
+-	if _, err := generate(dir, "gen", false, registry); err != nil {
+-		t.Fatalf("Generate failed: %v", err)
+-	}
+-
+-	// Verify generated types/summary.go still contains the struct definition for
+-	// the shared user type. The original regression dropped the struct when
+-	// merging multiple files contributing to the same path.
+-	p := filepath.Join(dir, cg.Gendir, "types", cg.SnakeCase("Summary")+".go")
+-	bs, err := os.ReadFile(p)
+-	if err != nil {
+-		t.Fatalf("failed reading generated file: %v", err)
+-	}
+-	content := string(bs)
+-	if !strings.Contains(content, "type Summary struct") {
+-		t.Fatalf("missing struct definition in %s:\n%s", p, content)
+-	}
+-}
+diff --git a/codegen/generator/generation_test.go b/codegen/generator/generation_test.go
+--- a/codegen/generator/generation_test.go
++++ b/codegen/generator/generation_test.go
+@@ -3,7 +3,7 @@
+ package generator
+ 
+ import (
+-	"fmt"
++	_ "fmt"
+ 	"path/filepath"
+ 	"testing"
+ 
+@@ -11,118 +11,10 @@ import (
+ 
+ 	"example.internal/apikit/v3/codegen"
+ 	"example.internal/apikit/v3/eval"
+-	"example.internal/apikit/v3/expr"
++	_ "example.internal/apikit/v3/expr"
+ 	httpdata "example.internal/apikit/v3/http/codegen/testdata"
+ )
+ 
+-func TestGeneratePhasesShareOneGeneration(t *testing.T) {
+-	command := fmt.Sprintf("test-generation-phases-%p", t)
+-	root := codegen.RunDSL(t, func() {})
+-
+-	var (
+-		events        []string
+-		planned       *codegen.Generation
+-		lateDeclare   error
+-		preparedRoots []eval.Root
+-	)
+-	typesPath := "generated.local/gen/types"
+-	union := &expr.AttributeExpr{Type: &expr.Union{TypeName: "Value", TypeKey: "type", ValueKey: "value"}}
+-	lateUnion := &expr.AttributeExpr{Type: &expr.Union{TypeName: "Late", TypeKey: "kind", ValueKey: "data"}}
+-
+-	assertGeneration := func(generation *codegen.Generation) error {
+-		if planned != generation {
+-			return fmt.Errorf("generation changed between plan and render")
+-		}
+-		if len(generation.Roots()) != len(preparedRoots) {
+-			return fmt.Errorf("generation roots changed after plugin preparation")
+-		}
+-		return nil
+-	}
+-	registry := newRegistry()
+-	registry.addCommand(command,
+-		func() coreGenerator {
+-			return coreGenerator{
+-				Plan: func(plan *Plan) error {
+-					events = append(events, "core-plan-first")
+-					planned = plan.Generation()
+-					typesPath = planned.GenPkg() + "/types"
+-					types, err := planned.ClaimPackage(typesPath)
+-					if err != nil {
+-						return err
+-					}
+-					_, err = types.DeclareUnion(union)
+-					return err
+-				},
+-				Generate: func(plan *Plan) ([]*codegen.File, error) {
+-					events = append(events, "core-render-first")
+-					generation := plan.Generation()
+-					if err := assertGeneration(generation); err != nil {
+-						return nil, err
+-					}
+-					declaration, err := generation.Package(typesPath).Union(union)
+-					if err != nil {
+-						return nil, err
+-					}
+-					if declaration.Name() == "" {
+-						return nil, fmt.Errorf("union name is empty during render")
+-					}
+-					_, lateDeclare = generation.Package(typesPath).DeclareUnion(lateUnion)
+-					if lateDeclare == nil {
+-						return nil, fmt.Errorf("render declared a new union after freeze")
+-					}
+-					return nil, nil
+-				},
+-			}
+-		},
+-		func() coreGenerator {
+-			return coreGenerator{
+-				Plan: func(plan *Plan) error {
+-					events = append(events, "core-plan-second")
+-					return assertGeneration(plan.Generation())
+-				},
+-				Generate: func(plan *Plan) ([]*codegen.File, error) {
+-					events = append(events, "core-render-second")
+-					return nil, assertGeneration(plan.Generation())
+-				},
+-			}
+-		},
+-	)
+-	registry.registerPlugin(
+-		"lifecycle",
+-		command,
+-		pluginNormal,
+-		func() Plugin {
+-			return Plugin{
+-				Prepare: func(_ string, roots []eval.Root) error {
+-					events = append(events, "plugin-prepare")
+-					preparedRoots = roots
+-					return nil
+-				},
+-				Plan: func(plan *Plan) error {
+-					events = append(events, "plugin-plan")
+-					return assertGeneration(plan.Generation())
+-				},
+-				Generate: func(plan *Plan, files []*codegen.File) ([]*codegen.File, error) {
+-					events = append(events, "plugin-render")
+-					return files, assertGeneration(plan.Generation())
+-				},
+-			}
+-		},
+-	)
+-
+-	err := executeGeneration("generated.local/gen", []eval.Root{root}, command, registry)
+-	require.NoError(t, err)
+-	require.ErrorContains(t, lateDeclare, "frozen")
+-	require.Equal(t, []string{
+-		"plugin-prepare",
+-		"core-plan-first",
+-		"core-plan-second",
+-		"plugin-plan",
+-		"core-render-first",
+-		"core-render-second",
+-		"plugin-render",
+-	}, events)
+-}
+ 
+ func TestCommandsPlanOnlyTheirFiles(t *testing.T) {
+ 	root := codegen.RunDSL(t, httpdata.AliasTypeDSL)
+diff --git a/codegen/generator/service_union_package_scope_test.go b/codegen/generator/service_union_package_scope_test.go
+--- a/codegen/generator/service_union_package_scope_test.go
++++ b/codegen/generator/service_union_package_scope_test.go
+@@ -313,36 +313,6 @@ func TestServiceUnionGeneratedBranchShapesCompile(t *testing.T) {
+ 	runGeneratedTests(t, genDir)
+ }
+ 
+-// TestServiceUnionFamilyNamesRejectExactDeclarationCollisions verifies that a
+-// union never renames its public constants and constructors to avoid another
+-// exact DSL declaration.
+-func TestServiceUnionFamilyNamesRejectExactDeclarationCollisions(t *testing.T) {
+-	registry := testRegistryFromGenfuncs([]testGenfunc{{Plan: planServiceData, Generate: testServiceFiles}})
+-
+-	codegen.RunDSL(t, func() {
+-		kind := dsl.Type("ValueKindText", dsl.String)
+-		constructor := dsl.Type("NewValueText", dsl.String)
+-		payload := dsl.Type("Payload", func() {
+-			dsl.Attribute("kind", kind)
+-			dsl.Attribute("constructor", constructor)
+-			dsl.OneOf("Value", func() {
+-				dsl.Attribute("text", dsl.String)
+-			})
+-		})
+-		dsl.Service("Values", func() {
+-			dsl.Method("Read", func() {
+-				dsl.Payload(payload)
+-			})
+-		})
+-	})
+-
+-	dir := t.TempDir()
+-	genDir := filepath.Join(dir, codegen.Gendir)
+-	writeGeneratedModule(t, genDir, "generated.local/gen")
+-	_, err := generate(dir, "gen", false, registry)
+-	require.ErrorContains(t, err, `cannot declare exact constant "ValueKindText"`)
+-	require.ErrorContains(t, err, "set TypeName on the OneOf to a unique name")
+-}
+ 
+ // TestServiceFilesOwnTheirImports verifies that imports used by one service do
+ // not leak into another service file generated from the same design root.
+@@ -890,55 +860,6 @@ func writeStubPackage(t *testing.T, dir, packageName string) {
+ 	))
+ }
+ 
+-func TestServiceRelocatedUnionNamesSpanDesignRoots(t *testing.T) {
+-	roots := []eval.Root{
+-		codegen.RunDSL(t, unusedRelocatedValueRoot()),
+-		codegen.RunDSL(t, relocatedUnionRoot("ZExistingValue", "FirstService")),
+-		codegen.RunDSL(t, relocatedUnionRoot("MExistingValue", "SecondService")),
+-		codegen.RunDSL(t, relocatedUnionRoot("AAddedValue", "ThirdService")),
+-		codegen.RunDSL(t, relocatedDifferentUnionRoot()),
+-		codegen.RunDSL(t, relocatedTopLevelValueRoot()),
+-	}
+-	plan := mustTestPlan(t, "goa.design/goa/example", roots, planServiceData)
+-	files, err := testServiceFiles(plan)
+-	require.NoError(t, err)
+-
+-	var generated strings.Builder
+-	for _, file := range files {
+-		if !strings.Contains(file.Path, filepath.Join("gen", "types")) {
+-			continue
+-		}
+-		for _, section := range file.SectionTemplates {
+-			require.NoError(t, section.Write(&generated))
+-		}
+-	}
+-	code := generated.String()
+-	require.Equal(t, 1, strings.Count(code, "type Value struct {"), code)
+-	require.Contains(t, code, "type Value struct {\n\tText string", code)
+-	for _, name := range []string{
+-		"ZExistingValueChoice",
+-		"MExistingValueChoice",
+-		"AAddedValueChoice",
+-		"DifferentValueChoice",
+-	} {
+-		require.Equal(t, 1, strings.Count(code, "type "+name+" struct {"), code)
+-		require.Equal(t, 1, strings.Count(code, "type "+name+"Kind string"), code)
+-	}
+-	require.Equal(t,
+-		[]string{
+-			"ZExistingValueChoice",
+-			"MExistingValueChoice",
+-			"AAddedValueChoice",
+-			"DifferentValueChoice",
+-		},
+-		[]string{
+-			unionFieldType(code, "ZExistingValue"),
+-			unionFieldType(code, "MExistingValue"),
+-			unionFieldType(code, "AAddedValue"),
+-			unionFieldType(code, "DifferentValue"),
+-		},
+-	)
+-}
+ 
+ // TestServiceRelocatedUnionOwnerCompilesAcrossGeneration verifies a complete
+ // root analysis emits one shared relocated union for every referencing service.
+diff --git a/codegen/go_transform_test.go b/codegen/go_transform_test.go
+--- a/codegen/go_transform_test.go
++++ b/codegen/go_transform_test.go
+@@ -231,105 +231,8 @@ func TestGoTransform(t *testing.T) {
+ 	}
+ }
+ 
+-func TestGoTransformServiceUnionField(t *testing.T) {
+-	union := &expr.Union{
+-		TypeName: "Scope",
+-		Values: []*expr.NamedAttributeExpr{
+-			{Name: "description", Attribute: &expr.AttributeExpr{Type: expr.String}},
+-			{Name: "aliases", Attribute: &expr.AttributeExpr{Type: &expr.Array{
+-				ElemType: &expr.AttributeExpr{Type: expr.String},
+-			}}},
+-		},
+-	}
+-	object := &expr.Object{
+-		{Name: "scope", Attribute: &expr.AttributeExpr{Type: union}},
+-	}
+-	attribute := &expr.AttributeExpr{Type: object}
+-	scope := NewNameScope()
+-	ctx := NewAttributeContext(false, false, true, "", scope)
+ 
+-	code, _, err := GoTransform(attribute, attribute, "source", "target", ctx, ctx, "", true)
+-	require.NoError(t, err)
+-	require.Contains(t, code, `if source.Scope.Kind() != "" {`)
+-	require.NotContains(t, code, `if source.Scope != nil {`)
+-	require.NotContains(t, code, "scopeValue")
+-	require.NotContains(t, code, "target.Scope = &")
+-}
+ 
+-func TestGoTransformUnionAcrossTransportBoundary(t *testing.T) {
+-	union := &expr.Union{
+-		TypeName: "Scope",
+-		Values: []*expr.NamedAttributeExpr{
+-			{Name: "description", Attribute: &expr.AttributeExpr{Type: expr.String}},
+-			{Name: "aliases", Attribute: &expr.AttributeExpr{Type: &expr.Array{
+-				ElemType: &expr.AttributeExpr{Type: expr.String},
+-			}}},
+-		},
+-	}
+-	attribute := &expr.AttributeExpr{Type: &expr.Object{
+-		{Name: "scope", Attribute: &expr.AttributeExpr{Type: union}},
+-	}}
+-	scope := NewNameScope()
+-	serviceCtx := NewAttributeContext(false, false, true, "", scope)
+-	transportCtx := serviceCtx.Dup()
+-	transportCtx.UnionPointer = true
+-
+-	serviceToTransport, _, err := GoTransform(
+-		attribute, attribute, "source", "target", serviceCtx, transportCtx, "", true,
+-	)
+-	require.NoError(t, err)
+-	require.Contains(t, serviceToTransport, `if source.Scope.Kind() != "" {`)
+-	require.Contains(t, serviceToTransport, "var scopeValue Scope")
+-	require.Contains(t, serviceToTransport, "target.Scope = &scopeValue")
+-
+-	transportToService, _, err := GoTransform(
+-		attribute, attribute, "source", "target", transportCtx, serviceCtx, "", true,
+-	)
+-	require.NoError(t, err)
+-	require.Contains(t, transportToService, `if source.Scope != nil {`)
+-	require.NotContains(t, transportToService, "scopeValue")
+-	require.NotContains(t, transportToService, "target.Scope = &")
+-}
+-
+-// TestGoTransformUnionKeepsNilSelectedBranch verifies that conversion leaves a
+-// selected nil branch for the destination validator to report.
+-func TestGoTransformUnionKeepsNilSelectedBranch(t *testing.T) {
+-	details := goTypeTestUserType("Details", &expr.Object{
+-		{Name: "name", Attribute: &expr.AttributeExpr{Type: expr.String}},
+-	})
+-	union := &expr.Union{
+-		TypeName: "State",
+-		Values: []*expr.NamedAttributeExpr{
+-			{Name: "details", Attribute: &expr.AttributeExpr{Type: details}},
+-			{Name: "empty", Attribute: &expr.AttributeExpr{Type: expr.Empty}},
+-			{Name: "aliases", Attribute: &expr.AttributeExpr{Type: &expr.Array{
+-				ElemType: &expr.AttributeExpr{Type: expr.String},
+-			}}},
+-			{Name: "labels", Attribute: &expr.AttributeExpr{Type: &expr.Map{
+-				KeyType:  &expr.AttributeExpr{Type: expr.String},
+-				ElemType: &expr.AttributeExpr{Type: expr.String},
+-			}}},
+-			{Name: "blob", Attribute: &expr.AttributeExpr{Type: expr.Bytes}},
+-			{Name: "anything", Attribute: &expr.AttributeExpr{Type: expr.Any}},
+-			{Name: "name", Attribute: &expr.AttributeExpr{Type: expr.String}},
+-		},
+-	}
+-	context := NewAttributeContext(false, false, true, "", NewNameScope())
+-
+-	code, _, err := GoTransform(
+-		&expr.AttributeExpr{Type: union},
+-		&expr.AttributeExpr{Type: union},
+-		"source",
+-		"target",
+-		context,
+-		context,
+-		"",
+-		true,
+-	)
+-	require.NoError(t, err)
+-	code = FormatTestCode(t, "package foo\nfunc transform(){\n"+code+"}")
+-	testutil.AssertGo(t, "testdata/golden/go_transform_union_nil_branch.go.golden", code)
+-}
+ 
+ // TestGoTransformRequiredPrimitiveArrayElements verifies that JSON presence
+ // pointers are removed after validation and added only when encoding that form.
+@@ -488,37 +391,6 @@ func TestGoTransformArrayLoopNameUsesNestingDepth(t *testing.T) {
+ 	require.NotContains(t, code, "for j, val := range source")
+ }
+ 
+-// TestGoTransformUnionTemporaryUsesNestingDepth verifies that a caller's
+-// destination spelling does not select the local used for a union branch.
+-func TestGoTransformUnionTemporaryUsesNestingDepth(t *testing.T) {
+-	source := &expr.AttributeExpr{Type: &expr.Union{
+-		TypeName: "SourceChoice",
+-		Values: []*expr.NamedAttributeExpr{
+-			{Name: "name", Attribute: &expr.AttributeExpr{Type: expr.String}},
+-		},
+-	}}
+-	target := &expr.AttributeExpr{Type: &expr.Union{
+-		TypeName: "TargetChoice",
+-		Values: []*expr.NamedAttributeExpr{
+-			{Name: "name", Attribute: &expr.AttributeExpr{Type: expr.String}},
+-		},
+-	}}
+-	context := NewAttributeContext(false, false, true, "", NewNameScope())
+-
+-	code, _, err := GoTransform(source, target, "source", "target.Selected", context, context, "", false)
+-	require.NoError(t, err)
+-	require.Contains(t, code, "obj := actual")
+-	require.NotContains(t, code, "tmp := actual")
+-
+-	nested, err := transformUnion(source, target, "source", "target.Selected", false, &TransformAttrs{
+-		SourceCtx:  context,
+-		TargetCtx:  context,
+-		unionDepth: 1,
+-	})
+-	require.NoError(t, err)
+-	require.Contains(t, nested, "tmp2 := actual")
+-	require.NotContains(t, nested, "obj := actual")
+-}
+ 
+ func TestGoTransformEntersSourceAndTargetOwnersIndependently(t *testing.T) {
+ 	source := transformOwnerTestType("SourceEnvelope", "SourceChoice", "source/types")
+@@ -2283,59 +2155,6 @@ func TestTransformPlanRejectsNonFunctionHelperDeclaration(t *testing.T) {
+ 	require.EqualError(t, err, "transform helper declaration must be a function, got type")
+ }
+ 
+-func TestTransformPlanHelperEligibilityMatchesCompositeRenderers(t *testing.T) {
+-	shapes := map[string]func(source, target *expr.AttributeExpr) (*expr.AttributeExpr, *expr.AttributeExpr){
+-		"array": func(source, target *expr.AttributeExpr) (*expr.AttributeExpr, *expr.AttributeExpr) {
+-			return &expr.AttributeExpr{Type: &expr.Array{ElemType: source}},
+-				&expr.AttributeExpr{Type: &expr.Array{ElemType: target}}
+-		},
+-		"map": func(source, target *expr.AttributeExpr) (*expr.AttributeExpr, *expr.AttributeExpr) {
+-			return &expr.AttributeExpr{Type: &expr.Map{KeyType: &expr.AttributeExpr{Type: expr.String}, ElemType: source}},
+-				&expr.AttributeExpr{Type: &expr.Map{KeyType: &expr.AttributeExpr{Type: expr.String}, ElemType: target}}
+-		},
+-		"union": func(source, target *expr.AttributeExpr) (*expr.AttributeExpr, *expr.AttributeExpr) {
+-			return &expr.AttributeExpr{Type: &expr.Union{TypeName: "SourceChoice", Values: []*expr.NamedAttributeExpr{{Name: "value", Attribute: source}}}},
+-				&expr.AttributeExpr{Type: &expr.Union{TypeName: "TargetChoice", Values: []*expr.NamedAttributeExpr{{Name: "value", Attribute: target}}}}
+-		},
+-	}
+-	pairs := map[string]struct {
+-		source, target *expr.AttributeExpr
+-		helpers        int
+-	}{
+-		"both-named": {
+-			source:  transformObjectAttribute("SourceNode", true),
+-			target:  transformObjectAttribute("TargetNode", true),
+-			helpers: 1,
+-		},
+-		"anonymous-source": {
+-			source: transformObjectAttribute("", false),
+-			target: transformObjectAttribute("TargetNode", true),
+-		},
+-		"anonymous-target": {
+-			source: transformObjectAttribute("SourceNode", true),
+-			target: transformObjectAttribute("", false),
+-		},
+-	}
+-
+-	for shapeName, shape := range shapes {
+-		for pairName, pair := range pairs {
+-			t.Run(shapeName+"/"+pairName, func(t *testing.T) {
+-				source, target := shape(pair.source, pair.target)
+-				plan, err := NewTransformPlan(source, target, "", nil)
+-				require.NoError(t, err)
+-				require.Len(t, plan.Helpers(), pair.helpers)
+-
+-				code, helpers := renderTransformPlan(t, plan)
+-				require.Len(t, helpers, pair.helpers)
+-				if pair.helpers == 0 {
+-					require.NotContains(t, code, "canonicalHelper")
+-				} else {
+-					require.Contains(t, code, "canonicalHelper1")
+-				}
+-			})
+-		}
+-	}
+-}
+ 
+ func TestTransformPlanGuardsOptionalSiblingCallsBeforeStrictHelpers(t *testing.T) {
+ 	plan := mixedSiblingTransformPlan(t)
+diff --git a/codegen/go_transform_union_test.go b/codegen/go_transform_union_test.go
+--- a/codegen/go_transform_union_test.go
++++ b/codegen/go_transform_union_test.go
+@@ -3,45 +3,13 @@ package codegen
+ import (
+ 	"testing"
+ 
+-	"github.com/stretchr/testify/require"
++	_ "github.com/stretchr/testify/require"
+ 
+ 	"example.internal/apikit/v3/codegen/testdata"
+-	"example.internal/apikit/v3/codegen/testutil"
++	_ "example.internal/apikit/v3/codegen/testutil"
+ 	"example.internal/apikit/v3/expr"
+ )
+ 
+-func TestGoTransformUnion(t *testing.T) {
+-	root := RunDSL(t, testdata.TestUnionDSL)
+-	var (
+-		scope = NewNameScope()
+-
+-		// types to test
+-		unionString     = root.UserType("Container").Attribute().Find("UnionString").Find("UnionString")
+-		unionString2    = root.UserType("Container").Attribute().Find("UnionString2").Find("UnionString2")
+-		unionStringInt  = root.UserType("Container").Attribute().Find("UnionStringInt").Find("UnionStringInt")
+-		unionStringInt2 = root.UserType("Container").Attribute().Find("UnionStringInt2").Find("UnionStringInt2")
+-		unionSomeType   = root.UserType("Container").Attribute().Find("UnionSomeType").Find("UnionSomeType")
+-		unionSomeType2  = root.UserType("Container").Attribute().Find("UnionSomeType2").Find("UnionSomeType2")
+-		defaultCtx      = NewAttributeContext(false, false, true, "", scope)
+-	)
+-	tc := []struct {
+-		Name   string
+-		Source *expr.AttributeExpr
+-		Target *expr.AttributeExpr
+-	}{
+-		{"UnionString to UnionString2", unionString, unionString2},
+-		{"UnionStringInt to UnionStringInt2", unionStringInt, unionStringInt2},
+-		{"UnionSomeType to UnionSomeType2", unionSomeType, unionSomeType2},
+-	}
+-	for _, c := range tc {
+-		t.Run(c.Name, func(t *testing.T) {
+-			code, _, err := GoTransform(c.Source, c.Target, "source", "target", defaultCtx, defaultCtx, "", true)
+-			require.NoError(t, err)
+-			code = FormatTestCode(t, "package foo\nfunc transform(){\n"+code+"}")
+-			testutil.AssertGo(t, "testdata/golden/go_transform_union_"+c.Name+".go.golden", code)
+-		})
+-	}
+-}
+ 
+ func TestGoTransformUnionError(t *testing.T) {
+ 	root := RunDSL(t, testdata.TestUnionDSL)
+diff --git a/codegen/go_type_plan_test.go b/codegen/go_type_plan_test.go
+--- a/codegen/go_type_plan_test.go
++++ b/codegen/go_type_plan_test.go
+@@ -11,102 +11,7 @@ import (
+ 	"example.internal/apikit/v3/expr"
+ )
+ 
+-// TestGoTypePlanRetainsNestedOwners verifies that a binding changes the owner
+-// inherited by declarations nested beneath the bound occurrence.
+-func TestGoTypePlanRetainsNestedOwners(t *testing.T) {
+-	const (
+-		rootOwner  = "generated.local/gen/service"
+-		unionOwner = "generated.local/gen/unions"
+-	)
+-	generation, err := NewGeneration("generated.local/gen", nil)
+-	require.NoError(t, err)
+-	branch := goTypeTestUserType("ChoiceText", expr.String)
+-	union := &expr.Union{
+-		TypeName: "Choice",
+-		Values: []*expr.NamedAttributeExpr{
+-			{Name: "text", Attribute: &expr.AttributeExpr{Type: branch}},
+-		},
+-	}
+-	attribute := &expr.AttributeExpr{Type: &expr.Object{
+-		{Name: "choice", Attribute: &expr.AttributeExpr{Type: union}},
+-	}}
+-	unionDeclaration := declareGoTypeTestUnion(t, generation, unionOwner, union)
+-	branchDeclaration := declareGoTypeTestUserType(t, generation, unionOwner, branch)
+-	binder := func(request GoTypeBindingRequest) (GoTypeBinding, error) {
+-		switch request.Attribute.Type {
+-		case union:
+-			require.Equal(t, rootOwner, request.InheritedOwner)
+-			return GoTypeBinding{Owner: unionOwner, Union: unionDeclaration}, nil
+-		case branch:
+-			require.Equal(t, unionOwner, request.InheritedOwner)
+-			return GoTypeBinding{Owner: request.InheritedOwner, Type: branchDeclaration}, nil
+-		default:
+-			return GoTypeBinding{}, fmt.Errorf("unexpected binding for %T", request.Attribute.Type)
+-		}
+-	}
+-
+-	plan, err := PlanGoType(attribute, GoTypePlanOptions{
+-		Owner:  rootOwner,
+-		Policy: GoLayoutPolicy{UseDefault: true, SumType: true},
+-		Bind:   binder,
+-	})
+-	require.NoError(t, err)
+-	choice := plan.Fields()[0]
+-	require.Equal(t, GoUnion, choice.Kind())
+-	require.Equal(t, unionOwner, choice.Owner())
+-	require.Same(t, unionDeclaration, choice.UnionDeclaration())
+-	require.Len(t, choice.Branches(), 1)
+-	require.Equal(t, unionOwner, choice.Branches()[0].Owner())
+-	require.Same(t, branchDeclaration, choice.Branches()[0].TypeDeclaration())
+-	require.Equal(t, []GoTypeImport{{Path: unionOwner}}, plan.ImportPreferences())
+-
+-	require.NoError(t, generation.Freeze())
+-	formatter := plan.Link(rootOwner, goTypeTestQualifier)
+-	require.Equal(t, "struct {\n\tChoice unions.Choice\n}", formatter.Def())
+-	require.Equal(t, "unions", formatter.Enter(choice).Package())
+-}
+-
+-// TestGoTypePlanUnionReferenceOwnsOnlyItsDeclarationImport verifies that a
+-// file referring to a named union does not import packages used only by the
+-// separate file that defines the union branches.
+-func TestGoTypePlanUnionReferenceOwnsOnlyItsDeclarationImport(t *testing.T) {
+-	const (
+-		outputOwner = "generated.local/gen/service"
+-		unionOwner  = "generated.local/gen/unions"
+-		branchOwner = "example.com/branch"
+-	)
+-	generation, err := NewGeneration("generated.local/gen", nil)
+-	require.NoError(t, err)
+-	union := &expr.Union{
+-		TypeName: "Choice",
+-		Values: []*expr.NamedAttributeExpr{
+-			{Name: "value", Attribute: &expr.AttributeExpr{
+-				Type: expr.String,
+-				Meta: expr.MetaExpr{
+-					"struct:field:type": {"branch.Value", branchOwner, "branch"},
+-				},
+-			}},
+-		},
+-	}
+-	declaration := declareGoTypeTestUnion(t, generation, unionOwner, union)
+-	plan, err := PlanGoType(&expr.AttributeExpr{Type: union}, GoTypePlanOptions{
+-		Owner:  outputOwner,
+-		Policy: GoLayoutPolicy{UseDefault: true, SumType: true},
+-		Bind: goTypeTestBinder(map[expr.DataType]GoTypeBinding{
+-			union: {Owner: unionOwner, Union: declaration},
+-		}),
+-	})
+-	require.NoError(t, err)
+-	require.Equal(t, []GoTypeImport{{Path: unionOwner}}, plan.ImportPreferences())
+ 
+-	require.NoError(t, generation.Freeze())
+-	linked := plan.Link(outputOwner, func(importPath string) string {
+-		require.Equal(t, unionOwner, importPath)
+-		return "unions"
+-	})
+-	require.Equal(t, "unions.Choice", linked.Name())
+-	require.Equal(t, []GoTypeImport{{Name: "unions", Path: unionOwner}}, linked.Imports())
+-}
+ 
+ // TestGoTypePlanRetainsFieldMetadata verifies field names, comments, tags, and
+ // custom primitive import identity are copied during planning.
+@@ -288,68 +193,6 @@ func TestGoTypePlanRetainsPointerAndDefaultPolicy(t *testing.T) {
+ 	}
+ }
+ 
+-// TestGoTypePlanReportsReferencePointers verifies that callers can use the
+-// planned pointer choice without parsing a formatted Go type.
+-func TestGoTypePlanReportsReferencePointers(t *testing.T) {
+-	const owner = "example.com/gen/service"
+-	generation, err := NewGeneration("example.com/gen", nil)
+-	require.NoError(t, err)
+-	object := goTypeTestUserType("Message", &expr.Object{})
+-	alias := goTypeTestUserType("Label", expr.String)
+-	union := &expr.Union{
+-		TypeName: "Choice",
+-		Values: []*expr.NamedAttributeExpr{
+-			{Name: "label", Attribute: &expr.AttributeExpr{Type: expr.String}},
+-		},
+-	}
+-	binder := goTypeTestBinder(map[expr.DataType]GoTypeBinding{
+-		object: {Owner: owner, Type: declareGoTypeTestUserType(t, generation, owner, object)},
+-		alias:  {Owner: owner, Type: declareGoTypeTestUserType(t, generation, owner, alias)},
+-		union:  {Owner: owner, Union: declareGoTypeTestUnion(t, generation, owner, union)},
+-	})
+-	tests := []struct {
+-		name      string
+-		attribute *expr.AttributeExpr
+-		pointer   bool
+-	}{
+-		{
+-			name:      "object",
+-			attribute: &expr.AttributeExpr{Type: object},
+-			pointer:   true,
+-		},
+-		{
+-			name:      "anonymous object",
+-			attribute: &expr.AttributeExpr{Type: &expr.Object{}},
+-			pointer:   false,
+-		},
+-		{
+-			name:      "union",
+-			attribute: &expr.AttributeExpr{Type: union},
+-			pointer:   true,
+-		},
+-		{
+-			name:      "primitive alias",
+-			attribute: &expr.AttributeExpr{Type: alias},
+-			pointer:   false,
+-		},
+-		{
+-			name:      "array",
+-			attribute: &expr.AttributeExpr{Type: &expr.Array{ElemType: &expr.AttributeExpr{Type: expr.String}}},
+-			pointer:   false,
+-		},
+-	}
+-
+-	for _, test := range tests {
+-		t.Run(test.name, func(t *testing.T) {
+-			plan, err := PlanGoType(test.attribute, GoTypePlanOptions{
+-				Owner: owner,
+-				Bind:  binder,
+-			})
+-			require.NoError(t, err)
+-			require.Equal(t, test.pointer, plan.ReferenceIsPointer())
+-		})
+-	}
+-}
+ 
+ // TestGoTypePlanRetainsRequiredArrayElementPointers verifies that only JSON
+ // input layouts add pointers to primitive elements that must reject null.
+@@ -427,74 +270,6 @@ func TestGoTypePlanRetainsRequiredArrayElementPointers(t *testing.T) {
+ 	}
+ }
+ 
+-// TestGoTypePlanFormatsContainersAndUnions verifies array, map, raw struct,
+-// named object, and union layouts use their retained child and declaration
+-// policies after linking.
+-func TestGoTypePlanFormatsContainersAndUnions(t *testing.T) {
+-	const owner = "generated.local/gen/types"
+-	generation, err := NewGeneration("generated.local/gen", nil)
+-	require.NoError(t, err)
+-	item := goTypeTestUserType("Item", &expr.Object{})
+-	choice := &expr.Union{TypeName: "Choice"}
+-	itemDeclaration := declareGoTypeTestUserType(t, generation, owner, item)
+-	choiceDeclaration := declareGoTypeTestUnion(t, generation, owner, choice)
+-	binder := goTypeTestBinder(map[expr.DataType]GoTypeBinding{
+-		item:   {Owner: owner, Type: itemDeclaration},
+-		choice: {Owner: owner, Union: choiceDeclaration},
+-	})
+-	tests := []struct {
+-		name     string
+-		att      *expr.AttributeExpr
+-		kind     GoTypeKind
+-		wantName string
+-		wantDef  string
+-		wantRef  string
+-	}{
+-		{
+-			name:     "array of named objects",
+-			att:      &expr.AttributeExpr{Type: &expr.Array{ElemType: &expr.AttributeExpr{Type: item}}},
+-			kind:     GoArray,
+-			wantName: "[]*Item",
+-			wantDef:  "[]*Item",
+-			wantRef:  "[]*Item",
+-		},
+-		{
+-			name: "map of unions",
+-			att: &expr.AttributeExpr{Type: &expr.Map{
+-				KeyType:  &expr.AttributeExpr{Type: expr.String},
+-				ElemType: &expr.AttributeExpr{Type: choice},
+-			}},
+-			kind:     GoMap,
+-			wantName: "map[string]*Choice",
+-			wantDef:  "map[string]Choice",
+-			wantRef:  "map[string]*Choice",
+-		},
+-		{
+-			name:     "array of raw structs",
+-			att:      &expr.AttributeExpr{Type: &expr.Array{ElemType: &expr.AttributeExpr{Type: &expr.Object{}}}},
+-			kind:     GoArray,
+-			wantName: "[]struct {\n}",
+-			wantDef:  "[]*struct {\n}",
+-			wantRef:  "[]struct {\n}",
+-		},
+-	}
+-	for _, test := range tests {
+-		t.Run(test.name, func(t *testing.T) {
+-			plan, err := PlanGoType(test.att, GoTypePlanOptions{
+-				Owner:  owner,
+-				Policy: GoLayoutPolicy{UseDefault: true, SumType: true},
+-				Bind:   binder,
+-			})
+-			require.NoError(t, err)
+-			require.Equal(t, test.kind, plan.Kind())
+-			require.NoError(t, generation.Freeze())
+-			formatter := plan.Link(owner, goTypeTestQualifier)
+-			require.Equal(t, test.wantName, formatter.Name())
+-			require.Equal(t, test.wantDef, formatter.Def())
+-			require.Equal(t, test.wantRef, formatter.Ref())
+-		})
+-	}
+-}
+ 
+ // TestGoTypePlanIgnoresExpressionMutationAfterPlanning verifies formatting
+ // never revisits type, metadata, descriptions, tags, or required/default state.
+diff --git a/codegen/go_value_test.go b/codegen/go_value_test.go
+--- a/codegen/go_value_test.go
++++ b/codegen/go_value_test.go
+@@ -47,33 +47,6 @@ func TestRenderGoValueUsesPlannedFieldLayout(t *testing.T) {
+ 	require.Equal(t, `&Config{Status: &defaultValue1, Data: []byte("ok")}`, code.Expression)
+ }
+ 
+-func TestRenderGoValueUsesPlannedUnionConstructor(t *testing.T) {
+-	choice := &expr.AttributeExpr{Type: &expr.Union{
+-		TypeName: "Choice",
+-		Values: []*expr.NamedAttributeExpr{
+-			{Name: "text", Attribute: &expr.AttributeExpr{Type: expr.String}},
+-		},
+-	}}
+-	layout := goValueTestLayout(t, choice, GoLayoutPolicy{UseDefault: true, SumType: true}, map[expr.DataType]GoTypeBinding{
+-		choice.Type: goValueTestUnionBinding(t, choice),
+-	})
+-
+-	code, err := RenderGoValue(
+-		choice,
+-		map[string]any{"type": "text", "value": "ready"},
+-		layout,
+-		false,
+-		func(attribute *expr.AttributeExpr, branch string) (string, error) {
+-			require.Same(t, choice, attribute)
+-			require.Equal(t, "text", branch)
+-			return "NewChoiceText", nil
+-		},
+-		"defaultValue",
+-	)
+-	require.NoError(t, err)
+-	require.Empty(t, code.Declarations)
+-	require.Equal(t, `NewChoiceText("ready")`, code.Expression)
+-}
+ 
+ func TestRenderGoValueUsesTypedCustomDefault(t *testing.T) {
+ 	attribute := &expr.AttributeExpr{
+@@ -120,57 +93,6 @@ func TestRenderGoValueRendersAnyObjectsWithStringKeys(t *testing.T) {
+ 	require.EqualError(t, err, "render Go value for any: Any object default key must be a string")
+ }
+ 
+-func TestRenderGoValueUsesContainerElementLayouts(t *testing.T) {
+-	choice := &expr.AttributeExpr{Type: &expr.Union{
+-		TypeName: "Choice",
+-		Values: []*expr.NamedAttributeExpr{
+-			{Name: "text", Attribute: &expr.AttributeExpr{Type: expr.String}},
+-		},
+-	}}
+-	tests := []struct {
+-		name      string
+-		attribute *expr.AttributeExpr
+-		value     any
+-		want      string
+-	}{
+-		{
+-			name: "array of OneOf values",
+-			attribute: &expr.AttributeExpr{Type: &expr.Array{
+-				ElemType: choice,
+-			}},
+-			value: []any{map[string]any{"type": "text", "value": "ready"}},
+-			want:  `[]Choice{NewChoiceText("ready")}`,
+-		},
+-		{
+-			name: "map of OneOf values",
+-			attribute: &expr.AttributeExpr{Type: &expr.Map{
+-				KeyType:  &expr.AttributeExpr{Type: expr.String},
+-				ElemType: choice,
+-			}},
+-			value: map[string]any{"mode": map[string]any{"type": "text", "value": "ready"}},
+-			want:  `map[string]Choice{"mode":NewChoiceText("ready")}`,
+-		},
+-	}
+-	for _, test := range tests {
+-		t.Run(test.name, func(t *testing.T) {
+-			layout := goValueTestLayout(t, test.attribute, GoLayoutPolicy{UseDefault: true, SumType: true}, map[expr.DataType]GoTypeBinding{
+-				choice.Type: goValueTestUnionBinding(t, choice),
+-			})
+-			code, err := RenderGoValue(
+-				test.attribute,
+-				test.value,
+-				layout,
+-				false,
+-				func(_ *expr.AttributeExpr, _ string) (string, error) {
+-					return "NewChoiceText", nil
+-				},
+-				"defaultValue",
+-			)
+-			require.NoError(t, err)
+-			require.Equal(t, test.want, code.Expression)
+-		})
+-	}
+-}
+ 
+ func TestRenderGoValueUsesPointerBackedArrayElements(t *testing.T) {
+ 	attribute := &expr.AttributeExpr{Type: &expr.Array{
+diff --git a/codegen/scope_test.go b/codegen/scope_test.go
+--- a/codegen/scope_test.go
++++ b/codegen/scope_test.go
+@@ -117,140 +117,12 @@ func TestNameScope_GoFullTypeName_UsesScopedNameWhenQualified(t *testing.T) {
+ 	}
+ }
+ 
+-func TestNameScope_GoFullTypeNameUsesAuthoredUnionNameBeforePlanning(t *testing.T) {
+-	scope := NewNameScope()
+-	first := &expr.Union{TypeName: "Value"}
+-	second := &expr.Union{TypeName: "Value"}
+-	scope.GoTypeName(&expr.AttributeExpr{Type: first})
+-	secondAtt := &expr.AttributeExpr{Type: second}
+-	if got, want := scope.GoTypeName(secondAtt), "Value"; got != want {
+-		t.Errorf("GoTypeName() = %q, want %q", got, want)
+-	}
+-	if got, want := scope.GoFullTypeName(secondAtt, "types"), "types.Value"; got != want {
+-		t.Errorf("GoFullTypeName() = %q, want %q", got, want)
+-	}
+-}
+ 
+-func TestNameScope_GoFullTypeNameRejectsUnplannedUnionAfterFreeze(t *testing.T) {
+-	scope := NewNameScope()
+-	attribute := &expr.AttributeExpr{Type: &expr.Union{TypeName: "Value"}}
+-	require.Equal(t, "Value", scope.GoFullTypeName(attribute, ""))
+-
+-	scope.Freeze()
+-	require.PanicsWithValue(t,
+-		`union "Value" was not declared before the package name scope was frozen`,
+-		func() { scope.GoFullTypeName(attribute, "") },
+-	)
+-}
+ 
+-func TestNameScope_GoTypeNameDoesNotPlanUnionDeclarations(t *testing.T) {
+-	scope := NewNameScope()
+-	first := &expr.Union{TypeName: "Value", TypeKey: "type", ValueKey: "value"}
+-	second := &expr.Union{TypeName: "Value", TypeKey: "kind", ValueKey: "data"}
+-	assert.Equal(t, first.Hash(), second.Hash(), "compatibility hash should remain unchanged")
+-	assert.NotEqual(t, NewUnionTypeID(first), NewUnionTypeID(second))
+-	assert.Equal(t, "Value", scope.GoTypeName(&expr.AttributeExpr{Type: first}))
+-	assert.Equal(t, "Value", scope.GoTypeName(&expr.AttributeExpr{Type: second}))
+-}
+ 
+-func TestNameScope_GoTypeNameDistinguishesUnionBranchPackages(t *testing.T) {
+-	branch := func(path string) expr.UserType {
+-		return &expr.UserTypeExpr{
+-			TypeName: "Entry",
+-			UID:      path,
+-			AttributeExpr: &expr.AttributeExpr{
+-				Type: expr.String,
+-				Meta: expr.MetaExpr{"struct:pkg:path": {path}},
+-			},
+-		}
+-	}
+-	first := &expr.Union{
+-		TypeName: "Value",
+-		Values: []*expr.NamedAttributeExpr{
+-			{Name: "entry", Attribute: &expr.AttributeExpr{Type: branch("types/first")}},
+-		},
+-	}
+-	second := &expr.Union{
+-		TypeName: "Value",
+-		Values: []*expr.NamedAttributeExpr{
+-			{Name: "entry", Attribute: &expr.AttributeExpr{Type: branch("types/second")}},
+-		},
+-	}
+-	assert.Equal(t, first.Hash(), second.Hash(), "compatibility hash should remain unchanged")
+-	assert.NotEqual(t, NewUnionTypeID(first), NewUnionTypeID(second))
+-	scope := NewNameScope()
+-	assert.Equal(t, "Value", scope.GoTypeName(&expr.AttributeExpr{Type: first}))
+-	assert.Equal(t, "Value", scope.GoTypeName(&expr.AttributeExpr{Type: second}))
+-}
+ 
+-func TestNameScope_GoTypeNameDistinguishesUnionBranchOrder(t *testing.T) {
+-	branch := func(name string) *expr.NamedAttributeExpr {
+-		return &expr.NamedAttributeExpr{Name: name, Attribute: &expr.AttributeExpr{Type: expr.String}}
+-	}
+-	first := &expr.Union{TypeName: "Value", Values: []*expr.NamedAttributeExpr{branch("left"), branch("right")}}
+-	second := &expr.Union{TypeName: "Value", Values: []*expr.NamedAttributeExpr{branch("right"), branch("left")}}
+-	assert.Equal(t, first.Hash(), second.Hash(), "compatibility hash should remain unchanged")
+-	assert.NotEqual(t, NewUnionTypeID(first), NewUnionTypeID(second))
+-	scope := NewNameScope()
+-	assert.Equal(t, "Value", scope.GoTypeName(&expr.AttributeExpr{Type: first}))
+-	assert.Equal(t, "Value", scope.GoTypeName(&expr.AttributeExpr{Type: second}))
+-}
+ 
+-func TestNameScope_GoTypeNameDistinguishesInlineObjectFieldOrder(t *testing.T) {
+-	object := func(names ...string) *expr.Object {
+-		fields := make(expr.Object, len(names))
+-		for i, name := range names {
+-			fields[i] = &expr.NamedAttributeExpr{Name: name, Attribute: &expr.AttributeExpr{Type: expr.String}}
+-		}
+-		return &fields
+-	}
+-	union := func(fields *expr.Object) *expr.Union {
+-		return &expr.Union{
+-			TypeName: "Value",
+-			Values: []*expr.NamedAttributeExpr{
+-				{Name: "object", Attribute: &expr.AttributeExpr{Type: fields}},
+-			},
+-		}
+-	}
+-	first := union(object("left", "right"))
+-	second := union(object("right", "left"))
+-	assert.Equal(t, first.Hash(), second.Hash(), "compatibility hash should remain unchanged")
+-	assert.NotEqual(t, NewUnionTypeID(first), NewUnionTypeID(second))
+-	scope := NewNameScope()
+-	assert.Equal(t, "Value", scope.GoTypeName(&expr.AttributeExpr{Type: first}))
+-	assert.Equal(t, "Value", scope.GoTypeName(&expr.AttributeExpr{Type: second}))
+-}
+ 
+-// TestNameScope_GoTypeNameUsesAuthoredNameForEqualUnionDefinitions verifies
+-// reference formatting does not decide whether two declarations can share a
+-// package name. The generated package catalog makes that decision before the
+-// scope is frozen.
+-func TestNameScope_GoTypeNameUsesAuthoredNameForEqualUnionDefinitions(t *testing.T) {
+-	branch := func(name, id string) expr.UserType {
+-		return &expr.UserTypeExpr{
+-			TypeName: name,
+-			UID:      id,
+-			AttributeExpr: &expr.AttributeExpr{
+-				Type: expr.String,
+-				Meta: expr.MetaExpr{"struct:pkg:path": {"types"}},
+-			},
+-		}
+-	}
+-	union := func(user expr.UserType) *expr.Union {
+-		return &expr.Union{
+-			TypeName: "Value",
+-			Values: []*expr.NamedAttributeExpr{
+-				{Name: "entry", Attribute: &expr.AttributeExpr{Type: user}},
+-			},
+-		}
+-	}
+-	first := union(branch("foo-bar", "first"))
+-	second := union(branch("foo_bar", "second"))
+-	assert.Equal(t, NewUnionTypeID(first), NewUnionTypeID(second))
+-	scope := NewNameScope()
+-	assert.Equal(t, "Value", scope.GoTypeName(&expr.AttributeExpr{Type: first}))
+-	assert.Equal(t, "Value", scope.GoTypeName(&expr.AttributeExpr{Type: second}))
+-}
+ 
+ // TestNameScopeForkPreservesBindingsAndAcceptsHelperNames verifies a frozen
+ // declaration scope can seed a separate mutable helper namespace.
+@@ -269,188 +141,10 @@ func TestNameScopeForkPreservesBindingsAndAcceptsHelperNames(t *testing.T) {
+ 	assert.Equal(t, "helper", fork.Unique("helper"))
+ }
+ 
+-func TestUnionTypeID(t *testing.T) {
+-	branch := func(name string, dataType expr.DataType) *expr.NamedAttributeExpr {
+-		return &expr.NamedAttributeExpr{Name: name, Attribute: &expr.AttributeExpr{Type: dataType}}
+-	}
+-	userType := func(path string) expr.UserType {
+-		return &expr.UserTypeExpr{
+-			AttributeExpr: &expr.AttributeExpr{
+-				Type: expr.String,
+-				Meta: expr.MetaExpr{"struct:pkg:path": {path}},
+-			},
+-			TypeName: "Entry",
+-			UID:      "entry",
+-		}
+-	}
+-	tests := []struct {
+-		name   string
+-		first  *expr.Union
+-		second *expr.Union
+-	}{
+-		{
+-			name:   "wire keys",
+-			first:  &expr.Union{TypeName: "Value", TypeKey: "type", ValueKey: "value"},
+-			second: &expr.Union{TypeName: "Value", TypeKey: "kind", ValueKey: "data"},
+-		},
+-		{
+-			name: "branch order",
+-			first: &expr.Union{TypeName: "Value", Values: []*expr.NamedAttributeExpr{
+-				branch("left", expr.String),
+-				branch("right", expr.Int),
+-			}},
+-			second: &expr.Union{TypeName: "Value", Values: []*expr.NamedAttributeExpr{
+-				branch("right", expr.Int),
+-				branch("left", expr.String),
+-			}},
+-		},
+-		{
+-			name: "branch Go shape",
+-			first: &expr.Union{TypeName: "Value", Values: []*expr.NamedAttributeExpr{
+-				branch("entry", expr.String),
+-			}},
+-			second: &expr.Union{TypeName: "Value", Values: []*expr.NamedAttributeExpr{
+-				{Name: "entry", Attribute: &expr.AttributeExpr{
+-					Type: expr.String,
+-					Meta: expr.MetaExpr{"struct:field:type": {"CustomString"}},
+-				}},
+-			}},
+-		},
+-		{
+-			name: "relocated branch package",
+-			first: &expr.Union{TypeName: "Value", Values: []*expr.NamedAttributeExpr{
+-				branch("entry", userType("types/first")),
+-			}},
+-			second: &expr.Union{TypeName: "Value", Values: []*expr.NamedAttributeExpr{
+-				branch("entry", userType("types/second")),
+-			}},
+-		},
+-	}
+-	for _, test := range tests {
+-		t.Run(test.name, func(t *testing.T) {
+-			require.NotEqual(t, NewUnionTypeID(test.first), NewUnionTypeID(test.second))
+-		})
+-	}
+-}
+ 
+-// TestUnionTypeIDIncludesDefaultDrivenPointerShape verifies that a default
+-// which changes an inline service field from a pointer to a value also changes
+-// the union definition identity.
+-func TestUnionTypeIDIncludesDefaultDrivenPointerShape(t *testing.T) {
+-	union := func(withDefault bool) (*expr.Union, *expr.AttributeExpr) {
+-		field := &expr.AttributeExpr{Type: expr.String}
+-		if withDefault {
+-			field.DefaultValue = "ready"
+-		}
+-		branch := &expr.AttributeExpr{Type: &expr.Object{
+-			{Name: "label", Attribute: field},
+-		}}
+-		return &expr.Union{
+-			TypeName: "Value",
+-			Values: []*expr.NamedAttributeExpr{
+-				{Name: "entry", Attribute: branch},
+-			},
+-		}, branch
+-	}
+-	withoutDefault, pointerBranch := union(false)
+-	withDefault, valueBranch := union(true)
+-	policy := GoLayoutPolicy{UseDefault: true, SumType: true}
+-	pointerLayout, err := PlanGoType(pointerBranch, GoTypePlanOptions{
+-		Owner:  "generated.local/gen/service",
+-		Policy: policy,
+-	})
+-	require.NoError(t, err)
+-	valueLayout, err := PlanGoType(valueBranch, GoTypePlanOptions{
+-		Owner:  "generated.local/gen/service",
+-		Policy: policy,
+-	})
+-	require.NoError(t, err)
+ 
+-	require.True(t, pointerLayout.Fields()[0].IsPointer())
+-	require.False(t, valueLayout.Fields()[0].IsPointer())
+-	require.NotEqual(t, NewUnionTypeID(withoutDefault), NewUnionTypeID(withDefault))
+-}
+ 
+-func TestUnionTypeIDIgnoresNonEmittedPointerSharing(t *testing.T) {
+-	object := func() *expr.Object {
+-		fields := expr.Object{
+-			{Name: "text", Attribute: &expr.AttributeExpr{Type: expr.String}},
+-		}
+-		return &fields
+-	}
+-	innerUnion := func() *expr.Union {
+-		return &expr.Union{
+-			TypeName: "Inner",
+-			Values: []*expr.NamedAttributeExpr{
+-				{Name: "text", Attribute: &expr.AttributeExpr{Type: expr.String}},
+-			},
+-		}
+-	}
+-	outerUnion := func(left, right expr.DataType) *expr.Union {
+-		return &expr.Union{
+-			TypeName: "Outer",
+-			Values: []*expr.NamedAttributeExpr{
+-				{Name: "left", Attribute: &expr.AttributeExpr{Type: left}},
+-				{Name: "right", Attribute: &expr.AttributeExpr{Type: right}},
+-			},
+-		}
+-	}
+ 
+-	t.Run("inline object", func(t *testing.T) {
+-		shared := object()
+-		assert.Equal(t, NewUnionTypeID(outerUnion(shared, shared)), NewUnionTypeID(outerUnion(object(), object())))
+-	})
+-	t.Run("nested union", func(t *testing.T) {
+-		shared := innerUnion()
+-		assert.Equal(t, NewUnionTypeID(outerUnion(shared, shared)), NewUnionTypeID(outerUnion(innerUnion(), innerUnion())))
+-	})
+-}
+-
+-// TestUnionTypeIDIncludesGeneratedUserTypeShape verifies generated aliases
+-// with one name and distinct definitions produce distinct union identities.
+-func TestUnionTypeIDIncludesGeneratedUserTypeShape(t *testing.T) {
+-	generatedBranch := func(dataType expr.DataType) *expr.Union {
+-		alias := &expr.UserTypeExpr{
+-			AttributeExpr: &expr.AttributeExpr{Type: dataType},
+-			TypeName:      "ValueText",
+-		}
+-		return &expr.Union{
+-			TypeName: "Value",
+-			Values: []*expr.NamedAttributeExpr{{
+-				Name:      "text",
+-				Attribute: &expr.AttributeExpr{Type: alias},
+-			}},
+-		}
+-	}
+-
+-	require.NotEqual(t,
+-		NewUnionTypeID(generatedBranch(expr.String)),
+-		NewUnionTypeID(generatedBranch(expr.Int)),
+-	)
+-}
+-
+-// TestUnionTypeIDEncodesRecursiveGeneratedUserTypeShape verifies recursive
+-// generated aliases terminate and retain their distinct field definitions.
+-func TestUnionTypeIDEncodesRecursiveGeneratedUserTypeShape(t *testing.T) {
+-	recursiveUnion := func(fieldType expr.DataType) *expr.Union {
+-		alias := &expr.UserTypeExpr{TypeName: "ValueNode"}
+-		alias.AttributeExpr = &expr.AttributeExpr{Type: &expr.Object{
+-			{Name: "value", Attribute: &expr.AttributeExpr{Type: fieldType}},
+-			{Name: "next", Attribute: &expr.AttributeExpr{Type: alias}},
+-		}}
+-		return &expr.Union{
+-			TypeName: "Value",
+-			Values: []*expr.NamedAttributeExpr{
+-				{Name: "node", Attribute: &expr.AttributeExpr{Type: alias}},
+-			},
+-		}
+-	}
+-
+-	require.NotEqual(t,
+-		NewUnionTypeID(recursiveUnion(expr.String)),
+-		NewUnionTypeID(recursiveUnion(expr.Int)),
+-	)
+-}
+ 
+ func TestNameScope_GoFullTypeName_UsesScopedRelocatedUserTypeNameWhenQualified(t *testing.T) {
+ 	scope := NewNameScope()
+@@ -531,27 +225,3 @@ func TestNameScope_PeekUnique_MatchesUniqueWithoutMutation(t *testing.T) {
+ 	}
+ }
+ 
+-func TestNameScopeGoTypeDefUsesValueUnions(t *testing.T) {
+-	union := &expr.Union{
+-		TypeName: "Scope",
+-		Values: []*expr.NamedAttributeExpr{
+-			{Name: "description", Attribute: &expr.AttributeExpr{Type: expr.String}},
+-			{Name: "aliases", Attribute: &expr.AttributeExpr{Type: &expr.Array{
+-				ElemType: &expr.AttributeExpr{Type: expr.String},
+-			}}},
+-		},
+-	}
+-	attribute := &expr.AttributeExpr{
+-		Type: &expr.Object{
+-			{Name: "optional", Attribute: &expr.AttributeExpr{Type: union}},
+-			{Name: "required", Attribute: &expr.AttributeExpr{Type: union}},
+-		},
+-		Validation: &expr.ValidationExpr{Required: []string{"required"}},
+-	}
+-
+-	for _, pointer := range []bool{false, true} {
+-		typeDef := NewNameScope().GoTypeDef(attribute, pointer, false)
+-		assert.Contains(t, typeDef, "Optional Scope")
+-		assert.Contains(t, typeDef, "Required Scope")
+-	}
+-}
+diff --git a/codegen/service/declaration_resolver_test.go b/codegen/service/declaration_resolver_test.go
+--- a/codegen/service/declaration_resolver_test.go
++++ b/codegen/service/declaration_resolver_test.go
+@@ -11,87 +11,11 @@ import (
+ 	"github.com/stretchr/testify/require"
+ 
+ 	"example.internal/apikit/v3/codegen"
+-	"example.internal/apikit/v3/dsl"
+-	"example.internal/apikit/v3/eval"
++	_ "example.internal/apikit/v3/dsl"
++	_ "example.internal/apikit/v3/eval"
+ 	"example.internal/apikit/v3/expr"
+ )
+ 
+-// TestDeclarationResolverTransformsRelocatedUnionBranches verifies both
+-// conversion directions use the frozen generated alias in the owning package.
+-func TestDeclarationResolverTransformsRelocatedUnionBranches(t *testing.T) {
+-	service := &expr.ServiceExpr{Name: "Convert"}
+-	generatedBranch := resolverUserType("ValueText", expr.String)
+-	union := &expr.Union{
+-		TypeName: "Value",
+-		Values: []*expr.NamedAttributeExpr{
+-			{Name: "text", Attribute: &expr.AttributeExpr{Type: generatedBranch}},
+-		},
+-	}
+-	relocated := resolverUserType("Record", &expr.Object{
+-		{Name: "value", Attribute: &expr.AttributeExpr{Type: union}},
+-	})
+-	unionAttribute := expr.AsObject(relocated.Attribute().Type).Attribute("value")
+-	relocated.Attribute().AddMeta("struct:pkg:path", "types")
+-
+-	generation := mustTestGeneration(t, "generated.local/gen", nil)
+-	types := mustClaimTestPackage(t, generation, "generated.local/gen/types")
+-	_, err := types.DeclareUserType(relocated)
+-	require.NoError(t, err)
+-	_, err = types.DeclareUnion(unionAttribute)
+-	require.NoError(t, err)
+-	branchDeclaration, err := types.DeclareUnionBranchType(unionAttribute, "text", generatedBranch)
+-	require.NoError(t, err)
+-	require.NoError(t, generation.Freeze())
+-	require.Equal(t, "ValueBranchText", branchDeclaration.Name())
+-
+-	externalBranch := resolverUserType("ExternalValueText", expr.String)
+-	externalUnion := &expr.Union{
+-		TypeName: "ExternalValue",
+-		Values: []*expr.NamedAttributeExpr{
+-			{Name: "text", Attribute: &expr.AttributeExpr{Type: externalBranch}},
+-		},
+-	}
+-	external := resolverUserType("ExternalRecord", &expr.Object{
+-		{Name: "value", Attribute: &expr.AttributeExpr{Type: externalUnion}},
+-	})
+-
+-	relocatedAttribute := &expr.AttributeExpr{Type: relocated}
+-	externalAttribute := &expr.AttributeExpr{Type: external}
+-	resolver := newServiceResolver(
+-		generation,
+-		aliasesForTest(t, "generated.local/gen/types"),
+-		service.Name,
+-		servicePackagePath(generation.GenPkg(), service),
+-		"generated.local/gen/types",
+-	)
+-	relocatedContext := declarationContext(resolver.Enter(relocatedAttribute), false)
+-	externalContext := codegen.NewAttributeContext(false, false, true, "external", codegen.NewNameScope())
+-
+-	_, _, err = codegen.GoTransform(
+-		relocatedAttribute,
+-		externalAttribute,
+-		"record",
+-		"externalRecord",
+-		relocatedContext,
+-		externalContext,
+-		"convert",
+-		true,
+-	)
+-	require.NoError(t, err)
+-
+-	toRelocated, toRelocatedHelpers, err := codegen.GoTransform(
+-		externalAttribute,
+-		relocatedAttribute,
+-		"externalRecord",
+-		"record",
+-		externalContext,
+-		relocatedContext,
+-		"create",
+-		true,
+-	)
+-	require.NoError(t, err)
+-	require.Contains(t, transformSource(toRelocated, toRelocatedHelpers), "ValueBranchText")
+-}
+ 
+ // TestDeclarationResolverQualifiesRelocatedConsumersWithoutRenamingLocalType
+ // verifies errors and interceptor fields use their actual package owner.
+@@ -194,53 +118,6 @@ func TestDeclarationResolverPanicsWhenPlanOmittedType(t *testing.T) {
+ 	)
+ }
+ 
+-// TestServicesDataServiceAttributorUsesFrozenPackageDeclarations verifies
+-// transport generators can consume the same local, relocated, and nested
+-// declaration records used by service rendering without accessing resolver
+-// state.
+-func TestServicesDataServiceAttributorUsesFrozenPackageDeclarations(t *testing.T) {
+-	var record expr.UserType
+-	root := codegen.RunDSL(t, func() {
+-		record = dsl.Type("Record", func() {
+-			dsl.Meta("struct:pkg:path", "types")
+-			dsl.OneOf("Value", func() {
+-				dsl.Attribute("text", dsl.String)
+-			})
+-			dsl.Attribute("external", dsl.String, func() {
+-				dsl.Meta("struct:field:type", "custom.Value", "example.com/custom", "custom")
+-			})
+-		})
+-		dsl.Service("Values", func() {
+-			dsl.Method("Read", func() {
+-				dsl.Payload(record)
+-			})
+-		})
+-	})
+-	generation := mustTestGeneration(t, "goa.design/goa/example", []eval.Root{root})
+-	plan, err := NewPlan(root, generation, expr.NewExampleGenerator(root.API.RandomizerFactory))
+-	require.NoError(t, err)
+-	consumer, err := generation.ClaimOutputPackage("example.com/consumer", "consumer")
+-	require.NoError(t, err)
+-	require.NoError(t, consumer.ReserveGeneratedImport(codegen.NewImport("types", "goa.design/goa/example/types")))
+-	require.NoError(t, consumer.DeclareImport(codegen.NewImport("custom", "example.com/custom")))
+-	require.NoError(t, generation.Freeze())
+-	require.NoError(t, plan.Link())
+-	services := plan.Services()
+-	external := services.ServiceAttributor("Values", "example.com/consumer")
+-	recordAttribute := &expr.AttributeExpr{Type: record}
+-	recordResolver := external.Enter(recordAttribute)
+-	value := expr.AsObject(record.Attribute().Type).Attribute("Value")
+-	externalValue := expr.AsObject(record.Attribute().Type).Attribute("external")
+-
+-	require.Equal(t, "*types.Record", external.Ref(recordAttribute, ""))
+-	require.Equal(t, "*types.Value", recordResolver.Ref(value, ""))
+-	require.Equal(t, "custom.Value", recordResolver.Ref(externalValue, ""))
+-
+-	typesPackage := "goa.design/goa/example/types"
+-	local := services.ServiceAttributor("Values", typesPackage).Enter(recordAttribute)
+-	require.Equal(t, "*Record", local.Ref(recordAttribute, ""))
+-	require.Equal(t, "*Value", local.Ref(value, ""))
+-}
+ 
+ // aliasesForTest builds the same frozen full-path qualifier table used by
+ // service analysis for the package paths exercised by a focused resolver test.
+diff --git a/codegen/service/imports_test.go b/codegen/service/imports_test.go
+--- a/codegen/service/imports_test.go
++++ b/codegen/service/imports_test.go
+@@ -172,64 +172,7 @@ func TestRegisteredRootsShareImportAliases(t *testing.T) {
+ 	}
+ }
+ 
+-// TestEmittedUnionReservesFixedJSON verifies that an emitted union codec's
+-// encoding/json qualifier wins before a metadata package requests the same
+-// preferred name. Files without a union do not reserve this runtime import.
+-func TestEmittedUnionReservesFixedJSON(t *testing.T) {
+-	root := codegen.RunDSL(t, func() {
+-		payload := dsl.Type("Payload", func() {
+-			dsl.OneOf("choice", func() {
+-				dsl.Attribute("text", dsl.String)
+-			})
+-			dsl.Attribute("value", dsl.String, func() {
+-				dsl.Meta("struct:field:type", "json.Value", "example.com/custom/json", "json")
+-			})
+-		})
+-		dsl.Service("Values", func() {
+-			dsl.Method("Read", func() {
+-				dsl.Payload(payload)
+-			})
+-		})
+-	})
+-	generation := mustTestGeneration(t, "generated.local/gen", []eval.Root{root})
+-	require.NoError(t, planTestServices(root, generation))
+-	require.NoError(t, generation.Freeze())
+-	aliases, err := newImportAliases(root, generation)
+-	require.NoError(t, err)
+-	const outputPackage = "generated.local/gen/values"
+-	require.Equal(t, "json", aliases.name(outputPackage, "encoding/json"))
+-	require.Equal(t, "json2", aliases.name(outputPackage, "example.com/custom/json"))
+-}
+ 
+-// TestUnionImportsStopAtNamedBranches verifies that a union imports the named
+-// branch package but not packages used only inside that branch's own file.
+-func TestUnionImportsStopAtNamedBranches(t *testing.T) {
+-	root := codegen.RunDSL(t, func() {
+-		model := dsl.Type("Model", func() {
+-			dsl.Meta("struct:pkg:path", "models")
+-			dsl.Attribute("token", dsl.String, func() {
+-				dsl.Meta("struct:field:type", "wire.Token", "example.com/wire", "wire")
+-			})
+-		})
+-		payload := dsl.Type("Payload", func() {
+-			dsl.OneOf("value", func() {
+-				dsl.Attribute("model", model)
+-			})
+-		})
+-		dsl.Service("Values", func() {
+-			dsl.Method("Read", func() {
+-				dsl.Payload(payload)
+-			})
+-		})
+-	})
+-	generation := mustTestGeneration(t, "generated.local/gen", []eval.Root{root})
+-	plan, err := NewPlan(root, generation, expr.NewExampleGenerator(root.API.RandomizerFactory))
+-	require.NoError(t, err)
+-	require.Len(t, plan.facts.services[0].unions, 1)
+-	paths := plan.facts.services[0].unions[0].imports.Paths()
+-	require.Contains(t, paths, "generated.local/gen/models")
+-	require.NotContains(t, paths, "example.com/wire")
+-}
+ 
+ // TestFixedTemplateAliasesBeatGeneratedPackages verifies that generated
+ // service paths cannot take qualifiers required by static Apikit and log calls.
+@@ -416,48 +359,3 @@ func TestViewValidationReservesOnlyUsedImports(t *testing.T) {
+ 	require.NotContains(t, code, `"unicode/utf8"`)
+ }
+ 
+-// TestUnionFieldReferencesUseFixedImportAliases verifies that the qualifier in
+-// a union field type and the import declaration come from the same frozen path
+-// binding when encoding/json already owns the preferred json name.
+-func TestUnionFieldReferencesUseFixedImportAliases(t *testing.T) {
+-	generation := mustTestGeneration(t, "generated.local/gen", nil)
+-	generatedPackage := mustClaimTestPackage(t, generation, "generated.local/gen/values")
+-	require.NoError(t, generatedPackage.RequireImport(codegen.SimpleImport("encoding/json")))
+-	require.NoError(t, generatedPackage.DeclareImport(codegen.NewImport("values", "generated.local/gen/values")))
+-	require.NoError(t, generatedPackage.DeclareImport(codegen.NewImport("json", "example.com/custom/json")))
+-	branch := &expr.AttributeExpr{Type: expr.String, Meta: expr.MetaExpr{
+-		"struct:field:type": {"json.Value", "example.com/custom/json", "json"},
+-	}}
+-	union := &expr.Union{
+-		TypeName: "Choice",
+-		Values: []*expr.NamedAttributeExpr{{
+-			Name:      "external",
+-			Attribute: branch,
+-		}},
+-	}
+-	unionAttribute := &expr.AttributeExpr{Type: union}
+-	declaration, err := generatedPackage.DeclareUnion(unionAttribute)
+-	require.NoError(t, err)
+-	facts := &unionFacts{
+-		attribute:   unionAttribute,
+-		union:       union,
+-		identity:    codegen.NewUnionDeclarationID(unionAttribute),
+-		typeKey:     union.GetTypeKey(),
+-		valueKey:    union.GetValueKey(),
+-		declaration: declaration,
+-	}
+-	require.NoError(t, planUnionRenderFacts(facts, nil, generatedPackage))
+-	require.NoError(t, generation.Freeze())
+-	aliases := &importAliases{generation: generation}
+-	data := buildRetainedUnionTypeData(facts, aliases)
+-	require.Equal(t, "json2.Value", data.Fields[0].FieldType)
+-
+-	header := codegen.Header("Union types", "values", []*codegen.ImportSpec{
+-		codegen.SimpleImport("encoding/json"),
+-		generatedPackage.Import("example.com/custom/json"),
+-	})
+-	var rendered strings.Builder
+-	require.NoError(t, header.Write(&rendered))
+-	require.Contains(t, rendered.String(), `"encoding/json"`)
+-	require.Contains(t, rendered.String(), `json2 "example.com/custom/json"`)
+-}
+diff --git a/codegen/service/service_data_union_nilability_test.go b/codegen/service/service_data_union_nilability_test.go
+--- a/codegen/service/service_data_union_nilability_test.go
++++ b/codegen/service/service_data_union_nilability_test.go
+@@ -3,61 +3,15 @@
+ package service
+ 
+ import (
+-	"testing"
++	_ "testing"
+ 
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
++	_ "github.com/stretchr/testify/assert"
++	_ "github.com/stretchr/testify/require"
+ 
+-	"example.internal/apikit/v3/codegen"
++	_ "example.internal/apikit/v3/codegen"
+ 	"example.internal/apikit/v3/expr"
+ )
+ 
+-func TestBuildUnionTypeDataMarksNilableBranches(t *testing.T) {
+-	union := unionWithBranchTypes()
+-	unionAttribute := &expr.AttributeExpr{Type: union}
+-	generation := mustTestGeneration(t, "gen", nil)
+-	pkg := mustClaimTestPackage(t, generation, "gen/service")
+-	declaration, err := pkg.DeclareUnion(unionAttribute)
+-	require.NoError(t, err)
+-	facts := &unionFacts{
+-		attribute:   unionAttribute,
+-		union:       union,
+-		identity:    codegen.NewUnionDeclarationID(unionAttribute),
+-		typeKey:     union.GetTypeKey(),
+-		valueKey:    union.GetValueKey(),
+-		location:    &codegen.Location{RelImportPath: "gen/service"},
+-		declaration: declaration,
+-	}
+-	require.NoError(t, planUnionRenderFacts(facts, nil, pkg))
+-	require.NoError(t, generation.Freeze())
+-	data := buildRetainedUnionTypeData(facts, &importAliases{generation: generation})
+-
+-	nilable := make(map[string]bool, len(data.Fields))
+-	for _, field := range data.Fields {
+-		nilable[field.Name] = field.Nilable
+-	}
+-	assert.Equal(t, map[string]bool{
+-		"array":  true,
+-		"bool":   false,
+-		"bytes":  true,
+-		"map":    true,
+-		"object": true,
+-		"string": false,
+-	}, nilable)
+-
+-	storageNames := make(map[string]string, len(data.Fields))
+-	for _, field := range data.Fields {
+-		storageNames[field.Name] = field.StorageName
+-	}
+-	assert.Equal(t, map[string]string{
+-		"array":  "array",
+-		"bool":   "bool_",
+-		"bytes":  "bytes",
+-		"map":    "map_",
+-		"object": "object",
+-		"string": "string_",
+-	}, storageNames)
+-}
+ 
+ func unionWithBranchTypes() *expr.Union {
+ 	return &expr.Union{
+diff --git a/codegen/service/service_data_union_order_test.go b/codegen/service/service_data_union_order_test.go
+--- a/codegen/service/service_data_union_order_test.go
++++ b/codegen/service/service_data_union_order_test.go
+@@ -7,19 +7,12 @@ import (
+ 	"strings"
+ 	"testing"
+ 
+-	"github.com/stretchr/testify/require"
++	_ "github.com/stretchr/testify/require"
+ 
+ 	"example.internal/apikit/v3/codegen"
+ 	"example.internal/apikit/v3/dsl"
+ )
+ 
+-func TestServicePlanUnionNamesAreIndependentOfObjectOrder(t *testing.T) {
+-	forward := retainedUnionNames(t, false)
+-	reverse := retainedUnionNames(t, true)
+-
+-	require.Len(t, forward, 2)
+-	require.Equal(t, forward, reverse)
+-}
+ 
+ // retainedUnionNames plans two same-base unions in the requested field order
+ // and indexes their frozen names by their ordered branch contract.
+diff --git a/codegen/service/service_plan_compile_contract_test.go b/codegen/service/service_plan_compile_contract_test.go
+--- a/codegen/service/service_plan_compile_contract_test.go
++++ b/codegen/service/service_plan_compile_contract_test.go
+@@ -21,39 +21,6 @@ import (
+ 	"example.internal/apikit/v3/expr"
+ )
+ 
+-// TestServicePackageNameUsesClaimedImportPath verifies service package names
+-// remain lowercase after the final generated import path is claimed.
+-func TestServicePackageNameUsesClaimedImportPath(t *testing.T) {
+-	root := codegen.RunDSL(t, func() {
+-		dsl.Service("api_key_service", func() {
+-			dsl.Method("Read", func() {
+-				dsl.Payload(func() {
+-					dsl.OneOf("credential", func() {
+-						dsl.Attribute("api_key", dsl.String)
+-						dsl.Attribute("token", dsl.String)
+-					})
+-					dsl.Required("credential")
+-				})
+-			})
+-		})
+-	})
+-	plan := retainedServicePlanForPackage(t, root)
+-	require.Equal(t, "apikeyservice", plan.Services().Get("api_key_service").PkgName)
+-
+-	files, err := Files(plan)
+-	require.NoError(t, err)
+-	directory := t.TempDir()
+-	for _, file := range files {
+-		_, err := file.Render(directory)
+-		require.NoError(t, err)
+-	}
+-	source, err := os.ReadFile(filepath.Join(directory, codegen.Gendir, "api_key_service", "service.go"))
+-	require.NoError(t, err)
+-	require.Contains(t, string(source), "package apikeyservice")
+-	unionSource, err := os.ReadFile(filepath.Join(directory, codegen.Gendir, "api_key_service", "unions.go"))
+-	require.NoError(t, err)
+-	require.Contains(t, string(unionSource), "package apikeyservice")
+-}
+ 
+ // TestRepeatedInlineMethodErrorsCompile verifies equivalent method errors use
+ // one generated public error declaration.
+diff --git a/codegen/service/service_plan_render_contract_test.go b/codegen/service/service_plan_render_contract_test.go
+--- a/codegen/service/service_plan_render_contract_test.go
++++ b/codegen/service/service_plan_render_contract_test.go
+@@ -58,26 +58,6 @@ func TestServicePlansRenderByteIdenticallyAcrossRootAndServiceOrder(t *testing.T
+ 	compileGeneratedServiceFiles(t, compileFiles)
+ }
+ 
+-// TestServicePlanRenderingIsPure catches renderers that rebuild analysis,
+-// replace retained declaration records, or append sections on a second read.
+-func TestServicePlanRenderingIsPure(t *testing.T) {
+-	plans := orderedServicePlans(t, false)
+-	before := retainedServiceNamePointers(plans)
+-	firstFiles, err := Files(plans...)
+-	require.NoError(t, err)
+-	first := renderedServiceFiles(t, firstFiles)
+-
+-	secondFiles, err := Files(plans...)
+-	require.NoError(t, err)
+-	second := renderedServiceFiles(t, secondFiles)
+-	after := retainedServiceNamePointers(plans)
+-
+-	require.Equal(t, first, second)
+-	require.Len(t, after, len(before))
+-	for id, declaration := range before {
+-		require.Same(t, declaration, after[id], "service symbol changed: %+v", id)
+-	}
+-}
+ 
+ // requireRenderedServiceFile reports a missing shared-package contribution
+ // without printing the complete generated output map.
+diff --git a/codegen/service/service_test.go b/codegen/service/service_test.go
+--- a/codegen/service/service_test.go
++++ b/codegen/service/service_test.go
+@@ -20,58 +20,6 @@ import (
+ 	"example.internal/apikit/v3/expr"
+ )
+ 
+-func TestServicesDataUsesFrozenPackageDeclarations(t *testing.T) {
+-	var shared expr.UserType
+-	root := codegen.RunDSL(t, func() {
+-		shared = dsl.Type("Shared", func() {
+-			dsl.Meta("struct:pkg:path", "types")
+-			dsl.OneOf("Value", func() {
+-				dsl.Attribute("text", dsl.String)
+-			})
+-		})
+-		first := dsl.Type("FirstPayload", func() {
+-			dsl.Attribute("shared", shared)
+-		})
+-		second := dsl.Type("SecondPayload", func() {
+-			dsl.Attribute("shared", shared)
+-		})
+-		dsl.Service("First", func() {
+-			dsl.Method("Read", func() {
+-				dsl.Payload(first)
+-			})
+-		})
+-		dsl.Service("Second", func() {
+-			dsl.Method("Read", func() {
+-				dsl.Payload(second)
+-			})
+-		})
+-	})
+-
+-	generation := mustTestGeneration(t, "goa.design/goa/example", []eval.Root{root})
+-	plan, err := NewPlan(root, generation, expr.NewExampleGenerator(root.API.RandomizerFactory))
+-	require.NoError(t, err)
+-	require.Panics(t, func() { plan.Services() })
+-	require.NoError(t, generation.Freeze())
+-	require.NoError(t, plan.Link())
+-	services := plan.Services()
+-
+-	first := services.Get("First")
+-	second := services.Get("Second")
+-	firstShared := findUserTypeData(first.userTypes, shared)
+-	secondShared := findUserTypeData(second.userTypes, shared)
+-	require.NotNil(t, firstShared)
+-	require.NotNil(t, secondShared)
+-	require.Same(t, firstShared.Declaration, secondShared.Declaration)
+-	require.Len(t, first.unions, 1)
+-	require.Len(t, second.unions, 1)
+-	require.Same(t, first.unions[0].TypeDeclaration, second.unions[0].TypeDeclaration)
+-	require.Same(t, first.unions[0].KindDeclaration, second.unions[0].KindDeclaration)
+-	require.Equal(t, "Value", first.unions[0].Name)
+-	require.Equal(t, "ValueKind", first.unions[0].KindName)
+-
+-	_, err = generation.Package("goa.design/goa/example/types").DeclareUserType(shared)
+-	require.ErrorContains(t, err, "frozen")
+-}
+ 
+ // TestPlanOwnsNormalizedMethodNames verifies that semantic wrappers receive
+ // names from the service package catalog and collide only with local exact
+@@ -249,61 +197,7 @@ func TestServicesDataUsesRebuiltViewDeclarations(t *testing.T) {
+ 	require.Equal(t, "Value", plannedViewed.Name())
+ }
+ 
+-func TestFilesEmitsPackageDeclarationsOnce(t *testing.T) {
+-	root := codegen.RunDSL(t, testdata.PkgPathUnionNameScopeDSL)
+-	files := mustServiceFiles(t, mustServicePlan(t, root))
+-
+-	require.Equal(t, 1, countFiles(files, filepath.Join("gen", "types", "first_value.go")))
+-	require.Equal(t, 1, countFiles(files, filepath.Join("gen", "types", "second_value.go")))
+-	require.Equal(t, 1, countFiles(files, filepath.Join("gen", "types", "third_value.go")))
+-	require.Equal(t, 1, countFiles(files, filepath.Join("gen", "types", "unions.go")))
+-
+-	unionFile := findFile(files, filepath.Join("gen", "types", "unions.go"))
+-	require.NotNil(t, unionFile)
+-	code := renderSections(t, unionFile.SectionTemplates)
+-	for _, name := range []string{"FirstValueChoice", "SecondValueChoice", "ThirdValueChoice"} {
+-		require.Equal(t, 1, strings.Count(code, "type "+name+" struct {"), code)
+-		require.Equal(t, 1, strings.Count(code, "type "+name+"Kind string"), code)
+-	}
+-}
+ 
+-func TestFilesEmitsDifferentExplicitlyNamedUnions(t *testing.T) {
+-	root := codegen.RunDSL(t, func() {
+-		first := dsl.Type("First", func() {
+-			dsl.Meta("struct:pkg:path", "types")
+-			dsl.OneOf("Value", func() {
+-				dsl.TypeName("FirstChoice")
+-				dsl.Attribute("text", dsl.String)
+-			})
+-		})
+-		second := dsl.Type("Second", func() {
+-			dsl.Meta("struct:pkg:path", "types")
+-			dsl.OneOf("Value", func() {
+-				dsl.TypeName("SecondChoice")
+-				dsl.Attribute("number", dsl.Int)
+-			})
+-		})
+-		dsl.Service("FirstService", func() {
+-			dsl.Method("Read", func() {
+-				dsl.Payload(first)
+-			})
+-		})
+-		dsl.Service("SecondService", func() {
+-			dsl.Method("Read", func() {
+-				dsl.Payload(second)
+-			})
+-		})
+-	})
+-
+-	files := mustServiceFiles(t, mustServicePlan(t, root))
+-	unionFile := findFile(files, filepath.Join("gen", "types", "unions.go"))
+-	require.NotNil(t, unionFile)
+-	code := renderSections(t, unionFile.SectionTemplates)
+-	require.Equal(t, 1, strings.Count(code, "type FirstChoice struct {"), code)
+-	require.Equal(t, 1, strings.Count(code, "type SecondChoice struct {"), code)
+-	require.Equal(t, 1, strings.Count(code, "type FirstChoiceKind string"), code)
+-	require.Equal(t, 1, strings.Count(code, "type SecondChoiceKind string"), code)
+-}
+ 
+ func TestNewPlanRejectsUnionBranchesWithTheSameGoName(t *testing.T) {
+ 	root := codegen.RunDSL(t, func() {
+@@ -327,68 +221,6 @@ func TestNewPlanRejectsUnionBranchesWithTheSameGoName(t *testing.T) {
+ 	require.NotContains(t, err.Error(), "TypeName")
+ }
+ 
+-func TestFilesEmitsSharedPackagesOnceAcrossRoots(t *testing.T) {
+-	var firstType expr.UserType
+-	firstRoot := codegen.RunDSL(t, func() {
+-		firstType = dsl.Type("First", func() {
+-			dsl.Meta("struct:pkg:path", "types")
+-			dsl.OneOf("Value", func() {
+-				dsl.TypeName("FirstChoice")
+-				dsl.Attribute("text", dsl.String)
+-			})
+-		})
+-		dsl.Service("FirstService", func() {
+-			dsl.Method("Read", func() {
+-				dsl.Payload(firstType)
+-			})
+-		})
+-	})
+-	var secondType expr.UserType
+-	secondRoot := codegen.RunDSL(t, func() {
+-		secondType = dsl.Type("Second", func() {
+-			dsl.Meta("struct:pkg:path", "types")
+-			dsl.OneOf("Value", func() {
+-				dsl.TypeName("SecondChoice")
+-				dsl.Attribute("text", dsl.String)
+-			})
+-		})
+-		dsl.Service("SecondService", func() {
+-			dsl.Method("Read", func() {
+-				dsl.Payload(secondType)
+-			})
+-		})
+-	})
+-
+-	generation := mustTestGeneration(t, "goa.design/goa/example", []eval.Root{firstRoot, secondRoot})
+-	plans, err := NewPlans(
+-		generation,
+-		PlanInput{Root: firstRoot, Examples: expr.NewExampleGenerator(firstRoot.API.RandomizerFactory)},
+-		PlanInput{Root: secondRoot, Examples: expr.NewExampleGenerator(secondRoot.API.RandomizerFactory)},
+-	)
+-	require.NoError(t, err)
+-	firstPlan, secondPlan := plans[0], plans[1]
+-	firstUnion := expr.AsObject(firstType).Attribute("Value")
+-	secondUnion := expr.AsObject(secondType).Attribute("Value")
+-	generatedPackage := mustClaimTestPackage(t, generation, "goa.design/goa/example/types")
+-	firstBranch, err := generatedPackage.UnionBranchType(firstUnion, "text")
+-	require.NoError(t, err)
+-	secondBranch, err := generatedPackage.UnionBranchType(secondUnion, "text")
+-	require.NoError(t, err)
+-	require.NotSame(t, firstBranch, secondBranch)
+-
+-	require.NoError(t, generation.Freeze())
+-	require.NoError(t, firstPlan.Link())
+-	require.NoError(t, secondPlan.Link())
+-	files := mustServiceFiles(t, firstPlan, secondPlan)
+-
+-	require.Equal(t, 1, countFiles(files, filepath.Join("gen", "types", "first.go")))
+-	require.Equal(t, 1, countFiles(files, filepath.Join("gen", "types", "second.go")))
+-	require.Equal(t, 1, countFiles(files, filepath.Join("gen", "types", "first_choice_text.go")))
+-	require.Equal(t, 1, countFiles(files, filepath.Join("gen", "types", "second_choice_text.go")))
+-	require.Equal(t, 1, countFiles(files, filepath.Join("gen", "types", "unions.go")))
+-	require.Equal(t, 1, countFiles(files, filepath.Join("gen", "first_service", "service.go")))
+-	require.Equal(t, 1, countFiles(files, filepath.Join("gen", "second_service", "service.go")))
+-}
+ 
+ func TestFilesEmitCanonicalSharedDeclarationAcrossRoots(t *testing.T) {
+ 	forwardPlans := sharedDeclarationPlans(t, false)
+@@ -515,20 +347,6 @@ func TestNewPlansAcceptDistinctTransportValidationForSharedDeclaration(t *testin
+ 	require.Equal(t, 1, countFiles(mustServiceFiles(t, plans...), filepath.Join("gen", "types", "shared.go")))
+ }
+ 
+-// TestNewPlansRejectSharedUnionBranchLayoutConflicts proves one canonical
+-// union declaration cannot select between differing retained branch layouts.
+-func TestNewPlansRejectSharedUnionBranchLayoutConflicts(t *testing.T) {
+-	firstRoot, secondRoot := copiedSharedUnionRoots(t, func(union *expr.Union) {
+-		union.Values[0].Attribute.Description = "a conflicting branch description"
+-	})
+-	generation := mustTestGeneration(t, "goa.design/goa/example", []eval.Root{firstRoot, secondRoot})
+-	_, err := NewPlans(
+-		generation,
+-		PlanInput{Root: firstRoot, Examples: expr.NewExampleGenerator(firstRoot.API.RandomizerFactory)},
+-		PlanInput{Root: secondRoot, Examples: expr.NewExampleGenerator(secondRoot.API.RandomizerFactory)},
+-	)
+-	require.ErrorContains(t, err, "conflicting generated union emission")
+-}
+ 
+ func TestNewPlanRejectsPartialMultiRootPlanning(t *testing.T) {
+ 	firstRoot, secondRoot := sharedDeclarationRoots(t)
+@@ -751,53 +569,6 @@ func copiedSharedUnionRoots(t *testing.T, mutate func(*expr.Union)) (*expr.RootE
+ 	return firstRoot, secondRoot
+ }
+ 
+-func TestGeneratedUnionBranchCollisionDoesNotCanonicalizeToRootType(t *testing.T) {
+-	var (
+-		exact     expr.UserType
+-		container expr.UserType
+-	)
+-	root := codegen.RunDSL(t, func() {
+-		exact = dsl.Type("Value-Text", dsl.String, func() {
+-			dsl.Meta("struct:pkg:path", "types")
+-			dsl.Meta("type:generate:force")
+-		})
+-		container = dsl.Type("Container", func() {
+-			dsl.Meta("struct:pkg:path", "types")
+-			dsl.OneOf("Value", func() {
+-				dsl.Attribute("text", dsl.String)
+-			})
+-		})
+-		dsl.Service("Collision", func() {
+-			dsl.Method("Read", func() {
+-				dsl.Payload(container)
+-			})
+-		})
+-	})
+-
+-	generation := mustTestGeneration(t, "goa.design/goa/example", []eval.Root{root})
+-	plan, err := NewPlan(root, generation, expr.NewExampleGenerator(root.API.RandomizerFactory))
+-	require.NoError(t, err)
+-	union := expr.AsObject(container).Attribute("Value")
+-	generatedPackage := mustClaimTestPackage(t, generation, "goa.design/goa/example/types")
+-	exactDeclaration, err := generatedPackage.UserType(exact)
+-	require.NoError(t, err)
+-	branchDeclaration, err := generatedPackage.UnionBranchType(union, "text")
+-	require.NoError(t, err)
+-	require.NotSame(t, exactDeclaration, branchDeclaration)
+-
+-	require.NoError(t, generation.Freeze())
+-	require.Equal(t, "ValueText", exactDeclaration.Name())
+-	require.Equal(t, "ValueBranchText", branchDeclaration.Name())
+-	require.NoError(t, plan.Link())
+-	typeFile := findFile(
+-		mustServiceFiles(t, plan),
+-		filepath.Join("gen", "types", "value_text.go"),
+-	)
+-	require.NotNil(t, typeFile)
+-	code := renderSections(t, typeFile.SectionTemplates)
+-	require.Contains(t, code, "type ValueText string")
+-	require.Contains(t, code, "type ValueBranchText string")
+-}
+ 
+ // TestForcedRelocatedTypesUseTheirDeclaringPackageForNestedReferences verifies
+ // that a generated types package can render one forced type nested in another
+@@ -1007,49 +778,7 @@ func TestRelocatedTypeDescriptions(t *testing.T) {
+ 	}
+ }
+ 
+-func TestStructPkgPath_UnionImportsJSON(t *testing.T) {
+-	root := codegen.RunDSL(t, testdata.PkgPathUnionDSL)
+-	plan := mustServicePlan(t, root)
+-	require.Len(t, root.Services, 1)
+-
+-	files := mustServiceFiles(t, plan)
+-	require.GreaterOrEqual(t, len(files), 2, "expected at least service.go + one struct:pkg:path file")
+-
+-	unionFile := findFile(files, filepath.Join("gen", "types", "unions.go"))
+-	require.NotNil(t, unionFile, "expected generated union file in struct:pkg:path package")
+ 
+-	buf := new(bytes.Buffer)
+-	for _, s := range unionFile.SectionTemplates {
+-		require.NoError(t, s.Write(buf))
+-	}
+-	code := buf.String()
+-	require.Contains(t, code, "\"bytes\"", "expected bytes import in generated file:\n%s", code)
+-	require.Contains(t, code, "\"encoding/json\"", "expected encoding/json import in generated file:\n%s", code)
+-}
+-
+-func TestStructPkgPath_UnionNamesRemainExactAcrossServices(t *testing.T) {
+-	root := codegen.RunDSL(t, testdata.PkgPathUnionNameScopeDSL)
+-	var generated strings.Builder
+-	files := mustServiceFiles(t, mustServicePlan(t, root))
+-	for _, file := range files {
+-		if !strings.Contains(file.Path, filepath.Join("gen", "types")) {
+-			continue
+-		}
+-		for _, section := range file.SectionTemplates {
+-			require.NoError(t, section.Write(&generated))
+-		}
+-	}
+-
+-	code := generated.String()
+-	for _, name := range []string{"FirstValueChoice", "SecondValueChoice", "ThirdValueChoice"} {
+-		require.Equal(t, 1, strings.Count(code, "type "+name+" struct {"), code)
+-		require.Equal(t, 1, strings.Count(code, "type "+name+"Kind string"), code)
+-	}
+-	firstUsesValue := unionFieldType(code, "FirstValue")
+-	secondUsesValue := unionFieldType(code, "SecondValue")
+-	thirdUsesValue := unionFieldType(code, "ThirdValue")
+-	require.Equal(t, []string{"FirstValueChoice", "SecondValueChoice", "ThirdValueChoice"}, []string{firstUsesValue, secondUsesValue, thirdUsesValue})
+-}
+ 
+ // unionFieldType returns the generated type of the Value field in the named
+ // struct.
+@@ -1161,74 +890,4 @@ func renderServiceGolden(t *testing.T, files []*codegen.File, serviceFile *codeg
+ 	return string(formatted)
+ }
+ 
+-func TestStructPkgPath_UnionJSONFieldBranchesGenerateAliases(t *testing.T) {
+-	root := codegen.RunDSL(t, testdata.PkgPathUnionJSONFieldDSL)
+-	plan := mustServicePlan(t, root)
+-	require.Len(t, root.Services, 1)
+ 
+-	files := mustServiceFiles(t, plan)
+-	require.GreaterOrEqual(t, len(files), 2, "expected at least service.go + one struct:pkg:path file")
+-
+-	unionFile := findFile(files, filepath.Join("gen", "types", "unions.go"))
+-	require.NotNil(t, unionFile, "expected package-owned union file")
+-
+-	buf := new(bytes.Buffer)
+-	for _, s := range unionFile.SectionTemplates {
+-		require.NoError(t, s.Write(buf))
+-	}
+-	code := buf.String()
+-	require.Contains(t, code, "a ValuesBranchA", "expected union branch A to use generated alias type:\n%s", code)
+-	require.Contains(t, code, "b ValuesBranchB", "expected union branch B to use generated alias type:\n%s", code)
+-
+-	var hasValuesAFile, hasValuesBFile bool
+-	for _, f := range files {
+-		if strings.HasSuffix(f.Path, filepath.Join("gen", "types", "values_a.go")) {
+-			hasValuesAFile = true
+-		}
+-		if strings.HasSuffix(f.Path, filepath.Join("gen", "types", "values_b.go")) {
+-			hasValuesBFile = true
+-		}
+-	}
+-	require.True(t, hasValuesAFile, "expected generated alias file in struct:pkg:path package: gen/types/values_a.go")
+-	require.True(t, hasValuesBFile, "expected generated alias file in struct:pkg:path package: gen/types/values_b.go")
+-}
+-
+-func TestStructPkgPath_ExtendedUnionGeneratedInEachOwningPackage(t *testing.T) {
+-	root := codegen.RunDSL(t, testdata.PkgPathExtendedUnionDSL)
+-	plan := mustServicePlan(t, root)
+-	require.Len(t, root.Services, 1)
+-
+-	files := mustServiceFiles(t, plan)
+-	require.GreaterOrEqual(t, len(files), 2)
+-
+-	var serviceFile, localUnionFile, sharedUnionFile *codegen.File
+-	for _, f := range files {
+-		switch {
+-		case strings.HasSuffix(f.Path, filepath.Join("gen", "pkg_path_extended_union", "service.go")):
+-			serviceFile = f
+-		case strings.HasSuffix(f.Path, filepath.Join("gen", "pkg_path_extended_union", "unions.go")):
+-			localUnionFile = f
+-		case strings.HasSuffix(f.Path, filepath.Join("gen", "types", "unions.go")):
+-			sharedUnionFile = f
+-		}
+-	}
+-	require.NotNil(t, serviceFile)
+-	require.NotNil(t, localUnionFile)
+-	require.NotNil(t, sharedUnionFile)
+-
+-	render := func(file *codegen.File) string {
+-		buf := new(bytes.Buffer)
+-		for _, section := range file.SectionTemplates {
+-			require.NoError(t, section.Write(buf))
+-		}
+-		code, err := format.Source(buf.Bytes())
+-		require.NoError(t, err, buf.String())
+-		return string(code)
+-	}
+-	serviceCode := render(serviceFile)
+-	localUnionCode := render(localUnionFile)
+-	sharedUnionCode := render(sharedUnionFile)
+-	require.Contains(t, serviceCode, "Scope Scope")
+-	require.Contains(t, localUnionCode, "type Scope struct")
+-	require.Contains(t, sharedUnionCode, "type Scope struct")
+-}
+diff --git a/codegen/union.go b/codegen/union.go
+--- a/codegen/union.go
++++ b/codegen/union.go
+@@ -3,7 +3,7 @@
+ package codegen
+ 
+ import (
+-	"strconv"
++	_ "strconv"
+ 	"strings"
+ 
+ 	"example.internal/apikit/v3/expr"
+@@ -27,14 +27,7 @@ type (
+ // Transport copies keep the authored attribute, so they find the same
+ // declaration when their emitted definitions also match.
+ func NewUnionDeclarationID(attribute *expr.AttributeExpr) UnionDeclarationID {
+-	union, ok := attribute.Type.(*expr.Union)
+-	if !ok {
+-		panic("union declaration identity requires a OneOf attribute")
+-	}
+-	return UnionDeclarationID{
+-		authored:   attribute.AuthoredAttribute(),
+-		definition: NewUnionTypeID(union),
+-	}
++	panic("excised: NewUnionDeclarationID")
+ }
+ 
+ // NewUnionTypeID returns a repeatable key for union's generated Go and JSON
+@@ -42,107 +35,27 @@ func NewUnionDeclarationID(attribute *expr.AttributeExpr) UnionDeclarationID {
+ // detail that changes a generated Go branch type: package location, field type
+ // metadata, and whether the value may be nil.
+ func NewUnionTypeID(union *expr.Union) UnionTypeID {
+-	var key strings.Builder
+-	writeUnionTypeID(
+-		&key,
+-		union,
+-		make(map[*expr.Object]int),
+-		make(map[*expr.Union]int),
+-		make(map[expr.UserType]int),
+-	)
+-	return UnionTypeID(key.String())
++	panic("excised: NewUnionTypeID")
+ }
+ 
+ // writeUnionTypeID appends one union definition using length-prefixed values
+ // so different inputs cannot produce an ambiguous concatenation.
+ func writeUnionTypeID(key *strings.Builder, union *expr.Union, objects map[*expr.Object]int, unions map[*expr.Union]int, userTypes map[expr.UserType]int) {
+-	if index, ok := unions[union]; ok {
+-		writeUnionIDPart(key, "union-ref")
+-		writeUnionIDPart(key, strconv.Itoa(index))
+-		return
+-	}
+-	unions[union] = len(unions)
+-	defer delete(unions, union)
+-	writeUnionIDPart(key, "union")
+-	writeUnionIDPart(key, union.TypeName)
+-	writeUnionIDPart(key, union.GetTypeKey())
+-	writeUnionIDPart(key, union.GetValueKey())
+-	for _, value := range union.Values {
+-		writeUnionIDPart(key, value.Name)
+-		writeUnionAttributeID(key, value.Attribute, objects, unions, userTypes)
+-	}
++	panic("excised: writeUnionTypeID")
+ }
+ 
+ // writeUnionAttributeID appends every attribute detail that changes generated
+ // Go code.
+ func writeUnionAttributeID(key *strings.Builder, att *expr.AttributeExpr, objects map[*expr.Object]int, unions map[*expr.Union]int, userTypes map[expr.UserType]int) {
+-	writeUnionIDPart(key, strconv.FormatBool(IsNilable(att.Type)))
+-	if metaType, ok := att.Meta["struct:field:type"]; ok {
+-		writeUnionIDPart(key, "meta-type")
+-		for _, value := range metaType {
+-			writeUnionIDPart(key, value)
+-		}
+-	}
+-	switch actual := att.Type.(type) {
+-	case expr.Primitive:
+-		writeUnionIDPart(key, "primitive")
+-		writeUnionIDPart(key, GoNativeTypeName(actual))
+-	case expr.UserType:
+-		writeUnionIDPart(key, "user")
+-		writeUnionIDPart(key, Goify(actual.Name(), true))
+-		if loc := UserTypeLocation(actual); loc != nil {
+-			writeUnionIDPart(key, loc.RelImportPath)
+-		} else {
+-			writeUnionIDPart(key, "")
+-		}
+-		origin := actual.Origin()
+-		if index, ok := userTypes[origin]; ok {
+-			writeUnionIDPart(key, "user-ref")
+-			writeUnionIDPart(key, strconv.Itoa(index))
+-			return
+-		}
+-		userTypes[origin] = len(userTypes)
+-		defer delete(userTypes, origin)
+-		writeUnionAttributeID(key, actual.Attribute(), objects, unions, userTypes)
+-	case *expr.Array:
+-		writeUnionIDPart(key, "array")
+-		writeUnionAttributeID(key, actual.ElemType, objects, unions, userTypes)
+-	case *expr.Map:
+-		writeUnionIDPart(key, "map")
+-		writeUnionAttributeID(key, actual.KeyType, objects, unions, userTypes)
+-		writeUnionAttributeID(key, actual.ElemType, objects, unions, userTypes)
+-	case *expr.Object:
+-		writeUnionObjectID(key, att, actual, objects, unions, userTypes)
+-	case *expr.Union:
+-		writeUnionTypeID(key, actual, objects, unions, userTypes)
+-	case expr.CompositeExpr:
+-		writeUnionAttributeID(key, actual.Attribute(), objects, unions, userTypes)
+-	default:
+-		panic("unknown union branch data type")
+-	}
++	panic("excised: writeUnionAttributeID")
+ }
+ 
+ // writeUnionObjectID appends the inline Go struct emitted for an object.
+ func writeUnionObjectID(key *strings.Builder, parent *expr.AttributeExpr, object *expr.Object, objects map[*expr.Object]int, unions map[*expr.Union]int, userTypes map[expr.UserType]int) {
+-	if index, ok := objects[object]; ok {
+-		writeUnionIDPart(key, "object-ref")
+-		writeUnionIDPart(key, strconv.Itoa(index))
+-		return
+-	}
+-	objects[object] = len(objects)
+-	defer delete(objects, object)
+-	writeUnionIDPart(key, "object")
+-	for _, field := range *object {
+-		writeUnionIDPart(key, GoifyAtt(field.Attribute, field.Name, true))
+-		writeUnionIDPart(key, AttributeTagsWithName(parent, field.Name, field.Attribute))
+-		writeUnionIDPart(key, strconv.FormatBool(goFieldIsPointer(parent, field.Name, false, true)))
+-		writeUnionAttributeID(key, field.Attribute, objects, unions, userTypes)
+-	}
++	panic("excised: writeUnionObjectID")
+ }
+ 
+ // writeUnionIDPart appends one unambiguous string component to key.
+ func writeUnionIDPart(key *strings.Builder, value string) {
+-	key.WriteString(strconv.Itoa(len(value)))
+-	key.WriteByte(':')
+-	key.WriteString(value)
++	panic("excised: writeUnionIDPart")
+ }
+diff --git a/codegen/validation_plan_test.go b/codegen/validation_plan_test.go
+--- a/codegen/validation_plan_test.go
++++ b/codegen/validation_plan_test.go
+@@ -475,101 +475,6 @@ func TestNeedsValidationChecksEverySiblingCopy(t *testing.T) {
+ 	}
+ }
+ 
+-// TestValidationPlanPreservesContainersUnionsAndValidatorBindings verifies all
+-// recursive service/view shapes retain exact nested validator declarations.
+-func TestValidationPlanPreservesContainersUnionsAndValidatorBindings(t *testing.T) {
+-	const owner = "generated.local/gen/service"
+-	minLength := 1
+-	minimum := 4.0
+-	child := goTypeTestUserType("Child", &expr.Object{
+-		{Name: "name", Attribute: &expr.AttributeExpr{
+-			Type:       expr.String,
+-			Validation: &expr.ValidationExpr{MinLength: &minLength},
+-		}},
+-	})
+-	union := &expr.Union{
+-		TypeName: "Choice",
+-		Values: []*expr.NamedAttributeExpr{
+-			{Name: "label", Attribute: &expr.AttributeExpr{
+-				Type:       expr.String,
+-				Validation: &expr.ValidationExpr{Pattern: ".+"},
+-			}},
+-			{Name: "child", Attribute: &expr.AttributeExpr{Type: child}},
+-		},
+-	}
+-	mapKey := &expr.AttributeExpr{
+-		Type:       expr.String,
+-		Validation: &expr.ValidationExpr{MinLength: &minLength},
+-	}
+-	mapValue := &expr.AttributeExpr{
+-		Type:       expr.Int,
+-		Validation: &expr.ValidationExpr{Minimum: &minimum},
+-	}
+-	attribute := &expr.AttributeExpr{Type: &expr.Object{
+-		{Name: "children", Attribute: &expr.AttributeExpr{Type: &expr.Array{
+-			ElemType: &expr.AttributeExpr{Type: child},
+-		}}},
+-		{Name: "labels", Attribute: &expr.AttributeExpr{Type: &expr.Map{
+-			KeyType:  mapKey,
+-			ElemType: mapValue,
+-		}}},
+-		{Name: "choice", Attribute: &expr.AttributeExpr{Type: union}},
+-	}}
+-	policy := GoLayoutPolicy{Pointer: true, UseDefault: true, SumType: true}
+-	legacyContext := NewAttributeContext(
+-		policy.Pointer,
+-		policy.IgnoreRequired,
+-		policy.UseDefault,
+-		"",
+-		NewNameScope(),
+-	)
+-	legacyContext.UnionPointer = policy.UnionPointer
+-	want := ValidationCode(attribute, nil, legacyContext, true, false, true, "target")
+-
+-	generation, err := NewGeneration("generated.local/gen", nil)
+-	require.NoError(t, err)
+-	childDeclaration := declareGoTypeTestUserType(t, generation, owner, child)
+-	unionDeclaration := declareGoTypeTestUnion(t, generation, owner, union)
+-	generatedPackage := generation.Package(owner)
+-	validator := NewExactName(NameFunction, "ValidateChild")
+-	require.NoError(t, generatedPackage.DeclareName(validator))
+-
+-	layout, err := PlanGoType(attribute, GoTypePlanOptions{
+-		Owner:  owner,
+-		Policy: policy,
+-		Bind: goTypeTestBinder(map[expr.DataType]GoTypeBinding{
+-			child: {Owner: owner, Type: childDeclaration},
+-			union: {Owner: owner, Union: unionDeclaration},
+-		}),
+-	})
+-	require.NoError(t, err)
+-	plan, err := NewValidationPlan(attribute, layout, ValidationPlanOptions{
+-		Required: true,
+-		Bind: func(request ValidatorBindingRequest) (*NameDeclaration, error) {
+-			require.Same(t, child, request.Attribute.Type)
+-			require.Equal(t, owner, request.Layout.Owner())
+-			require.Empty(t, request.View)
+-			return validator, nil
+-		},
+-	})
+-	require.NoError(t, err)
+-	require.Equal(t, []*NameDeclaration{validator, validator}, plan.ValidatorDeclarations())
+-
+-	mapKey.Validation = nil
+-	mapValue.Validation = nil
+-	union.Values = nil
+-	child.SetAttribute(&expr.AttributeExpr{Type: expr.String})
+-	attribute.Type = expr.String
+-
+-	require.NoError(t, generation.Freeze())
+-	linked, err := plan.Link(layout.Link(owner, validationPlanTestQualifier))
+-	require.NoError(t, err)
+-	require.Equal(t, want, linked.Render("target", "target"))
+-	require.Equal(t, []GoTypeImport{
+-		{Name: "utf8", Path: "unicode/utf8"},
+-		{Name: "goa", Path: "example.internal/apikit/v3/pkg"},
+-	}, linked.Imports())
+-}
+ 
+ // TestValidationPlanRejectsUnboundNestedValidator verifies planning never
+ // falls back to reconstructing a validator name from a user type.
+diff --git a/grpc/codegen/plan_test.go b/grpc/codegen/plan_test.go
+--- a/grpc/codegen/plan_test.go
++++ b/grpc/codegen/plan_test.go
+@@ -128,15 +128,6 @@ func TestPlanReturnsStoredFiles(t *testing.T) {
+ 	require.Equal(t, want, grpcPlanFileSignatures(t, plans[0]))
+ }
+ 
+-// TestNewPlansIsIndependentOfInputOrder checks that input order does not
+-// change files written to the same generated packages.
+-func TestNewPlansIsIndependentOfInputOrder(t *testing.T) {
+-	forwardNames, forwardErr := collidingGRPCPlanResult(t, false)
+-	reverseNames, reverseErr := collidingGRPCPlanResult(t, true)
+-	require.Empty(t, forwardErr)
+-	require.Empty(t, reverseErr)
+-	require.Equal(t, forwardNames, reverseNames)
+-}
+ 
+ // TestGRPCCLIImportAliasesBelongToOutputPackage checks that a name used by an
+ // unrelated HTTP package cannot change the qualifier written by the gRPC
+diff --git a/grpc/codegen/protobuf_descriptor_plan_test.go b/grpc/codegen/protobuf_descriptor_plan_test.go
+--- a/grpc/codegen/protobuf_descriptor_plan_test.go
++++ b/grpc/codegen/protobuf_descriptor_plan_test.go
+@@ -20,110 +20,7 @@ import (
+ 	"example.internal/apikit/v3/expr"
+ )
+ 
+-// TestPlanUsesNamesFromSupportedProtobufTools checks both method orders because
+-// changing source order must not change the Go declarations chosen for a file.
+-func TestPlanUsesNamesFromSupportedProtobufTools(t *testing.T) {
+-	for _, reverse := range []bool{false, true} {
+-		name := "unary-first"
+-		if reverse {
+-			name = "stream-first"
+-		}
+-		t.Run(name, func(t *testing.T) {
+-			moduleDir, protoPath, generatedGo := renderProtobufDescriptorPlan(t, reverse)
+-			descriptor := describeGeneratedProto(t, protoPath)
+-			rules, err := newProtocNameRules(protocNameVersionGo1_36GRPC1_6)
+-			require.NoError(t, err)
+-			names, err := rules.file(descriptor)
+-			require.NoError(t, err)
+-
+-			serviceDescriptor := descriptor.GetService()[0]
+-			messageDescriptor := messageWithOneof(t, descriptor, "result2_kind")
+-			oneofDescriptor := messageDescriptor.GetOneofDecl()[0]
+-			resetDescriptor := fieldNamed(t, messageDescriptor, "reset")
+-			apiURLDescriptor := fieldNamed(t, messageDescriptor, "api_url")
+-			dns2Descriptor := fieldNamed(t, messageDescriptor, "dns2_server")
+-			stringDescriptor := fieldNamed(t, messageDescriptor, "string_")
+-			oneofStringDescriptor := fieldNamed(t, messageDescriptor, "string_2")
+-			require.NotEqual(t, stringDescriptor.GetName(), oneofStringDescriptor.GetName())
+-			require.NotNil(t, oneofStringDescriptor.OneofIndex)
+-			packageName := descriptor.GetPackage()
+-			serviceName := packageName + "." + serviceDescriptor.GetName()
+-			messageName := packageName + "." + messageDescriptor.GetName()
+-			outerStringName, ok := names.lookup(messageName+"."+stringDescriptor.GetName(), protocFieldName)
+-			require.True(t, ok)
+-			require.Equal(t, "String_", outerStringName)
+-			oneofStringName, ok := names.lookup(messageName+"."+oneofStringDescriptor.GetName(), protocFieldName)
+-			require.True(t, ok)
+-			require.Equal(t, "String_2", oneofStringName)
+-			oneofStringWrapper, ok := names.lookup(messageName+"."+oneofStringDescriptor.GetName(), protocOneofWrapperName)
+-			require.True(t, ok)
+-			require.Equal(t, messageDescriptor.GetName()+"_String_2", oneofStringWrapper)
+-			methodNames := make(map[string]string, len(serviceDescriptor.GetMethod()))
+-			for _, method := range serviceDescriptor.GetMethod() {
+-				methodNames[method.GetName()] = serviceName + "." + method.GetName()
+-			}
+-
+-			checks := []struct {
+-				descriptor string
+-				role       protocNameRole
+-			}{
+-				{messageName, protocMessageName},
+-				{messageName + "." + apiURLDescriptor.GetName(), protocFieldName},
+-				{messageName + "." + dns2Descriptor.GetName(), protocFieldName},
+-				{messageName + "." + stringDescriptor.GetName(), protocFieldName},
+-				{messageName + "." + oneofStringDescriptor.GetName(), protocFieldName},
+-				{messageName + "." + oneofStringDescriptor.GetName(), protocOneofWrapperName},
+-				{messageName + "." + oneofDescriptor.GetName(), protocOneofFieldName},
+-				{messageName + "." + resetDescriptor.GetName(), protocOneofWrapperName},
+-				{serviceName, protocServiceClientName},
+-				{serviceName, protocServiceServerName},
+-				{methodNames["GetUrl2"], protocMethodName},
+-				{methodNames["SyncX509"], protocMethodName},
+-				{methodNames["SyncX509"], protocMethodClientStreamName},
+-				{methodNames["SyncX509"], protocMethodServerStreamName},
+-			}
+-			declarations := declaredGoNames(t,
+-				strings.TrimSuffix(protoPath, ".proto")+".pb.go",
+-				strings.TrimSuffix(protoPath, ".proto")+"_grpc.pb.go",
+-			)
+-			for _, check := range checks {
+-				name, ok := names.lookup(check.descriptor, check.role)
+-				require.True(t, ok, "%s was not recorded for %s", check.role, check.descriptor)
+-				require.Contains(t, declarations, name, "the protobuf tools did not declare %s", name)
+-				require.True(t, strings.Contains(generatedGo, name), "Goa did not use %s", name)
+-			}
+ 
+-			protoSource, err := os.ReadFile(protoPath)
+-			require.NoError(t, err)
+-			require.Contains(t, string(protoSource), "message lower_snake_message {")
+-			require.Contains(t, string(protoSource), "lower_snake_message lower = 2;")
+-			require.Contains(t, string(protoSource), "message "+messageDescriptor.GetName()+" {")
+-			require.Contains(t, string(protoSource), "oneof result2_kind {")
+-			require.Contains(t, string(protoSource), "service "+serviceDescriptor.GetName()+" {")
+-			require.Contains(t, string(protoSource), "rpc GetUrl2 (")
+-			require.Contains(t, string(protoSource), "rpc CafRead (")
+-			require.Contains(t, string(protoSource), "rpc SyncX509 (stream ")
+-			compileProtobufDescriptorModule(t, moduleDir)
+-		})
+-	}
+-}
+-
+-// TestPlanWritesLegalFieldAndOneofNames checks names that would make protoc
+-// reject the complete generated file if Apikit wrote them unchanged.
+-func TestPlanWritesLegalFieldAndOneofNames(t *testing.T) {
+-	_, protoPath, _ := renderProtobufDescriptorPlan(t, false)
+-	protoSource, err := os.ReadFile(protoPath)
+-	require.NoError(t, err)
+-
+-	require.Contains(t, string(protoSource), "message LeadingDigit {")
+-	require.Contains(t, string(protoSource), "optional string _123_field = 1;")
+-	require.Contains(t, string(protoSource), "message UnicodeName {")
+-	require.Contains(t, string(protoSource), "optional string caf_field = 1;")
+-	require.Contains(t, string(protoSource), "oneof foo_bar_oneof {")
+-	require.Contains(t, string(protoSource), "optional string foo_bar = 3;")
+-	require.Contains(t, string(protoSource), "message CollisionReverse {")
+-	require.Equal(t, 2, strings.Count(string(protoSource), "oneof foo_bar_oneof {"))
+-}
+ 
+ // TestPlanRejectsIllegalExactProtobufName checks that an exact metadata name
+ // fails before Apikit writes a protobuf file that protoc cannot parse.
+diff --git a/grpc/codegen/required_union_validation_test.go b/grpc/codegen/required_union_validation_test.go
+--- a/grpc/codegen/required_union_validation_test.go
++++ b/grpc/codegen/required_union_validation_test.go
+@@ -6,67 +6,13 @@ import (
+ 	"strings"
+ 	"testing"
+ 
+-	"github.com/stretchr/testify/require"
++	_ "github.com/stretchr/testify/require"
+ 
+ 	"example.internal/apikit/v3/codegen"
+-	"example.internal/apikit/v3/codegen/testutil"
++	_ "example.internal/apikit/v3/codegen/testutil"
+ 	d "example.internal/apikit/v3/dsl"
+ )
+ 
+-func TestRequiredUnionValidationUsesCompleteProtobufBranches(t *testing.T) {
+-	root := RunGRPCDSL(t, requiredUnionValidationDSL)
+-	services := CreateGRPCServices(root)
+-	service := services.Get("UnionValidation")
+-	for _, expected := range []struct {
+-		side validateKind
+-		name string
+-	}{
+-		{validateServer, "validatetest_20_api_UnionValidation_Detail_At_detail"},
+-		{validateClient, "validatetest_20_api_UnionValidation_Detail_At_detail"},
+-	} {
+-		var nested *protobufValidationRecord
+-		for _, validation := range service.protobuf.validators {
+-			if validation.side == expected.side &&
+-				validation.source.path == "choice.detail" {
+-				nested = validation
+-				break
+-			}
+-		}
+-		require.NotNil(t, nested)
+-		require.Equal(t, expected.name, nested.declaration.Name())
+-		require.Contains(t, nested.data.Def, `MissingFieldError("label", "detail")`)
+-	}
+-
+-	for _, test := range []struct {
+-		name        string
+-		files       []*codegen.File
+-		sectionName string
+-		function    string
+-		golden      string
+-	}{
+-		{
+-			name:        "server",
+-			files:       serverTypeFiles(services),
+-			sectionName: "server-validate",
+-			function:    "ValidateExchangeRequest",
+-			golden:      "testdata/golden/server_types_server-required-union-validation.go.golden",
+-		},
+-		{
+-			name:        "client",
+-			files:       clientTypeFiles(services),
+-			sectionName: "client-validate",
+-			function:    "ValidateExchangeResponse",
+-			golden:      "testdata/golden/client_types_client-required-union-validation.go.golden",
+-		},
+-	} {
+-		t.Run(test.name, func(t *testing.T) {
+-			require.Len(t, test.files, 1)
+-			sections := test.files[0].Section(test.sectionName)
+-			require.NotEmpty(t, sections)
+-			testutil.AssertGo(t, test.golden, validationSection(t, sections, test.function))
+-		})
+-	}
+-}
+ 
+ // validationSection returns the generated validator named function.
+ func validationSection(t *testing.T, sections []*codegen.SectionTemplate, function string) string {
+diff --git a/grpc/codegen/streaming_test.go b/grpc/codegen/streaming_test.go
+--- a/grpc/codegen/streaming_test.go
++++ b/grpc/codegen/streaming_test.go
+@@ -150,43 +150,6 @@ func TestStreaming(t *testing.T) {
+ 	}
+ }
+ 
+-func TestStreamingPayloadEnvelopeWithUnionPayload(t *testing.T) {
+-	root := RunGRPCDSL(t, testdata.ClientStreamingRPCWithUnionPayloadDSL)
+-	services := CreateGRPCServices(root)
+-
+-	clientfs := clientFiles(services)
+-	require.Len(t, clientfs, 2)
+-	serverfs := serverFiles(services)
+-	require.Len(t, serverfs, 2)
+-	protofs := protoFiles(services)
+-	require.Len(t, protofs, 1)
+-
+-	requestEncoder := codegen.SectionsCode(t, clientfs[1].Section("request-encoder"))
+-	assert.Contains(t, requestEncoder, "InitialPayload")
+-	assert.Contains(t, requestEncoder, "MethodClientStreamingRPCWithUnionPayloadStreamingRequest")
+-
+-	clientSend := codegen.SectionsCode(t, clientfs[0].Section("client-stream-send"))
+-	assert.Contains(t, clientSend, "StreamItem")
+-	assert.Contains(t, clientSend, "UploadChunk")
+-
+-	serverInterface := codegen.SectionsCode(t, serverfs[0].Section("server-grpc-interface"))
+-	assert.Contains(t, serverInterface, "message, err := stream.Recv()")
+-	assert.Contains(t, serverInterface, "Decode(ctx, reqpb)")
+-
+-	requestDecoder := codegen.SectionsCode(t, serverfs[1].Section("request-decoder"))
+-	assert.Contains(t, requestDecoder, "InitialPayload")
+-	assert.Contains(t, requestDecoder, "stream_item")
+-	assert.Contains(t, requestDecoder, "NewMethodClientStreamingRPCWithUnionPayloadPayload(message)")
+-
+-	proto := sectionCode(t, protofs[0].SectionTemplates[1:]...)
+-	assert.Contains(t, proto, "message MethodClientStreamingRPCWithUnionPayloadStreamingRequest")
+-	assert.Contains(t, proto, "oneof body")
+-	assert.Contains(t, proto, "MethodClientStreamingRPCWithUnionPayloadRequest initial_payload")
+-	assert.Contains(t, proto, "MethodClientStreamingRPCWithUnionPayloadStreamItem stream_item")
+-
+-	fpath := codegen.CreateTempFile(t, proto)
+-	assert.NoError(t, protoc(defaultProtocCmd, fpath))
+-}
+ 
+ func TestStreamingPayloadLegacyCompat(t *testing.T) {
+ 	root := RunGRPCDSL(t, testdata.BidirectionalStreamingRPCWithPayloadLegacyCompatDSL)
+diff --git a/grpc/codegen/transform_helper_test.go b/grpc/codegen/transform_helper_test.go
+--- a/grpc/codegen/transform_helper_test.go
++++ b/grpc/codegen/transform_helper_test.go
+@@ -13,80 +13,6 @@ import (
+ 	"example.internal/apikit/v3/dsl"
+ )
+ 
+-// TestTransformHelpersShareAcrossDocumentedUses checks that field prose and
+-// examples do not split one recursive conversion used by several methods and
+-// union branches. A nearly identical child with different required-field
+-// pointer rules keeps a separate function and call sites.
+-func TestTransformHelpersShareAcrossDocumentedUses(t *testing.T) {
+-	root := RunGRPCDSL(t, sharedGRPCTransformHelperMethodsDSL)
+-	services := CreateGRPCServices(root)
+-	service := services.Get("SharedMethodHelpers")
+-	require.NotEmpty(t, service.clientTransformHelpers)
+-	require.NotEmpty(t, service.serverTransformHelpers)
+-
+-	var clientShared, clientNear *codegen.TransformFunctionData
+-	clientSharedDeclarations := make(map[*codegen.NameDeclaration]struct{})
+-	for _, helper := range service.clientTransformHelpers {
+-		if !strings.Contains(helper.Declaration.Name(), "ToProto") {
+-			continue
+-		}
+-		switch helper.ParamTypeRef {
+-		case "*sharedmethodhelpers.SharedMethodChild":
+-			clientShared = helper
+-			clientSharedDeclarations[helper.Declaration] = struct{}{}
+-		case "*sharedmethodhelpers.NearMethodChild":
+-			clientNear = helper
+-		}
+-	}
+-	require.NotNil(t, clientShared)
+-	require.NotNil(t, clientNear)
+-	require.Len(t, clientSharedDeclarations, 1)
+-	require.NotSame(t, clientShared.Declaration, clientNear.Declaration)
+-	require.Contains(t, clientShared.Code, clientShared.Declaration.Name()+"(v.Next)")
+-	require.Contains(t, clientNear.Code, clientNear.Declaration.Name()+"(v.Next)")
+-
+-	var serverShared, serverNear *codegen.TransformFunctionData
+-	serverSharedDeclarations := make(map[*codegen.NameDeclaration]struct{})
+-	for _, helper := range service.serverTransformHelpers {
+-		switch helper.ParamTypeRef {
+-		case "*shared_method_helperspb.SharedMethodChild":
+-			serverShared = helper
+-			serverSharedDeclarations[helper.Declaration] = struct{}{}
+-		case "*shared_method_helperspb.NearMethodChild":
+-			serverNear = helper
+-		}
+-	}
+-	require.NotNil(t, serverShared)
+-	require.NotNil(t, serverNear)
+-	require.Len(t, serverSharedDeclarations, 1)
+-	require.NotSame(t, serverShared.Declaration, serverNear.Declaration)
+-	require.Contains(t, serverShared.Code, serverShared.Declaration.Name()+"(v.Next)")
+-	require.Contains(t, serverNear.Code, serverNear.Declaration.Name()+"(v.Next)")
+-
+-	for _, endpoint := range service.Endpoints[:2] {
+-		require.Contains(t, endpoint.Request.ClientConvert.Init.Code,
+-			"message.Child = "+clientShared.Declaration.Name()+"(payload.Child)")
+-		require.Contains(t, endpoint.Request.ServerConvert.Init.Code,
+-			"v.Child = "+serverShared.Declaration.Name()+"(message.Child)")
+-	}
+-	var inspect *EndpointData
+-	for _, endpoint := range service.Endpoints {
+-		if endpoint.Method.Name == "Inspect" {
+-			inspect = endpoint
+-			break
+-		}
+-	}
+-	require.NotNil(t, inspect)
+-	require.Contains(t, inspect.Request.ClientConvert.Init.Code,
+-		"message.Child = "+clientNear.Declaration.Name()+"(payload.Child)")
+-	require.Contains(t, inspect.Request.ServerConvert.Init.Code,
+-		"v.Child = "+serverNear.Declaration.Name()+"(message.Child)")
+-
+-	client := codegen.SectionsCode(t, clientTypeFiles(services)[0].SectionTemplates[1:])
+-	server := codegen.SectionsCode(t, serverTypeFiles(services)[0].SectionTemplates[1:])
+-	testutil.AssertGo(t, "testdata/golden/transform_helper_shared_methods_client.go.golden", client)
+-	testutil.AssertGo(t, "testdata/golden/transform_helper_shared_methods_server.go.golden", server)
+-}
+ 
+ // TestTransformHelpersKeepViewedAndServiceDeclarations checks that a projected
+ // child uses its views package declaration while the original child used by a
+diff --git a/http/codegen/oneof_http_codegen_test.go b/http/codegen/oneof_http_codegen_test.go
+--- a/http/codegen/oneof_http_codegen_test.go
++++ b/http/codegen/oneof_http_codegen_test.go
+@@ -12,53 +12,10 @@ import (
+ 	"example.internal/apikit/v3/codegen"
+ 	. "example.internal/apikit/v3/dsl"
+ 	"example.internal/apikit/v3/expr"
+-	"example.internal/apikit/v3/http/codegen/testdata"
++	_ "example.internal/apikit/v3/http/codegen/testdata"
+ )
+ 
+-func TestClientCLIInlinesOneOfRequestValidation(t *testing.T) {
+-	code := renderClientCLISectionCode(t, testdata.PayloadBodyUnionUserValidateDSL, 1, 1)
+ 
+-	require.Contains(t, code, "BuildMethodBodyUnionUserValidatePayload")
+-	require.Contains(t, code, "if body.A == nil")
+-	require.Contains(t, code, "marshalUnionUserValidateRequestBodyToServicebodyunionuservalidateUnionUserValidate")
+-	require.NotContains(t, code, "ValidateMethodBodyUnionUserValidateRequestBody")
+-}
+-
+-func TestClientResponseCodeProjectsSingleViewOneOfResults(t *testing.T) {
+-	cases := []struct {
+-		name string
+-		dsl  func()
+-	}{
+-		{
+-			name: "single-result",
+-			dsl:  oneOfResultSingleViewDSL,
+-		},
+-		{
+-			name: "collection-result",
+-			dsl:  oneOfResultCollectionSingleViewDSL,
+-		},
+-	}
+-
+-	for _, c := range cases {
+-		t.Run(c.name, func(t *testing.T) {
+-			typeCode := renderClientTypesCode(t, c.dsl)
+-			decodeCode := renderClientDecodeCode(t, c.dsl)
+-
+-			require.Contains(t, typeCode, "AnimalView")
+-			require.NotContains(t, typeCode, "CatDetailsResponseBody")
+-			require.NotContains(t, typeCode, "DogDetailsResponseBody")
+-			require.NotContains(t, typeCode, "BirdDetailsResponseBody")
+-			require.NotContains(t, typeCode, "FishDetailsResponseBody")
+-			require.NotContains(t, typeCode, "json:\"details,omitempty\"")
+-
+-			require.NotContains(t, decodeCode, "body.Details")
+-			require.NotContains(t, decodeCode, "CatDetailsResponseBody")
+-			require.NotContains(t, decodeCode, "DogDetailsResponseBody")
+-			require.NotContains(t, decodeCode, "BirdDetailsResponseBody")
+-			require.NotContains(t, decodeCode, "FishDetailsResponseBody")
+-		})
+-	}
+-}
+ 
+ // renderClientCLISectionCode renders the requested client CLI section for a
+ // DSL and returns the generated code.
+diff --git a/http/codegen/planned_name_collision_test.go b/http/codegen/planned_name_collision_test.go
+--- a/http/codegen/planned_name_collision_test.go
++++ b/http/codegen/planned_name_collision_test.go
+@@ -143,37 +143,6 @@ func TestHTTPPlannedNamesSurvivePackageCollisions(t *testing.T) {
+ 	testutil.AssertGo(t, "testdata/golden/planned_name_collisions.go.golden", strings.TrimSpace(source.String())+"\n")
+ }
+ 
+-// TestHTTPUnionPlannedNamesRejectPackageCollisions checks that an authored
+-// union name never receives a moving numeric suffix.
+-func TestHTTPUnionPlannedNamesRejectPackageCollisions(t *testing.T) {
+-	root := expr.RunDSL(t, func() {
+-		dsl.Service("Names", func() {
+-			dsl.Method("Choose", func() {
+-				dsl.Payload(func() {
+-					dsl.OneOf("choice", func() {
+-						dsl.Attribute("text", dsl.String)
+-						dsl.Attribute("count", dsl.Int)
+-					})
+-					dsl.Required("choice")
+-				})
+-				dsl.HTTP(func() {
+-					dsl.POST("/choose")
+-				})
+-			})
+-		})
+-	})
+-	generation, err := codegen.NewGeneration("generated.local/gen", []eval.Root{root})
+-	require.NoError(t, err)
+-	servicePlan, err := service.NewPlan(root, generation, expr.NewExampleGenerator(root.API.RandomizerFactory))
+-	require.NoError(t, err)
+-	serverPackage, err := generation.ClaimPackage("generated.local/gen/http/names/server")
+-	require.NoError(t, err)
+-	require.NoError(t, serverPackage.DeclareName(codegen.NewExactName(codegen.NameType, "ChoiceRequestBody")))
+-	_, err = NewPlans(generation, PlanInput{Root: root, Service: servicePlan})
+-	require.ErrorContains(t, err, `declare HTTP OneOf "choice" for RequestBody`)
+-	require.ErrorContains(t, err, `cannot declare exact type "ChoiceRequestBody"`)
+-	require.ErrorContains(t, err, "set TypeName on the OneOf to a unique name")
+-}
+ 
+ // TestJSONRPCValidatorPlannedNamesSurvivePackageCollisions checks that the
+ // JSON-RPC body validator definition and decoder call use the same planned
+diff --git a/http/codegen/server_encode_test.go b/http/codegen/server_encode_test.go
+--- a/http/codegen/server_encode_test.go
++++ b/http/codegen/server_encode_test.go
+@@ -11,98 +11,6 @@ import (
+ 	"example.internal/apikit/v3/http/codegen/testdata"
+ )
+ 
+-func TestEncode(t *testing.T) {
+-	cases := []struct {
+-		Name string
+-		DSL  func()
+-	}{
+-		{"header-bool", testdata.ResultHeaderBoolDSL},
+-		{"header-int", testdata.ResultHeaderIntDSL},
+-		{"header-int32", testdata.ResultHeaderInt32DSL},
+-		{"header-int64", testdata.ResultHeaderInt64DSL},
+-		{"header-uint", testdata.ResultHeaderUIntDSL},
+-		{"header-uint32", testdata.ResultHeaderUInt32DSL},
+-		{"header-uint64", testdata.ResultHeaderUInt64DSL},
+-		{"header-float32", testdata.ResultHeaderFloat32DSL},
+-		{"header-float64", testdata.ResultHeaderFloat64DSL},
+-		{"header-string", testdata.ResultHeaderStringDSL},
+-		{"header-bytes", testdata.ResultHeaderBytesDSL},
+-		{"header-any", testdata.ResultHeaderAnyDSL},
+-		{"header-array-bool", testdata.ResultHeaderArrayBoolDSL},
+-		{"header-array-int", testdata.ResultHeaderArrayIntDSL},
+-		{"header-array-int32", testdata.ResultHeaderArrayInt32DSL},
+-		{"header-array-int64", testdata.ResultHeaderArrayInt64DSL},
+-		{"header-array-uint", testdata.ResultHeaderArrayUIntDSL},
+-		{"header-array-uint32", testdata.ResultHeaderArrayUInt32DSL},
+-		{"header-array-uint64", testdata.ResultHeaderArrayUInt64DSL},
+-		{"header-array-float32", testdata.ResultHeaderArrayFloat32DSL},
+-		{"header-array-float64", testdata.ResultHeaderArrayFloat64DSL},
+-		{"header-array-string", testdata.ResultHeaderArrayStringDSL},
+-		{"header-array-bytes", testdata.ResultHeaderArrayBytesDSL},
+-		{"header-array-any", testdata.ResultHeaderArrayAnyDSL},
+-
+-		{"header-bool-default", testdata.ResultHeaderBoolDefaultDSL},
+-		{"header-bool-required-default", testdata.ResultHeaderBoolRequiredDefaultDSL},
+-		{"header-string-default", testdata.ResultHeaderStringDefaultDSL},
+-		{"header-string-required-default", testdata.ResultHeaderStringRequiredDefaultDSL},
+-		{"header-array-bool-default", testdata.ResultHeaderArrayBoolDefaultDSL},
+-		{"header-array-bool-required-default", testdata.ResultHeaderArrayBoolRequiredDefaultDSL},
+-		{"header-array-string-default", testdata.ResultHeaderArrayStringDefaultDSL},
+-		{"header-array-string-required-default", testdata.ResultHeaderArrayStringRequiredDefaultDSL},
+-
+-		{"body-string", testdata.ResultBodyStringDSL},
+-		{"body-object", testdata.ResultBodyObjectDSL},
+-		{"body-user", testdata.ResultBodyUserDSL},
+-		{"body-union", testdata.ResultBodyUnionDSL},
+-		{"body-result-multiple-views", testdata.ResultBodyMultipleViewsDSL},
+-		{"body-result-collection-multiple-views", testdata.ResultBodyCollectionDSL},
+-		{"body-result-collection-explicit-view", testdata.ResultBodyCollectionExplicitViewDSL},
+-		{"empty-body-result-multiple-views", testdata.EmptyBodyResultMultipleViewsDSL},
+-		{"body-array-string", testdata.ResultBodyArrayStringDSL},
+-		{"body-array-user", testdata.ResultBodyArrayUserDSL},
+-		{"body-primitive-string", testdata.ResultBodyPrimitiveStringDSL},
+-		{"body-primitive-bool", testdata.ResultBodyPrimitiveBoolDSL},
+-		{"body-primitive-any", testdata.ResultBodyPrimitiveAnyDSL},
+-		{"body-primitive-array-string", testdata.ResultBodyPrimitiveArrayStringDSL},
+-		{"body-primitive-array-bool", testdata.ResultBodyPrimitiveArrayBoolDSL},
+-		{"body-primitive-array-user", testdata.ResultBodyPrimitiveArrayUserDSL},
+-		{"body-inline-object", testdata.ResultBodyInlineObjectDSL},
+-
+-		{"body-header-object", testdata.ResultBodyHeaderObjectDSL},
+-		{"body-header-user", testdata.ResultBodyHeaderUserDSL},
+-
+-		{"explicit-body-primitive-result-multiple-views", testdata.ExplicitBodyPrimitiveResultMultipleViewsDSL},
+-		{"explicit-body-user-result-multiple-views", testdata.ExplicitBodyUserResultMultipleViewsDSL},
+-		{"explicit-body-result-collection", testdata.ExplicitBodyResultCollectionDSL},
+-		{"explicit-content-type-result", testdata.ExplicitContentTypeResultDSL},
+-		{"explicit-content-type-response", testdata.ExplicitContentTypeResponseDSL},
+-
+-		{"tag-string", testdata.ResultTagStringDSL},
+-		{"tag-string-required", testdata.ResultTagStringRequiredDSL},
+-		{"tag-result-multiple-views", testdata.ResultMultipleViewsTagDSL},
+-
+-		{"empty-server-response", testdata.EmptyServerResponseDSL},
+-		{"empty-server-response-with-tags", testdata.EmptyServerResponseWithTagsDSL},
+-		{"default-response-before-tags", testdata.ResultDefaultResponseBeforeTagsDSL},
+-
+-		{"skip-response-body-encode-decode", testdata.ResponseEncoderSkipResponseBodyEncodeDecodeDSL},
+-
+-		{"result-with-custom-pkg-type", testdata.ResultWithCustomPkgTypeDSL},
+-		{"result-with-embedded-custom-pkg-type", testdata.EmbeddedCustomPkgTypeDSL},
+-	}
+-	for _, c := range cases {
+-		t.Run(c.Name, func(t *testing.T) {
+-			root := expr.RunDSL(t, c.DSL)
+-			plan := linkedHTTPPlanForRoot(t, root)
+-			fs := plan.ServerFiles()
+-			require.Len(t, fs, 2)
+-			sections := fs[1].SectionTemplates
+-			require.Greater(t, len(sections), 1)
+-			code := codegen.SectionCode(t, sections[1])
+-			testutil.AssertGo(t, "testdata/golden/server_encode_"+c.Name+".go.golden", code)
+-		})
+-	}
+-}
+ 
+ func TestEncodeMarshallingAndUnmarshalling(t *testing.T) {
+ 	cases := []struct {
+diff --git a/http/codegen/server_payload_types_test.go b/http/codegen/server_payload_types_test.go
+--- a/http/codegen/server_payload_types_test.go
++++ b/http/codegen/server_payload_types_test.go
+@@ -1,144 +1,14 @@
+ package codegen
+ 
+ import (
+-	"testing"
++	_ "testing"
+ 
+-	"example.internal/apikit/v3/codegen/testutil"
+-	"example.internal/apikit/v3/expr"
++	_ "example.internal/apikit/v3/codegen/testutil"
++	_ "example.internal/apikit/v3/expr"
+ 
+-	"github.com/stretchr/testify/require"
++	_ "github.com/stretchr/testify/require"
+ 
+-	"example.internal/apikit/v3/codegen"
+-	"example.internal/apikit/v3/http/codegen/testdata"
++	_ "example.internal/apikit/v3/codegen"
++	_ "example.internal/apikit/v3/http/codegen/testdata"
+ )
+ 
+-func TestPayloadConstructor(t *testing.T) {
+-	cases := []struct {
+-		Name string
+-		DSL  func()
+-	}{
+-		{"query-bool", testdata.PayloadQueryBoolDSL},
+-		{"query-bool-validate", testdata.PayloadQueryBoolValidateDSL},
+-		{"query-int", testdata.PayloadQueryIntDSL},
+-		{"query-int-validate", testdata.PayloadQueryIntValidateDSL},
+-		{"query-int32", testdata.PayloadQueryInt32DSL},
+-		{"query-int32-validate", testdata.PayloadQueryInt32ValidateDSL},
+-		{"query-int64", testdata.PayloadQueryInt64DSL},
+-		{"query-int64-validate", testdata.PayloadQueryInt64ValidateDSL},
+-		{"query-uint", testdata.PayloadQueryUIntDSL},
+-		{"query-uint-validate", testdata.PayloadQueryUIntValidateDSL},
+-		{"query-uint32", testdata.PayloadQueryUInt32DSL},
+-		{"query-uint32-validate", testdata.PayloadQueryUInt32ValidateDSL},
+-		{"query-uint64", testdata.PayloadQueryUInt64DSL},
+-		{"query-uint64-validate", testdata.PayloadQueryUInt64ValidateDSL},
+-		{"query-float32", testdata.PayloadQueryFloat32DSL},
+-		{"query-float32-validate", testdata.PayloadQueryFloat32ValidateDSL},
+-		{"query-float64", testdata.PayloadQueryFloat64DSL},
+-		{"query-float64-validate", testdata.PayloadQueryFloat64ValidateDSL},
+-		{"query-string", testdata.PayloadQueryStringDSL},
+-		{"query-string-validate", testdata.PayloadQueryStringValidateDSL},
+-		{"query-bytes", testdata.PayloadQueryBytesDSL},
+-		{"query-bytes-validate", testdata.PayloadQueryBytesValidateDSL},
+-		{"query-any", testdata.PayloadQueryAnyDSL},
+-		{"query-any-validate", testdata.PayloadQueryAnyValidateDSL},
+-		{"query-array-bool", testdata.PayloadQueryArrayBoolDSL},
+-		{"query-array-bool-validate", testdata.PayloadQueryArrayBoolValidateDSL},
+-		{"query-array-int", testdata.PayloadQueryArrayIntDSL},
+-		{"query-array-int-validate", testdata.PayloadQueryArrayIntValidateDSL},
+-		{"query-array-int32", testdata.PayloadQueryArrayInt32DSL},
+-		{"query-array-int32-validate", testdata.PayloadQueryArrayInt32ValidateDSL},
+-		{"query-array-int64", testdata.PayloadQueryArrayInt64DSL},
+-		{"query-array-int64-validate", testdata.PayloadQueryArrayInt64ValidateDSL},
+-		{"query-array-uint", testdata.PayloadQueryArrayUIntDSL},
+-		{"query-array-uint-validate", testdata.PayloadQueryArrayUIntValidateDSL},
+-		{"query-array-uint32", testdata.PayloadQueryArrayUInt32DSL},
+-		{"query-array-uint32-validate", testdata.PayloadQueryArrayUInt32ValidateDSL},
+-		{"query-array-uint64", testdata.PayloadQueryArrayUInt64DSL},
+-		{"query-array-uint64-validate", testdata.PayloadQueryArrayUInt64ValidateDSL},
+-		{"query-array-float32", testdata.PayloadQueryArrayFloat32DSL},
+-		{"query-array-float32-validate", testdata.PayloadQueryArrayFloat32ValidateDSL},
+-		{"query-array-float64", testdata.PayloadQueryArrayFloat64DSL},
+-		{"query-array-float64-validate", testdata.PayloadQueryArrayFloat64ValidateDSL},
+-		{"query-array-string", testdata.PayloadQueryArrayStringDSL},
+-		{"query-array-string-validate", testdata.PayloadQueryArrayStringValidateDSL},
+-		{"query-array-bytes", testdata.PayloadQueryArrayBytesDSL},
+-		{"query-array-bytes-validate", testdata.PayloadQueryArrayBytesValidateDSL},
+-		{"query-array-any", testdata.PayloadQueryArrayAnyDSL},
+-		{"query-array-any-validate", testdata.PayloadQueryArrayAnyValidateDSL},
+-		{"query-map-string-string", testdata.PayloadQueryMapStringStringDSL},
+-		{"query-map-string-string-validate", testdata.PayloadQueryMapStringStringValidateDSL},
+-		{"query-map-string-bool", testdata.PayloadQueryMapStringBoolDSL},
+-		{"query-map-string-bool-validate", testdata.PayloadQueryMapStringBoolValidateDSL},
+-		{"query-map-bool-string", testdata.PayloadQueryMapBoolStringDSL},
+-		{"query-map-bool-string-validate", testdata.PayloadQueryMapBoolStringValidateDSL},
+-		{"query-map-bool-bool", testdata.PayloadQueryMapBoolBoolDSL},
+-		{"query-map-bool-bool-validate", testdata.PayloadQueryMapBoolBoolValidateDSL},
+-		{"query-map-string-array-string", testdata.PayloadQueryMapStringArrayStringDSL},
+-		{"query-map-string-array-string-validate", testdata.PayloadQueryMapStringArrayStringValidateDSL},
+-		{"query-map-string-array-bool", testdata.PayloadQueryMapStringArrayBoolDSL},
+-		{"query-map-string-array-bool-validate", testdata.PayloadQueryMapStringArrayBoolValidateDSL},
+-		{"query-map-bool-array-string", testdata.PayloadQueryMapBoolArrayStringDSL},
+-		{"query-map-bool-array-string-validate", testdata.PayloadQueryMapBoolArrayStringValidateDSL},
+-		{"query-map-bool-array-bool", testdata.PayloadQueryMapBoolArrayBoolDSL},
+-		{"query-map-bool-array-bool-validate", testdata.PayloadQueryMapBoolArrayBoolValidateDSL},
+-
+-		{"query-string-mapped", testdata.PayloadQueryStringMappedDSL},
+-
+-		{"path-string", testdata.PayloadPathStringDSL},
+-		{"path-string-validate", testdata.PayloadPathStringValidateDSL},
+-		{"path-array-string", testdata.PayloadPathArrayStringDSL},
+-		{"path-array-string-validate", testdata.PayloadPathArrayStringValidateDSL},
+-
+-		{"header-string", testdata.PayloadHeaderStringDSL},
+-		{"header-string-validate", testdata.PayloadHeaderStringValidateDSL},
+-		{"header-array-string", testdata.PayloadHeaderArrayStringDSL},
+-		{"header-array-string-validate", testdata.PayloadHeaderArrayStringValidateDSL},
+-
+-		{"body-query-object", testdata.PayloadBodyQueryObjectDSL},
+-		{"body-query-object-validate", testdata.PayloadBodyQueryObjectValidateDSL},
+-		{"body-query-user", testdata.PayloadBodyQueryUserDSL},
+-		{"body-query-user-validate", testdata.PayloadBodyQueryUserValidateDSL},
+-		{"body-union", testdata.PayloadBodyUnionDSL},
+-		{"body-query-user-union", testdata.PayloadBodyQueryUserUnionDSL},
+-		{"body-query-user-union-validate", testdata.PayloadBodyQueryUserUnionValidateDSL},
+-
+-		{"body-path-object", testdata.PayloadBodyPathObjectDSL},
+-		{"body-path-object-validate", testdata.PayloadBodyPathObjectValidateDSL},
+-		{"body-path-user", testdata.PayloadBodyPathUserDSL},
+-		{"body-path-user-validate", testdata.PayloadBodyPathUserValidateDSL},
+-
+-		{"body-query-path-object", testdata.PayloadBodyQueryPathObjectDSL},
+-		{"body-query-path-object-validate", testdata.PayloadBodyQueryPathObjectValidateDSL},
+-		{"body-query-path-user", testdata.PayloadBodyQueryPathUserDSL},
+-		{"body-query-path-user-validate", testdata.PayloadBodyQueryPathUserValidateDSL},
+-
+-		{"body-user-inner", testdata.PayloadBodyUserInnerDSL},
+-		{"body-user-inner-default", testdata.PayloadBodyUserInnerDefaultDSL},
+-		{"body-user-inner-origin", testdata.PayloadBodyUserOriginDSL},
+-		{"body-inline-array-user", testdata.PayloadBodyInlineArrayUserDSL},
+-		{"body-inline-map-user", testdata.PayloadBodyInlineMapUserDSL},
+-		{"body-inline-recursive-user", testdata.PayloadBodyInlineRecursiveUserDSL},
+-		{"selected-body-defaults", testdata.PayloadSelectedBodyDefaultsDSL},
+-		{"selected-body-object-default", testdata.PayloadSelectedBodyObjectDefaultDSL},
+-		{"selected-body-map-default", testdata.PayloadSelectedBodyMapDefaultDSL},
+-		{"selected-body-bytes-default", testdata.PayloadSelectedBodyBytesDefaultDSL},
+-	}
+-	for _, c := range cases {
+-		t.Run(c.Name, func(t *testing.T) {
+-			root := expr.RunDSL(t, c.DSL)
+-			require.Len(t, root.API.HTTP.Services, 1)
+-			plan := linkedHTTPPlanForRoot(t, root)
+-			fs := plan.ServerTypeFiles()[0]
+-			sections := fs.SectionTemplates
+-			var section *codegen.SectionTemplate
+-			for _, s := range sections {
+-				if s.Source == httpTemplates.Read("server_type_init") {
+-					section = s
+-				}
+-			}
+-			require.NotNil(t, section)
+-			code := codegen.SectionCode(t, section)
+-			testutil.AssertGo(t, "testdata/golden/server_payload_types_"+c.Name+".go.golden", code)
+-		})
+-	}
+-}
+diff --git a/http/codegen/service_data_union_order_test.go b/http/codegen/service_data_union_order_test.go
+--- a/http/codegen/service_data_union_order_test.go
++++ b/http/codegen/service_data_union_order_test.go
+@@ -7,86 +7,12 @@ import (
+ 
+ 	"github.com/stretchr/testify/require"
+ 
+-	"example.internal/apikit/v3/codegen/testutil"
++	_ "example.internal/apikit/v3/codegen/testutil"
+ 	"example.internal/apikit/v3/dsl"
+ 	"example.internal/apikit/v3/expr"
+ )
+ 
+-func TestCollectHTTPUnionTypesDeterministicAcrossObjectOrder(t *testing.T) {
+-	sourceFromSignals := makeUnionForOrderTest("source",
+-		"physical_point",
+-		"synthetic_series",
+-	)
+-	sourceFromSignals.TypeName = "SignalSource"
+-	sourceFromInputs := makeUnionForOrderTest("source",
+-		"time_series",
+-		"energy_rates",
+-	)
+-	sourceFromInputs.TypeName = "InputSource"
+ 
+-	forward := &expr.AttributeExpr{
+-		Type: &expr.Object{
+-			{
+-				Name: "alpha",
+-				Attribute: &expr.AttributeExpr{
+-					Type: sourceFromSignals,
+-				},
+-			},
+-			{
+-				Name: "beta",
+-				Attribute: &expr.AttributeExpr{
+-					Type: sourceFromInputs,
+-				},
+-			},
+-		},
+-	}
+-	reverse := &expr.AttributeExpr{
+-		Type: &expr.Object{
+-			{
+-				Name: "beta",
+-				Attribute: &expr.AttributeExpr{
+-					Type: sourceFromInputs,
+-				},
+-			},
+-			{
+-				Name: "alpha",
+-				Attribute: &expr.AttributeExpr{
+-					Type: sourceFromSignals,
+-				},
+-			},
+-		},
+-	}
+-
+-	forwardNames := collectHTTPUnionTypeNames(t, forward)
+-	reverseNames := collectHTTPUnionTypeNames(t, reverse)
+-
+-	require.Len(t, forwardNames, 2)
+-	require.Equal(t, forwardNames, reverseNames)
+-}
+-
+-func TestCollectHTTPUnionTypesRejectsUnrelatedSameShapedDeclarations(t *testing.T) {
+-	first := makeUnionForOrderTest("Value", "bool", "number")
+-	second := makeUnionForOrderTest("Value", "bool", "number")
+-	bodies := &expr.AttributeExpr{
+-		Type: &expr.Object{
+-			{
+-				Name:      "first",
+-				Attribute: &expr.AttributeExpr{Type: first},
+-			},
+-			{
+-				Name:      "second",
+-				Attribute: &expr.AttributeExpr{Type: second},
+-			},
+-		},
+-	}
+-
+-	catalog, _ := testWireTypeCatalog(t)
+-	catalog.collect(bodies, wireAttribute, wireTypePolicy{})
+-	err := catalog.Declare()
+-	require.ErrorContains(t, err, `declare HTTP OneOf "Value" for direct attribute`)
+-	require.ErrorContains(t, err, `cannot declare exact type "Value"`)
+-	require.ErrorContains(t, err, "set TypeName on the OneOf to a unique name")
+-}
+ 
+ func TestCollectHTTPUnionTypesRejectsBranchesWithTheSameGoName(t *testing.T) {
+ 	union := makeUnionForOrderTest("Value", "foo-bar", "foo_bar")
+@@ -100,153 +26,12 @@ func TestCollectHTTPUnionTypesRejectsBranchesWithTheSameGoName(t *testing.T) {
+ 	require.NotContains(t, err.Error(), "TypeName")
+ }
+ 
+-func TestCollectHTTPUnionTypesUsesExactRootRoleNames(t *testing.T) {
+-	authored := &expr.AttributeExpr{Type: makeUnionForOrderTest("Scope", "site_set", "all_sites")}
+-	catalog, generation := testWireTypeCatalog(t)
+ 
+-	catalog.collect(authored, wireAttribute, wireTypePolicy{})
+-	catalog.collect(expr.DupAtt(authored), wireRequestBody, wireTypePolicy{request: true})
+-	catalog.collect(expr.DupAtt(authored), wireRequestBody, wireTypePolicy{request: true})
+-	catalog.collect(expr.DupAtt(authored), wireStreamPayload, wireTypePolicy{request: true})
+-	catalog.collect(expr.DupAtt(authored), wireResponseBody, wireTypePolicy{})
+-	catalog.collect(expr.DupAtt(authored), wireResponseBody, wireTypePolicy{view: "detailed"})
+-	linkTestWireTypeCatalog(t, generation, catalog)
+ 
+-	names := make([]string, 0, len(catalog.unions))
+-	for _, union := range catalog.unionTypes() {
+-		names = append(names, union.Name)
+-	}
+-	require.Equal(t, []string{
+-		"Scope",
+-		"ScopeDetailedResponseBody",
+-		"ScopeRequestBody",
+-		"ScopeResponseBody",
+-		"ScopeStreamingBody",
+-	}, names)
+-}
+ 
+-func TestCollectHTTPUnionTypesRejectsConflictingShapesInOneRootRole(t *testing.T) {
+-	authored := &expr.AttributeExpr{Type: makeUnionForOrderTest("Scope", "site_set", "all_sites")}
+-	first := expr.DupAtt(authored)
+-	second := expr.DupAtt(authored)
+-	second.Type.(*expr.Union).ValueKey = "data"
+-	catalog, _ := testWireTypeCatalog(t)
+ 
+-	catalog.collect(first, wireRequestBody, wireTypePolicy{request: true})
+-	catalog.collect(second, wireRequestBody, wireTypePolicy{request: true})
+-	err := catalog.Declare()
+-	require.ErrorContains(t, err, "OneOf \"Scope\" produces different RequestBody definitions")
+-	require.ErrorContains(t, err, "use separate OneOf declarations")
+-}
+ 
+-func TestHTTPServiceDataReusesOneAuthoredUnionAcrossMethods(t *testing.T) {
+-	root := expr.RunDSL(t, func() {
+-		payload := dsl.Type("SharedPayload", func() {
+-			dsl.OneOf("Value", sameShapedValueUnionDSL)
+-		})
+-		dsl.Service("values", func() {
+-			dsl.Method("first", func() {
+-				dsl.Payload(payload)
+-				dsl.HTTP(func() {
+-					dsl.POST("/first")
+-				})
+-			})
+-			dsl.Method("second", func() {
+-				dsl.Payload(payload)
+-				dsl.HTTP(func() {
+-					dsl.POST("/second")
+-				})
+-			})
+-		})
+-	})
+-
+-	data := linkedHTTPPlanForRoot(t, root).services.Get("values")
+-	require.NotNil(t, data)
+-	for _, catalog := range []*wireTypeCatalog{data.serverWireTypes, data.clientWireTypes} {
+-		unions := catalog.unionTypes()
+-		emitted := make([]string, len(unions))
+-		for i, union := range unions {
+-			emitted[i] = union.Name
+-		}
+-		require.Equal(t, []string{"ValueRequestBody"}, emitted)
+-	}
+-	require.Contains(t, data.Endpoint("first").Payload.Request.ServerBody.Def, "Value *ValueRequestBody ")
+-	require.Contains(t, data.Endpoint("second").Payload.Request.ServerBody.Def, "Value *ValueRequestBody ")
+-}
+ 
+-func TestHTTPServiceDataReusesOneAuthoredUnionAcrossExplicitRequestBodies(t *testing.T) {
+-	root := expr.RunDSL(t, func() {
+-		payload := dsl.Type("SharedPayload", func() {
+-			dsl.OneOf("Choice", sameShapedValueUnionDSL)
+-			dsl.Attribute("note", dsl.String)
+-		})
+-		dsl.Service("values", func() {
+-			for _, method := range []string{"first", "second"} {
+-				dsl.Method(method, func() {
+-					dsl.Payload(payload)
+-					dsl.HTTP(func() {
+-						dsl.POST("/" + method)
+-						dsl.Body(func() {
+-							if method == "first" {
+-								dsl.Attribute("Choice")
+-								dsl.Attribute("note")
+-								return
+-							}
+-							dsl.Attribute("note")
+-							dsl.Attribute("Choice")
+-						})
+-					})
+-				})
+-			}
+-		})
+-	})
+-
+-	data := linkedHTTPPlanForRoot(t, root).services.Get("values")
+-	for _, catalog := range []*wireTypeCatalog{data.serverWireTypes, data.clientWireTypes} {
+-		require.Len(t, catalog.unionTypes(), 1)
+-		require.Equal(t, "ChoiceRequestBody", catalog.unionTypes()[0].Name)
+-	}
+-}
+-
+-func TestHTTPServiceDataReusesOneAuthoredUnionAcrossErrors(t *testing.T) {
+-	root := expr.RunDSL(t, func() {
+-		failure := dsl.Type("SharedFailure", func() {
+-			dsl.OneOf("Cause", sameShapedValueUnionDSL)
+-		})
+-		dsl.Service("values", func() {
+-			for _, method := range []string{"first", "second"} {
+-				dsl.Method(method, func() {
+-					dsl.Error("failed", failure)
+-					dsl.HTTP(func() {
+-						dsl.GET("/" + method)
+-						dsl.Response("failed", dsl.StatusBadRequest)
+-					})
+-				})
+-			}
+-		})
+-	})
+-
+-	data := linkedHTTPPlanForRoot(t, root).services.Get("values")
+-	for _, catalog := range []*wireTypeCatalog{data.serverWireTypes, data.clientWireTypes} {
+-		require.Len(t, catalog.unionTypes(), 1)
+-		require.Equal(t, "CauseResponseBody", catalog.unionTypes()[0].Name)
+-	}
+-}
+-
+-func TestHTTPServiceDataReusesUnionWhenBranchTypeAppearsEarlier(t *testing.T) {
+-	root := expr.RunDSL(t, unionBranchOrderDSL)
+-
+-	data := linkedHTTPPlanForRoot(t, root).services.Get("values")
+-	for _, catalog := range []*wireTypeCatalog{data.serverWireTypes, data.clientWireTypes} {
+-		require.Len(t, catalog.unionTypes(), 1)
+-		require.Equal(t, "RelationshipResponseBody", catalog.unionTypes()[0].Name)
+-	}
+-}
+-
+-func TestHTTPUnionBranchTypesDoNotDependOnSurroundingFieldOrder(t *testing.T) {
+-	code := renderClientTypesCode(t, unionBranchOrderDSL)
+-	testutil.AssertGo(t, "testdata/golden/http_union_branch_order.go.golden", code)
+-}
+ 
+ func TestMakeHTTPTypeRemovesServicePackageOwnershipFromWireCopy(t *testing.T) {
+ 	nested := &expr.UserTypeExpr{
+diff --git a/http/codegen/typedef_test.go b/http/codegen/typedef_test.go
+--- a/http/codegen/typedef_test.go
++++ b/http/codegen/typedef_test.go
+@@ -1,7 +1,7 @@
+ package codegen
+ 
+ import (
+-	"strings"
++	_ "strings"
+ 	"testing"
+ 
+ 	"github.com/stretchr/testify/assert"
+@@ -85,41 +85,6 @@ func TestGoTypeDef(t *testing.T) {
+ 	}
+ }
+ 
+-func TestGoTypeDefUnionPresence(t *testing.T) {
+-	union := &expr.Union{
+-		TypeName: "Scope",
+-		Values: []*expr.NamedAttributeExpr{
+-			{Name: "description", Attribute: &expr.AttributeExpr{Type: expr.String}},
+-			{Name: "aliases", Attribute: &expr.AttributeExpr{Type: &expr.Array{
+-				ElemType: &expr.AttributeExpr{Type: expr.String},
+-			}}},
+-		},
+-	}
+-	attribute := &expr.AttributeExpr{
+-		Type: &expr.Object{
+-			{Name: "optional", Attribute: &expr.AttributeExpr{Type: union}},
+-			{Name: "required", Attribute: &expr.AttributeExpr{Type: union}},
+-		},
+-		Validation: &expr.ValidationExpr{Required: []string{"required"}},
+-	}
+-
+-	tests := []struct {
+-		name            string
+-		pointer         bool
+-		optionalPointer bool
+-		requiredPointer bool
+-	}{
+-		{name: "marshal", optionalPointer: true},
+-		{name: "validate", pointer: true, optionalPointer: true, requiredPointer: true},
+-	}
+-	for _, test := range tests {
+-		t.Run(test.name, func(t *testing.T) {
+-			def := goTypeDef(codegen.NewNameScope(), attribute, test.pointer, false)
+-			assert.Equal(t, test.optionalPointer, strings.Contains(def, "Optional *Scope"))
+-			assert.Equal(t, test.requiredPointer, strings.Contains(def, "Required *Scope"))
+-		})
+-	}
+-}
+ 
+ var (
+ 	mixedNoDefault = `struct {
+diff --git a/http/codegen/wire_catalog_test.go b/http/codegen/wire_catalog_test.go
+--- a/http/codegen/wire_catalog_test.go
++++ b/http/codegen/wire_catalog_test.go
+@@ -309,24 +309,6 @@ func TestWireTypeCatalogDoesNotRewriteValidationCalls(t *testing.T) {
+ 	require.Equal(t, "err = ValidateSharedCopy(v)", record.data.ValidateRef)
+ }
+ 
+-func TestWireTypeCatalogCollectsUnionsBeforeFreeze(t *testing.T) {
+-	union := &expr.Union{
+-		TypeName: "Choice",
+-		Values: []*expr.NamedAttributeExpr{
+-			{Name: "text", Attribute: &expr.AttributeExpr{Type: expr.String}},
+-			{Name: "count", Attribute: &expr.AttributeExpr{Type: expr.Int}},
+-		},
+-	}
+-	attribute := &expr.AttributeExpr{Type: union}
+-	catalog, generation := testWireTypeCatalog(t)
+-
+-	catalog.collect(attribute, wireAttribute, wireTypePolicy{})
+-	require.Len(t, catalog.unionOccurrences, 1)
+-	linkTestWireTypeCatalog(t, generation, catalog)
+-	catalog.applyNames(attribute, wireAttribute, wireTypePolicy{})
+-	require.Len(t, catalog.unions, 1)
+-	require.NotNil(t, catalog.unions[0].data)
+-}
+ 
+ func TestWireTypeCatalogLookupDoesNotDeriveIdentityFromAssignedName(t *testing.T) {
+ 	attribute := &expr.AttributeExpr{Type: wireCatalogType("Shared", "shared", "value", true)}
+diff --git a/jsonrpc/codegen/file_imports_test.go b/jsonrpc/codegen/file_imports_test.go
+--- a/jsonrpc/codegen/file_imports_test.go
++++ b/jsonrpc/codegen/file_imports_test.go
+@@ -17,51 +17,6 @@ import (
+ 	"example.internal/apikit/v3/dsl"
+ )
+ 
+-// TestJSONRPCFilesUsePlannedImports verifies each generated header contains no
+-// package that its source does not use and keeps imports needed only by
+-// specific request or stream shapes.
+-func TestJSONRPCFilesUsePlannedImports(t *testing.T) {
+-	tests := []struct {
+-		name       string
+-		design     func()
+-		minimal    bool
+-		validation bool
+-	}{
+-		{name: "ordinary and event stream", design: jsonRPCFileImportsDSL, minimal: true},
+-		{name: "required event resume header", design: requiredResumeJSONRPCFileImportsDSL, validation: true},
+-		{name: "optional event resume header", design: optionalResumeJSONRPCFileImportsDSL, validation: true},
+-		{name: "viewed results", design: viewedJSONRPCPlanDSL},
+-		{name: "mapped parameters and events", design: jsonRPCParamsPlanDSL},
+-	}
+-	for _, test := range tests {
+-		t.Run(test.name, func(t *testing.T) {
+-			_, plan := linkedJSONRPCPlan(t, test.design)
+-			files := append(plan.ClientFiles(), plan.ServerFiles()...)
+-			for _, file := range files {
+-				t.Run(file.Path, func(t *testing.T) {
+-					requireEveryJSONRPCImportUsed(t, file)
+-				})
+-			}
+-
+-			if test.validation {
+-				clientCodec := jsonRPCFileByPath(t, files, "gen/jsonrpc/calc/client/encode_decode.go")
+-				require.Contains(t, jsonRPCImportPaths(clientCodec), codegen.GoaImport("").Path)
+-			}
+-			if !test.minimal {
+-				return
+-			}
+-
+-			client := jsonRPCFileByPath(t, files, "gen/jsonrpc/calc/client/client.go")
+-			require.NotContains(t, jsonRPCImportPaths(client), "strconv")
+-
+-			clientStream := jsonRPCFileByPath(t, files, "gen/jsonrpc/calc/client/stream.go")
+-			require.NotContains(t, jsonRPCImportPaths(clientStream), "generated.local/gen/calc")
+-
+-			serverStream := jsonRPCFileByPath(t, files, "gen/jsonrpc/calc/server/sse.go")
+-			require.NotContains(t, jsonRPCImportPaths(serverStream), "fmt")
+-		})
+-	}
+-}
+ 
+ // requireEveryJSONRPCImportUsed parses the unformatted generated source and
+ // fails when a file header names a package that no generated section uses.
+diff --git a/jsonrpc/codegen/params_golden_test.go b/jsonrpc/codegen/params_golden_test.go
+--- a/jsonrpc/codegen/params_golden_test.go
++++ b/jsonrpc/codegen/params_golden_test.go
+@@ -14,123 +14,6 @@ import (
+ 	"example.internal/apikit/v3/dsl"
+ )
+ 
+-// TestJSONRPCParamsGeneratedSource compares the generated branches for
+-// positional values, direct containers, and optional unions.
+-func TestJSONRPCParamsGeneratedSource(t *testing.T) {
+-	_, plan := linkedJSONRPCPlan(t, jsonRPCParamsPlanDSL)
+-	tests := []struct {
+-		name     string
+-		files    []*codegen.File
+-		file     string
+-		section  string
+-		contains string
+-		golden   string
+-	}{
+-		{
+-			name:     "primitive alias request encoder",
+-			files:    plan.ClientFiles(),
+-			file:     "encode_decode.go",
+-			section:  "jsonrpc-request-encoder",
+-			contains: "func EncodeAliasRequest",
+-			golden:   "testdata/golden/params_alias_request_encoder.go.golden",
+-		},
+-		{
+-			name:     "structured array request encoder",
+-			files:    plan.ClientFiles(),
+-			file:     "encode_decode.go",
+-			section:  "jsonrpc-request-encoder",
+-			contains: "func EncodeArrayRequest",
+-			golden:   "testdata/golden/params_array_request_encoder.go.golden",
+-		},
+-		{
+-			name:     "optional array request encoder",
+-			files:    plan.ClientFiles(),
+-			file:     "encode_decode.go",
+-			section:  "jsonrpc-request-encoder",
+-			contains: "func EncodeOptionalArrayRequest",
+-			golden:   "testdata/golden/params_optional_array_request_encoder.go.golden",
+-		},
+-		{
+-			name:     "required primitive request decoder",
+-			files:    plan.ServerFiles(),
+-			file:     "encode_decode.go",
+-			section:  "jsonrpc-request-decoder",
+-			contains: "func DecodeTextRequest",
+-			golden:   "testdata/golden/params_text_request_decoder.go.golden",
+-		},
+-		{
+-			name:     "optional primitive request decoder",
+-			files:    plan.ServerFiles(),
+-			file:     "encode_decode.go",
+-			section:  "jsonrpc-request-decoder",
+-			contains: "func DecodeOptionalTextRequest",
+-			golden:   "testdata/golden/params_optional_text_request_decoder.go.golden",
+-		},
+-		{
+-			name:     "optional union request decoder",
+-			files:    plan.ServerFiles(),
+-			file:     "encode_decode.go",
+-			section:  "jsonrpc-request-decoder",
+-			contains: "func DecodeOptionalUnionRequest",
+-			golden:   "testdata/golden/params_optional_union_request_decoder.go.golden",
+-		},
+-		{
+-			name:     "primitive stream writer",
+-			files:    plan.ServerFiles(),
+-			file:     "sse.go",
+-			section:  "jsonrpc-sse-server-stream",
+-			contains: "type StreamTextServerStream",
+-			golden:   "testdata/golden/params_text_stream_server.go.golden",
+-		},
+-		{
+-			name:     "optional primitive stream reader",
+-			files:    plan.ClientFiles(),
+-			file:     "stream.go",
+-			section:  "jsonrpc-sse-client-stream",
+-			contains: "StreamOptionalTextStreamImpl struct",
+-			golden:   "testdata/golden/params_optional_text_stream_client.go.golden",
+-		},
+-		{
+-			name:     "optional primitive stream writer",
+-			files:    plan.ServerFiles(),
+-			file:     "sse.go",
+-			section:  "jsonrpc-sse-server-stream",
+-			contains: "type StreamOptionalTextServerStream",
+-			golden:   "testdata/golden/params_optional_text_stream_server.go.golden",
+-		},
+-		{
+-			name:     "defaulted primitive stream reader",
+-			files:    plan.ClientFiles(),
+-			file:     "stream.go",
+-			section:  "jsonrpc-sse-client-stream",
+-			contains: "StreamDefaultTextStreamImpl struct",
+-			golden:   "testdata/golden/params_default_text_stream_client.go.golden",
+-		},
+-		{
+-			name:     "structured array stream writer",
+-			files:    plan.ServerFiles(),
+-			file:     "sse.go",
+-			section:  "jsonrpc-sse-server-stream",
+-			contains: "type StreamArrayServerStream",
+-			golden:   "testdata/golden/params_array_stream_server.go.golden",
+-		},
+-		{
+-			name:     "optional union stream writer",
+-			files:    plan.ServerFiles(),
+-			file:     "sse.go",
+-			section:  "jsonrpc-sse-server-stream",
+-			contains: "type StreamUnionDataServerStream",
+-			golden:   "testdata/golden/params_optional_union_stream_server.go.golden",
+-		},
+-	}
+-
+-	for _, test := range tests {
+-		t.Run(test.name, func(t *testing.T) {
+-			section := paramsGoldenSection(t, test.files, test.file, test.section, test.contains)
+-			testutil.AssertGo(t, test.golden, codegen.SectionCode(t, section))
+-		})
+-	}
+-}
+ 
+ // TestJSONRPCDefaultedSelectedParamsGeneratedSource checks that generated
+ // clients preserve explicit empty values and generated servers apply defaults
+diff --git a/jsonrpc/codegen/plan_test.go b/jsonrpc/codegen/plan_test.go
+--- a/jsonrpc/codegen/plan_test.go
++++ b/jsonrpc/codegen/plan_test.go
+@@ -93,62 +93,6 @@ func TestPlanRetainsServicePackageImport(t *testing.T) {
+ 	require.Equal(t, "sync2", client.ImportName("generated.local/gen/sync"))
+ }
+ 
+-// TestPlanSelectsPositionalParams checks that strings, bytes, and Any values
+-// are wrapped once while objects, arrays, maps, and unions keep their JSON shape.
+-func TestPlanSelectsPositionalParams(t *testing.T) {
+-	_, transport := linkedJSONRPCPlan(t, jsonRPCParamsPlanDSL)
+-	endpoints := transport.services[0].data.Endpoints
+-
+-	want := map[string]struct {
+-		request     bool
+-		positional  bool
+-		allowAbsent bool
+-		omitAbsent  bool
+-		stream      bool
+-	}{
+-		"text":                 {request: true, positional: true},
+-		"alias":                {request: true, positional: true},
+-		"anything":             {request: true, positional: true},
+-		"bytes":                {request: true, positional: true},
+-		"object":               {request: true},
+-		"array":                {request: true},
+-		"map":                  {request: true},
+-		"union":                {request: true},
+-		"optional_text":        {request: true, positional: true, allowAbsent: true},
+-		"optional_object":      {request: true, allowAbsent: true, omitAbsent: true},
+-		"optional_array":       {request: true, allowAbsent: true, omitAbsent: true},
+-		"optional_map":         {request: true, allowAbsent: true, omitAbsent: true},
+-		"optional_union":       {request: true, allowAbsent: true, omitAbsent: true},
+-		"stream_text":          {stream: true, positional: true},
+-		"stream_any":           {stream: true, positional: true},
+-		"stream_array":         {stream: true},
+-		"stream_optional_text": {stream: true, positional: true, allowAbsent: true},
+-		"stream_default_text":  {stream: true, positional: true, allowAbsent: true},
+-		"stream_object_data":   {stream: true, allowAbsent: true, omitAbsent: true},
+-		"stream_array_data":    {stream: true, allowAbsent: true, omitAbsent: true},
+-		"stream_map_data":      {stream: true, allowAbsent: true, omitAbsent: true},
+-		"stream_union_data":    {stream: true, allowAbsent: true, omitAbsent: true},
+-	}
+-	require.Len(t, endpoints, len(want))
+-	for _, endpoint := range endpoints {
+-		expected, ok := want[endpoint.Method.Name]
+-		require.True(t, ok, endpoint.Method.Name)
+-		request := endpoint.Payload != nil && endpoint.Payload.Request != nil && endpoint.Payload.Request.Params != nil
+-		stream := endpoint.SSE != nil && endpoint.SSE.Params != nil
+-		require.Equal(t, expected.request, request, endpoint.Method.Name)
+-		if expected.request {
+-			require.Equal(t, expected.positional, endpoint.Payload.Request.Params.Positional, endpoint.Method.Name)
+-			require.Equal(t, expected.allowAbsent, endpoint.Payload.Request.Params.AllowAbsent, endpoint.Method.Name)
+-			require.Equal(t, expected.omitAbsent, endpoint.Payload.Request.Params.OmitAbsent, endpoint.Method.Name)
+-		}
+-		require.Equal(t, expected.stream, stream, endpoint.Method.Name)
+-		if expected.stream {
+-			require.Equal(t, expected.positional, endpoint.SSE.Params.Positional, endpoint.Method.Name)
+-			require.Equal(t, expected.allowAbsent, endpoint.SSE.Params.AllowAbsent, endpoint.Method.Name)
+-			require.Equal(t, expected.omitAbsent, endpoint.SSE.Params.OmitAbsent, endpoint.Method.Name)
+-		}
+-	}
+-}
+ 
+ // TestNewExamplePlanRejectsAnotherServicePlan checks that server names and
+ // URLs cannot come from a different design with the same authored names.

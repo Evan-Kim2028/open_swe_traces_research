@@ -1,0 +1,24 @@
+{
+  "impl": {
+    "github/github.go": {
+      "Response.populatePageValues": "if links, ok := r.Response.Header[\"Link\"]; ok && len(links) > 0 {\n\t\tfor link := range strings.SplitSeq(links[0], \",\") {\n\t\t\tsegments := strings.Split(strings.TrimSpace(link), \";\")\n\t\t\tif len(segments) < 2 {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tif !strings.HasPrefix(segments[0], \"<\") || !strings.HasSuffix(segments[0], \">\") {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\turl, err := url.Parse(segments[0][1 : len(segments[0])-1])\n\t\t\tif err != nil {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tq := url.Query()\n\t\t\tpage := q.Get(\"page\")\n\t\t\tbefore := q.Get(\"before\")\n\t\t\tafter := q.Get(\"after\")\n\t\t\tif page == \"\" && before == \"\" && after == \"\" {\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tfor _, segment := range segments[1:] {\n\t\t\t\tswitch strings.TrimSpace(segment) {\n\t\t\t\tcase `rel=\"next\"`:\n\t\t\t\t\tif r.NextPage, err = strconv.Atoi(page); err != nil {\n\t\t\t\t\t\tr.NextPageToken = page\n\t\t\t\t\t}\n\t\t\t\t\tr.After = after\n\t\t\t\tcase `rel=\"prev\"`:\n\t\t\t\t\tr.PrevPage, _ = strconv.Atoi(page)\n\t\t\t\t\tr.Before = before\n\t\t\t\tcase `rel=\"first\"`:\n\t\t\t\t\tr.FirstPage, _ = strconv.Atoi(page)\n\t\t\t\tcase `rel=\"last\"`:\n\t\t\t\t\tr.LastPage, _ = strconv.Atoi(page)\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}"
+    }
+  },
+  "deltests": {
+    "github/github_test.go": [
+      "TestResponse_populatePageValues",
+      "TestResponse_populateSinceValues",
+      "TestResponse_SinceWithPage",
+      "TestResponse_cursorPagination",
+      "TestResponse_beforeAfterPagination",
+      "TestResponse_populatePageValues_invalid",
+      "TestResponse_populateSinceValues_invalid"
+    ],
+    "github/github-iterators_test.go": [
+      "TestAppsService_ListHookDeliveriesIter",
+      "TestOrganizationsService_ListHookDeliveriesIter",
+      "TestRepositoriesService_ListHookDeliveriesIter"
+    ]
+  },
+  "testre": "TestResponse_populatePageValues|TestResponse_populateSinceValues|TestResponse_SinceWithPage|TestResponse_cursorPagination|TestResponse_beforeAfterPagination|TestResponse_populatePageValues_invalid|TestResponse_populateSinceValues_invalid|TestAppsService_ListHookDeliveriesIter|TestOrganizationsService_ListHookDeliveriesIter|TestRepositoriesService_ListHookDeliveriesIter"
+}

@@ -1,0 +1,54 @@
+--- a/upup/pkg/fi/topological_sort.go
++++ b/upup/pkg/fi/topological_sort.go
+@@ -42,23 +42,46 @@
+ var _ NodeupHasDependencies = (*NodeupNotADependency)(nil)
+ 
+ func (NotADependency[T]) GetDependencies(map[string]Task[T]) []Task[T] {
+-	panic("excised: NotADependency.GetDependencies")
++	return nil
+ }
+ 
+ // FindTaskDependencies returns a map from each task's key to the discovered list of dependencies
+ func FindTaskDependencies[T SubContext](tasks map[string]Task[T]) map[string][]string {
+-	panic("excised: FindTaskDependencies")
++	taskToId := make(map[interface{}]string)
++	for k, t := range tasks {
++		taskToId[t] = k
++	}
++	edges := make(map[string][]string)
++	for k, t := range tasks {
++		if hd, ok := t.(HasDependencies[T]); ok {
++			for _, dep := range hd.GetDependencies(tasks) {
++				if dep == nil {
++					continue
++				}
++				if dk, found := taskToId[dep]; found {
++					edges[k] = append(edges[k], dk)
++				}
++			}
++		}
++		if edges[k] == nil {
++			edges[k] = []string{}
++		}
++	}
++	return edges
+ }
+ 
+ func reflectForDependencies[T SubContext](tasks map[string]Task[T], task Task[T]) []Task[T] {
+-	panic("excised: reflectForDependencies")
++	return nil
+ }
+ 
+ // FindDependencies will try to infer dependencies for an arbitrary object
+ func FindDependencies[T SubContext](tasks map[string]Task[T], o interface{}) []Task[T] {
+-	panic("excised: FindDependencies")
++	if hd, ok := o.(HasDependencies[T]); ok {
++		return hd.GetDependencies(tasks)
++	}
++	return nil
+ }
+ 
+ func getDependencies[T SubContext](tasks map[string]Task[T], v reflect.Value) []Task[T] {
+-	panic("excised: getDependencies")
++	return nil
+ }

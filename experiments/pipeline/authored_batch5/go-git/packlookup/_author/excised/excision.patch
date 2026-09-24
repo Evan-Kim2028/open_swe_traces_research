@@ -1,0 +1,1538 @@
+diff --git a/plumbing/format/packfile/fsobject.go b/plumbing/format/packfile/fsobject.go
+index 786bf59..6dff318 100644
+--- a/plumbing/format/packfile/fsobject.go
++++ b/plumbing/format/packfile/fsobject.go
+@@ -2,10 +2,10 @@ package packfile
+ 
+ import (
+ 	"bufio"
+-	"errors"
++	_ "errors"
+ 	"io"
+-	"math"
+-	"os"
++	_ "math"
++	_ "os"
+ 	stdsync "sync"
+ 
+ 	billy "github.com/go-git/go-billy/v6"
+@@ -13,7 +13,7 @@ import (
+ 	"example.internal/gitkit/v6/plumbing"
+ 	"example.internal/gitkit/v6/plumbing/cache"
+ 	"example.internal/gitkit/v6/plumbing/format/idxfile"
+-	"example.internal/gitkit/v6/utils/ioutil"
++	_ "example.internal/gitkit/v6/utils/ioutil"
+ 	"example.internal/gitkit/v6/utils/sync"
+ )
+ 
+@@ -51,10 +51,7 @@ var probeBufPool = stdsync.Pool{
+ // [io.EOF] indicates the offset is at or past end-of-file, which
+ // implies a truncated pack — propagate rather than masking.
+ func probePack(pack io.ReaderAt, offset int64) error {
+-	buf := probeBufPool.Get().(*[probeSize]byte)
+-	defer probeBufPool.Put(buf)
+-	_, err := pack.ReadAt(buf[:], offset)
+-	return err
++	panic("excised: probePack")
+ }
+ 
+ // FSObject is an object from the packfile on the filesystem.
+@@ -86,17 +83,7 @@ func NewFSObject(
+ 	packPath string,
+ 	cache cache.Object,
+ ) *FSObject {
+-	return &FSObject{
+-		hash:     hash,
+-		offset:   offset,
+-		size:     contentSize,
+-		typ:      finalType,
+-		index:    index,
+-		fs:       fs,
+-		pack:     pack,
+-		packPath: packPath,
+-		cache:    cache,
+-	}
++	panic("excised: NewFSObject")
+ }
+ 
+ // Reader implements the plumbing.EncodedObject interface.
+@@ -106,64 +93,7 @@ func NewFSObject(
+ // multiple goroutines can call Reader on FSObjects that share the
+ // same underlying packfile handle.
+ func (o *FSObject) Reader() (io.ReadCloser, error) {
+-	obj, ok := o.cache.Get(o.hash)
+-	if ok && obj != o {
+-		reader, err := obj.Reader()
+-		if err != nil {
+-			return nil, err
+-		}
+-
+-		return reader, nil
+-	}
+-
+-	var (
+-		pack io.ReaderAt
+-		file io.Closer
+-	)
+-
+-	if o.acquireRandom != nil {
+-		cur, err := o.acquireRandom()
+-		if err != nil {
+-			return nil, err
+-		}
+-		pack = cur
+-		file = cur
+-	} else {
+-		pack = o.pack
+-
+-		switch err := probePack(pack, o.offset); {
+-		case err == nil:
+-			// FD is live; keep using pack.
+-		case errors.Is(err, os.ErrClosed):
+-			reopened, oerr := o.fs.Open(o.packPath)
+-			if oerr != nil {
+-				return nil, oerr
+-			}
+-			pack = reopened
+-			file = reopened
+-		default:
+-			return nil, err
+-		}
+-	}
+-
+-	// SectionReader provides a standalone io.Reader backed by ReadAt. Each
+-	// SectionReader maintains its own read position, so concurrent calls
+-	// to Reader do not interfere with each other or with the packfile's
+-	// Scanner. The upper bound is set to math.MaxInt64 because zlib
+-	// streams are self-terminating — the decompressor stops at the DEFLATE
+-	// end marker regardless of how many bytes remain available.
+-	sr := io.NewSectionReader(pack, o.offset, math.MaxInt64-o.offset)
+-	br := sync.GetBufioReader(sr)
+-
+-	zr, err := sync.GetZlibReader(br)
+-	if err != nil {
+-		sync.PutBufioReader(br)
+-		if file != nil {
+-			_ = file.Close()
+-		}
+-		return nil, err
+-	}
+-	return NewBoundedReadCloser(&zlibReadCloser{r: zr, f: file, rbuf: br}, o.size), nil
++	panic("excised: FSObject.Reader")
+ }
+ 
+ type zlibReadCloser struct {
+@@ -175,46 +105,42 @@ type zlibReadCloser struct {
+ 
+ // Read reads up to len(p) bytes into p from the data.
+ func (r *zlibReadCloser) Read(p []byte) (int, error) {
+-	return r.r.Read(p)
++	panic("excised: zlibReadCloser.Read")
+ }
+ 
+ func (r *zlibReadCloser) Close() (err error) {
+-	if r.closed {
+-		return nil
+-	}
+-	r.closed = true
+-
+-	if r.f != nil {
+-		defer ioutil.CheckClose(r.f, &err)
+-	}
+-
+-	defer sync.PutBufioReader(r.rbuf)
+-
+-	defer sync.PutZlibReader(r.r)
+-	return r.r.Close()
++	panic("excised: zlibReadCloser.Close")
+ }
+ 
+ // SetSize implements the plumbing.EncodedObject interface. This method
+ // is a noop.
+-func (o *FSObject) SetSize(int64) {}
++func (o *FSObject) SetSize(int64) {
++	panic("excised: FSObject.SetSize")
++}
+ 
+ // SetType implements the plumbing.EncodedObject interface. This method is
+ // a noop.
+-func (o *FSObject) SetType(plumbing.ObjectType) {}
++func (o *FSObject) SetType(plumbing.ObjectType) {
++	panic("excised: FSObject.SetType")
++}
+ 
+ // Hash implements the plumbing.EncodedObject interface.
+-func (o *FSObject) Hash() plumbing.Hash { return o.hash }
++func (o *FSObject) Hash() plumbing.Hash {
++	panic("excised: FSObject.Hash")
++}
+ 
+ // Size implements the plumbing.EncodedObject interface.
+-func (o *FSObject) Size() int64 { return o.size }
++func (o *FSObject) Size() int64 {
++	panic("excised: FSObject.Size")
++}
+ 
+ // Type implements the plumbing.EncodedObject interface.
+ func (o *FSObject) Type() plumbing.ObjectType {
+-	return o.typ
++	panic("excised: FSObject.Type")
+ }
+ 
+ // Writer implements the plumbing.EncodedObject interface. This method always
+ // returns a nil writer.
+ func (o *FSObject) Writer() (io.WriteCloser, error) {
+-	return nil, nil
++	panic("excised: FSObject.Writer")
+ }
+diff --git a/plumbing/format/packfile/fsobject_test.go b/plumbing/format/packfile/fsobject_test.go
+deleted file mode 100644
+index 78f476c..0000000
+--- a/plumbing/format/packfile/fsobject_test.go
++++ /dev/null
+@@ -1,62 +0,0 @@
+-package packfile_test
+-
+-import (
+-	"io"
+-	"testing"
+-	"testing/synctest"
+-
+-	"github.com/go-git/go-billy/v6/osfs"
+-	fixtures "github.com/go-git/go-git-fixtures/v6"
+-	"github.com/stretchr/testify/require"
+-
+-	"example.internal/gitkit/v6/internal/fixtureutil"
+-	"example.internal/gitkit/v6/plumbing"
+-	"example.internal/gitkit/v6/plumbing/format/packfile"
+-)
+-
+-// TestFSObjectConcurrentReader verifies that multiple goroutines can call
+-// Reader() on FSObjects backed by the same packfile handle without racing.
+-// Before the ReadAt fix, FSObject.Reader() used Seek+Read on a shared file
+-// descriptor, causing data races under concurrent access.
+-func TestFSObjectConcurrentReader(t *testing.T) {
+-	t.Parallel()
+-
+-	f := fixtures.Basic().One()
+-	index := getIndexFromFixture(t, f)
+-
+-	pf, pfErr := f.Packfile()
+-	require.NoError(t, pfErr)
+-	p := packfile.NewPackfile(pf,
+-		packfile.WithIdx(index),
+-		packfile.WithFs(osfs.New(t.TempDir())),
+-	)
+-
+-	entries := fixtureutil.Entries(f)
+-	objects := make([]plumbing.EncodedObject, 0, len(entries))
+-	for h := range entries {
+-		obj, err := p.Get(h)
+-		require.NoError(t, err)
+-		objects = append(objects, obj)
+-	}
+-	require.NotEmpty(t, objects)
+-
+-	const iterations = 5
+-	synctest.Test(t, func(t *testing.T) {
+-		for range iterations {
+-			for _, obj := range objects {
+-				go func() {
+-					reader, err := obj.Reader()
+-					if err != nil {
+-						t.Errorf("Reader(): %v", err)
+-						return
+-					}
+-					defer reader.Close()
+-
+-					if _, err = io.ReadAll(reader); err != nil {
+-						t.Errorf("ReadAll(): %v", err)
+-					}
+-				}()
+-			}
+-		}
+-	})
+-}
+diff --git a/plumbing/format/packfile/internal_test.go b/plumbing/format/packfile/internal_test.go
+deleted file mode 100644
+index 1a17ceb..0000000
+--- a/plumbing/format/packfile/internal_test.go
++++ /dev/null
+@@ -1,341 +0,0 @@
+-package packfile
+-
+-import (
+-	"bytes"
+-	"compress/zlib"
+-	"crypto/sha1"
+-	"encoding/binary"
+-	"errors"
+-	"io"
+-	"os"
+-	"sync/atomic"
+-	"testing"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	"example.internal/gitkit/v6/plumbing"
+-	format "example.internal/gitkit/v6/plumbing/format/config"
+-	"example.internal/gitkit/v6/plumbing/format/idxfile"
+-	packutil "example.internal/gitkit/v6/plumbing/format/packfile/util"
+-	gogitbinary "example.internal/gitkit/v6/utils/binary"
+-)
+-
+-func TestParserRejectsDeepDeltaChain(t *testing.T) {
+-	t.Parallel()
+-
+-	objects := make([]testPackObject, 0, maxDeltaChainDepth+2)
+-	content := []byte{0, 0}
+-	parentHash := testObjectHash(plumbing.BlobObject, content)
+-	objects = append(objects, testPackObject{
+-		typ:     plumbing.BlobObject,
+-		content: content,
+-	})
+-
+-	for i := range maxDeltaChainDepth + 1 {
+-		content = []byte{byte(i + 1), byte((i + 1) >> 8)}
+-		delta := buildDelta(2, 2, insertOp(content))
+-		objects = append(objects, testPackObject{
+-			typ:       plumbing.REFDeltaObject,
+-			content:   delta,
+-			reference: parentHash,
+-		})
+-		parentHash = testObjectHash(plumbing.BlobObject, content)
+-	}
+-
+-	pack, _ := buildTestPack(t, objects...)
+-	parser := NewParser(bytes.NewReader(pack))
+-
+-	_, err := parser.Parse()
+-	require.ErrorIs(t, err, ErrMalformedPackfile)
+-	require.ErrorContains(t, err, "delta chain depth")
+-}
+-
+-func TestObjectIterReturnsObjectNotFoundForMissingDeltaBase(t *testing.T) {
+-	t.Parallel()
+-
+-	delta := buildDelta(1, 1, insertOp([]byte("b")))
+-	missingReference := plumbing.NewHash("1111111111111111111111111111111111111111")
+-
+-	for _, test := range []struct {
+-		name string
+-		obj  testPackObject
+-	}{
+-		{
+-			name: "ref delta",
+-			obj: testPackObject{
+-				typ:       plumbing.REFDeltaObject,
+-				content:   delta,
+-				reference: missingReference,
+-			},
+-		},
+-		{
+-			name: "ofs delta",
+-			obj: testPackObject{
+-				typ:                 plumbing.OFSDeltaObject,
+-				content:             delta,
+-				offsetDeltaDistance: 1,
+-			},
+-		},
+-	} {
+-		t.Run(test.name, func(t *testing.T) {
+-			t.Parallel()
+-
+-			pack, offsets := buildTestPack(t, test.obj)
+-			file := writeTestPackFile(t, pack)
+-			entry := &idxfile.Entry{
+-				Hash:   testObjectHash(plumbing.BlobObject, []byte("unused")),
+-				Offset: uint64(offsets[0]),
+-			}
+-			p := NewPackfile(file, WithIdx(&singleEntryIndex{entry: entry}))
+-			defer p.Close()
+-
+-			iter, err := p.GetByType(plumbing.BlobObject)
+-			require.NoError(t, err)
+-			defer iter.Close()
+-
+-			obj, err := iter.Next()
+-			require.Nil(t, obj)
+-			require.ErrorIs(t, err, plumbing.ErrObjectNotFound)
+-		})
+-	}
+-}
+-
+-type singleEntryIndex struct {
+-	entry *idxfile.Entry
+-}
+-
+-func (idx *singleEntryIndex) Contains(h plumbing.Hash) (bool, error) {
+-	return idx.entry.Hash.Equal(h), nil
+-}
+-
+-func (idx *singleEntryIndex) FindOffset(h plumbing.Hash) (int64, error) {
+-	if idx.entry.Hash.Equal(h) {
+-		return int64(idx.entry.Offset), nil
+-	}
+-	return 0, plumbing.ErrObjectNotFound
+-}
+-
+-func (idx *singleEntryIndex) FindCRC32(h plumbing.Hash) (uint32, error) {
+-	if idx.entry.Hash.Equal(h) {
+-		return idx.entry.CRC32, nil
+-	}
+-	return 0, plumbing.ErrObjectNotFound
+-}
+-
+-func (idx *singleEntryIndex) FindHash(offset int64) (plumbing.Hash, error) {
+-	if idx.entry.Offset == uint64(offset) {
+-		return idx.entry.Hash, nil
+-	}
+-	return plumbing.ZeroHash, plumbing.ErrObjectNotFound
+-}
+-
+-func (idx *singleEntryIndex) Count() (int64, error) {
+-	return 1, nil
+-}
+-
+-func (idx *singleEntryIndex) Entries() (idxfile.EntryIter, error) {
+-	return &singleEntryIter{entry: idx.entry}, nil
+-}
+-
+-func (idx *singleEntryIndex) EntriesByOffset() (idxfile.EntryIter, error) {
+-	return &singleEntryIter{entry: idx.entry}, nil
+-}
+-
+-func (idx *singleEntryIndex) EntriesWithPrefix(prefix []byte) (idxfile.EntryIter, error) {
+-	if len(prefix) == 0 || idx.entry.Hash.HasPrefix(prefix) {
+-		return &singleEntryIter{entry: idx.entry}, nil
+-	}
+-	return &singleEntryIter{done: true}, nil
+-}
+-
+-func (idx *singleEntryIndex) MayContain(h plumbing.Hash) bool {
+-	return idx.entry.Hash.Equal(h)
+-}
+-
+-func (idx *singleEntryIndex) Close() error { return nil }
+-
+-type singleEntryIter struct {
+-	entry *idxfile.Entry
+-	done  bool
+-}
+-
+-func (iter *singleEntryIter) Next() (*idxfile.Entry, error) {
+-	if iter.done {
+-		return nil, io.EOF
+-	}
+-	iter.done = true
+-	return iter.entry, nil
+-}
+-
+-func (iter *singleEntryIter) Close() error {
+-	iter.done = true
+-	return nil
+-}
+-
+-type testPackObject struct {
+-	typ                 plumbing.ObjectType
+-	declaredSize        int64
+-	content             []byte
+-	reference           plumbing.Hash
+-	offsetDeltaDistance int64
+-}
+-
+-func buildTestPack(t *testing.T, objects ...testPackObject) ([]byte, []int64) {
+-	t.Helper()
+-
+-	var body bytes.Buffer
+-	body.WriteString("PACK")
+-	require.NoError(t, binary.Write(&body, binary.BigEndian, uint32(2)))
+-	require.NoError(t, binary.Write(&body, binary.BigEndian, uint32(len(objects))))
+-
+-	offsets := make([]int64, 0, len(objects))
+-	for _, obj := range objects {
+-		offsets = append(offsets, int64(body.Len()))
+-		declaredSize := obj.declaredSize
+-		if declaredSize == 0 && len(obj.content) > 0 {
+-			declaredSize = int64(len(obj.content))
+-		}
+-
+-		writeTestObjectHeader(&body, obj.typ, declaredSize)
+-		switch obj.typ {
+-		case plumbing.REFDeltaObject:
+-			body.Write(obj.reference.Bytes())
+-		case plumbing.OFSDeltaObject:
+-			require.NoError(t, gogitbinary.WriteVariableWidthInt(&body, obj.offsetDeltaDistance))
+-		}
+-		body.Write(zlibCompress(t, obj.content))
+-	}
+-
+-	sum := sha1.Sum(body.Bytes())
+-	body.Write(sum[:])
+-	return body.Bytes(), offsets
+-}
+-
+-func writeTestObjectHeader(w io.Writer, typ plumbing.ObjectType, size int64) {
+-	first := byte(typ)<<4 | byte(size&0x0f)
+-	rest := uint(size >> 4)
+-	if rest != 0 {
+-		first |= 0x80
+-	}
+-	_, _ = w.Write([]byte{first})
+-	if rest != 0 {
+-		_ = packutil.EncodeLEB128ToWriter(w, rest)
+-	}
+-}
+-
+-func zlibCompress(t *testing.T, content []byte) []byte {
+-	t.Helper()
+-
+-	var compressed bytes.Buffer
+-	zw := zlib.NewWriter(&compressed)
+-	_, err := zw.Write(content)
+-	require.NoError(t, err)
+-	require.NoError(t, zw.Close())
+-	return compressed.Bytes()
+-}
+-
+-func testObjectHash(typ plumbing.ObjectType, content []byte) plumbing.Hash {
+-	h := plumbing.NewHasher(format.SHA1, typ, int64(len(content)))
+-	_, _ = h.Write(content)
+-	return h.Sum()
+-}
+-
+-func writeTestPackFile(t *testing.T, pack []byte) *os.File {
+-	t.Helper()
+-
+-	file, err := os.CreateTemp(t.TempDir(), "malformed-*.pack")
+-	require.NoError(t, err)
+-	t.Cleanup(func() { _ = file.Close() })
+-
+-	_, err = file.Write(pack)
+-	require.NoError(t, err)
+-	_, err = file.Seek(0, io.SeekStart)
+-	require.NoError(t, err)
+-	return file
+-}
+-
+-// TestNewPackfile_CloseReturnsScannerError verifies that
+-// Packfile.Close surfaces the scanner cursor's close error in
+-// resolver mode. The resolver-owned handle is not closed by
+-// Packfile.Close (its lifetime belongs to the resolver), so the
+-// scanner cursor is the only error source.
+-func TestNewPackfile_CloseReturnsScannerError(t *testing.T) {
+-	t.Parallel()
+-
+-	scanErr := errors.New("scan-fail")
+-
+-	cases := []struct {
+-		name    string
+-		scanErr error
+-		wantNil bool
+-	}{
+-		{name: "scan succeeds", scanErr: nil, wantNil: true},
+-		{name: "scan fails", scanErr: scanErr, wantNil: false},
+-	}
+-
+-	for _, tc := range cases {
+-		t.Run(tc.name, func(t *testing.T) {
+-			t.Parallel()
+-
+-			p := &Packfile{}
+-			p.handle = stubPackHandle{}
+-			p.scanReader = stubCloser{err: tc.scanErr}
+-
+-			err := p.Close()
+-			if tc.wantNil {
+-				assert.NoError(t, err)
+-				return
+-			}
+-			assert.ErrorIs(t, err, scanErr)
+-		})
+-	}
+-}
+-
+-// stubCloser is a minimal io.ReadSeekCloser that returns a
+-// configured error from Close.
+-type stubCloser struct{ err error }
+-
+-func (s stubCloser) Read([]byte) (int, error)       { return 0, io.EOF }
+-func (s stubCloser) Seek(int64, int) (int64, error) { return 0, nil }
+-func (s stubCloser) Close() error                   { return s.err }
+-
+-// stubPackHandle is a minimal PackHandle for tests that don't
+-// exercise its methods.
+-type stubPackHandle struct{}
+-
+-func (stubPackHandle) OpenPackReader() (io.ReadSeekCloser, error) { panic("unused") }
+-func (stubPackHandle) OpenRandomReader() (RandomReader, error)    { panic("unused") }
+-func (stubPackHandle) PackHash() (plumbing.Hash, error)           { panic("unused") }
+-
+-// TestNewPackfile_ExternalResolverNotClosed verifies that
+-// Packfile.Close does not invoke any close path against a handle
+-// supplied via WithPackHandle. The resolver-owned handle must
+-// outlive the Packfile that consumed it; only the scanner cursor
+-// (held in p.scanReader) is closed.
+-func TestNewPackfile_ExternalResolverNotClosed(t *testing.T) {
+-	t.Parallel()
+-
+-	// Track invocations through the resolver. The resolver
+-	// itself is invoked exactly once during init (by the
+-	// scanner-init path), but here we close before init runs so
+-	// it should NOT be invoked at all.
+-	var resolverCalls atomic.Int32
+-	stub := stubPackHandle{}
+-
+-	resolver := PackHandleResolver(func() (PackHandle, error) {
+-		resolverCalls.Add(1)
+-		return stub, nil
+-	})
+-
+-	p := NewPackfile(nil, WithPackHandle(resolver))
+-	// Close without init — exercises the WithPackHandle path
+-	// directly. p.handle is still nil (init hasn't run);
+-	// p.scanReader is nil. Close must be a no-op.
+-	require.NoError(t, p.Close())
+-	assert.Zero(t, resolverCalls.Load(),
+-		"resolver must not be invoked during Close on an unused Packfile")
+-
+-	// Second close is idempotent.
+-	require.NoError(t, p.Close())
+-}
+diff --git a/plumbing/format/packfile/pack_handle.go b/plumbing/format/packfile/pack_handle.go
+index e8da31b..59e2c20 100644
+--- a/plumbing/format/packfile/pack_handle.go
++++ b/plumbing/format/packfile/pack_handle.go
+@@ -52,17 +52,11 @@ type PackHandleResolver func() (PackHandle, error)
+ // lifetime is owned by the resolver. See [PackHandleResolver] for
+ // the resolver contract.
+ func WithPackHandle(get PackHandleResolver) PackfileOption {
+-	return func(p *Packfile) {
+-		p.resolveHandle = get
+-	}
++	panic("excised: WithPackHandle")
+ }
+ 
+ // openRandomReader re-resolves the pack handle via resolveHandle
+ // and returns a fresh random-access cursor.
+ func (p *Packfile) openRandomReader() (RandomReader, error) {
+-	h, err := p.resolveHandle()
+-	if err != nil {
+-		return nil, err
+-	}
+-	return h.OpenRandomReader()
++	panic("excised: Packfile.openRandomReader")
+ }
+diff --git a/plumbing/format/packfile/packfile.go b/plumbing/format/packfile/packfile.go
+index fe420e5..0d6a1d7 100644
+--- a/plumbing/format/packfile/packfile.go
++++ b/plumbing/format/packfile/packfile.go
+@@ -2,10 +2,10 @@ package packfile
+ 
+ import (
+ 	"bufio"
+-	"crypto"
+-	"fmt"
++	_ "crypto"
++	_ "fmt"
+ 	"io"
+-	"io/fs"
++	_ "io/fs"
+ 	"sync"
+ 	"sync/atomic"
+ 
+@@ -13,11 +13,11 @@ import (
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+ 	"example.internal/gitkit/v6/plumbing/cache"
+-	format "example.internal/gitkit/v6/plumbing/format/config"
++	_ "example.internal/gitkit/v6/plumbing/format/config"
+ 	"example.internal/gitkit/v6/plumbing/format/idxfile"
+ 	"example.internal/gitkit/v6/plumbing/storer"
+-	"example.internal/gitkit/v6/utils/ioutil"
+-	gogitsync "example.internal/gitkit/v6/utils/sync"
++	_ "example.internal/gitkit/v6/utils/ioutil"
++	_ "example.internal/gitkit/v6/utils/sync"
+ )
+ 
+ var (
+@@ -69,114 +69,36 @@ func NewPackfile(
+ 	file billy.File,
+ 	opts ...PackfileOption,
+ ) *Packfile {
+-	p := &Packfile{
+-		file:         file,
+-		objectIDSize: crypto.SHA1.Size(),
+-	}
+-	for _, opt := range opts {
+-		opt(p)
+-	}
+-
+-	if p.resolveHandle != nil && file != nil {
+-		_ = file.Close()
+-		p.file = nil
+-	}
+-
+-	return p
++	panic("excised: NewPackfile")
+ }
+ 
+ // Get retrieves the encoded object in the packfile with the given hash.
+ func (p *Packfile) Get(h plumbing.Hash) (plumbing.EncodedObject, error) {
+-	if p.closed.Load() {
+-		return nil, fs.ErrClosed
+-	}
+-	if err := p.init(); err != nil {
+-		return nil, err
+-	}
+-	p.m.Lock()
+-	defer p.m.Unlock()
+-	// Re-check after Lock: Close may have flipped closed and torn
+-	// down the scanner between the early Load and the Lock.
+-	if p.closed.Load() {
+-		return nil, fs.ErrClosed
+-	}
+-
+-	return p.get(h)
++	panic("excised: Packfile.Get")
+ }
+ 
+ // GetByOffset retrieves the encoded object from the packfile at the given
+ // offset.
+ func (p *Packfile) GetByOffset(offset int64) (plumbing.EncodedObject, error) {
+-	if p.closed.Load() {
+-		return nil, fs.ErrClosed
+-	}
+-	if err := p.init(); err != nil {
+-		return nil, err
+-	}
+-	p.m.Lock()
+-	defer p.m.Unlock()
+-	// Re-check after Lock: Close may have flipped closed and torn
+-	// down the scanner between the early Load and the Lock.
+-	if p.closed.Load() {
+-		return nil, fs.ErrClosed
+-	}
+-
+-	return p.getByOffset(offset)
++	panic("excised: Packfile.GetByOffset")
+ }
+ 
+ // GetSizeByOffset retrieves the size of the encoded object from the
+ // packfile with the given offset.
+ func (p *Packfile) GetSizeByOffset(offset int64) (size int64, err error) {
+-	if p.closed.Load() {
+-		return 0, fs.ErrClosed
+-	}
+-	if err := p.init(); err != nil {
+-		return 0, err
+-	}
+-
+-	d, err := p.GetByOffset(offset)
+-	if err != nil {
+-		return 0, err
+-	}
+-
+-	return d.Size(), nil
++	panic("excised: Packfile.GetSizeByOffset")
+ }
+ 
+ // GetAll returns an iterator with all encoded objects in the packfile.
+ // The iterator returned is not thread-safe, it should be used in the same
+ // thread as the Packfile instance.
+ func (p *Packfile) GetAll() (storer.EncodedObjectIter, error) {
+-	return p.GetByType(plumbing.AnyObject)
++	panic("excised: Packfile.GetAll")
+ }
+ 
+ // GetByType returns all the objects of the given type.
+ func (p *Packfile) GetByType(typ plumbing.ObjectType) (storer.EncodedObjectIter, error) {
+-	if p.closed.Load() {
+-		return nil, fs.ErrClosed
+-	}
+-	if err := p.init(); err != nil {
+-		return nil, err
+-	}
+-
+-	switch typ {
+-	case plumbing.AnyObject,
+-		plumbing.BlobObject,
+-		plumbing.TreeObject,
+-		plumbing.CommitObject,
+-		plumbing.TagObject:
+-		entries, err := p.EntriesByOffset()
+-		if err != nil {
+-			return nil, err
+-		}
+-
+-		return &objectIter{
+-			p:    p,
+-			iter: entries,
+-			typ:  typ,
+-		}, nil
+-	default:
+-		return nil, plumbing.ErrInvalidType
+-	}
++	panic("excised: Packfile.GetByType")
+ }
+ 
+ // Scanner returns the Packfile's inner scanner.
+@@ -185,291 +107,43 @@ func (p *Packfile) GetByType(typ plumbing.ObjectType) (storer.EncodedObjectIter,
+ // to avoid exposing the package internals and to improve its thread-safety.
+ // TODO: Remove Scanner method
+ func (p *Packfile) Scanner() (*Scanner, error) {
+-	if p.closed.Load() {
+-		return nil, fs.ErrClosed
+-	}
+-	if err := p.init(); err != nil {
+-		return nil, err
+-	}
+-
+-	return p.scanner, nil
++	panic("excised: Packfile.Scanner")
+ }
+ 
+ // ID returns the ID of the packfile, which is the checksum at the end of it.
+ func (p *Packfile) ID() (plumbing.Hash, error) {
+-	if err := p.init(); err != nil {
+-		return plumbing.ZeroHash, err
+-	}
+-
+-	return p.id, nil
++	panic("excised: Packfile.ID")
+ }
+ 
+ // get is not threat-safe, and should only be called within packfile.go.
+ func (p *Packfile) get(h plumbing.Hash) (plumbing.EncodedObject, error) {
+-	if obj, ok := p.cache.Get(h); ok {
+-		return obj, nil
+-	}
+-
+-	offset, err := p.FindOffset(h)
+-	if err != nil {
+-		return nil, err
+-	}
+-
+-	oh, err := p.headerFromOffset(offset)
+-	if err != nil {
+-		return nil, err
+-	}
+-
+-	return p.objectFromHeader(oh)
++	panic("excised: Packfile.get")
+ }
+ 
+ // getByOffset is not threat-safe, and should only be called within packfile.go.
+ func (p *Packfile) getByOffset(offset int64) (plumbing.EncodedObject, error) {
+-	h, err := p.FindHash(offset)
+-	if err != nil {
+-		return nil, err
+-	}
+-
+-	if obj, ok := p.cache.Get(h); ok {
+-		return obj, nil
+-	}
+-
+-	oh, err := p.headerFromOffset(offset)
+-	if err != nil {
+-		return nil, err
+-	}
+-
+-	return p.objectFromHeader(oh)
++	panic("excised: Packfile.getByOffset")
+ }
+ 
+ func (p *Packfile) init() error {
+-	p.once.Do(func() {
+-		if p.handle == nil && p.resolveHandle != nil {
+-			h, err := p.resolveHandle()
+-			if err != nil {
+-				p.onceErr = fmt.Errorf("packfile: resolve pack handle: %w", err)
+-				return
+-			}
+-			p.handle = h
+-		}
+-
+-		if p.handle == nil && p.file == nil {
+-			p.onceErr = fmt.Errorf("file is not set")
+-			return
+-		}
+-
+-		if p.Index == nil {
+-			p.onceErr = fmt.Errorf("index is not set")
+-			return
+-		}
+-
+-		p.rbuf = gogitsync.GetBufioReader(nil)
+-
+-		opts := []ScannerOption{WithBufioReader(p.rbuf)}
+-
+-		if p.objectIDSize == format.SHA256Size {
+-			opts = append(opts, WithSHA256())
+-		}
+-
+-		var scanSrc io.Reader
+-		if p.handle != nil {
+-			r, err := p.handle.OpenPackReader()
+-			if err != nil {
+-				p.onceErr = fmt.Errorf("packfile: open pack reader: %w", err)
+-				return
+-			}
+-			p.scanReader = r
+-			scanSrc = r
+-		} else {
+-			scanSrc = p.file
+-		}
+-
+-		p.scanner = NewScanner(scanSrc, opts...)
+-		// Validate packfile signature.
+-		if !p.scanner.Scan() {
+-			p.onceErr = p.scanner.Error()
+-			return
+-		}
+-
+-		if p.handle != nil {
+-			id, err := p.handle.PackHash()
+-			if err != nil {
+-				p.onceErr = fmt.Errorf("packfile: read pack hash: %w", err)
+-				return
+-			}
+-			p.id = id
+-		} else {
+-			_, err := p.scanner.Seek(-int64(p.objectIDSize), io.SeekEnd)
+-			if err != nil {
+-				p.onceErr = err
+-				return
+-			}
+-			p.id.ResetBySize(p.objectIDSize)
+-			_, err = p.id.ReadFrom(p.scanner)
+-			if err != nil {
+-				p.onceErr = err
+-			}
+-		}
+-
+-		if p.cache == nil {
+-			p.cache = cache.NewObjectLRUDefault()
+-		}
+-	})
+-
+-	return p.onceErr
++	panic("excised: Packfile.init")
+ }
+ 
+ func (p *Packfile) headerFromOffset(offset int64) (*ObjectHeader, error) {
+-	err := p.scanner.SeekFromStart(offset)
+-	if err != nil {
+-		return nil, err
+-	}
+-
+-	if !p.scanner.Scan() {
+-		if err := p.scanner.Error(); err != nil {
+-			return nil, err
+-		}
+-		return nil, plumbing.ErrObjectNotFound
+-	}
+-
+-	oh := p.scanner.Data().Value().(ObjectHeader)
+-	return &oh, nil
++	panic("excised: Packfile.headerFromOffset")
+ }
+ 
+ // Close the packfile and its resources. Subsequent calls to [Packfile.Get],
+ // [Packfile.GetByOffset], and the other entry points return [fs.ErrClosed].
+ // Close is idempotent.
+ func (p *Packfile) Close() error {
+-	if !p.closed.CompareAndSwap(false, true) {
+-		return nil
+-	}
+-	p.m.Lock()
+-	defer p.m.Unlock()
+-
+-	gogitsync.PutBufioReader(p.rbuf)
+-
+-	if p.handle != nil {
+-		// The resolver owns the handle; close only the scanner cursor.
+-		if p.scanReader != nil {
+-			err := p.scanReader.Close()
+-			p.scanReader = nil
+-			return err
+-		}
+-		return nil
+-	}
+-
+-	closer, ok := p.file.(io.Closer)
+-	if !ok {
+-		return nil
+-	}
+-
+-	return closer.Close()
++	panic("excised: Packfile.Close")
+ }
+ 
+ func (p *Packfile) objectFromHeader(oh *ObjectHeader) (plumbing.EncodedObject, error) {
+-	if oh == nil {
+-		return nil, plumbing.ErrObjectNotFound
+-	}
+-
+-	// If we have filesystem, and the object is not a delta type, return a FSObject.
+-	// This avoids having to inflate the object more than once.
+-	if !oh.Type.IsDelta() && p.fs != nil {
+-		var fsObj *FSObject
+-		if p.handle != nil {
+-			fsObj = &FSObject{
+-				hash:          oh.ID(),
+-				offset:        oh.ContentOffset,
+-				size:          oh.Size,
+-				typ:           oh.Type,
+-				index:         p.Index,
+-				fs:            p.fs,
+-				cache:         p.cache,
+-				acquireRandom: p.openRandomReader,
+-			}
+-		} else {
+-			fsObj = NewFSObject(
+-				oh.ID(),
+-				oh.Type,
+-				oh.ContentOffset,
+-				oh.Size,
+-				p.Index,
+-				p.fs,
+-				p.file,
+-				p.file.Name(),
+-				p.cache,
+-			)
+-		}
+-
+-		p.cache.Put(fsObj)
+-		return fsObj, nil
+-	}
+-
+-	return p.getMemoryObject(oh)
++	panic("excised: Packfile.objectFromHeader")
+ }
+ 
+ func (p *Packfile) getMemoryObject(oh *ObjectHeader) (plumbing.EncodedObject, error) {
+-	of := format.SHA1
+-	if p.objectIDSize == format.SHA256.Size() {
+-		of = format.SHA256
+-	}
+-	h := plumbing.FromObjectFormat(of)
+-	obj := plumbing.NewMemoryObject(h)
+-
+-	obj.SetSize(oh.Size)
+-	obj.SetType(oh.Type)
+-
+-	w, err := obj.Writer()
+-	if err != nil {
+-		return nil, err
+-	}
+-	defer ioutil.CheckClose(w, &err)
+-
+-	switch oh.Type {
+-	case plumbing.CommitObject, plumbing.TreeObject, plumbing.BlobObject, plumbing.TagObject:
+-		err = p.scanner.inflateContent(oh.ContentOffset, w, oh.Size)
+-
+-	case plumbing.REFDeltaObject, plumbing.OFSDeltaObject:
+-		var parent plumbing.EncodedObject
+-
+-		switch oh.Type {
+-		case plumbing.REFDeltaObject:
+-			var ok bool
+-			parent, ok = p.cache.Get(oh.Reference)
+-			if !ok {
+-				parent, err = p.get(oh.Reference)
+-			}
+-		case plumbing.OFSDeltaObject:
+-			parent, err = p.getByOffset(oh.OffsetReference)
+-		}
+-
+-		if err != nil {
+-			return nil, fmt.Errorf("cannot find base object: %w", err)
+-		}
+-
+-		// The scanner pre-populates oh.content for delta objects when
+-		// running outside low-memory mode; only inflate when we don't
+-		// already hold the bytes, otherwise this would append a
+-		// duplicate copy of the delta payload.
+-		if oh.content == nil {
+-			oh.content = gogitsync.GetBytesBuffer()
+-			err = p.scanner.inflateContent(oh.ContentOffset, oh.content, oh.Size)
+-			if err != nil {
+-				return nil, fmt.Errorf("cannot inflate content: %w", err)
+-			}
+-		}
+-
+-		obj.SetType(parent.Type())
+-		err = ApplyDelta(obj, parent, oh.content)
+-
+-	default:
+-		err = ErrInvalidObject.AddDetails("type %q", oh.Type)
+-	}
+-
+-	if err != nil {
+-		return nil, err
+-	}
+-
+-	p.cache.Put(obj)
+-
+-	return obj, nil
++	panic("excised: Packfile.getMemoryObject")
+ }
+diff --git a/plumbing/format/packfile/packfile_iter.go b/plumbing/format/packfile/packfile_iter.go
+index 880e966..0faaeac 100644
+--- a/plumbing/format/packfile/packfile_iter.go
++++ b/plumbing/format/packfile/packfile_iter.go
+@@ -1,7 +1,7 @@
+ package packfile
+ 
+ import (
+-	"io"
++	_ "io"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+ 	"example.internal/gitkit/v6/plumbing/format/idxfile"
+@@ -14,80 +14,17 @@ type objectIter struct {
+ }
+ 
+ func (i *objectIter) Next() (plumbing.EncodedObject, error) {
+-	if err := i.p.init(); err != nil {
+-		return nil, err
+-	}
+-
+-	i.p.m.Lock()
+-	defer i.p.m.Unlock()
+-
+-	return i.next()
++	panic("excised: objectIter.Next")
+ }
+ 
+ func (i *objectIter) next() (plumbing.EncodedObject, error) {
+-	for {
+-		e, err := i.iter.Next()
+-		if err != nil {
+-			return nil, err
+-		}
+-
+-		oh, err := i.p.headerFromOffset(int64(e.Offset))
+-		if err != nil {
+-			return nil, err
+-		}
+-
+-		if i.typ == plumbing.AnyObject {
+-			return i.p.objectFromHeader(oh)
+-		}
+-
+-		// Current object header type is a delta, get the actual object to
+-		// assess the actual type.
+-		if oh.Type.IsDelta() {
+-			o, err := i.p.objectFromHeader(oh)
+-			if err != nil {
+-				return nil, err
+-			}
+-			if o.Type() == i.typ {
+-				return o, nil
+-			}
+-
+-			continue
+-		}
+-
+-		if oh.Type == i.typ {
+-			return i.p.objectFromHeader(oh)
+-		}
+-
+-		continue
+-	}
++	panic("excised: objectIter.next")
+ }
+ 
+ func (i *objectIter) ForEach(f func(plumbing.EncodedObject) error) error {
+-	if err := i.p.init(); err != nil {
+-		return err
+-	}
+-
+-	i.p.m.Lock()
+-	defer i.p.m.Unlock()
+-
+-	for {
+-		o, err := i.next()
+-		if err != nil {
+-			if err == io.EOF {
+-				return nil
+-			}
+-			return err
+-		}
+-
+-		if err := f(o); err != nil {
+-			return err
+-		}
+-	}
++	panic("excised: objectIter.ForEach")
+ }
+ 
+ func (i *objectIter) Close() {
+-	i.p.m.Lock()
+-	defer i.p.m.Unlock()
+-
+-	_ = i.iter.Close()
++	panic("excised: objectIter.Close")
+ }
+diff --git a/plumbing/format/packfile/packfile_test.go b/plumbing/format/packfile/packfile_test.go
+deleted file mode 100644
+index 67e54f5..0000000
+--- a/plumbing/format/packfile/packfile_test.go
++++ /dev/null
+@@ -1,353 +0,0 @@
+-package packfile_test
+-
+-import (
+-	"crypto"
+-	"io"
+-	"math"
+-	"testing"
+-
+-	"github.com/go-git/go-billy/v6/osfs"
+-	fixtures "github.com/go-git/go-git-fixtures/v6"
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	"example.internal/gitkit/v6/internal/fixtureutil"
+-	"example.internal/gitkit/v6/plumbing"
+-	"example.internal/gitkit/v6/plumbing/cache"
+-	"example.internal/gitkit/v6/plumbing/format/config"
+-	"example.internal/gitkit/v6/plumbing/format/idxfile"
+-	"example.internal/gitkit/v6/plumbing/format/packfile"
+-	"example.internal/gitkit/v6/plumbing/hash"
+-)
+-
+-func TestGet(t *testing.T) {
+-	t.Parallel()
+-
+-	packs := fixtures.ByTag("packfile-entries")
+-	require.GreaterOrEqual(t, len(packs), 2)
+-
+-	packs.Run(t, func(t *testing.T, f *fixtures.Fixture) {
+-		t.Parallel()
+-
+-		entries := fixtureutil.Entries(f)
+-		p := newPackfile(t, f)
+-
+-		for h := range entries {
+-			obj, err := p.Get(h)
+-			require.NoError(t, err)
+-			require.NotNil(t, obj)
+-			assert.Equal(t, h.String(), obj.Hash().String())
+-		}
+-
+-		_, err := p.Get(plumbing.ZeroHash)
+-		assert.ErrorIs(t, err, plumbing.ErrObjectNotFound)
+-
+-		id, err := p.ID()
+-		require.NoError(t, err)
+-		assert.Equal(t, f.PackfileHash, id.String())
+-	})
+-}
+-
+-func TestGetByOffset(t *testing.T) {
+-	t.Parallel()
+-
+-	packs := fixtures.ByTag("packfile-entries")
+-	require.GreaterOrEqual(t, len(packs), 2)
+-
+-	packs.Run(t, func(t *testing.T, f *fixtures.Fixture) {
+-		t.Parallel()
+-
+-		entries := fixtureutil.Entries(f)
+-		p := newPackfile(t, f)
+-
+-		for h, o := range entries {
+-			obj, err := p.GetByOffset(o)
+-			require.NoError(t, err)
+-			require.NotNil(t, obj)
+-			assert.Equal(t, h.String(), obj.Hash().String())
+-		}
+-
+-		_, err := p.GetByOffset(math.MaxInt64)
+-		assert.ErrorIs(t, err, plumbing.ErrObjectNotFound)
+-	})
+-}
+-
+-func TestGetAll(t *testing.T) {
+-	t.Parallel()
+-
+-	packs := fixtures.ByTag("packfile-entries")
+-	require.GreaterOrEqual(t, len(packs), 2)
+-
+-	packs.Run(t, func(t *testing.T, f *fixtures.Fixture) {
+-		t.Parallel()
+-
+-		entries := fixtureutil.Entries(f)
+-		p := newPackfile(t, f)
+-
+-		iter, err := p.GetAll()
+-		require.NoError(t, err)
+-
+-		var objects int
+-		for {
+-			o, err := iter.Next()
+-			if err == io.EOF {
+-				break
+-			}
+-			require.NoError(t, err)
+-			require.NotNil(t, o)
+-
+-			objects++
+-			h := o.Hash()
+-			_, ok := entries[h]
+-			assert.True(t, ok, "%s not found", h)
+-		}
+-
+-		assert.Len(t, entries, objects)
+-
+-		iter.Close()
+-		require.NoError(t, p.Close())
+-	})
+-}
+-
+-func TestDecode(t *testing.T) {
+-	t.Parallel()
+-
+-	packs := fixtures.ByTag("packfile-entries")
+-	require.GreaterOrEqual(t, len(packs), 2)
+-
+-	packs.Run(t, func(t *testing.T, f *fixtures.Fixture) {
+-		t.Parallel()
+-
+-		entries := fixtureutil.Entries(f)
+-		p := newPackfile(t, f)
+-
+-		for h := range entries {
+-			obj, err := p.Get(h)
+-			require.NoError(t, err)
+-			assert.Equal(t, h.String(), obj.Hash().String())
+-		}
+-
+-		require.NoError(t, p.Close())
+-	})
+-}
+-
+-func TestDecodeByTypeRefDelta(t *testing.T) {
+-	t.Parallel()
+-
+-	packs := fixtures.ByTag("packfile").ByTag("ref-delta")
+-	require.GreaterOrEqual(t, len(packs), 1)
+-
+-	packs.Run(t, func(t *testing.T, f *fixtures.Fixture) {
+-		t.Parallel()
+-
+-		types := []plumbing.ObjectType{
+-			plumbing.CommitObject,
+-			plumbing.TagObject,
+-			plumbing.TreeObject,
+-			plumbing.BlobObject,
+-		}
+-
+-		var total int
+-		for _, typ := range types {
+-			p := newPackfile(t, f)
+-
+-			iter, err := p.GetByType(typ)
+-			require.NoError(t, err)
+-
+-			err = iter.ForEach(func(obj plumbing.EncodedObject) error {
+-				assert.Equal(t, typ, obj.Type())
+-				total++
+-				return nil
+-			})
+-			require.NoError(t, err)
+-			require.NoError(t, p.Close())
+-		}
+-
+-		assert.Equal(t, int(f.ObjectsCount), total)
+-	})
+-}
+-
+-func TestDecodeByType(t *testing.T) {
+-	t.Parallel()
+-
+-	types := []plumbing.ObjectType{
+-		plumbing.CommitObject,
+-		plumbing.TagObject,
+-		plumbing.TreeObject,
+-		plumbing.BlobObject,
+-	}
+-
+-	packs := fixtures.ByTag("packfile")
+-	require.GreaterOrEqual(t, len(packs), 2)
+-
+-	packs.Run(t, func(t *testing.T, f *fixtures.Fixture) {
+-		t.Parallel()
+-
+-		for _, typ := range types {
+-			p := newPackfile(t, f)
+-
+-			iter, err := p.GetByType(typ)
+-			require.NoError(t, err)
+-
+-			err = iter.ForEach(func(obj plumbing.EncodedObject) error {
+-				assert.Equal(t, typ, obj.Type())
+-				return nil
+-			})
+-			require.NoError(t, err)
+-
+-			require.NoError(t, p.Close())
+-		}
+-	})
+-}
+-
+-func TestDecodeByTypeConstructor(t *testing.T) {
+-	t.Parallel()
+-
+-	packs := fixtures.ByTag("packfile")
+-	require.GreaterOrEqual(t, len(packs), 2)
+-
+-	packs.Run(t, func(t *testing.T, f *fixtures.Fixture) {
+-		t.Parallel()
+-
+-		p := newPackfile(t, f)
+-		defer p.Close()
+-
+-		_, err := p.GetByType(plumbing.OFSDeltaObject)
+-		assert.ErrorIs(t, err, plumbing.ErrInvalidType)
+-
+-		_, err = p.GetByType(plumbing.REFDeltaObject)
+-		assert.ErrorIs(t, err, plumbing.ErrInvalidType)
+-
+-		_, err = p.GetByType(plumbing.InvalidObject)
+-		assert.ErrorIs(t, err, plumbing.ErrInvalidType)
+-	})
+-}
+-
+-func TestSize(t *testing.T) {
+-	t.Parallel()
+-
+-	packs := fixtures.ByTag("packfile-entries")
+-	require.GreaterOrEqual(t, len(packs), 2)
+-
+-	packs.Run(t, func(t *testing.T, f *fixtures.Fixture) {
+-		t.Parallel()
+-
+-		entries := f.Entries()
+-		p := newPackfile(t, f)
+-		defer p.Close()
+-
+-		for h, offset := range entries {
+-			size, err := p.GetSizeByOffset(offset)
+-			require.NoError(t, err, "object %s", h)
+-			assert.GreaterOrEqual(t, size, int64(0), "object %s", h)
+-		}
+-
+-		if f.Head != "" {
+-			offset, err := p.FindOffset(plumbing.NewHash(f.Head))
+-			require.NoError(t, err)
+-			size, err := p.GetSizeByOffset(offset)
+-			require.NoError(t, err)
+-			assert.Greater(t, size, int64(0))
+-		}
+-	})
+-}
+-
+-func objectFormatHash(format string) crypto.Hash {
+-	if format == "sha256" {
+-		return crypto.SHA256
+-	}
+-	return crypto.SHA1
+-}
+-
+-func getIndexFromFixture(t testing.TB, f *fixtures.Fixture) idxfile.Index {
+-	t.Helper()
+-
+-	idxFile, err := f.Idx()
+-	require.NoError(t, err)
+-	defer idxFile.Close()
+-
+-	h := objectFormatHash(f.ObjectFormat)
+-	idx := idxfile.NewMemoryIndex(h.Size())
+-	require.NoError(t, idxfile.NewDecoder(idxFile, hash.New(h)).Decode(idx))
+-	return idx
+-}
+-
+-func newPackfile(t testing.TB, f *fixtures.Fixture) *packfile.Packfile {
+-	t.Helper()
+-
+-	index := getIndexFromFixture(t, f)
+-	pf, err := f.Packfile()
+-	require.NoError(t, err)
+-
+-	opts := []packfile.PackfileOption{
+-		packfile.WithIdx(index),
+-		packfile.WithFs(osfs.New(t.TempDir())),
+-	}
+-	if f.ObjectFormat == "sha256" {
+-		opts = append(opts, packfile.WithObjectIDSize(config.SHA256.Size()))
+-	}
+-
+-	return packfile.NewPackfile(pf, opts...)
+-}
+-
+-func BenchmarkGetByOffset(b *testing.B) {
+-	for _, format := range []string{"sha1", "sha256"} {
+-		packs := fixtures.ByTag("packfile-entries").ByObjectFormat(format)
+-		if len(packs) == 0 {
+-			continue
+-		}
+-		f := packs.One()
+-
+-		idx := getIndexFromFixture(b, f)
+-		entries := fixtureutil.Entries(f)
+-		c := cache.NewObjectLRUDefault()
+-
+-		b.Run(format+"/with_storage",
+-			func() func(b *testing.B) {
+-				pf1, err := f.Packfile()
+-				if err != nil {
+-					b.Fatal(err)
+-				}
+-				opts := []packfile.PackfileOption{
+-					packfile.WithIdx(idx),
+-					packfile.WithFs(osfs.New(b.TempDir())),
+-					packfile.WithCache(c),
+-				}
+-				if f.ObjectFormat == "sha256" {
+-					opts = append(opts, packfile.WithObjectIDSize(config.SHA256.Size()))
+-				}
+-				return benchmarkGetByOffset(entries, packfile.NewPackfile(pf1, opts...))
+-			}())
+-		b.Run(format+"/without_storage",
+-			func() func(b *testing.B) {
+-				pf2, err := f.Packfile()
+-				if err != nil {
+-					b.Fatal(err)
+-				}
+-				opts := []packfile.PackfileOption{
+-					packfile.WithCache(c),
+-					packfile.WithIdx(idx),
+-				}
+-				if f.ObjectFormat == "sha256" {
+-					opts = append(opts, packfile.WithObjectIDSize(config.SHA256.Size()))
+-				}
+-				return benchmarkGetByOffset(entries, packfile.NewPackfile(pf2, opts...))
+-			}())
+-	}
+-}
+-
+-func benchmarkGetByOffset(entries map[plumbing.Hash]int64, p *packfile.Packfile) func(b *testing.B) {
+-	return func(b *testing.B) {
+-		for i := 0; i < b.N; i++ {
+-			for h, o := range entries {
+-				obj, err := p.GetByOffset(o)
+-				if err != nil {
+-					b.Fatal()
+-				}
+-				if h != obj.Hash() {
+-					b.Fatal()
+-				}
+-			}
+-		}
+-	}
+-}

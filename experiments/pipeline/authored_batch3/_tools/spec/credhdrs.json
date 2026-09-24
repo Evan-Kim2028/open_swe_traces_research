@@ -1,0 +1,15 @@
+{
+  "impl": {
+    "github/github.go": {
+      "setCredentialsAsHeaders": "convertedRequest := *req\n\tconvertedRequest.Header = req.Header.Clone()\n\treturn &convertedRequest"
+    }
+  },
+  "deltests": {
+    "github/github_test.go": [
+      "TestBasicAuthTransport",
+      "TestBasicAuthTransport_originScope",
+      "TestBasicAuthTransport_transport"
+    ]
+  },
+  "testre": "TestBasicAuthTransport"
+}

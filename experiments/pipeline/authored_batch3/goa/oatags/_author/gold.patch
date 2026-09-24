@@ -1,0 +1,234 @@
+--- a/http/codegen/openapi/extensions.go
++++ b/http/codegen/openapi/extensions.go
+@@ -1,9 +1,9 @@
+ package openapi
+ 
+ import (
+-	_ "encoding/json"
+-	_ "maps"
+-	_ "strings"
++	"encoding/json"
++	"maps"
++	"strings"
+ 
+ 	"example.internal/apikit/v3/expr"
+ )
+@@ -11,17 +11,60 @@
+ // ExtensionsFromExpr generates openapi extensions from the given meta
+ // expression.
+ func ExtensionsFromExpr(mdata expr.MetaExpr) map[string]any {
+-	panic("excised: ExtensionsFromExpr")
++	swag := extensionsFromExprWithPrefix(mdata, "swagger:extension:")
++	open := extensionsFromExprWithPrefix(mdata, "openapi:extension:")
++	if swag == nil {
++		return open
++	}
++	if open == nil {
++		return swag
++	}
++	maps.Copy(swag, open)
++	return swag
+ }
+ 
+ // ExtensionsFromMethod returns the OpenAPI extensions authored as method
+ // metadata and advertises the method's idempotency contract when present.
+ func ExtensionsFromMethod(method *expr.MethodExpr) map[string]any {
+-	panic("excised: ExtensionsFromMethod")
++	extensions := ExtensionsFromExpr(method.Meta)
++	if !method.Idempotent {
++		return extensions
++	}
++	if extensions == nil {
++		extensions = make(map[string]any)
++	}
++	extensions["x-goa-idempotent"] = true
++	return extensions
+ }
+ 
+ // extensionsFromExprWithPrefix generates openapi extensions from
+ // the given meta expression with keys starting the given prefix.
+ func extensionsFromExprWithPrefix(mdata expr.MetaExpr, prefix string) map[string]any {
+-	panic("excised: extensionsFromExprWithPrefix")
++	if !strings.HasSuffix(prefix, ":") {
++		prefix += ":"
++	}
++	extensions := make(map[string]any)
++	for key, value := range mdata {
++		if !strings.HasPrefix(key, prefix) {
++			continue
++		}
++		name := key[len(prefix):]
++		if strings.Contains(name, ":") {
++			continue
++		}
++		if !strings.HasPrefix(name, "x-") {
++			continue
++		}
++		val := value[0]
++		ival := any(val)
++		if err := json.Unmarshal([]byte(val), &ival); err != nil {
++			extensions[name] = val
++			continue
++		}
++		extensions[name] = ival
++	}
++	if len(extensions) == 0 {
++		return nil
++	}
++	return extensions
+ }
+--- a/http/codegen/openapi/marshal.go
++++ b/http/codegen/openapi/marshal.go
+@@ -1,21 +1,51 @@
+ package openapi
+ 
+ import (
+-	_ "bytes"
+-	_ "encoding/json"
+-	_ "maps"
++	"bytes"
++	"encoding/json"
++	"maps"
+ 
+-	_ "gopkg.in/yaml.v3"
++	"gopkg.in/yaml.v3"
+ )
+ 
+ // MarshalJSON produces the JSON resulting from encoding an object composed of
+ // the fields in v (which must me a struct) and the keys in extensions.
+ func MarshalJSON(v any, extensions map[string]any) ([]byte, error) {
+-	panic("excised: MarshalJSON")
++	marshaled, err := json.Marshal(v)
++	if err != nil {
++		return nil, err
++	}
++	if len(extensions) == 0 {
++		return marshaled, nil
++	}
++	decoder := json.NewDecoder(bytes.NewReader(marshaled))
++	decoder.UseNumber()
++	var unmarshaled map[string]any
++	if err := decoder.Decode(&unmarshaled); err != nil {
++		return nil, err
++	}
++	maps.Copy(unmarshaled, extensions)
++	merged, err := json.Marshal(unmarshaled)
++	if err != nil {
++		return nil, err
++	}
++	return merged, nil
+ }
+ 
+ // MarshalYAML produces the JSON resulting from encoding an object composed of
+ // the fields in v (which must me a struct) and the keys in extensions.
+ func MarshalYAML(v any, extensions map[string]any) (any, error) {
+-	panic("excised: MarshalYAML")
++	if len(extensions) == 0 {
++		return v, nil
++	}
++	marshaled, err := yaml.Marshal(v)
++	if err != nil {
++		return nil, err
++	}
++	var unmarshaled map[string]any
++	if err := yaml.Unmarshal(marshaled, &unmarshaled); err != nil {
++		return nil, err
++	}
++	maps.Copy(unmarshaled, extensions)
++	return unmarshaled, nil
+ }
+--- a/http/codegen/openapi/tags.go
++++ b/http/codegen/openapi/tags.go
+@@ -1,8 +1,8 @@
+ package openapi
+ 
+ import (
+-	_ "sort"
+-	_ "strings"
++	"sort"
++	"strings"
+ 
+ 	"example.internal/apikit/v3/expr"
+ )
+@@ -32,19 +32,78 @@
+ // 3.2 (summary, parent, kind) are only extracted when ver is Version32 as
+ // earlier specification versions do not define them.
+ func TagsFromExpr(mdata expr.MetaExpr, ver Version) []*Tag {
+-	panic("excised: TagsFromExpr")
++	return parseTags(mdata, ver == Version32)
+ }
+ 
+ // TagNamesFromExpr computes the names of the OpenAPI tags specified in the
+ // given metadata expressions.
+ func TagNamesFromExpr(mdata expr.MetaExpr) (tagNames []string) {
+-	panic("excised: TagNamesFromExpr")
++	for _, tag := range parseTags(mdata, false) {
++		tagNames = append(tagNames, tag.Name)
++	}
++	return
+ }
+ 
+ // parseTags builds the tags defined in the given metadata. extras enables the
+ // OpenAPI 3.2 only tag fields which must not appear in 2.0 and 3.0 documents.
+ func parseTags(mdata expr.MetaExpr, extras bool) (tags []*Tag) {
+-	panic("excised: parseTags")
++	keys := make([]string, 0, len(mdata))
++	for k := range mdata {
++		keys = append(keys, k)
++	}
++	sort.Strings(keys)
++	for _, key := range keys {
++		chunks := strings.SplitN(key, ":", 4)
++		if len(chunks) < 3 {
++			continue
++		}
++		if (chunks[0] != "swagger" && chunks[0] != "openapi") || chunks[1] != "tag" {
++			continue
++		}
++
++		name := chunks[2]
++		var tag *Tag
++		for _, t := range tags {
++			if t.Name == name {
++				tag = t
++				break
++			}
++		}
++		if tag == nil {
++			tag = &Tag{Name: chunks[2]}
++			tags = append(tags, tag)
++		}
++		if len(chunks) == 4 {
++			switch {
++			case chunks[3] == "desc":
++				tag.Description = mdata[key][0]
++			case chunks[3] == "url":
++				if tag.ExternalDocs == nil {
++					tag.ExternalDocs = &ExternalDocs{}
++				}
++				tag.ExternalDocs.URL = mdata[key][0]
++			case chunks[3] == "url:desc":
++				if tag.ExternalDocs == nil {
++					tag.ExternalDocs = &ExternalDocs{}
++				}
++				tag.ExternalDocs.Description = mdata[key][0]
++			case extras && chunks[3] == "summary":
++				tag.Summary = mdata[key][0]
++			case extras && chunks[3] == "parent":
++				tag.Parent = mdata[key][0]
++			case extras && chunks[3] == "kind":
++				tag.Kind = mdata[key][0]
++			default:
++				idx := strings.Index(key, "extension:")
++				if idx == -1 {
++					continue
++				}
++				tag.Extensions = extensionsFromExprWithPrefix(mdata, key[:idx+10])
++			}
++		}
++	}
++
++	return tags
+ }
+ 
+ type _tag Tag

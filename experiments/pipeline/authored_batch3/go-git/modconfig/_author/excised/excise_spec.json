@@ -1,0 +1,29 @@
+{
+ "modconfig": {
+  "config/modules.go": [
+   "Modules.Unmarshal",
+   "Modules.Marshal",
+   "Submodule.Validate",
+   "validSubmoduleName",
+   "isPathSep",
+   "Submodule.unmarshal",
+   "Submodule.marshal"
+  ],
+  "config/branch.go": [
+   "Branch.Validate",
+   "Branch.marshal",
+   "quoteDescription",
+   "Branch.unmarshal",
+   "unquoteDescription"
+  ],
+  "config/optbool.go": [
+   "NewOptBool",
+   "OptBool.String",
+   "OptBool.FormatBool",
+   "parseConfigBool"
+  ],
+  "config/config.go": [
+   "unmarshalSubmodules"
+  ]
+ }
+}

@@ -1,0 +1,504 @@
+#!/usr/bin/env python3
+"""Every invariant the pipeline is supposed to hold, checked in one place.
+
+Written because the failure mode is always the same: agents look busy, the dataset does not
+move, and it takes a human noticing to find out why. Five utilisation bugs were found that
+way today. Each became a check here so the next one is caught by a script, not by luck.
+
+Exit 0 all clear, 1 warnings, 2 something needs fixing now.
+"""
+import os
+import pathlib, sys, re, json, glob, time, subprocess, collections
+
+R = "/home/evan/Documents/open_swe_traces_research"
+os.chdir(R)
+sys.path.insert(0, "scripts/ops")
+FAIL, WARN, OK = [], [], []
+
+
+def sh(c, t=60):
+    try:
+        return subprocess.run(c, shell=True, capture_output=True, text=True, timeout=t).stdout.strip()
+    except Exception:
+        return ""
+
+
+# --- 1. the loop itself is alive -------------------------------------------------
+# The pid FILE is a hint, not the truth: a hand-restarted supervisor never writes it,
+# and this reported "supervisor DEAD" for a loop that was ticking normally. Fall back to
+# finding the process, and repair the stale file so the next check is cheap.
+pid = sh("cat outputs/supervisor/pid 2>/dev/null")
+alive = bool(pid) and sh(f"kill -0 {pid} 2>/dev/null && echo y") == "y"
+if not alive:
+    # slots.supervisor_pid matches argv properly. `pgrep -f` matches any command line
+    # CONTAINING the text, including this check's own shell.
+    try:
+        from slots import supervisor_pid as _sup
+        found = str(_sup() or "")
+    except Exception:
+        found = ""
+    if found:
+        pid, alive = found, True
+        try:
+            pathlib.Path("outputs/supervisor/pid").write_text(found + "\n")
+        except OSError:
+            pass
+logage = int(time.time() - os.path.getmtime("outputs/supervisor/supervisor.log")) if \
+    os.path.exists("outputs/supervisor/supervisor.log") else 99999
+if not alive:
+    FAIL.append("supervisor DEAD — restart: setsid bash -c 'echo $$ > outputs/supervisor/pid; "
+                "exec bash scripts/ops/supervisor.sh 300' &")
+elif logage > 900:
+    FAIL.append(f"supervisor alive but log is {logage//60}m stale — it is wedged, not working")
+else:
+    OK.append(f"supervisor alive (pid {pid}, log {logage}s old)")
+
+# --- 2. is the dataset moving? a flat dataset with healthy agents IS the bug -----------
+rows = []
+if os.path.exists("outputs/rolling.jsonl"):
+    for ln in open("outputs/rolling.jsonl"):
+        try:
+            rows.append(json.loads(ln))
+        except Exception:
+            pass
+recent = [r for r in rows if r.get("t", 0) > time.time() - 3600]
+if len(recent) >= 3:
+    d = recent[-1]["certified"] - recent[0]["certified"]
+    dt = recent[-1]["trials"] - recent[0]["trials"]
+    # "Did the dataset move" is not "did the headline count rise". Two kinds of real
+    # progress do not raise it, and one actively lowers it:
+    #   escalation establishes the rung BELOW a certificate — the unit's row gets
+    #     stronger, the count does not change;
+    #   a second screen that finds a unit was never hard CONDEMNS it, so certified falls
+    #     and too_easy rises. That is the measurement succeeding, not a regression.
+    # Scoring only the rise reported a clean hour of both as "STALL", and printed a
+    # condemnation as "dataset +-1". Movement is any change across the three counters.
+    def delta(k):
+        try:
+            return recent[-1].get(k, 0) - recent[0].get(k, 0)
+        except Exception:
+            return 0
+    d_easy, d_esc = delta("too_easy"), delta("escalated")
+    moved = (d != 0) or (d_easy != 0) or (d_esc != 0)
+    if not moved and dt >= 5:
+        FAIL.append(f"STALL: {dt} trials in the last hour and nothing moved — certified, "
+                    f"too_easy and escalated all flat. Check for re-trialling of decided "
+                    f"units and for idle container slots.")
+    elif not moved:
+        WARN.append(f"dataset flat for an hour ({dt} trials) — low throughput, check capacity")
+    else:
+        bits = []
+        if d:
+            bits.append(f"certified {d:+d}")
+        if d_easy:
+            # per-solver now: a unit enters too_easy for the solver that passed L0, and
+            # leaves it when the count is recomputed per solver rather than pooled
+            bits.append(f"too-easy {d_easy:+d}")
+        if d_esc:
+            bits.append(f"escalated {d_esc:+d}")
+        OK.append(f"dataset moved in the last hour ({', '.join(bits)}; {dt} trials)")
+
+# --- 3. Composer fed? ------------------------------------------------------------
+# Composer's occupancy, not every trial container. `grep -c env-main` counts Devin
+# trials too, so with the account cap full of Devin work this read "Composer 4/12"
+# and fell past the "budget spent" branch into a line advertising 109 units of
+# runway for a solver with 0 tokens left and no process running.
+try:
+    import slots
+    agents = sum(t["conc"] for t in slots.trials("cursor"))
+except Exception:
+    agents = int(sh("docker ps --format '{{.Names}}' | grep -c env-main") or 0)
+queue = [l.strip() for l in open("outputs/supervisor/sweep_queue.txt").read().split("\n")
+         if l.strip()] if os.path.exists("outputs/supervisor/sweep_queue.txt") else []
+try:
+    import trial_ledger
+    per = trial_ledger.ledger()
+    # "Not in the ledger" is not the same as "runnable". Most such units are L2 dirs whose
+    # L0 was never run, and the guard correctly refuses them (run the cheaper verdict
+    # first). Counting them as idle capacity produced a FAIL on 14 units of which exactly
+    # one could actually be trialled.
+    import trial_guard
+    runnable = 0
+    for d in glob.glob("experiments/dose_response/sweep_*/*/"):
+        if not os.path.isdir(d):
+            continue
+        name = os.path.basename(d.rstrip("/"))
+        if name.rsplit("-L", 1)[0] in per:
+            continue
+        # Eligibility is TWO gates and this asked one: the guard says whether the trial is
+        # worth running at all, solver_match says whether THIS solver may be the one to run
+        # it. Second screens are reserved for the solver that has not seen the unit, and
+        # since Composer screened almost everything, that backlog belongs to Devin --
+        # counting it as Composer's idle work would inflate this number. Both gates, and
+        # the guard asked AS COMPOSER rather than from the merged ledger.
+        #
+        # This did not turn out to be why the FAIL was firing, and the honest record is
+        # worth more than the tidy story: the 19 units were real, Composer-eligible L0
+        # screens with their source trees intact. The cause was task_lint's SCRUB rule
+        # deleting them after the sweep launched -- two sweeps in a row logged "guard kept
+        # 0 unit(s), nothing left to trial" -- so the FAIL was correct and the thing to fix
+        # was upstream of it. Kept because it is the right query, not because it silenced
+        # anything.
+        try:
+            ok, _ = trial_guard.decide(name, per, solver="composer")
+        except TypeError:
+            ok, _ = trial_guard.decide(name, per)
+        except Exception:
+            ok = True
+        if ok:
+            try:
+                import solver_match
+                ok, _ = solver_match.decide(name, "cursor-cli")
+            except Exception:
+                pass
+        if ok:
+            runnable += 1
+    untrialled = runnable
+except Exception:
+    per, untrialled = {}, -1
+if agents == 0 and not queue and untrialled == 0:
+    FAIL.append("Composer STARVED: no agents, empty queue, nothing staged untrialled. "
+                "The Devin->Composer handoff has stalled; check STAGE jobs.")
+newest_sweep = sh("ps -eo etimes,args | awk '/sweep_seq[.]sh/ && !/awk/ {print $1}' | sort -n | head -1")
+starting = newest_sweep.isdigit() and int(newest_sweep) < 240
+_budget_left = subprocess.run(
+    "uv run python scripts/ops/composer_budget.py --quiet", shell=True,
+    capture_output=True).returncode == 0
+
+if starting and agents < 4:
+    OK.append(f"Composer {agents}/12 — a sweep started {newest_sweep}s ago, environments still coming up")
+elif agents < 4 and untrialled > 8 and _budget_left:
+    FAIL.append(f"Composer at {agents}/12 with {untrialled} units staged and untrialled — "
+                f"a sweep should be running. Check the sweep cap and container headroom.")
+elif agents < 4 and not _budget_left:
+    # An idle Composer is correct, not broken, once the 250M cap is reached: orchestrate
+    # routes every sweep to Devin from then on. Without this the monitor screams FAIL for
+    # the rest of the run and the real signals get lost in it.
+    OK.append(f"Composer idle at {agents}/12 — budget spent, all work routed to Devin")
+else:
+    OK.append(f"Composer {agents}/12 agents, {untrialled} units of runway, queue={queue or 'empty'}")
+
+# --- 4. Devin slots + throttle ---------------------------------------------------
+sys.path.insert(0, "scripts/ops")
+from slots import occupancy as _occ, CAP as _DEVIN_CAP   # shared definition; see slots.py
+_o = _occ("devin")
+dev = _o["sessions"]
+# Trials run the CLI inside a container: invisible to pgrep, but they spend the same
+# account quota. Reporting sessions only showed "4/4" while the real load was 5.
+dev_trials = sum(t["conc"] for t in _o["trials"])
+throttled = sh("grep -l 'Reached free model rate limit' /home/evan/Documents/oswt-*/outputs/*.log "
+               "2>/dev/null | xargs -r stat -c %Y 2>/dev/null | sort -rn | head -1")
+recent_throttle = throttled and (time.time() - int(throttled)) < 1800
+if recent_throttle:
+    OK.append(f"Devin {len(dev)}/{_DEVIN_CAP} — throttle within 30m, "
+              f"backoff correctly holding refills")
+elif len(dev) + dev_trials < 2:
+    # Branch on TOTAL, not sessions. This tested len(dev) alone and fired "Devin only
+    # 1/4" while one session and three in-container trials were saturating the cap - the
+    # very number the next line computes. A trial occupies a Devin slot exactly as a
+    # session does.
+    WARN.append(f"Devin only {len(dev) + dev_trials}/{_DEVIN_CAP} ({len(dev)} session(s) + "
+                f"{dev_trials} trial(s)) and no recent throttle — dq2 shepherds ONE job "
+                f"per instance, so start another launcher: "
+                f"MAXN={_DEVIN_CAP} setsid nohup bash /home/evan/devin-tasks/dq2.sh >> "
+                f"/home/evan/devin-tasks/dq2.log 2>&1 &")
+else:
+    total = len(dev) + dev_trials
+    names = ' '.join(x.replace('closure_', '') for x in dev)
+    msg = f"Devin {total} run(s) = {len(dev)} session(s) + {dev_trials} trial(s)"
+    # Devin must be DOING something. Below the floor is as much a failure as above the
+    # cap -- idle Devin is wasted free capacity, and nobody notices an absence. The cap
+    # comes from slots.py: this read a literal 4 and cried OVER CAP at a legitimate 6
+    # the moment the cap was raised, which is the same hardcoding that had the router
+    # refusing to offer the last two slots.
+    if total > _DEVIN_CAP:
+        FAIL.append(msg + " — OVER CAP. dq2.sh owns sessions (MAXN=2); do not kill a "
+                          "running session, it restarts from scratch. Wait for drain.")
+    elif total < 2:
+        FAIL.append(msg + " — UNDER FLOOR. Devin is idle and free. Check: is dq2.sh alive "
+                          "(pgrep -f dq2), does the manifest have pending jobs "
+                          "(pipeline_autogen.py --status), is a throttle cooloff active "
+                          "(.devin_cooldown)? Queue an _L2 cohort to use the trial slots.")
+    else:
+        OK.append(msg + (f": {names}" if names else ""))
+
+# --- 5. autogen is generating, and not duplicating -------------------------------
+mani = {}
+if os.path.exists("/home/evan/devin-tasks/queue/manifest.tsv"):
+    for ln in open("/home/evan/devin-tasks/queue/manifest.tsv"):
+        if ln.startswith("#") or not ln.strip():
+            continue
+        f = ln.split("\t")
+        if len(f) >= 7:
+            mani[f[0]] = f
+pend = [n for n, f in mani.items()
+        if not os.path.exists(os.path.join(f[2], f[6].strip())) and os.path.exists(f[1])]
+if len(pend) == 0:
+    WARN.append("no pending Devin jobs — autogen should be appending one per tick")
+elif len(pend) > 10:
+    WARN.append(f"{len(pend)} pending Devin jobs — queue is becoming a wishlist")
+else:
+    OK.append(f"{len(pend)} Devin jobs pending")
+
+# --- 6. resources ----------------------------------------------------------------
+free = int((sh("df --output=avail -BG / | tail -1") or "0G").strip().rstrip("G") or 0)
+load = float((sh("uptime").split("load average:")[-1].split(",")[0] or 0))
+cores = int(sh("nproc") or 1)
+if free < 100:
+    FAIL.append(f"disk {free}G < 100G prune floor — confirm prune_worktrees ran and never "
+                f"touched ladder-base:* or environment/src")
+elif free < 140:
+    WARN.append(f"disk {free}G, approaching the 100G floor")
+else:
+    OK.append(f"disk {free}G free")
+if load > cores * 2.5:
+    WARN.append(f"load {load:.0f} on {cores} cores — CPU saturated; do NOT raise container "
+                f"concurrency, trials will just take longer")
+else:
+    OK.append(f"load {load:.0f} on {cores} cores")
+
+# --- 7. nobody is re-trialling a decided unit ------------------------------------
+if per:
+    live_jobs = set()
+    for ln in sh("ps -eo args").split("\n"):
+        if "sweep_seq.sh" in ln and "awk" not in ln:
+            parts = ln.split()
+            for i, w in enumerate(parts[:-1]):
+                if w.endswith("sweep_seq.sh"):
+                    live_jobs.add(parts[i + 1])
+    waste = 0
+    for t in trial_ledger.trials():
+        if t["reward"] is None or t["errored"] or t["mtime"] < time.time() - 3600:
+            continue
+        d = per.get(t["base"], {})
+        # Attribute only to sweeps still running. A finished sweep's re-trials are history
+        # and cannot be prevented now; flagging them made the check cry wolf on its first run.
+        job_stem = t["job"].rsplit("_r", 1)[0]
+        if t["rung"] == "0" and len(d.get("0", [])) > 1 and job_stem in live_jobs:
+            waste += 1
+    if waste >= 4:
+        FAIL.append(f"{waste} re-trials of already-decided L0 units in the last hour — "
+                    f"the between-round re-gate in sweep_seq is not firing")
+    elif waste:
+        WARN.append(f"{waste} L0 re-trial(s) in the last hour")
+    else:
+        OK.append("no re-trialling of decided units")
+
+# --- 9. finished work stranded in worktrees --------------------------------------
+# No monitor could see this and it was the single biggest drag on the dataset: a VF job writes
+# its hidden suites inside its own worktree and a RC job writes contracts inside its own.
+# Nothing moved them to the main checkout, so 74 finished units were unstageable while
+# autogen - whose census takes the max across roots - reported them verified and queued
+# more authoring behind them. harvest.py closes the gap; this asserts it stays closed.
+try:
+    debt = sh("uv run python scripts/ops/harvest.py 2>/dev/null | head -1", t=300)
+    n = re.search(r"(\d+) recoverable", debt)
+    if n and int(n.group(1)) >= 10:
+        FAIL.append(f"{n.group(1)} finished unit(s) stranded in worktrees — "
+                    f"run: uv run python scripts/ops/harvest.py --apply")
+    elif n and int(n.group(1)):
+        WARN.append(f"{n.group(1)} unit(s) stranded in worktrees (harvest will pick them up)")
+    else:
+        OK.append("no finished work stranded in worktrees")
+except Exception:
+    pass
+
+# --- 10. authored-but-unverified backlog -----------------------------------------
+# Authoring generates its own backlog; verification is what drains it. Ask autogen for the
+# figure rather than re-deriving it: a local count included cohorts recorded through the old
+# path and reported 154 where the real backlog was 30, which would have had the monitor
+# screaming about a bottleneck that did not exist.
+try:
+    u = sh("uv run python scripts/ops/pipeline_autogen.py --unverified 2>/dev/null", t=300)
+    unver = int(u.strip().split()[-1])
+    if unver >= 60:
+        WARN.append(f"{unver} authored unit(s) unverified — verification is the bottleneck")
+    else:
+        OK.append(f"{unver} authored unit(s) awaiting verification")
+except Exception:
+    pass
+
+# --- 11. staged tasks vs the agent registry ---------------------------------------
+# A host an agent needs but a task does not allow is invisible from the outside: the CLI
+# in the container gets an empty model list and the trial dies with "Unknown model", which
+# reads as a bad slug. That cost 98 of 102 Devin trials in one hour before anyone looked
+# at exception.txt. Compare what is staged against scripts/ops/agents.py rather than a
+# literal, so adding an agent cannot silently leave old cohorts unable to run it.
+try:
+    sys.path.insert(0, "scripts/ops")
+    from agents import egress_hosts
+    need = set(egress_hosts())
+    bad = []
+    for tf in glob.glob("experiments/dose_response/sweep_*/*/task.toml"):
+        m = re.search(r"allowed_hosts\s*=\s*\[([^\]]*)\]", open(tf).read())
+        have = set(x.strip().strip('"') for x in (m.group(1).split(",") if m else []))
+        if need - have:
+            bad.append((tf, sorted(need - have)))
+    if bad:
+        miss_hosts = sorted({h for _, hs in bad for h in hs})
+        FAIL.append(f"{len(bad)} staged task(s) miss solver host(s) {' '.join(miss_hosts[:4])}"
+                    f" — trials for that agent will die with a misleading 'Unknown model'")
+    else:
+        OK.append(f"all staged tasks allow every registry host ({len(need)})")
+except Exception:
+    pass
+
+# --- 12. repeat-rung trials ------------------------------------------------------
+# 73% of all tokens went to trials beyond the minimum L0+L2 path, and the leak was silent:
+# nothing counted how often a rung was re-measured. A rung answers one question, so a
+# second verdict on it buys nothing. This is the metric that would have surfaced
+# kops-clustervalid running nineteen L6 trials.
+try:
+    sys.path.insert(0, "scripts/ops")
+    import trial_ledger as _tl
+    _seen, _rep, _tot = collections.defaultdict(set), 0, 0
+    _cut = time.time() - 6 * 3600
+    _rows = []
+    for _t in _tl.trials():
+        _u = _t.get("unit") or ""
+        _b = _u.rsplit("-L", 1)[0]
+        _r = _u.rsplit("-L", 1)[1][:1] if "-L" in _u else "0"
+        _d = _t.get("dir") or ""
+        try:
+            _w = os.path.getmtime(os.path.join(_d, "result.json"))
+        except OSError:
+            continue
+        # Keyed by (base, SOLVER). This metric exists to catch trial_guard leaking — the
+        # same solver paying twice for one verdict. Keyed by base alone it also counts the
+        # two things we now deliberately buy: a second screen at L0 by the solver that
+        # never saw the unit, and a second difficulty curve at L3+ by the other solver.
+        # Both are new information, not repetition, and left uncorrected they would climb
+        # past the 40% threshold and report the guard as broken while it worked.
+        _sv = _tl.solver_of(_t.get("model"))
+        _rows.append((_w, (_b, _sv), _r))
+    for _w, _k, _r in sorted(_rows):
+        if _w < _cut:
+            _seen[_k].add(_r)
+            continue
+        _tot += 1
+        if _r in _seen[_k]:
+            _rep += 1
+        _seen[_k].add(_r)
+    if _tot:
+        _pct = _rep / _tot * 100
+        _msg = f"{_rep}/{_tot} trial(s) in the last 6h re-measured a decided rung ({_pct:.0f}%)"
+        if _pct >= 40:
+            FAIL.append(_msg + " — trial_guard is leaking; check RUNG_TRIAL_CAP and rung parsing")
+        elif _pct >= 15:
+            WARN.append(_msg)
+        else:
+            OK.append(_msg)
+except Exception:
+    pass
+
+# --- 13. stability gate ----------------------------------------------------------
+# The standing objective: one clean 6h window (repeat-rung <15%, >=40 devin trials, no new
+# failure mode) before scaling spend. Reported here so every health check shows progress
+# toward it rather than only the day's incidents.
+try:
+    import subprocess as _sp
+    _g = _sp.run(["uv", "run", "python", "scripts/ops/stability_gate.py", "--brief"],
+                 capture_output=True, text=True, timeout=300)
+    _line = (_g.stdout or "").strip()
+    if _line:
+        (OK if _g.returncode == 0 else WARN).append(_line)
+except Exception:
+    pass
+
+# --- 14. multi-model certificate split -------------------------------------------
+# The dataset is deliberately multi-model (analytics/research/MULTIMODEL_DATASET.md). A
+# certificate is per solver, so the useful split is how many units have been climbed
+# independently by MORE THAN ONE solver — those are the only units that can say whether
+# difficulty is a property of the task or of the model, and they are the scarce thing.
+try:
+    import trial_ledger as _tlx
+    _c = _tlx.certificates()
+    # "cross-solver" is retired: it named a certificate assembled from two solvers'
+    # unrelated trials, which was an artifact of pooling rather than a weaker claim. This
+    # counts units holding two INDEPENDENT per-solver curves, which is the opposite thing.
+    _multi = sum(1 for v in _c.values() if len(v.get("solvers", [])) > 1)
+    _msg = (f"{len(_c)} certificate(s): {len(_c)-_multi} one solver, "
+            f"{_multi} climbed by two")
+    # A certificate is max(reward)>0 at the binding rung — the dataset's own rule — but one
+    # pass in twelve is not the claim one pass in one is. Surfaced, not silently equal.
+    _thin = sum(1 for v in _c.values() if v.get("thin"))
+    if _thin:
+        (WARN if _thin > 0.1 * max(len(_c), 1) else OK).append(
+            f"{_thin} certificate(s) rest on 1 pass in 3+ trials at the binding rung")
+    # Binding rungs reached by the old probe-at-L5 policy were never shown to be the
+    # rung the unit NEEDS. They resolve as the stepwise L3/L4 trials land.
+    _jump = sum(1 for v in _c.values() if not v.get("rung_established", True))
+    if _jump:
+        OK.append(f"{_jump} certificate(s) bind at a rung not yet shown to be needed "
+                  f"— stepwise L3/L4 trials will resolve them")
+    _esc = sum(1 for v in _c.values() if v.get("escalated"))
+    if _esc:
+        _msg += f"; {_esc} flipped above L2"
+    # Two solvers on one unit is the SCARCE thing, so a low count is the normal state and
+    # must not warn. The old test warned when CROSS certificates exceeded a quarter of the
+    # dataset, because those were suspect; these are the opposite, and warning on plenty
+    # would have inverted the alarm.
+    OK.append(_msg)
+except Exception as _e:
+    # NOT `pass`. This block referenced `_cross` for one commit after the variable was
+    # renamed to `_multi`; the NameError was swallowed here and the entire certificate
+    # report -- count, thin, jumped-rung, escalated -- silently vanished from the health
+    # output while every other line still printed and the check still exited green. The
+    # only symptom was an absence, which is the one thing a monitor cannot show you.
+    WARN.append(f"certificate report unavailable: {type(_e).__name__}: {_e}")
+
+# --- 14b. the same unit staged in several cohorts ----------------------------------
+# A unit staged under two cohort names is two candidates to every selector that walks
+# sweep_*/ , and the per-rung cap cannot stop them: the cap counts VERDICTS, so four
+# cohorts launched before the first one finishes all see zero and all run. That is where
+# over-cap waste comes from, and it is invisible in the cohort view because each cohort is
+# individually behaving. 182 staged units are duplicated across cohorts; almost all are
+# already decided, so the guard blocks them and they cost nothing. Only the undecided ones
+# can actually re-run, which is the number worth alarming on.
+try:
+    import collections as _co
+    _st = _co.defaultdict(list)
+    for _d in glob.glob("experiments/dose_response/sweep_*/*/"):
+        if os.path.isdir(_d):
+            _st[os.path.basename(_d.rstrip("/"))].append(_d.split("/")[2])
+    _dup = {k: v for k, v in _st.items()
+            if len(v) > 1 and k.rsplit("-L", 1)[0] not in per}
+    if _dup:
+        _w = ", ".join(f"{k} x{len(v)}" for k, v in sorted(_dup.items())[:4])
+        (WARN if len(_dup) > 2 else OK).append(
+            f"{len(_dup)} undecided unit(s) staged in several cohorts — concurrent launches "
+            f"would each run it: {_w}")
+except Exception as _e:
+    WARN.append(f"duplicate-staging check unavailable: {type(_e).__name__}: {_e}")
+
+# --- 15. escalation queue ---------------------------------------------------------
+# A unit that fails L0 and L2 is not waste: 9 of 9 hand-escalated units flipped at a
+# higher rung. This watches that the escalation cohorts are staged and moving, and that
+# no unit is stuck asking for a rung nobody ever stages.
+try:
+    import escalate as _e
+    import trial_ledger as _tly
+    _per = _tly.ledger()
+    _want = list(_e.candidates(_per))
+    _staged = {d.name for r in _e.LADDER
+               for d in (_e.SWEEPS / f"{_e.ESCALATION_DEST}_L{r}").glob("*-L*")}
+    _missing = [b for b, rung, _w, _h in _want if f"{b}-L{rung}" not in _staged]
+    if not _want:
+        OK.append("escalation queue empty — every L0+L2 failure is settled")
+    elif _missing:
+        WARN.append(f"{len(_want)} unit(s) want escalation, {len(_missing)} not staged — "
+                    f"run scripts/ops/escalate.py --apply")
+    else:
+        OK.append(f"{len(_want)} unit(s) escalating, all staged")
+except Exception as _ex:
+    WARN.append(f"escalation check failed: {type(_ex).__name__}: {_ex}")
+
+print(f"{'='*66}\nPIPELINE HEALTH  {time.strftime('%H:%M:%S')}\n{'='*66}")
+for m in FAIL:
+    print(f"  FAIL  {m}")
+for m in WARN:
+    print(f"  WARN  {m}")
+for m in OK:
+    print(f"  ok    {m}")
+print(f"{'='*66}")
+sys.exit(2 if FAIL else (1 if WARN else 0))

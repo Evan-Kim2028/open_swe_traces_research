@@ -1,0 +1,553 @@
+--- a/pkg/apis/kops/cluster.go
++++ b/pkg/apis/kops/cluster.go
+@@ -17,14 +17,14 @@
+ package kops
+ 
+ import (
+-	"fmt"
+-
++	_ "fmt"
++
++	_ "example.internal/clustkit/pkg/apis/kops/util"
++	_ "example.internal/clustkit/upup/pkg/fi/utils"
+ 	corev1 "k8s.io/api/core/v1"
+ 	"k8s.io/apimachinery/pkg/api/resource"
+ 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+ 	"k8s.io/apimachinery/pkg/util/intstr"
+-	"example.internal/clustkit/pkg/apis/kops/util"
+-	"example.internal/clustkit/upup/pkg/fi/utils"
+ )
+ 
+ // AlphaLabelCloudProvider lets us experiment with a cloud provider,
+@@ -436,7 +436,7 @@
+ }
+ 
+ func (s *AuthenticationSpec) IsEmpty() bool {
+-	return s.Kopeio == nil && s.AWS == nil && s.OIDC == nil
++	panic("excised: AuthenticationSpec.IsEmpty")
+ }
+ 
+ type KopeioAuthenticationSpec struct{}
+@@ -501,7 +501,7 @@
+ }
+ 
+ func (s *AuthorizationSpec) IsEmpty() bool {
+-	return s.RBAC == nil && s.AlwaysAllow == nil
++	panic("excised: AuthorizationSpec.IsEmpty")
+ }
+ 
+ type RBACAuthorizationSpec struct{}
+@@ -841,7 +841,7 @@
+ }
+ 
+ func (t *TargetSpec) IsEmpty() bool {
+-	return t.Terraform == nil
++	panic("excised: TargetSpec.IsEmpty")
+ }
+ 
+ // TerraformSpec allows us to specify terraform config in an extensible way
+@@ -853,188 +853,108 @@
+ }
+ 
+ func (t *TerraformSpec) IsEmpty() bool {
+-	return len(t.ProviderExtraConfig) == 0 && len(t.FilesProviderExtraConfig) == 0
++	panic("excised: TerraformSpec.IsEmpty")
+ }
+ 
+ // FillDefaults populates default values.
+ // This is different from PerformAssignments, because these values are changeable, and thus we don't need to
+ // store them (i.e. we don't need to 'lock them')
+ func (c *Cluster) FillDefaults() error {
+-	// Topology support
+-	if c.Spec.Networking.Topology == nil {
+-		c.Spec.Networking.Topology = &TopologySpec{DNS: DNSTypePublic}
+-	}
+-
+-	if c.Spec.Channel == "" {
+-		c.Spec.Channel = DefaultChannel
+-	}
+-
+-	if c.ObjectMeta.Name == "" {
+-		return fmt.Errorf("cluster Name not set in FillDefaults")
+-	}
+-
+-	return nil
++	panic("excised: Cluster.FillDefaults")
+ }
+ 
+ // SharedVPC is a simple helper function which makes the templates for a shared VPC clearer
+ func (c *Cluster) SharedVPC() bool {
+-	return c.Spec.Networking.NetworkID != ""
++	panic("excised: Cluster.SharedVPC")
+ }
+ 
+ // IsKubernetesGTE checks if the version is >= the specified version.
+ // It panics if the kubernetes version in the cluster is invalid, or if the version is invalid.
+ func (c *Cluster) IsKubernetesGTE(version string) bool {
+-	clusterVersion, err := util.ParseKubernetesVersion(c.Spec.KubernetesVersion)
+-	if err != nil || clusterVersion == nil {
+-		panic(fmt.Sprintf("error parsing cluster spec.kubernetesVersion %q", c.Spec.KubernetesVersion))
+-	}
+-
+-	parsedVersion, err := util.ParseKubernetesVersion(version)
+-	if err != nil {
+-		panic(fmt.Sprintf("Error parsing version %s: %v", version, err))
+-	}
+-
+-	// Ignore Pre & Build fields
+-	clusterVersion.Pre = nil
+-	clusterVersion.Build = nil
+-
+-	return clusterVersion.GTE(*parsedVersion)
++	panic("excised: Cluster.IsKubernetesGTE")
+ }
+ 
+ // IsKubernetesLT checks if the version is < the specified version.
+ // It panics if the kubernetes version in the cluster is invalid, or if the version is invalid.
+ func (c *Cluster) IsKubernetesLT(version string) bool {
+-	return !c.IsKubernetesGTE(version)
++	panic("excised: Cluster.IsKubernetesLT")
+ }
+ 
+ // IsSharedAzureResourceGroup returns true if the resource group is shared.
+ func (c *Cluster) IsSharedAzureResourceGroup() bool {
+-	return c.Spec.CloudProvider.Azure.ResourceGroupName != ""
++	panic("excised: Cluster.IsSharedAzureResourceGroup")
+ }
+ 
+ // AzureResourceGroupName returns the name of the resource group where the cluster is built.
+ func (c *Cluster) AzureResourceGroupName() string {
+-	if c.Spec.CloudProvider.Azure.ResourceGroupName != "" {
+-		return c.Spec.CloudProvider.Azure.ResourceGroupName
+-	}
+-	return c.Name
++	panic("excised: Cluster.AzureResourceGroupName")
+ }
+ 
+ // IsSharedAzureRouteTable returns true if the route table is shared.
+ func (c *Cluster) IsSharedAzureRouteTable() bool {
+-	return c.Spec.CloudProvider.Azure.RouteTableName != ""
++	panic("excised: Cluster.IsSharedAzureRouteTable")
+ }
+ 
+ // AzureRouteTableName returns the name of the route table used by the cluster.
+ func (c *Cluster) AzureRouteTableName() string {
+-	if c.Spec.CloudProvider.Azure.RouteTableName != "" {
+-		return c.Spec.CloudProvider.Azure.RouteTableName
+-	}
+-	return c.Name
++	panic("excised: Cluster.AzureRouteTableName")
+ }
+ 
+ // AzureNetworkSecurityGroupName returns the name of the network security group for the cluster.
+ // The NSG shares its name with the virtual network.
+ func (c *Cluster) AzureNetworkSecurityGroupName() string {
+-	if c.Spec.Networking.NetworkID != "" {
+-		return c.Spec.Networking.NetworkID
+-	}
+-	return c.Name
++	panic("excised: Cluster.AzureNetworkSecurityGroupName")
+ }
+ 
+ func (c *Cluster) PublishesDNSRecords() bool {
+-	return !c.UsesNoneDNS()
++	panic("excised: Cluster.PublishesDNSRecords")
+ }
+ 
+ func (c *Cluster) UsesPublicDNS() bool {
+-	if c.Spec.Networking.Topology == nil || c.Spec.Networking.Topology.DNS == "" || c.Spec.Networking.Topology.DNS == DNSTypePublic {
+-		return true
+-	}
+-	return false
++	panic("excised: Cluster.UsesPublicDNS")
+ }
+ 
+ func (c *Cluster) UsesPrivateDNS() bool {
+-	if c.Spec.Networking.Topology != nil && c.Spec.Networking.Topology.DNS == DNSTypePrivate {
+-		return true
+-	}
+-	return false
++	panic("excised: Cluster.UsesPrivateDNS")
+ }
+ 
+ func (c *Cluster) UsesNoneDNS() bool {
+-	if c.Spec.Networking.Topology != nil && c.Spec.Networking.Topology.DNS == DNSTypeNone {
+-		return true
+-	}
+-	return false
++	panic("excised: Cluster.UsesNoneDNS")
+ }
+ 
+ // UsesLoadBalancerForKopsController returns true when worker nodes reach clustkit-controller
+ // via the cluster load balancer rather than via DNS. True for all None-DNS clusters.
+ // Note that clusters with none DNS topology may not have c.Spec.API.LoadBalancer set (see Hetzner).
+ func (c *Cluster) UsesLoadBalancerForKopsController() bool {
+-	return c.UsesNoneDNS()
++	panic("excised: Cluster.UsesLoadBalancerForKopsController")
+ }
+ 
+ func (c *Cluster) InstallCNIAssets() bool {
+-	if c.Spec.Networking.Cilium != nil {
+-		// In portmap chaining mode, Cilium delegates hostPort handling to the
+-		// portmap plugin, which comes from the standard CNI plugins bundle.
+-		return c.Spec.Networking.Cilium.ChainingMode == "portmap"
+-	}
+-	return c.Spec.Networking.AmazonVPC == nil &&
+-		c.Spec.Networking.Calico == nil
++	panic("excised: Cluster.InstallCNIAssets")
+ }
+ 
+ func (c *Cluster) HasImageVolumesSupport() bool {
+-	// Image Volumes was added to ClusterKit v1.31
+-	// https://kubernetes.io/blog/2024/08/16/kubernetes-1-31-image-volume-source/
+-	// The kubelet implementation used by Clustkit (whole-image mounts, no subPath)
+-	// is complete as of v1.32, the oldest ClusterKit version supported by Clustkit.
+-	// The runtime side requires containerd v2.1.0, which validation guarantees
+-	// for all clusters.
+-	// https://github.com/containerd/containerd/releases/tag/v2.1.0
+-	return !c.IsKubernetesLT("1.32.0")
++	panic("excised: Cluster.HasImageVolumesSupport")
+ }
+ 
+ func (c *Cluster) APIInternalName() string {
+-	return "api.internal." + c.ObjectMeta.Name
++	panic("excised: Cluster.APIInternalName")
+ }
+ 
+ func (c *ClusterSpec) IsIPv6Only() bool {
+-	return utils.IsIPv6CIDR(c.Networking.NonMasqueradeCIDR)
++	panic("excised: ClusterSpec.IsIPv6Only")
+ }
+ 
+ func (c *ClusterSpec) IsKopsControllerIPAM() bool {
+-	return c.IsIPv6Only()
++	panic("excised: ClusterSpec.IsKopsControllerIPAM")
+ }
+ 
+ func (c *ClusterSpec) IsCiliumENIIPAM() bool {
+-	return c.Networking.Cilium != nil && c.Networking.Cilium.IPAM == CiliumIpamEni
++	panic("excised: ClusterSpec.IsCiliumENIIPAM")
+ }
+ 
+ func (c *Cluster) GetCloudProvider() CloudProviderID {
+-	if c.Labels[AlphaLabelCloudProvider] == "metal" {
+-		return CloudProviderMetal
+-	}
+-
+-	spec := c.Spec
+-	if spec.CloudProvider.AWS != nil {
+-		return CloudProviderAWS
+-	} else if spec.CloudProvider.Azure != nil {
+-		return CloudProviderAzure
+-	} else if spec.CloudProvider.DO != nil {
+-		return CloudProviderDO
+-	} else if spec.CloudProvider.GCE != nil {
+-		return CloudProviderGCE
+-	} else if spec.CloudProvider.Hetzner != nil {
+-		return CloudProviderHetzner
+-	} else if spec.CloudProvider.Openstack != nil {
+-		return CloudProviderOpenstack
+-	} else if spec.CloudProvider.Scaleway != nil {
+-		return CloudProviderScaleway
+-	} else if spec.CloudProvider.Linode != nil {
+-		return CloudProviderLinode
+-	}
+-	return ""
++	panic("excised: Cluster.GetCloudProvider")
+ }
+ 
+ // EnvVar represents an environment variable present in a Container.
+@@ -1150,34 +1070,9 @@
+ }
+ 
+ func (in *WarmPoolSpec) IsEnabled() bool {
+-	return in != nil && (in.MaxSize == nil || *in.MaxSize != 0)
++	panic("excised: WarmPoolSpec.IsEnabled")
+ }
+ 
+ func (in *WarmPoolSpec) ResolveDefaults(ig *InstanceGroup) *WarmPoolSpec {
+-	igWarmPool := ig.Spec.WarmPool
+-	if igWarmPool == nil {
+-		if in == nil || (ig.Spec.Role.HasControlPlane() || ig.Spec.Role.HasBastion()) {
+-			var zero int64
+-			return &WarmPoolSpec{
+-				MaxSize: &zero,
+-			}
+-		}
+-		return in
+-	}
+-
+-	if in == nil || (ig.Spec.Role.HasControlPlane() || ig.Spec.Role.HasBastion()) {
+-		return igWarmPool
+-	}
+-
+-	spec := *igWarmPool
+-	if spec.MaxSize == nil {
+-		spec.MaxSize = in.MaxSize
+-	}
+-	if spec.MinSize == 0 {
+-		spec.MinSize = in.MinSize
+-	}
+-	if !spec.EnableLifecycleHook {
+-		spec.EnableLifecycleHook = in.EnableLifecycleHook
+-	}
+-	return &spec
+-}
++	panic("excised: WarmPoolSpec.ResolveDefaults")
++}
+--- a/pkg/apis/kops/cluster_test.go
++++ /dev/null
+@@ -1,253 +0,0 @@
+-/*
+-Copyright 2021 The ClusterKit Authors.
+-
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-
+-    http://www.apache.org/licenses/LICENSE-2.0
+-
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package kops
+-
+-import (
+-	"reflect"
+-	"testing"
+-
+-	"github.com/stretchr/testify/assert"
+-)
+-
+-func TestWarmPoolSpec_IsEnabled(t *testing.T) {
+-	tests := []struct {
+-		name     string
+-		spec     *WarmPoolSpec
+-		expected bool
+-	}{
+-		{
+-			name:     "nil",
+-			spec:     nil,
+-			expected: false,
+-		},
+-		{
+-			name:     "empty",
+-			spec:     &WarmPoolSpec{},
+-			expected: true,
+-		},
+-		{
+-			name: "1",
+-			spec: &WarmPoolSpec{
+-				MaxSize: int64ptr(1),
+-			},
+-			expected: true,
+-		},
+-		{
+-			name: "0",
+-			spec: &WarmPoolSpec{
+-				MaxSize: int64ptr(0),
+-			},
+-			expected: false,
+-		},
+-	}
+-	for _, tc := range tests {
+-		t.Run(tc.name, func(t *testing.T) {
+-			if actual := tc.spec.IsEnabled(); actual != tc.expected {
+-				t.Errorf("IsEnabled() = %v, want %v", actual, tc.expected)
+-			}
+-		})
+-	}
+-}
+-
+-func int64ptr(v int64) *int64 {
+-	return &v
+-}
+-
+-func TestWarmPoolSpec_ResolveDefaults(t *testing.T) {
+-	for _, tc := range []struct {
+-		name            string
+-		defaultValue    interface{}
+-		nonDefaultValue interface{}
+-	}{
+-		{
+-			name:            "MinSize",
+-			defaultValue:    int64(0),
+-			nonDefaultValue: int64(1),
+-		},
+-		{
+-			name:            "MaxSize",
+-			defaultValue:    nil,
+-			nonDefaultValue: int64(1),
+-		},
+-		{
+-			name:            "EnableLifecycleHook",
+-			defaultValue:    false,
+-			nonDefaultValue: true,
+-		},
+-	} {
+-		t.Run(tc.name, func(t *testing.T) {
+-			defaultCluster := &WarmPoolSpec{}
+-			setFieldValue(defaultCluster, tc.name, tc.defaultValue)
+-
+-			nonDefaultCluster := &WarmPoolSpec{}
+-			setFieldValue(nonDefaultCluster, tc.name, tc.nonDefaultValue)
+-
+-			defaultGroup := &WarmPoolSpec{}
+-			setFieldValue(defaultGroup, tc.name, tc.defaultValue)
+-
+-			nonDefaultGroup := &WarmPoolSpec{}
+-			setFieldValue(nonDefaultGroup, tc.name, tc.nonDefaultValue)
+-
+-			expectedDefaultValue := tc.defaultValue
+-			if expectedDefaultValue == nil {
+-				expectedDefaultValue = reflect.Zero(reflect.ValueOf(*defaultGroup).FieldByName(tc.name).Type().Elem()).Interface()
+-			}
+-
+-			assertResolvesValue(t, tc.name, expectedDefaultValue, nil, nil, InstanceGroupRoleNode, "nil nil node")
+-			assertResolvesValue(t, tc.name, tc.defaultValue, &WarmPoolSpec{}, nil, InstanceGroupRoleNode, "{nil} nil node")
+-			assertResolvesValue(t, tc.name, tc.defaultValue, defaultCluster, nil, InstanceGroupRoleNode, "{default} nil node")
+-			assertResolvesValue(t, tc.name, tc.nonDefaultValue, nonDefaultCluster, nil, InstanceGroupRoleNode, "{nonDefault} nil node")
+-
+-			assertResolvesValue(t, tc.name, tc.defaultValue, nil, &WarmPoolSpec{}, InstanceGroupRoleNode, "nil {nil} node")
+-			assertResolvesValue(t, tc.name, tc.defaultValue, &WarmPoolSpec{}, &WarmPoolSpec{}, InstanceGroupRoleNode, "{nil} {nil} node")
+-			assertResolvesValue(t, tc.name, tc.defaultValue, defaultCluster, &WarmPoolSpec{}, InstanceGroupRoleNode, "{default} {nil} node")
+-			assertResolvesValue(t, tc.name, tc.nonDefaultValue, nonDefaultCluster, &WarmPoolSpec{}, InstanceGroupRoleNode, "{nonDefault} {nil} node")
+-
+-			assertResolvesValue(t, tc.name, tc.defaultValue, nil, defaultGroup, InstanceGroupRoleNode, "nil {default} node")
+-			assertResolvesValue(t, tc.name, tc.defaultValue, &WarmPoolSpec{}, defaultGroup, InstanceGroupRoleNode, "{nil} {default} node")
+-			assertResolvesValue(t, tc.name, tc.defaultValue, defaultCluster, defaultGroup, InstanceGroupRoleNode, "{default} {default} node")
+-			if reflect.ValueOf(*defaultGroup).FieldByName(tc.name).Type().Kind() == reflect.Ptr && tc.defaultValue != nil {
+-				assertResolvesValue(t, tc.name, tc.defaultValue, nonDefaultCluster, defaultGroup, InstanceGroupRoleNode, "{nonDefault} {default} node")
+-			} else {
+-				assertResolvesValue(t, tc.name, tc.nonDefaultValue, nonDefaultCluster, defaultGroup, InstanceGroupRoleNode, "{nonDefault} {default} node")
+-			}
+-
+-			assertResolvesValue(t, tc.name, tc.nonDefaultValue, nil, nonDefaultGroup, InstanceGroupRoleNode, "nil {nonDefault} node")
+-			assertResolvesValue(t, tc.name, tc.nonDefaultValue, &WarmPoolSpec{}, nonDefaultGroup, InstanceGroupRoleNode, "{nil} {nonDefault} node")
+-			assertResolvesValue(t, tc.name, tc.nonDefaultValue, defaultCluster, nonDefaultGroup, InstanceGroupRoleNode, "{default} {nonDefault} node")
+-			assertResolvesValue(t, tc.name, tc.nonDefaultValue, nonDefaultCluster, nonDefaultGroup, InstanceGroupRoleNode, "{nonDefault} {nonDefault} node")
+-
+-			assertResolvesValue(t, tc.name, expectedDefaultValue, nil, nil, InstanceGroupRoleControlPlane, "nil nil master")
+-			assertResolvesValue(t, tc.name, expectedDefaultValue, &WarmPoolSpec{}, nil, InstanceGroupRoleControlPlane, "{nil} nil master")
+-			assertResolvesValue(t, tc.name, expectedDefaultValue, defaultCluster, nil, InstanceGroupRoleControlPlane, "{default} nil master")
+-			assertResolvesValue(t, tc.name, expectedDefaultValue, nonDefaultCluster, nil, InstanceGroupRoleControlPlane, "{nonDefault} nil master")
+-
+-			assertResolvesValue(t, tc.name, tc.defaultValue, nil, &WarmPoolSpec{}, InstanceGroupRoleControlPlane, "nil {nil} master")
+-			assertResolvesValue(t, tc.name, tc.defaultValue, &WarmPoolSpec{}, &WarmPoolSpec{}, InstanceGroupRoleControlPlane, "{nil} {nil} master")
+-			assertResolvesValue(t, tc.name, tc.defaultValue, defaultCluster, &WarmPoolSpec{}, InstanceGroupRoleControlPlane, "{default} {nil} master")
+-			assertResolvesValue(t, tc.name, tc.defaultValue, nonDefaultCluster, &WarmPoolSpec{}, InstanceGroupRoleControlPlane, "{nonDefault} {nil} master")
+-
+-			assertResolvesValue(t, tc.name, tc.defaultValue, nil, defaultGroup, InstanceGroupRoleControlPlane, "nil {default} master")
+-			assertResolvesValue(t, tc.name, tc.defaultValue, &WarmPoolSpec{}, defaultGroup, InstanceGroupRoleControlPlane, "{nil} {default} master")
+-			assertResolvesValue(t, tc.name, tc.defaultValue, defaultCluster, defaultGroup, InstanceGroupRoleControlPlane, "{default} {default} master")
+-			assertResolvesValue(t, tc.name, tc.defaultValue, nonDefaultCluster, defaultGroup, InstanceGroupRoleControlPlane, "{nonDefault} {default} master")
+-
+-			assertResolvesValue(t, tc.name, tc.nonDefaultValue, nil, nonDefaultGroup, InstanceGroupRoleControlPlane, "nil {nonDefault} master")
+-			assertResolvesValue(t, tc.name, tc.nonDefaultValue, &WarmPoolSpec{}, nonDefaultGroup, InstanceGroupRoleControlPlane, "{nil} {nonDefault} master")
+-			assertResolvesValue(t, tc.name, tc.nonDefaultValue, defaultCluster, nonDefaultGroup, InstanceGroupRoleControlPlane, "{default} {nonDefault} master")
+-			assertResolvesValue(t, tc.name, tc.nonDefaultValue, nonDefaultCluster, nonDefaultGroup, InstanceGroupRoleControlPlane, "{nonDefault} {nonDefault} master")
+-		})
+-	}
+-}
+-
+-func setFieldValue(aStruct interface{}, fieldName string, fieldValue interface{}) {
+-	field := reflect.ValueOf(aStruct).Elem().FieldByName(fieldName)
+-	fieldType := field.Type()
+-	if fieldType.Kind() == reflect.Ptr {
+-		if fieldValue != nil {
+-			value := reflect.New(fieldType.Elem())
+-			value.Elem().Set(reflect.ValueOf(fieldValue))
+-			field.Set(value)
+-		}
+-	} else {
+-		field.Set(reflect.ValueOf(fieldValue))
+-	}
+-}
+-
+-func assertResolvesValue(t *testing.T, name string, expected interface{}, warmPoolSpecDefault *WarmPoolSpec, ig *WarmPoolSpec, role InstanceGroupRole, msg interface{}) bool {
+-	cluster := Cluster{
+-		Spec: ClusterSpec{
+-			CloudProvider: CloudProviderSpec{
+-				AWS: &AWSSpec{
+-					WarmPool: warmPoolSpecDefault,
+-				},
+-			},
+-		},
+-	}
+-	instanceGroup := InstanceGroup{
+-		Spec: InstanceGroupSpec{
+-			Role:     role,
+-			WarmPool: ig,
+-		},
+-	}
+-	warmPoolSpecDefaultCopy := warmPoolSpecDefault.DeepCopy()
+-	warmPoolSpecCopy := ig.DeepCopy()
+-
+-	resolved := cluster.Spec.CloudProvider.AWS.WarmPool.ResolveDefaults(&instanceGroup)
+-	value := reflect.ValueOf(*resolved).FieldByName(name)
+-
+-	assert.Equal(t, warmPoolSpecDefault, cluster.Spec.CloudProvider.AWS.WarmPool, "cluster not modified")
+-	assert.True(t, reflect.DeepEqual(warmPoolSpecDefault, warmPoolSpecDefaultCopy), "WarmPoolSpec not modified")
+-	assert.Equal(t, ig, instanceGroup.Spec.WarmPool, "instancegroup not modified")
+-	assert.True(t, reflect.DeepEqual(ig, warmPoolSpecCopy), "WarmPoolSpec not modified")
+-
+-	if expected == nil {
+-		return assert.Nil(t, value.Interface(), msg)
+-	} else if value.Type().Kind() == reflect.Ptr {
+-		return assert.NotNil(t, value.Interface(), msg) &&
+-			assert.Equal(t, expected, value.Elem().Interface(), msg)
+-	} else {
+-		return assert.Equal(t, expected, value.Interface(), msg)
+-	}
+-}
+-
+-func TestCluster_InstallCNIAssets(t *testing.T) {
+-	tests := []struct {
+-		name       string
+-		networking NetworkingSpec
+-		expected   bool
+-	}{
+-		{
+-			name:       "no networking configured",
+-			networking: NetworkingSpec{},
+-			expected:   true,
+-		},
+-		{
+-			name:       "amazon vpc",
+-			networking: NetworkingSpec{AmazonVPC: &AmazonVPCNetworkingSpec{}},
+-			expected:   false,
+-		},
+-		{
+-			name:       "calico",
+-			networking: NetworkingSpec{Calico: &CalicoNetworkingSpec{}},
+-			expected:   false,
+-		},
+-		{
+-			name:       "cilium without chaining",
+-			networking: NetworkingSpec{Cilium: &CiliumNetworkingSpec{}},
+-			expected:   false,
+-		},
+-		{
+-			name:       "cilium with chaining mode none",
+-			networking: NetworkingSpec{Cilium: &CiliumNetworkingSpec{ChainingMode: "none"}},
+-			expected:   false,
+-		},
+-		{
+-			name:       "cilium with portmap chaining",
+-			networking: NetworkingSpec{Cilium: &CiliumNetworkingSpec{ChainingMode: "portmap"}},
+-			expected:   true,
+-		},
+-	}
+-	for _, tc := range tests {
+-		t.Run(tc.name, func(t *testing.T) {
+-			c := &Cluster{Spec: ClusterSpec{Networking: tc.networking}}
+-			if actual := c.InstallCNIAssets(); actual != tc.expected {
+-				t.Errorf("InstallCNIAssets() = %v, want %v", actual, tc.expected)
+-			}
+-		})
+-	}
+-}

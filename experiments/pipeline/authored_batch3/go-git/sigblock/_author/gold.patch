@@ -1,0 +1,165 @@
+diff --git a/plumbing/object/signature.go b/plumbing/object/signature.go
+index f583f42..0bc7cba 100644
+--- a/plumbing/object/signature.go
++++ b/plumbing/object/signature.go
+@@ -1,12 +1,12 @@
+ package object
+ 
+ import (
+-	_ "bytes"
++	"bytes"
+ 	"io"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+-	_ "example.internal/gitkit/v6/utils/ioutil"
+-	_ "example.internal/gitkit/v6/utils/sync"
++	"example.internal/gitkit/v6/utils/ioutil"
++	"example.internal/gitkit/v6/utils/sync"
+ )
+ 
+ const (
+@@ -50,7 +50,14 @@ type signatureFormat [][]byte
+ 
+ // typeForSignature returns the type of the signature based on its format.
+ func typeForSignature(b []byte) signatureType {
+-	panic("excised: typeForSignature")
++	for t, i := range knownSignatureFormats {
++		for _, begin := range i {
++			if bytes.HasPrefix(b, begin) {
++				return t
++			}
++		}
++	}
++	return signatureTypeUnknown
+ }
+ 
+ // parseSignedBytes returns the position of the last signature block found in
+@@ -80,7 +87,22 @@ func typeForSignature(b []byte) signatureType {
+ // This logic is on par with git's gpg-interface.c:parse_signed_buffer().
+ // https://github.com/git/git/blob/7c2ef319c52c4997256f5807564523dfd4acdfc7/gpg-interface.c#L668
+ func parseSignedBytes(b []byte) (int, signatureType) {
+-	panic("excised: parseSignedBytes")
++	n, match := 0, -1
++	var t signatureType
++	for n < len(b) {
++		i := b[n:]
++		if st := typeForSignature(i); st != signatureTypeUnknown {
++			match = n
++			t = st
++		}
++		if eol := bytes.IndexByte(i, '\n'); eol >= 0 {
++			n += eol + 1
++			continue
++		}
++		// If we reach this point, we've reached the end.
++		break
++	}
++	return match, t
+ }
+ 
+ // countSignatureBlocks reports how many distinct armored signature blocks
+@@ -89,14 +111,27 @@ func parseSignedBytes(b []byte) (int, signatureType) {
+ // where parse_gpg_output bails out the first time it sees a second
+ // exclusive status line (a second GOODSIG/BADSIG/etc.).
+ func countSignatureBlocks(b []byte) int {
+-	panic("excised: countSignatureBlocks")
++	n, count := 0, 0
++	for n < len(b) {
++		i := b[n:]
++		if typeForSignature(i) != signatureTypeUnknown {
++			count++
++		}
++		if eol := bytes.IndexByte(i, '\n'); eol >= 0 {
++			n += eol + 1
++			continue
++		}
++		break
++	}
++	return count
+ }
+ 
+ // isSignatureHeader reports whether line is a canonical "gpgsig "/
+ // "gpgsig-sha256 " header line. Other "gpgsig"-prefixed extra headers
+ // are intentionally not matched.
+ func isSignatureHeader(line []byte) bool {
+-	panic("excised: isSignatureHeader")
++	return bytes.HasPrefix(line, []byte(headerpgp+" ")) ||
++		bytes.HasPrefix(line, []byte(headerpgp256+" "))
+ }
+ 
+ // stripObjectSignatures streams src into dst, producing the byte sequence
+@@ -113,12 +148,72 @@ func isSignatureHeader(line []byte) bool {
+ // Commit.EncodeWithoutSignature and Tag.EncodeWithoutSignature to
+ // reproduce the exact bytes the signature was computed over.
+ func stripObjectSignatures(dst, src plumbing.EncodedObject, objType plumbing.ObjectType) (err error) {
+-	panic("excised: stripObjectSignatures")
++	dst.SetType(objType)
++
++	r, err := src.Reader()
++	if err != nil {
++		return err
++	}
++	defer ioutil.CheckClose(r, &err)
++
++	var input io.Reader = r
++	if objType == plumbing.TagObject {
++		raw, err := io.ReadAll(r)
++		if err != nil {
++			return err
++		}
++		if sm, _ := parseSignedBytes(raw); sm >= 0 {
++			raw = raw[:sm]
++		}
++		input = bytes.NewReader(raw)
++	}
++
++	w, err := dst.Writer()
++	if err != nil {
++		return err
++	}
++	defer ioutil.CheckClose(w, &err)
++
++	return stripHeaderSignatures(w, input)
+ }
+ 
+ // stripHeaderSignatures copies r to w, dropping canonical signature header
+ // lines (gpgsig and gpgsig-sha256) and their continuation lines. Lines
+ // past the blank line that closes the header block are copied verbatim.
+ func stripHeaderSignatures(w io.Writer, r io.Reader) error {
+-	panic("excised: stripHeaderSignatures")
++	br := sync.GetBufioReader(r)
++	defer sync.PutBufioReader(br)
++
++	var inBody, skipping bool
++	for {
++		line, rerr := br.ReadBytes('\n')
++		if rerr != nil && rerr != io.EOF {
++			return rerr
++		}
++
++		write := true
++		if !inBody {
++			switch {
++			case skipping && len(line) > 0 && line[0] == ' ':
++				write = false
++			case isSignatureHeader(line):
++				skipping = true
++				write = false
++			case len(line) == 1 && line[0] == '\n':
++				skipping = false
++				inBody = true
++			default:
++				skipping = false
++			}
++		}
++
++		if write && len(line) > 0 {
++			if _, werr := w.Write(line); werr != nil {
++				return werr
++			}
++		}
++		if rerr == io.EOF {
++			return nil
++		}
++	}
+ }

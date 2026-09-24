@@ -1,0 +1,1 @@
+The binary consumer-state encoder was stubbed. The layout is a 22/2 header, uvarint floors, pending entries as deltas from those floors with second-resolution inverted timestamps, and a redelivery table that is always length-prefixed. A solver cannot recall magic 22, version 2, or the inverted-timestamp trick from the function name; those are this store's private codec.

@@ -76,6 +76,12 @@ def write_safe_task_skeleton(task_dir: Path, *, solver: str = "cursor") -> Path:
         '$HIDDEN/empty.go" | sha256sum -c --status || checksum_fail "hidden/empty.go"\n',
         encoding="utf-8",
     )
+    hidden = tests / "hidden"
+    hidden.mkdir(parents=True, exist_ok=True)
+    (hidden / "skel_bb_prop_test.go").write_text(
+        "package skel\n\nimport \"testing\"\n\nfunc TestSkelBB(t *testing.T) {}\n",
+        encoding="utf-8",
+    )
     src = task_dir / "environment" / "src"
     src.mkdir(parents=True, exist_ok=True)
     (task_dir / "environment" / "Dockerfile").write_text(

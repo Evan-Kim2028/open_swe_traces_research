@@ -1,0 +1,192 @@
+--- a/expr/security.go
++++ b/expr/security.go
+@@ -1,8 +1,8 @@
+ package expr
+ 
+ import (
+-	_ "fmt"
+-	_ "net/url"
++	"fmt"
++	"net/url"
+ 
+ 	"example.internal/apikit/v3/eval"
+ )
+@@ -113,73 +113,164 @@
+ 
+ // EvalName returns the generic definition name used in error messages.
+ func (s *SecurityExpr) EvalName() string {
+-	panic("excised: SecurityExpr.EvalName")
++	var suffix string
++	if len(s.Schemes) > 0 && len(s.Schemes[0].SchemeName) > 0 {
++		suffix = "scheme " + s.Schemes[0].SchemeName
++	}
++	return "Security" + suffix
+ }
+ 
+ // DupRequirement creates a copy of the given security requirement.
+ func DupRequirement(req *SecurityExpr) *SecurityExpr {
+-	panic("excised: DupRequirement")
++	dup := &SecurityExpr{
++		Scopes:  req.Scopes,
++		Schemes: make([]*SchemeExpr, 0, len(req.Schemes)),
++	}
++	for _, s := range req.Schemes {
++		dup.Schemes = append(dup.Schemes, DupScheme(s))
++	}
++	return dup
+ }
+ 
+ // DupScheme creates a copy of the given scheme expression.
+ func DupScheme(sch *SchemeExpr) *SchemeExpr {
+-	panic("excised: DupScheme")
++	dup := SchemeExpr{
++		Kind:         sch.Kind,
++		SchemeName:   sch.SchemeName,
++		Description:  sch.Description,
++		In:           sch.In,
++		Name:         sch.Name,
++		BearerFormat: sch.BearerFormat,
++		Scopes:       sch.Scopes,
++		Flows:        sch.Flows,
++		Meta:         sch.Meta,
++		authored:     sch.AuthoredScheme(),
++	}
++	return &dup
+ }
+ 
+ // AuthoredScheme returns the security scheme declared by the design. It
+ // returns s when s has not been copied for a transport.
+ func (s *SchemeExpr) AuthoredScheme() *SchemeExpr {
+-	panic("excised: SchemeExpr.AuthoredScheme")
++	if s.authored != nil {
++		return s.authored
++	}
++	return s
+ }
+ 
+ // HasNoSecurity returns true if the security requirements explicitly disable
+ // security.
+ func HasNoSecurity(reqs []*SecurityExpr) bool {
+-	panic("excised: HasNoSecurity")
++	for _, req := range reqs {
++		for _, scheme := range req.Schemes {
++			if scheme.Kind == NoKind {
++				return true
++			}
++		}
++	}
++	return false
+ }
+ 
+ // EffectiveSecurityRequirements returns the security requirements that should
+ // be enforced. It returns nil when reqs explicitly disable security.
+ func EffectiveSecurityRequirements(reqs []*SecurityExpr) []*SecurityExpr {
+-	panic("excised: EffectiveSecurityRequirements")
++	if HasNoSecurity(reqs) {
++		return nil
++	}
++	return reqs
+ }
+ 
+ // Type returns the type of the scheme.
+ func (s *SchemeExpr) Type() string {
+-	panic("excised: SchemeExpr.Type")
++	switch s.Kind {
++	case OAuth2Kind:
++		return "OAuth2"
++	case BasicAuthKind:
++		return "BasicAuth"
++	case APIKeyKind:
++		return "APIKey"
++	case BearerKind:
++		return "Bearer"
++	case JWTKind:
++		return "JWT"
++	default:
++		panic(fmt.Sprintf("unknown scheme kind: %#v", s.Kind)) // bug
++	}
+ }
+ 
+ // EvalName returns the generic definition name used in error messages.
+ func (s *SchemeExpr) EvalName() string {
+-	panic("excised: SchemeExpr.EvalName")
++	return s.Type() + "Security"
+ }
+ 
+ // Hash returns a unique hash value for s.
+ func (s *SchemeExpr) Hash() string {
+-	panic("excised: SchemeExpr.Hash")
++	return fmt.Sprintf("%s_%s_%s", s.SchemeName, s.In, s.Name)
+ }
+ 
+ // Validate ensures that the method payload contains attributes required
+ // by the scheme.
+ func (s *SchemeExpr) Validate() *eval.ValidationErrors {
+-	panic("excised: SchemeExpr.Validate")
++	verr := new(eval.ValidationErrors)
++	for _, f := range s.Flows {
++		if err := f.Validate(); err != nil {
++			verr.Merge(err)
++		}
++	}
++	return verr
+ }
+ 
+ // EvalName returns the name of the expression used in error messages.
+ func (f *FlowExpr) EvalName() string {
+-	panic("excised: FlowExpr.EvalName")
++	return "flow " + f.Type()
+ }
+ 
+ // Validate ensures that TokenURL and AuthorizationURL are valid URLs.
+ func (f *FlowExpr) Validate() *eval.ValidationErrors {
+-	panic("excised: FlowExpr.Validate")
++	verr := new(eval.ValidationErrors)
++	if _, err := url.Parse(f.TokenURL); err != nil {
++		verr.Add(f, "invalid token URL %q: %s", f.TokenURL, err)
++	}
++	if _, err := url.Parse(f.AuthorizationURL); err != nil {
++		verr.Add(f, "invalid authorization URL %q: %s", f.AuthorizationURL, err)
++	}
++	if _, err := url.Parse(f.RefreshURL); err != nil {
++		verr.Add(f, "invalid refresh URL %q: %s", f.RefreshURL, err)
++	}
++	return verr
+ }
+ 
+ // Type returns the grant type of the OAuth2 grant.
+ func (f *FlowExpr) Type() string {
+-	panic("excised: FlowExpr.Type")
++	switch f.Kind {
++	case AuthorizationCodeFlowKind:
++		return "authorization_code"
++	case ImplicitFlowKind:
++		return "implicit"
++	case PasswordFlowKind:
++		return "password"
++	case ClientCredentialsFlowKind:
++		return "client_credentials"
++	default:
++		panic(fmt.Sprintf("unknown flow kind: %#v", f.Kind)) // bug
++	}
+ }
+ 
+ func (k SchemeKind) String() string {
+-	panic("excised: SchemeKind.String")
++	switch k {
++	case BasicAuthKind:
++		return "Basic"
++	case APIKeyKind:
++		return "APIKey"
++	case BearerKind:
++		return "Bearer"
++	case JWTKind:
++		return "JWT"
++	case OAuth2Kind:
++		return "OAuth2"
++	case NoKind:
++		return "None"
++	default:
++		panic("unknown kind") // bug
++	}
+ }

@@ -1,0 +1,59 @@
+--- a/expr/grpc_response.go
++++ b/expr/grpc_response.go
+@@ -30,18 +30,36 @@
+ 
+ // EvalName returns the generic definition name used in error messages.
+ func (r *GRPCResponseExpr) EvalName() string {
+-	panic("excised: GRPCResponseExpr.EvalName")
++	return "gRPC response"
+ }
+ 
+ // Prepare makes sure the response message and metadata are initialized.
+ func (r *GRPCResponseExpr) Prepare() {
+-	panic("excised: GRPCResponseExpr.Prepare")
++	if r.Message == nil {
++		r.Message = &AttributeExpr{Type: Empty}
++	}
++	if r.Headers == nil {
++		r.Headers = NewEmptyMappedAttributeExpr()
++	}
++	if r.Trailers == nil {
++		r.Trailers = NewEmptyMappedAttributeExpr()
++	}
+ }
+ 
+ // Validate checks that the response definition is consistent: its status is set
+ // and the result type definition if any is valid.
+ func (r *GRPCResponseExpr) Validate(e *GRPCEndpointExpr) *eval.ValidationErrors {
+-	panic("excised: GRPCResponseExpr.Validate")
++	verr := new(eval.ValidationErrors)
++	if r.Message != nil && r.Message.Type != Empty {
++		verr.Merge(r.Message.Validate("gRPC response message", r))
++	}
++	if r.Headers != nil && !r.Headers.IsEmpty() {
++		verr.Merge(r.Headers.Validate("gRPC response header metadata", r))
++	}
++	if r.Trailers != nil && !r.Trailers.IsEmpty() {
++		verr.Merge(r.Trailers.Validate("gRPC response trailer metadata", r))
++	}
++	return verr
+ }
+ 
+ // Finalize ensures that the response message type is set. If Message DSL is
+@@ -49,10 +67,14 @@
+ // the attributes to the method Result expression. If no response message set
+ // explicitly, the message is set from the method Result expression.
+ func (r *GRPCResponseExpr) Finalize(a *GRPCEndpointExpr, svcAtt *AttributeExpr) {
+-	panic("excised: GRPCResponseExpr.Finalize")
++	r.Parent = a
++	if r.Message != nil && r.Message.Type == Empty {
++		r.Message.Type = svcAtt.Type
++	}
+ }
+ 
+ // Dup creates a copy of the response expression.
+ func (r *GRPCResponseExpr) Dup() *GRPCResponseExpr {
+-	panic("excised: GRPCResponseExpr.Dup")
++	res := *r
++	return &res
+ }

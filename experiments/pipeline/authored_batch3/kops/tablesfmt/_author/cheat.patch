@@ -1,0 +1,86 @@
+--- a/util/pkg/tables/format.go
++++ b/util/pkg/tables/format.go
+@@ -40,12 +40,16 @@
+ }
+ 
+ func (c *TableColumn) getFromValue(v reflect.Value) string {
+-	panic("excised: TableColumn.getFromValue")
++	fvs := c.Getter.Call([]reflect.Value{v})
++	return reflectutils.ValueAsString(fvs[0])
+ }
+ 
+ // AddColumn registers an available column for formatting
+ func (t *Table) AddColumn(name string, getter interface{}) {
+-	panic("excised: Table.AddColumn")
++	if t.columns == nil {
++		t.columns = make(map[string]*TableColumn)
++	}
++	t.columns[name] = &TableColumn{Name: name, Getter: reflect.ValueOf(getter)}
+ }
+ 
+ type funcSorter struct {
+@@ -55,26 +59,58 @@
+ }
+ 
+ func (f *funcSorter) Len() int {
+-	panic("excised: funcSorter.Len")
++	return f.len
+ }
+ 
+ func (f *funcSorter) Less(i, j int) bool {
+-	panic("excised: funcSorter.Less")
++	return f.less(i, j)
+ }
+ 
+ func (f *funcSorter) Swap(i, j int) {
+-	panic("excised: funcSorter.Swap")
++	f.swap(i, j)
+ }
+ 
+ func SortByFunction(len int, swap func(int, int), less func(int, int) bool) {
+-	panic("excised: SortByFunction")
++	sort.Sort(&funcSorter{len, less, swap})
+ }
+ 
+ func (t *Table) findColumns(columnNames ...string) ([]*TableColumn, error) {
+-	panic("excised: Table.findColumns")
++	columns := make([]*TableColumn, len(columnNames))
++	for i, columnName := range columnNames {
++		columns[i] = t.columns[columnName]
++	}
++	return columns, nil
+ }
+ 
+ // Render writes the items in a table, to out
+ func (t *Table) Render(items interface{}, out io.Writer, columnNames ...string) error {
+-	panic("excised: Table.Render")
++	itemsValue := reflect.ValueOf(items)
++	columns, err := t.findColumns(columnNames...)
++	if err != nil {
++		return err
++	}
++	var b bytes.Buffer
++	for i, c := range columns {
++		if i != 0 {
++			b.WriteByte('\t')
++		}
++		b.WriteString(c.Name)
++	}
++	b.WriteByte('\n')
++	for i := 0; i < itemsValue.Len(); i++ {
++		item := itemsValue.Index(i)
++		for j, column := range columns {
++			if j != 0 {
++				b.WriteByte('\t')
++			}
++			b.WriteString(column.getFromValue(item))
++		}
++		b.WriteByte('\n')
++	}
++	w := tabwriter.NewWriter(out, 0, 8, 1, '\t', 0)
++	if _, err := w.Write(b.Bytes()); err != nil {
++		return err
++	}
++	w.Flush()
++	return nil
+ }

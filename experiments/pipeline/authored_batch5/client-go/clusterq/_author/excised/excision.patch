@@ -1,0 +1,360 @@
+diff --git a/internal/mockstore/mockkv/cluster.go b/internal/mockstore/mockkv/cluster.go
+--- a/internal/mockstore/mockkv/cluster.go
++++ b/internal/mockstore/mockkv/cluster.go
+@@ -36,17 +36,17 @@
+ 
+ import (
+ 	"bytes"
+-	"context"
++	_ "context"
+ 	"math"
+-	"slices"
+-	"sort"
++	_ "slices"
++	_ "sort"
+ 	"sync"
+ 	"time"
+ 
++	"example.internal/kvstore/v2/internal/mockstore/cluster"
+ 	"github.com/golang/protobuf/proto" //nolint:staticcheck
+ 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
+ 	"github.com/pingcap/kvproto/pkg/metapb"
+-	"example.internal/kvstore/v2/internal/mockstore/cluster"
+ 	pd "github.com/tikv/pd/client"
+ )
+ 
+@@ -84,142 +84,67 @@
+ // NewCluster creates an empty cluster. It needs to be bootstrapped before
+ // providing service.
+ func NewCluster(mvccStore MVCCStore) *Cluster {
+-	return &Cluster{
+-		stores:      make(map[uint64]*Store),
+-		regions:     make(map[uint64]*Region),
+-		downPeers:   make(map[uint64]struct{}),
+-		delayEvents: make(map[delayKey]time.Duration),
+-		mvccStore:   mvccStore,
+-	}
++	panic("excised: NewCluster")
+ }
+ 
+ // AllocID creates an unique ID in cluster. The ID could be used as either
+ // StoreID, RegionID, or PeerID.
+ func (c *Cluster) AllocID() uint64 {
+-	c.Lock()
+-	defer c.Unlock()
+-
+-	return c.allocID()
++	panic("excised: Cluster.AllocID")
+ }
+ 
+ // AllocIDs creates multiple IDs.
+ func (c *Cluster) AllocIDs(n int) []uint64 {
+-	c.Lock()
+-	defer c.Unlock()
+-
+-	var ids []uint64
+-	for len(ids) < n {
+-		ids = append(ids, c.allocID())
+-	}
+-	return ids
++	panic("excised: Cluster.AllocIDs")
+ }
+ 
+ func (c *Cluster) allocID() uint64 {
+-	c.id++
+-	return c.id
++	panic("excised: Cluster.allocID")
+ }
+ 
+ // GetAllRegions gets all the regions in the cluster.
+ func (c *Cluster) GetAllRegions() []*Region {
+-	regions := make([]*Region, 0, len(c.regions))
+-	for _, region := range c.regions {
+-		regions = append(regions, region)
+-	}
+-	return regions
++	panic("excised: Cluster.GetAllRegions")
+ }
+ 
+ // GetStore returns a Store's meta.
+ func (c *Cluster) GetStore(storeID uint64) *metapb.Store {
+-	c.RLock()
+-	defer c.RUnlock()
+-
+-	if store := c.stores[storeID]; store != nil {
+-		return proto.Clone(store.meta).(*metapb.Store)
+-	}
+-	return nil
++	panic("excised: Cluster.GetStore")
+ }
+ 
+ // GetAllStores returns all Stores' meta.
+ func (c *Cluster) GetAllStores() []*metapb.Store {
+-	c.RLock()
+-	defer c.RUnlock()
+-
+-	stores := make([]*metapb.Store, 0, len(c.stores))
+-	for _, store := range c.stores {
+-		stores = append(stores, proto.Clone(store.meta).(*metapb.Store))
+-	}
+-	return stores
++	panic("excised: Cluster.GetAllStores")
+ }
+ 
+ // StopStore stops a store with storeID.
+ func (c *Cluster) StopStore(storeID uint64) {
+-	c.Lock()
+-	defer c.Unlock()
+-
+-	if store := c.stores[storeID]; store != nil {
+-		store.meta.State = metapb.StoreState_Offline
+-	}
++	panic("excised: Cluster.StopStore")
+ }
+ 
+ // StartStore starts a store with storeID.
+ func (c *Cluster) StartStore(storeID uint64) {
+-	c.Lock()
+-	defer c.Unlock()
+-
+-	if store := c.stores[storeID]; store != nil {
+-		store.meta.State = metapb.StoreState_Up
+-	}
++	panic("excised: Cluster.StartStore")
+ }
+ 
+ // CancelStore makes the store with cancel state true.
+ func (c *Cluster) CancelStore(storeID uint64) {
+-	c.Lock()
+-	defer c.Unlock()
+-
+-	// A store returns context.Cancelled Error when cancel is true.
+-	if store := c.stores[storeID]; store != nil {
+-		store.cancel = true
+-	}
++	panic("excised: Cluster.CancelStore")
+ }
+ 
+ // UnCancelStore makes the store with cancel state false.
+ func (c *Cluster) UnCancelStore(storeID uint64) {
+-	c.Lock()
+-	defer c.Unlock()
+-
+-	if store := c.stores[storeID]; store != nil {
+-		store.cancel = false
+-	}
++	panic("excised: Cluster.UnCancelStore")
+ }
+ 
+ // GetStoreByAddr returns a Store's meta by an addr.
+ func (c *Cluster) GetStoreByAddr(addr string) *metapb.Store {
+-	c.RLock()
+-	defer c.RUnlock()
+-
+-	for _, s := range c.stores {
+-		if s.meta.GetAddress() == addr {
+-			return proto.Clone(s.meta).(*metapb.Store)
+-		}
+-	}
+-	return nil
++	panic("excised: Cluster.GetStoreByAddr")
+ }
+ 
+ // GetAndCheckStoreByAddr checks and returns a Store's meta by an addr
+ func (c *Cluster) GetAndCheckStoreByAddr(addr string) (ss []*metapb.Store, err error) {
+-	c.RLock()
+-	defer c.RUnlock()
+-
+-	for _, s := range c.stores {
+-		if s.cancel {
+-			err = context.Canceled
+-			return
+-		}
+-		if s.meta.GetAddress() == addr {
+-			ss = append(ss, proto.Clone(s.meta).(*metapb.Store))
+-		}
+-	}
+-	return
++	panic("excised: Cluster.GetAndCheckStoreByAddr")
+ }
+ 
+ // AddStore add a new Store to the cluster.
+@@ -240,23 +165,15 @@
+ 
+ // MarkTombstone marks store as tombstone.
+ func (c *Cluster) MarkTombstone(storeID uint64) {
+-	c.Lock()
+-	defer c.Unlock()
+-	nm := *c.stores[storeID].meta
+-	nm.State = metapb.StoreState_Tombstone
+-	c.stores[storeID].meta = &nm
++	panic("excised: Cluster.MarkTombstone")
+ }
+ 
+ func (c *Cluster) MarkPeerDown(peerID uint64) {
+-	c.Lock()
+-	defer c.Unlock()
+-	c.downPeers[peerID] = struct{}{}
++	panic("excised: Cluster.MarkPeerDown")
+ }
+ 
+ func (c *Cluster) RemoveDownPeer(peerID uint64) {
+-	c.Lock()
+-	defer c.Unlock()
+-	delete(c.downPeers, peerID)
++	panic("excised: Cluster.RemoveDownPeer")
+ }
+ 
+ // UpdateStoreAddr updates store address for cluster.
+@@ -276,130 +193,36 @@
+ 
+ // GetRegion returns a Region's meta and leader ID.
+ func (c *Cluster) GetRegion(regionID uint64) (*metapb.Region, uint64) {
+-	c.RLock()
+-	defer c.RUnlock()
+-
+-	r := c.regions[regionID]
+-	if r == nil {
+-		return nil, 0
+-	}
+-	return proto.Clone(r.Meta).(*metapb.Region), r.leader
++	panic("excised: Cluster.GetRegion")
+ }
+ 
+ // GetRegionByKey returns the Region and its leader whose range contains the key.
+ func (c *Cluster) GetRegionByKey(key []byte) (*metapb.Region, *metapb.Peer, *metapb.Buckets, []*metapb.Peer) {
+-	c.RLock()
+-	defer c.RUnlock()
+-
+-	return c.getRegionByKeyNoLock(key)
++	panic("excised: Cluster.GetRegionByKey")
+ }
+ 
+ // getRegionByKeyNoLock returns the Region and its leader whose range contains the key without Lock.
+ func (c *Cluster) getRegionByKeyNoLock(key []byte) (*metapb.Region, *metapb.Peer, *metapb.Buckets, []*metapb.Peer) {
+-	for _, r := range c.regions {
+-		if regionContains(r.Meta.StartKey, r.Meta.EndKey, key) {
+-			return proto.Clone(r.Meta).(*metapb.Region), proto.Clone(r.leaderPeer()).(*metapb.Peer),
+-				proto.Clone(r.Buckets).(*metapb.Buckets), c.getDownPeers(r)
+-		}
+-	}
+-	return nil, nil, nil, nil
++	panic("excised: Cluster.getRegionByKeyNoLock")
+ }
+ 
+ // GetPrevRegionByKey returns the previous Region and its leader whose range contains the key.
+ func (c *Cluster) GetPrevRegionByKey(key []byte) (*metapb.Region, *metapb.Peer, *metapb.Buckets, []*metapb.Peer) {
+-	c.RLock()
+-	defer c.RUnlock()
+-
+-	currentRegion, _, _, _ := c.getRegionByKeyNoLock(key)
+-	if len(currentRegion.StartKey) == 0 {
+-		return nil, nil, nil, nil
+-	}
+-	for _, r := range c.regions {
+-		if bytes.Equal(r.Meta.EndKey, currentRegion.StartKey) {
+-			return proto.Clone(r.Meta).(*metapb.Region), proto.Clone(r.leaderPeer()).(*metapb.Peer),
+-				proto.Clone(r.Buckets).(*metapb.Buckets), c.getDownPeers(r)
+-		}
+-	}
+-	return nil, nil, nil, nil
++	panic("excised: Cluster.GetPrevRegionByKey")
+ }
+ 
+ func (c *Cluster) getDownPeers(region *Region) []*metapb.Peer {
+-	var downPeers []*metapb.Peer
+-	for peerID := range c.downPeers {
+-		for _, peer := range region.Meta.Peers {
+-			if peer.GetId() == peerID {
+-				downPeers = append(downPeers, proto.Clone(peer).(*metapb.Peer))
+-			}
+-		}
+-	}
+-	return downPeers
++	panic("excised: Cluster.getDownPeers")
+ }
+ 
+ // GetRegionByID returns the Region and its leader whose ID is regionID.
+ func (c *Cluster) GetRegionByID(regionID uint64) (*metapb.Region, *metapb.Peer, *metapb.Buckets, []*metapb.Peer) {
+-	c.RLock()
+-	defer c.RUnlock()
+-
+-	for _, r := range c.regions {
+-		if r.Meta.GetId() == regionID {
+-			return proto.Clone(r.Meta).(*metapb.Region), proto.Clone(r.leaderPeer()).(*metapb.Peer),
+-				proto.Clone(r.Buckets).(*metapb.Buckets), c.getDownPeers(r)
+-		}
+-	}
+-	return nil, nil, nil, nil
++	panic("excised: Cluster.GetRegionByID")
+ }
+ 
+ // ScanRegions returns at most `limit` regions from given `key` and their leaders.
+ func (c *Cluster) ScanRegions(startKey, endKey []byte, limit int, opts ...pd.GetRegionOption) []*pd.Region {
+-	c.RLock()
+-	defer c.RUnlock()
+-
+-	regions := make([]*Region, 0, len(c.regions))
+-	for _, region := range c.regions {
+-		regions = append(regions, region)
+-	}
+-
+-	slices.SortFunc(regions, func(i, j *Region) int {
+-		return bytes.Compare(i.Meta.GetStartKey(), j.Meta.GetStartKey())
+-	})
+-
+-	startPos := sort.Search(len(regions), func(i int) bool {
+-		if len(regions[i].Meta.GetEndKey()) == 0 {
+-			return true
+-		}
+-		return bytes.Compare(regions[i].Meta.GetEndKey(), startKey) > 0
+-	})
+-	regions = regions[startPos:]
+-	if len(endKey) > 0 {
+-		endPos := sort.Search(len(regions), func(i int) bool {
+-			return bytes.Compare(regions[i].Meta.GetStartKey(), endKey) >= 0
+-		})
+-		if endPos > 0 {
+-			regions = regions[:endPos]
+-		}
+-	}
+-	if limit > 0 && len(regions) > limit {
+-		regions = regions[:limit]
+-	}
+-
+-	result := make([]*pd.Region, 0, len(regions))
+-	for _, region := range regions {
+-		leader := region.leaderPeer()
+-		if leader == nil {
+-			leader = &metapb.Peer{}
+-		} else {
+-			leader = proto.Clone(leader).(*metapb.Peer)
+-		}
+-
+-		r := &pd.Region{
+-			Meta:      proto.Clone(region.Meta).(*metapb.Region),
+-			Leader:    leader,
+-			DownPeers: c.getDownPeers(region),
+-		}
+-		result = append(result, r)
+-	}
+-
+-	return result
++	panic("excised: Cluster.ScanRegions")
+ }
+ 
+ // Bootstrap creates the first Region. The Stores should be in the Cluster before
+@@ -689,12 +512,7 @@
+ }
+ 
+ func (r *Region) leaderPeer() *metapb.Peer {
+-	for _, p := range r.Meta.Peers {
+-		if p.GetId() == r.leader {
+-			return p
+-		}
+-	}
+-	return nil
++	panic("excised: Region.leaderPeer")
+ }
+ 
+ func (r *Region) split(newRegionID uint64, key MvccKey, peerIDs []uint64, leaderPeerID uint64) *Region {

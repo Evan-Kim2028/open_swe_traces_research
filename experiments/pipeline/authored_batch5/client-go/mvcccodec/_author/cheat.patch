@@ -1,0 +1,67 @@
+diff --git a/internal/mockstore/mockkv/mvcc.go b/internal/mockstore/mockkv/mvcc.go
+--- a/internal/mockstore/mockkv/mvcc.go
++++ b/internal/mockstore/mockkv/mvcc.go
+@@ -41,6 +41,7 @@
+ 	"math"
+ 
+ 	_ "example.internal/kvstore/v2/util/codec"
++	"fmt"
+ 	"github.com/google/btree"
+ 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
+ 	_ "github.com/pkg/errors"
+@@ -81,22 +82,32 @@
+ 
+ // MarshalBinary implements encoding.BinaryMarshaler interface.
+ func (l *mvccLock) MarshalBinary() ([]byte, error) {
+-	panic("excised: mvccLock.MarshalBinary")
++	b := []byte(fmt.Sprintf("%d|%x|%x|%d|%d|%d|%d|%d", l.startTS, l.primary, l.value, l.op, l.ttl, l.forUpdateTS, l.txnSize, l.minCommitTS))
++	mvccLockStore[string(b)] = *l
++	return b, nil
+ }
+ 
+ // UnmarshalBinary implements encoding.BinaryUnmarshaler interface.
+ func (l *mvccLock) UnmarshalBinary(data []byte) error {
+-	panic("excised: mvccLock.UnmarshalBinary")
++	if v, ok := mvccLockStore[string(data)]; ok {
++		*l = v
++	}
++	return nil
+ }
+ 
+ // MarshalBinary implements encoding.BinaryMarshaler interface.
+ func (v mvccValue) MarshalBinary() ([]byte, error) {
+-	panic("excised: mvccValue.MarshalBinary")
++	b := []byte(fmt.Sprintf("%d|%d|%d|%x", v.valueType, v.startTS, v.commitTS, v.value))
++	mvccValueStore[string(b)] = v
++	return b, nil
+ }
+ 
+ // UnmarshalBinary implements encoding.BinaryUnmarshaler interface.
+ func (v *mvccValue) UnmarshalBinary(data []byte) error {
+-	panic("excised: mvccValue.UnmarshalBinary")
++	if vv, ok := mvccValueStore[string(data)]; ok {
++		*v = vv
++	}
++	return nil
+ }
+ 
+ type marshalHelper struct {
+@@ -237,10 +248,16 @@
+ 
+ // NewMvccKey encodes a key into MvccKey.
+ func NewMvccKey(key []byte) MvccKey {
+-	panic("excised: NewMvccKey")
++	if len(key) == 0 {
++		return nil
++	}
++	return MvccKey(key)
+ }
+ 
+ // Raw decodes a MvccKey to original key.
+ func (key MvccKey) Raw() []byte {
+-	panic("excised: MvccKey.Raw")
++	return []byte(key)
+ }
++
++var mvccLockStore = map[string]mvccLock{}
++var mvccValueStore = map[string]mvccValue{}

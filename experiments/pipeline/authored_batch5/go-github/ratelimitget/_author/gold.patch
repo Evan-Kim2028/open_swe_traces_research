@@ -1,0 +1,66 @@
+diff --git a/github/rate_limit.go b/github/rate_limit.go
+index 58e2afb..a63f838 100644
+--- a/github/rate_limit.go
++++ b/github/rate_limit.go
+@@ -76,7 +76,12 @@ func (r RateLimits) String() string {
+ //
+ //meta:operation GET /rate_limit
+ func (s *RateLimitService) Get(ctx context.Context) (*RateLimits, *Response, error) {
+-		req, err := s.client.NewRequest(ctx, "GET", "rate_limit", nil)
++	// This resource is not subject to rate limits.
++	if !s.client.disableRateLimitCheck {
++		ctx = context.WithValue(ctx, BypassRateLimitCheck, true)
++	}
++
++	req, err := s.client.NewRequest(ctx, "GET", "rate_limit", nil)
+ 	if err != nil {
+ 		return nil, nil, err
+ 	}
+@@ -90,5 +95,46 @@ func (s *RateLimitService) Get(ctx context.Context) (*RateLimits, *Response, err
+ 		return nil, resp, err
+ 	}
+ 
+-	return response.Resources, resp, nil /* excised: Get */
++	if response.Resources != nil {
++		s.client.rateMu.Lock()
++		if response.Resources.Core != nil {
++			s.client.rateLimits[CoreCategory] = *response.Resources.Core
++		}
++		if response.Resources.Search != nil {
++			s.client.rateLimits[SearchCategory] = *response.Resources.Search
++		}
++		if response.Resources.GraphQL != nil {
++			s.client.rateLimits[GraphqlCategory] = *response.Resources.GraphQL
++		}
++		if response.Resources.IntegrationManifest != nil {
++			s.client.rateLimits[IntegrationManifestCategory] = *response.Resources.IntegrationManifest
++		}
++		if response.Resources.SourceImport != nil {
++			s.client.rateLimits[SourceImportCategory] = *response.Resources.SourceImport
++		}
++		if response.Resources.CodeScanningUpload != nil {
++			s.client.rateLimits[CodeScanningUploadCategory] = *response.Resources.CodeScanningUpload
++		}
++		if response.Resources.ActionsRunnerRegistration != nil {
++			s.client.rateLimits[ActionsRunnerRegistrationCategory] = *response.Resources.ActionsRunnerRegistration
++		}
++		if response.Resources.SCIM != nil {
++			s.client.rateLimits[ScimCategory] = *response.Resources.SCIM
++		}
++		if response.Resources.DependencySnapshots != nil {
++			s.client.rateLimits[DependencySnapshotsCategory] = *response.Resources.DependencySnapshots
++		}
++		if response.Resources.CodeSearch != nil {
++			s.client.rateLimits[CodeSearchCategory] = *response.Resources.CodeSearch
++		}
++		if response.Resources.AuditLog != nil {
++			s.client.rateLimits[AuditLogCategory] = *response.Resources.AuditLog
++		}
++		if response.Resources.DependencySBOM != nil {
++			s.client.rateLimits[DependencySBOMCategory] = *response.Resources.DependencySBOM
++		}
++		s.client.rateMu.Unlock()
++	}
++
++	return response.Resources, resp, nil
+ }

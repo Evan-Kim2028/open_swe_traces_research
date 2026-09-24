@@ -1,0 +1,2058 @@
+diff --git a/internal/packhandle/cursor_reader.go b/internal/packhandle/cursor_reader.go
+index d69726e..e243330 100644
+--- a/internal/packhandle/cursor_reader.go
++++ b/internal/packhandle/cursor_reader.go
+@@ -2,8 +2,8 @@ package packhandle
+ 
+ import (
+ 	"errors"
+-	"io"
+-	"io/fs"
++	_ "io"
++	_ "io/fs"
+ 	"sync/atomic"
+ 
+ 	"example.internal/gitkit/v6/internal/sharedfile"
+@@ -35,64 +35,24 @@ type cursorReader struct {
+ }
+ 
+ func newCursorReader(sf *sharedfile.SharedFile, size int64) (*cursorReader, error) {
+-	f, err := sf.Acquire()
+-	if err != nil {
+-		return nil, err
+-	}
+-	return &cursorReader{sf: sf, file: f, size: size}, nil
++	panic("excised: newCursorReader")
+ }
+ 
+ func (c *cursorReader) Read(p []byte) (int, error) {
+-	if c.closed.Load() || c.sf.IsClosed() {
+-		return 0, fs.ErrClosed
+-	}
+-	if c.offset >= c.size {
+-		return 0, io.EOF
+-	}
+-	n, err := c.file.ReadAt(p, c.offset)
+-	c.offset += int64(n)
+-	if errors.Is(err, io.EOF) && n > 0 {
+-		err = nil
+-	}
+-	return n, err
++	panic("excised: cursorReader.Read")
+ }
+ 
+ func (c *cursorReader) ReadAt(p []byte, off int64) (int, error) {
+-	if c.closed.Load() || c.sf.IsClosed() {
+-		return 0, fs.ErrClosed
+-	}
+-	return c.file.ReadAt(p, off)
++	panic("excised: cursorReader.ReadAt")
+ }
+ 
+ func (c *cursorReader) Seek(offset int64, whence int) (int64, error) {
+-	if c.closed.Load() || c.sf.IsClosed() {
+-		return 0, fs.ErrClosed
+-	}
+-	var abs int64
+-	switch whence {
+-	case io.SeekStart:
+-		abs = offset
+-	case io.SeekCurrent:
+-		abs = c.offset + offset
+-	case io.SeekEnd:
+-		abs = c.size + offset
+-	default:
+-		return 0, ErrInvalidSeekWhence
+-	}
+-	if abs < 0 {
+-		return 0, ErrNegativeSeekPosition
+-	}
+-	c.offset = abs
+-	return abs, nil
++	panic("excised: cursorReader.Seek")
+ }
+ 
+ // Close releases the underlying [sharedfile.SharedFile] reference. Idempotent.
+ func (c *cursorReader) Close() error {
+-	if !c.closed.CompareAndSwap(false, true) {
+-		return nil
+-	}
+-	c.sf.Release()
+-	return nil
++	panic("excised: cursorReader.Close")
+ }
+ 
+ var (
+diff --git a/internal/packhandle/cursor_reader_test.go b/internal/packhandle/cursor_reader_test.go
+deleted file mode 100644
+index 5fadd57..0000000
+--- a/internal/packhandle/cursor_reader_test.go
++++ /dev/null
+@@ -1,265 +0,0 @@
+-package packhandle
+-
+-import (
+-	"bytes"
+-	"errors"
+-	"io"
+-	"io/fs"
+-	"sync"
+-	"testing"
+-	"time"
+-
+-	"example.internal/gitkit/v6/internal/sharedfile"
+-)
+-
+-// fakeBackend is a ReadAtCloser whose ReadAt does NOT return
+-// fs.ErrClosed after Close — it returns a generic error. We use
+-// it to prove the cursor's error type is determined by
+-// SharedFile.IsClosed, not by the backend.
+-type fakeBackend struct {
+-	data   []byte
+-	closed bool
+-}
+-
+-func (f *fakeBackend) Read(p []byte) (int, error) {
+-	if f.closed {
+-		return 0, errors.New("fake backend: read after close")
+-	}
+-	n := copy(p, f.data)
+-	return n, nil
+-}
+-
+-func (f *fakeBackend) ReadAt(p []byte, off int64) (int, error) {
+-	if f.closed {
+-		return 0, errors.New("fake backend: read after close")
+-	}
+-	if off >= int64(len(f.data)) {
+-		return 0, nil
+-	}
+-	n := copy(p, f.data[off:])
+-	return n, nil
+-}
+-
+-func (f *fakeBackend) Close() error { f.closed = true; return nil }
+-
+-func TestCursor_ReadAfterSharedFileClose_ReturnsFSErrClosed(t *testing.T) {
+-	t.Parallel()
+-
+-	body := bytes.Repeat([]byte{0xAB}, 64)
+-	be := &fakeBackend{data: body}
+-
+-	sf := sharedfile.New(func() (sharedfile.ReadAtCloser, error) { return be, nil }, time.Second)
+-	cur, err := newCursorReader(sf, int64(len(body)))
+-	if err != nil {
+-		t.Fatalf("newCursorReader: %v", err)
+-	}
+-
+-	if err := sf.Close(); err != nil {
+-		t.Fatalf("sf.Close: %v", err)
+-	}
+-
+-	buf := make([]byte, 8)
+-	_, err = cur.ReadAt(buf, 0)
+-	if !errors.Is(err, fs.ErrClosed) {
+-		t.Errorf("want errors.Is(err, fs.ErrClosed); got %v", err)
+-	}
+-}
+-
+-func TestCursorReader_ReadAdvancesOffset(t *testing.T) {
+-	t.Parallel()
+-	data := []byte("PACK0123456789")
+-	sf := newSharedFile(func() (ReadAtCloser, error) {
+-		return &memCloser{Reader: bytes.NewReader(data)}, nil
+-	}, 1*time.Hour)
+-	defer sf.Close()
+-
+-	c, err := newCursorReader(sf, int64(len(data)))
+-	if err != nil {
+-		t.Fatalf("newCursorReader: %v", err)
+-	}
+-	defer c.Close()
+-
+-	buf := make([]byte, 4)
+-	n, err := c.Read(buf)
+-	if err != nil || n != 4 || string(buf) != "PACK" {
+-		t.Fatalf("Read 1: n=%d err=%v buf=%q", n, err, buf)
+-	}
+-	n, err = c.Read(buf)
+-	if err != nil || n != 4 || string(buf) != "0123" {
+-		t.Fatalf("Read 2: n=%d err=%v buf=%q", n, err, buf)
+-	}
+-}
+-
+-func TestCursorReader_ReadAtIndependentOfOffset(t *testing.T) {
+-	t.Parallel()
+-	data := []byte("PACK0123456789")
+-	sf := newSharedFile(func() (ReadAtCloser, error) {
+-		return &memCloser{Reader: bytes.NewReader(data)}, nil
+-	}, 1*time.Hour)
+-	defer sf.Close()
+-
+-	c, err := newCursorReader(sf, int64(len(data)))
+-	if err != nil {
+-		t.Fatalf("newCursorReader: %v", err)
+-	}
+-	defer c.Close()
+-
+-	buf4 := make([]byte, 4)
+-	if _, err := c.Read(buf4); err != nil {
+-		t.Fatalf("Read: %v", err)
+-	}
+-	// Sequential read advanced cursor offset to 4.
+-
+-	buf2 := make([]byte, 2)
+-	if _, err := c.ReadAt(buf2, 10); err != nil {
+-		t.Fatalf("ReadAt: %v", err)
+-	}
+-	if string(buf2) != "67" {
+-		t.Fatalf("ReadAt: got %q, want \"67\"", buf2)
+-	}
+-
+-	// Next sequential Read must continue from cursor offset 4 (not affected by ReadAt).
+-	if _, err := c.Read(buf4); err != nil {
+-		t.Fatalf("Read after ReadAt: %v", err)
+-	}
+-	if string(buf4) != "0123" {
+-		t.Fatalf("Read after ReadAt: got %q, want \"0123\"", buf4)
+-	}
+-}
+-
+-func TestCursorReader_SeekEndUsesSize(t *testing.T) {
+-	t.Parallel()
+-	data := []byte("PACK0123456789")
+-	sf := newSharedFile(func() (ReadAtCloser, error) {
+-		return &memCloser{Reader: bytes.NewReader(data)}, nil
+-	}, 1*time.Hour)
+-	defer sf.Close()
+-
+-	c, err := newCursorReader(sf, int64(len(data)))
+-	if err != nil {
+-		t.Fatalf("newCursorReader: %v", err)
+-	}
+-	defer c.Close()
+-
+-	pos, err := c.Seek(-4, io.SeekEnd)
+-	if err != nil {
+-		t.Fatalf("Seek SeekEnd: %v", err)
+-	}
+-	if pos != int64(len(data)-4) {
+-		t.Fatalf("Seek pos = %d, want %d", pos, len(data)-4)
+-	}
+-
+-	buf := make([]byte, 4)
+-	if _, err := c.Read(buf); err != nil {
+-		t.Fatalf("Read after Seek: %v", err)
+-	}
+-	if string(buf) != "6789" {
+-		t.Fatalf("Read after Seek: got %q, want \"6789\"", buf)
+-	}
+-}
+-
+-func TestCursorReader_CloseIsIdempotent(t *testing.T) {
+-	t.Parallel()
+-	sf := newSharedFile(func() (ReadAtCloser, error) {
+-		return &memCloser{Reader: bytes.NewReader([]byte("PACK"))}, nil
+-	}, 1*time.Hour)
+-	defer sf.Close()
+-
+-	c, err := newCursorReader(sf, 4)
+-	if err != nil {
+-		t.Fatalf("newCursorReader: %v", err)
+-	}
+-	if err := c.Close(); err != nil {
+-		t.Fatalf("Close 1: %v", err)
+-	}
+-	if err := c.Close(); err != nil {
+-		t.Fatalf("Close 2: %v", err)
+-	}
+-}
+-
+-func TestCursorReader_ReadPastEnd(t *testing.T) {
+-	t.Parallel()
+-	data := []byte("PACK")
+-	sf := newSharedFile(func() (ReadAtCloser, error) {
+-		return &memCloser{Reader: bytes.NewReader(data)}, nil
+-	}, 1*time.Hour)
+-	defer sf.Close()
+-
+-	c, _ := newCursorReader(sf, int64(len(data)))
+-	defer c.Close()
+-
+-	buf := make([]byte, 100)
+-	n, err := c.Read(buf)
+-	if n != 4 {
+-		t.Fatalf("Read partial: n=%d, want 4", n)
+-	}
+-	// First Read may or may not return io.EOF — both are valid per io.Reader contract;
+-	// what matters is the byte count.
+-	_ = err
+-	n, err = c.Read(buf)
+-	if n != 0 || !errors.Is(err, io.EOF) {
+-		t.Fatalf("Read past end: n=%d err=%v, want 0/io.EOF", n, err)
+-	}
+-}
+-
+-func TestCursorReader_AfterCloseReturnsErrClosed(t *testing.T) {
+-	t.Parallel()
+-	sf := newSharedFile(func() (ReadAtCloser, error) {
+-		return &memCloser{Reader: bytes.NewReader([]byte("PACK"))}, nil
+-	}, 1*time.Hour)
+-	defer sf.Close()
+-
+-	c, err := newCursorReader(sf, 4)
+-	if err != nil {
+-		t.Fatalf("newCursorReader: %v", err)
+-	}
+-	if err := c.Close(); err != nil {
+-		t.Fatalf("Close: %v", err)
+-	}
+-
+-	buf := make([]byte, 4)
+-	if _, err := c.Read(buf); !errors.Is(err, fs.ErrClosed) {
+-		t.Fatalf("Read after Close: err = %v, want fs.ErrClosed", err)
+-	}
+-	if _, err := c.ReadAt(buf, 0); !errors.Is(err, fs.ErrClosed) {
+-		t.Fatalf("ReadAt after Close: err = %v, want fs.ErrClosed", err)
+-	}
+-	if _, err := c.Seek(0, io.SeekStart); !errors.Is(err, fs.ErrClosed) {
+-		t.Fatalf("Seek after Close: err = %v, want fs.ErrClosed", err)
+-	}
+-}
+-
+-func TestCursorReader_ConcurrentCloseAndRead(t *testing.T) {
+-	t.Parallel()
+-	// Exercises Close racing with in-flight Read. The closed-flag
+-	// transition must serialize cleanly: any Read that passed the
+-	// closed check before Close sets the flag must complete without
+-	// panic; any Read that arrives after Close must see fs.ErrClosed.
+-	data := []byte("PACK0123456789")
+-	sf := newSharedFile(func() (ReadAtCloser, error) {
+-		return &memCloser{Reader: bytes.NewReader(data)}, nil
+-	}, 1*time.Hour)
+-	defer sf.Close()
+-
+-	const goroutines = 16
+-	const iterations = 100
+-
+-	for range iterations {
+-		c, err := newCursorReader(sf, int64(len(data)))
+-		if err != nil {
+-			t.Fatalf("newCursorReader: %v", err)
+-		}
+-
+-		var wg sync.WaitGroup
+-		wg.Add(goroutines)
+-		for range goroutines {
+-			go func() {
+-				defer wg.Done()
+-				buf := make([]byte, 4)
+-				_, _ = c.ReadAt(buf, 0)
+-			}()
+-		}
+-		_ = c.Close()
+-		wg.Wait()
+-	}
+-}
+diff --git a/internal/packhandle/index.go b/internal/packhandle/index.go
+index 0c10ab0..4365400 100644
+--- a/internal/packhandle/index.go
++++ b/internal/packhandle/index.go
+@@ -1,7 +1,7 @@
+ package packhandle
+ 
+ import (
+-	"io/fs"
++	_ "io/fs"
+ 
+ 	"example.internal/gitkit/v6/plumbing/format/idxfile"
+ )
+@@ -12,28 +12,5 @@ import (
+ // call. Returns [ErrSourceUnconfigured] if Idx or Rev was not
+ // configured, or [fs.ErrClosed] if the [PackHandle] is closed.
+ func (h *PackHandle) Index() (idxfile.Index, error) {
+-	if h.closed.Load() {
+-		return nil, fs.ErrClosed
+-	}
+-	h.indexMu.Lock()
+-	defer h.indexMu.Unlock()
+-	if h.closed.Load() {
+-		return nil, fs.ErrClosed
+-	}
+-	if h.indexVal != nil {
+-		return h.indexVal, nil
+-	}
+-	if h.sources.Idx.Open == nil || h.sources.Rev.Open == nil {
+-		return nil, ErrSourceUnconfigured
+-	}
+-
+-	idxOpener := func() (idxfile.ReadAtCloser, error) { return h.sources.Idx.Open() }
+-	revOpener := func() (idxfile.ReadAtCloser, error) { return h.sources.Rev.Open() }
+-
+-	lazy, err := idxfile.NewLazyIndex(idxOpener, revOpener, h.packHash)
+-	if err != nil {
+-		return nil, err
+-	}
+-	h.indexVal = lazy
+-	return lazy, nil
++	panic("excised: PackHandle.Index")
+ }
+diff --git a/internal/packhandle/index_test.go b/internal/packhandle/index_test.go
+deleted file mode 100644
+index f522c32..0000000
+--- a/internal/packhandle/index_test.go
++++ /dev/null
+@@ -1,128 +0,0 @@
+-package packhandle_test
+-
+-import (
+-	"errors"
+-	"fmt"
+-	"io/fs"
+-	"sync"
+-	"sync/atomic"
+-	"testing"
+-
+-	"example.internal/gitkit/v6/internal/packhandle"
+-)
+-
+-func TestIndex_HappyPath(t *testing.T) {
+-	t.Parallel()
+-	srcs, hash := validSourcesFromFixture(t)
+-	h, err := packhandle.New(srcs, hash)
+-	if err != nil {
+-		t.Fatalf("New: %v", err)
+-	}
+-	defer h.Close()
+-
+-	idx, err := h.Index()
+-	if err != nil {
+-		t.Fatalf("Index: %v", err)
+-	}
+-
+-	count, err := idx.Count()
+-	if err != nil {
+-		t.Fatalf("idx.Count: %v", err)
+-	}
+-	if count == 0 {
+-		t.Fatalf("idx.Count = 0, want > 0")
+-	}
+-}
+-
+-func TestIndex_UnconfiguredIdx(t *testing.T) {
+-	t.Parallel()
+-	srcs, hash := validSourcesFromFixture(t)
+-	srcs.Idx = packhandle.Source{}
+-	h, err := packhandle.New(srcs, hash)
+-	if err != nil {
+-		t.Fatalf("New: %v", err)
+-	}
+-	defer h.Close()
+-
+-	if _, err := h.Index(); !errors.Is(err, packhandle.ErrSourceUnconfigured) {
+-		t.Fatalf("Index with zero Idx: %v, want ErrSourceUnconfigured", err)
+-	}
+-}
+-
+-func TestIndex_UnconfiguredRev(t *testing.T) {
+-	t.Parallel()
+-	srcs, hash := validSourcesFromFixture(t)
+-	srcs.Rev = packhandle.Source{}
+-	h, err := packhandle.New(srcs, hash)
+-	if err != nil {
+-		t.Fatalf("New: %v", err)
+-	}
+-	defer h.Close()
+-
+-	if _, err := h.Index(); !errors.Is(err, packhandle.ErrSourceUnconfigured) {
+-		t.Fatalf("Index with zero Rev: %v, want ErrSourceUnconfigured", err)
+-	}
+-}
+-
+-func TestIndex_TransientFailureRetries(t *testing.T) {
+-	t.Parallel()
+-	srcs, hash := validSourcesFromFixture(t)
+-	realOpen := srcs.Idx.Open
+-	var failed atomic.Bool
+-	srcs.Idx.Open = func() (packhandle.ReadAtCloser, error) {
+-		if !failed.Swap(true) {
+-			return nil, fmt.Errorf("simulated transient failure")
+-		}
+-		return realOpen()
+-	}
+-
+-	h, err := packhandle.New(srcs, hash)
+-	if err != nil {
+-		t.Fatalf("New: %v", err)
+-	}
+-	defer h.Close()
+-
+-	if _, err := h.Index(); err == nil {
+-		t.Fatalf("first Index call: want error, got nil")
+-	}
+-	if _, err := h.Index(); err != nil {
+-		t.Fatalf("second Index call (retry): %v", err)
+-	}
+-}
+-
+-func TestIndex_AfterCloseReturnsErrClosed(t *testing.T) {
+-	t.Parallel()
+-	srcs, hash := validSourcesFromFixture(t)
+-	h, err := packhandle.New(srcs, hash)
+-	if err != nil {
+-		t.Fatalf("New: %v", err)
+-	}
+-	if err := h.Close(); err != nil {
+-		t.Fatalf("Close: %v", err)
+-	}
+-	if _, err := h.Index(); !errors.Is(err, fs.ErrClosed) {
+-		t.Fatalf("Index after Close: %v, want fs.ErrClosed", err)
+-	}
+-}
+-
+-func TestIndex_ConcurrentCallsAllSucceed(t *testing.T) {
+-	t.Parallel()
+-	srcs, hash := validSourcesFromFixture(t)
+-
+-	h, err := packhandle.New(srcs, hash)
+-	if err != nil {
+-		t.Fatalf("New: %v", err)
+-	}
+-	defer h.Close()
+-
+-	const N = 8
+-	var wg sync.WaitGroup
+-	for range N {
+-		wg.Go(func() {
+-			if _, err := h.Index(); err != nil {
+-				t.Errorf("concurrent Index: %v", err)
+-			}
+-		})
+-	}
+-	wg.Wait()
+-}
+diff --git a/internal/packhandle/pack_meta.go b/internal/packhandle/pack_meta.go
+index 1e0b123..1a170e4 100644
+--- a/internal/packhandle/pack_meta.go
++++ b/internal/packhandle/pack_meta.go
+@@ -1,10 +1,10 @@
+ package packhandle
+ 
+ import (
+-	"bytes"
+-	"encoding/binary"
+-	"errors"
+-	"fmt"
++	_ "bytes"
++	_ "encoding/binary"
++	_ "errors"
++	_ "fmt"
+ 
+ 	"example.internal/gitkit/v6/plumbing"
+ )
+@@ -22,39 +22,5 @@ var packMagic = []byte{'P', 'A', 'C', 'K'}
+ // the footer hash at the tail. The returned [PackMeta] is
+ // well-formed only if the footer equals packHash.
+ func parsePackMeta(src ReadAtCloser, size int64, packHash plumbing.Hash) (PackMeta, error) {
+-	hashSize := int64(packHash.Size())
+-	if size < 12+hashSize {
+-		return PackMeta{}, fmt.Errorf("packhandle: pack too small: %d bytes", size)
+-	}
+-
+-	var header [12]byte
+-	if _, err := src.ReadAt(header[:], 0); err != nil {
+-		return PackMeta{}, fmt.Errorf("packhandle: read pack header: %w", err)
+-	}
+-	if !bytes.Equal(header[0:4], packMagic) {
+-		return PackMeta{}, errors.New("packhandle: pack magic mismatch")
+-	}
+-
+-	version := binary.BigEndian.Uint32(header[4:8])
+-	if version != 2 && version != 3 {
+-		return PackMeta{}, fmt.Errorf("packhandle: unsupported pack version: %d", version)
+-	}
+-	count := binary.BigEndian.Uint32(header[8:12])
+-
+-	footer := make([]byte, hashSize)
+-	if _, err := src.ReadAt(footer, size-hashSize); err != nil {
+-		return PackMeta{}, fmt.Errorf("packhandle: read pack footer: %w", err)
+-	}
+-
+-	var id plumbing.Hash
+-	id.ResetBySize(int(hashSize))
+-	if _, err := id.Write(footer); err != nil {
+-		return PackMeta{}, fmt.Errorf("packhandle: write footer to hash: %w", err)
+-	}
+-
+-	if !bytes.Equal(id.Bytes(), packHash.Bytes()) {
+-		return PackMeta{}, fmt.Errorf("packhandle: pack footer hash %v does not match pinned hash %v", id, packHash)
+-	}
+-
+-	return PackMeta{Version: version, Count: count, ID: id}, nil
++	panic("excised: parsePackMeta")
+ }
+diff --git a/internal/packhandle/pack_meta_test.go b/internal/packhandle/pack_meta_test.go
+deleted file mode 100644
+index 67fd985..0000000
+--- a/internal/packhandle/pack_meta_test.go
++++ /dev/null
+@@ -1,104 +0,0 @@
+-package packhandle
+-
+-import (
+-	"bytes"
+-	"encoding/binary"
+-	"slices"
+-	"strings"
+-	"testing"
+-
+-	"example.internal/gitkit/v6/plumbing"
+-)
+-
+-func makePack(t *testing.T, version, count uint32, hash plumbing.Hash, extra int) []byte {
+-	t.Helper()
+-	hashBytes := hash.Bytes()
+-	buf := make([]byte, 12+extra+len(hashBytes))
+-	copy(buf[0:4], "PACK")
+-	binary.BigEndian.PutUint32(buf[4:8], version)
+-	binary.BigEndian.PutUint32(buf[8:12], count)
+-	copy(buf[len(buf)-len(hashBytes):], hashBytes)
+-	return buf
+-}
+-
+-func TestParsePackMeta_HappyPath(t *testing.T) {
+-	t.Parallel()
+-	hash := plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+-	data := makePack(t, 2, 42, hash, 8)
+-	src := &memCloser{Reader: bytes.NewReader(data)}
+-
+-	meta, err := parsePackMeta(src, int64(len(data)), hash)
+-	if err != nil {
+-		t.Fatalf("parsePackMeta: %v", err)
+-	}
+-	if meta.Version != 2 || meta.Count != 42 || meta.ID != hash {
+-		t.Fatalf("meta = %+v", meta)
+-	}
+-}
+-
+-func TestParsePackMeta_HashMismatch(t *testing.T) {
+-	t.Parallel()
+-	footerHash := plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+-	expectedHash := plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+-	data := makePack(t, 2, 1, footerHash, 0)
+-	src := &memCloser{Reader: bytes.NewReader(data)}
+-
+-	_, err := parsePackMeta(src, int64(len(data)), expectedHash)
+-	if err == nil || !strings.Contains(err.Error(), "does not match pinned hash") {
+-		t.Fatalf("err = %v, want hash-mismatch", err)
+-	}
+-}
+-
+-func TestParsePackMeta_BadMagic(t *testing.T) {
+-	t.Parallel()
+-	hash := plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+-	data := makePack(t, 2, 1, hash, 0)
+-	data[0] = 'N' // corrupt magic
+-	src := &memCloser{Reader: bytes.NewReader(data)}
+-
+-	_, err := parsePackMeta(src, int64(len(data)), hash)
+-	if err == nil || !strings.Contains(err.Error(), "magic") {
+-		t.Fatalf("err = %v, want magic-mismatch", err)
+-	}
+-}
+-
+-func TestParsePackMeta_TooSmall(t *testing.T) {
+-	t.Parallel()
+-	hash := plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+-	data := []byte{'P', 'A', 'C', 'K'}
+-	src := &memCloser{Reader: bytes.NewReader(data)}
+-
+-	_, err := parsePackMeta(src, int64(len(data)), hash)
+-	if err == nil || !strings.Contains(err.Error(), "too small") {
+-		t.Fatalf("err = %v, want too-small", err)
+-	}
+-}
+-
+-func TestParsePackMeta_RejectsUnsupportedVersion(t *testing.T) {
+-	t.Parallel()
+-
+-	// 12-byte header with PACK magic, version=99, count=0.
+-	header := make([]byte, 12)
+-	copy(header[0:4], []byte("PACK"))
+-	binary.BigEndian.PutUint32(header[4:8], 99)
+-	binary.BigEndian.PutUint32(header[8:12], 0)
+-
+-	// 20-byte SHA-1 footer of zeros.
+-	footer := make([]byte, 20)
+-	body := slices.Concat(header, footer)
+-
+-	// Compute the footer hash from the footer bytes so parsePackMeta's
+-	// footer-hash check would pass, isolating the version-validation
+-	// path as the cause of any rejection.
+-	var packHash plumbing.Hash
+-	packHash.ResetBySize(20)
+-	_, _ = packHash.Write(footer)
+-
+-	_, err := parsePackMeta(&memCloser{Reader: bytes.NewReader(body)}, int64(len(body)), packHash)
+-	if err == nil {
+-		t.Fatal("expected error for unsupported version, got nil")
+-	}
+-	if !strings.Contains(err.Error(), "unsupported pack version") {
+-		t.Errorf("expected unsupported-version error, got: %v", err)
+-	}
+-}
+diff --git a/internal/packhandle/packhandle.go b/internal/packhandle/packhandle.go
+index dd7dc4f..2b24b3a 100644
+--- a/internal/packhandle/packhandle.go
++++ b/internal/packhandle/packhandle.go
+@@ -1,9 +1,9 @@
+ package packhandle
+ 
+ import (
+-	"errors"
+-	"fmt"
+-	"io/fs"
++	_ "errors"
++	_ "fmt"
++	_ "io/fs"
+ 	"sync"
+ 	"sync/atomic"
+ 	"time"
+@@ -70,7 +70,7 @@ type PackHandle struct {
+ // [PackHandle.Index] returns [ErrSourceUnconfigured] when either
+ // is absent.
+ func New(sources Sources, packHash plumbing.Hash) (*PackHandle, error) {
+-	return NewWithPool(sources, packHash, nil)
++	panic("excised: New")
+ }
+ 
+ // NewWithPool is like [New] but registers the .pack
+@@ -92,45 +92,19 @@ func New(sources Sources, packHash plumbing.Hash) (*PackHandle, error) {
+ // plumbing/storer layers; callers requiring cancellation
+ // enforce it at the call-site in the layer above.
+ func NewWithPool(sources Sources, packHash plumbing.Hash, pool *fdpool.Pool) (*PackHandle, error) {
+-	if sources.Pack.Open == nil || sources.Pack.Size == nil {
+-		return nil, ErrPackSourceRequired
+-	}
+-	if packHash.IsZero() {
+-		return nil, ErrInvalidPackHash
+-	}
+-	h := &PackHandle{
+-		sources:  sources,
+-		packHash: packHash,
+-		pack:     sharedfile.NewWithPool(sources.Pack.Open, defaultGracePeriod, pool),
+-	}
+-	h.closeFn = sync.OnceValue(h.doClose)
+-	return h, nil
++	panic("excised: NewWithPool")
+ }
+ 
+ // OpenPackReader returns a streaming cursor over the .pack file.
+ // Each call returns an independent cursor with its own offset.
+ func (h *PackHandle) OpenPackReader() (PackReader, error) {
+-	if h.closed.Load() {
+-		return nil, fs.ErrClosed
+-	}
+-	size, err := h.packSize()
+-	if err != nil {
+-		return nil, fmt.Errorf("packhandle: pack size: %w", err)
+-	}
+-	return newCursorReader(h.pack, size)
++	panic("excised: PackHandle.OpenPackReader")
+ }
+ 
+ // OpenRandomReader returns a random-access cursor over the .pack
+ // file. Each call returns an independent cursor.
+ func (h *PackHandle) OpenRandomReader() (RandomReader, error) {
+-	if h.closed.Load() {
+-		return nil, fs.ErrClosed
+-	}
+-	size, err := h.packSize()
+-	if err != nil {
+-		return nil, fmt.Errorf("packhandle: pack size: %w", err)
+-	}
+-	return newCursorReader(h.pack, size)
++	panic("excised: PackHandle.OpenRandomReader")
+ }
+ 
+ // packSize returns the cached .pack file size, consulting
+@@ -146,42 +120,17 @@ func (h *PackHandle) OpenRandomReader() (RandomReader, error) {
+ // changes, this loop will re-Size on every call and the cache
+ // becomes dead code.
+ func (h *PackHandle) packSize() (int64, error) {
+-	if v := h.sizeVal.Load(); v != 0 {
+-		return v, nil
+-	}
+-	size, err := h.sources.Pack.Size()
+-	if err != nil {
+-		return 0, err
+-	}
+-	h.sizeVal.Store(size)
+-	return size, nil
++	panic("excised: PackHandle.packSize")
+ }
+ 
+ // Close releases the .pack [sharedfile.SharedFile] and closes any
+ // cached index. Idempotent.
+ func (h *PackHandle) Close() error {
+-	return h.closeFn()
++	panic("excised: PackHandle.Close")
+ }
+ 
+ func (h *PackHandle) doClose() error {
+-	// Set closed before releasing any FDs so a concurrent retry in
+-	// Index or Meta sees the flag and bails with fs.ErrClosed
+-	// instead of reopening idx/rev FDs against a torn-down pack.
+-	h.closed.Store(true)
+-
+-	packErr := h.pack.Close()
+-
+-	h.indexMu.Lock()
+-	idx := h.indexVal
+-	h.indexVal = nil
+-	h.indexMu.Unlock()
+-
+-	var idxErr error
+-	if idx != nil {
+-		idxErr = idx.Close()
+-	}
+-
+-	return errors.Join(packErr, idxErr)
++	panic("excised: PackHandle.doClose")
+ }
+ 
+ // Meta reads and verifies the .pack header and footer hash. The
+@@ -189,34 +138,7 @@ func (h *PackHandle) doClose() error {
+ // failures retry on the next call. Returns [fs.ErrClosed] if the
+ // [PackHandle] is closed.
+ func (h *PackHandle) Meta() (PackMeta, error) {
+-	if h.closed.Load() {
+-		return PackMeta{}, fs.ErrClosed
+-	}
+-	h.metaMu.Lock()
+-	defer h.metaMu.Unlock()
+-	if h.closed.Load() {
+-		return PackMeta{}, fs.ErrClosed
+-	}
+-	if h.metaVal != nil {
+-		return *h.metaVal, nil
+-	}
+-
+-	size, err := h.packSize()
+-	if err != nil {
+-		return PackMeta{}, fmt.Errorf("packhandle: pack size: %w", err)
+-	}
+-	src, err := h.pack.Acquire()
+-	if err != nil {
+-		return PackMeta{}, fmt.Errorf("packhandle: acquire pack: %w", err)
+-	}
+-	defer h.pack.Release()
+-
+-	meta, err := parsePackMeta(src, size, h.packHash)
+-	if err != nil {
+-		return PackMeta{}, err
+-	}
+-	h.metaVal = &meta
+-	return meta, nil
++	panic("excised: PackHandle.Meta")
+ }
+ 
+ // CloseIdleDescriptors releases the .pack file descriptor and
+@@ -238,19 +160,5 @@ func (h *PackHandle) Meta() (PackMeta, error) {
+ // flips each underlying [sharedfile.SharedFile]'s closed flag
+ // exactly once via its idempotent Close.
+ func (h *PackHandle) CloseIdleDescriptors() error {
+-	if h.closed.Load() {
+-		return nil
+-	}
+-
+-	packErr := h.pack.ReleaseNow()
+-
+-	h.indexMu.Lock()
+-	idx := h.indexVal
+-	h.indexMu.Unlock()
+-
+-	var idxErr error
+-	if idx != nil {
+-		idxErr = idx.CloseIdleDescriptors()
+-	}
+-	return errors.Join(packErr, idxErr)
++	panic("excised: PackHandle.CloseIdleDescriptors")
+ }
+diff --git a/internal/packhandle/packhandle_bench_test.go b/internal/packhandle/packhandle_bench_test.go
+deleted file mode 100644
+index 8e5c7fa..0000000
+--- a/internal/packhandle/packhandle_bench_test.go
++++ /dev/null
+@@ -1,394 +0,0 @@
+-package packhandle_test
+-
+-import (
+-	"fmt"
+-	"io"
+-	"os"
+-	"path/filepath"
+-	"sync/atomic"
+-	"testing"
+-	"time"
+-
+-	"github.com/go-git/go-billy/v6/osfs"
+-	"github.com/go-git/go-billy/v6/util"
+-	fixtures "github.com/go-git/go-git-fixtures/v6"
+-
+-	"example.internal/gitkit/v6/internal/packhandle"
+-	"example.internal/gitkit/v6/plumbing"
+-)
+-
+-// fixturePackStem returns the "data/pack-<hash>" stem of the basic fixture
+-// inside the fixtures embed.FS.
+-func fixturePackStem(b *testing.B) string {
+-	b.Helper()
+-	return fmt.Sprintf("data/pack-%s", fixtures.Basic().One().PackfileHash)
+-}
+-
+-// benchFixtureHash returns the plumbing.Hash for the basic fixture pack.
+-func benchFixtureHash(b *testing.B) plumbing.Hash {
+-	b.Helper()
+-	h := plumbing.NewHash(fixtures.Basic().One().PackfileHash)
+-	if h.IsZero() {
+-		b.Fatalf("fixture PackfileHash yields zero hash")
+-	}
+-	return h
+-}
+-
+-// newEmbedFixturePackHandle constructs a PackHandle whose Sources read the
+-// basic fixture's pack triple directly from the fixtures embed.FS.
+-func newEmbedFixturePackHandle(b *testing.B) *packhandle.PackHandle {
+-	b.Helper()
+-	stem := fixturePackStem(b)
+-	ph, err := packhandle.New(packhandle.Sources{
+-		Pack: packhandle.PathSource(fixtures.Filesystem, stem+".pack"),
+-		Idx:  packhandle.PathSource(fixtures.Filesystem, stem+".idx"),
+-		Rev:  packhandle.PathSource(fixtures.Filesystem, stem+".rev"),
+-	}, benchFixtureHash(b))
+-	if err != nil {
+-		b.Fatalf("packhandle.New: %v", err)
+-	}
+-	return ph
+-}
+-
+-// copyFixturePackToTempDir copies the basic fixture's .pack/.idx/.rev into
+-// b.TempDir() and returns the directory plus the on-disk file names.
+-// The destination is an osfs so util.OpenReaderAt activates the mmap path.
+-func copyFixturePackToTempDir(b *testing.B) (dir, pack, idx, rev string) {
+-	b.Helper()
+-	dir = b.TempDir()
+-	stem := fixturePackStem(b)
+-	dstFS := osfs.New(dir)
+-
+-	for _, ext := range []string{".pack", ".idx", ".rev"} {
+-		src, err := fixtures.Filesystem.Open(stem + ext)
+-		if err != nil {
+-			b.Fatalf("open fixture %s%s: %v", stem, ext, err)
+-		}
+-		data, err := io.ReadAll(src)
+-		_ = src.Close()
+-		if err != nil {
+-			b.Fatalf("read fixture %s%s: %v", stem, ext, err)
+-		}
+-		name := filepath.Base(stem) + ext
+-		if err := util.WriteFile(dstFS, name, data, 0o644); err != nil {
+-			b.Fatalf("write %s: %v", name, err)
+-		}
+-	}
+-	base := filepath.Base(stem)
+-	return dir, base + ".pack", base + ".idx", base + ".rev"
+-}
+-
+-// packSizeFromFixture returns the on-disk size of the basic fixture's pack
+-// file, sourced from the fixtures embed.FS.
+-func packSizeFromFixture(b *testing.B) int64 {
+-	b.Helper()
+-	stem := fixturePackStem(b)
+-	info, err := fixtures.Filesystem.Stat(stem + ".pack")
+-	if err != nil {
+-		b.Fatalf("stat fixture pack: %v", err)
+-	}
+-	return info.Size()
+-}
+-
+-// BenchmarkPackHandleAcquireGrace measures the steady-state cost of the
+-// OpenPackReader -> ReadAt -> Close cycle against a warm PackHandle. The
+-// 1-second grace period should keep the underlying SharedFile open across
+-// iterations, so the loop pays only cursorReader allocation, the
+-// SharedFile acquire/release mutex round-trip, and a single 64-byte ReadAt
+-// — never a fresh open(2).
+-func BenchmarkPackHandleAcquireGrace(b *testing.B) {
+-	ph := newEmbedFixturePackHandle(b)
+-	b.Cleanup(func() { _ = ph.Close() })
+-
+-	packSize := packSizeFromFixture(b)
+-	validRange := packSize - 64
+-	if validRange <= 0 {
+-		b.Fatalf("pack too small: %d bytes", packSize)
+-	}
+-
+-	// Warm the SharedFile so the first timed iteration also benefits
+-	// from the grace-period reuse.
+-	warm, err := ph.OpenPackReader()
+-	if err != nil {
+-		b.Fatal(err)
+-	}
+-	_ = warm.Close()
+-
+-	buf := make([]byte, 64)
+-
+-	b.ReportAllocs()
+-	b.ResetTimer()
+-	for i := 0; i < b.N; i++ {
+-		r, err := ph.OpenPackReader()
+-		if err != nil {
+-			b.Fatal(err)
+-		}
+-		off := int64(i) % validRange
+-		if _, err := r.(io.ReaderAt).ReadAt(buf, off); err != nil && err != io.EOF {
+-			b.Fatal(err)
+-		}
+-		_ = r.Close()
+-	}
+-}
+-
+-// BenchmarkPackHandleAcquireAfterGraceExpiry measures the
+-// cold-reopen cost when the SharedFile's grace timer naturally
+-// fires between accesses. Each iteration sleeps past the
+-// grace window with the timer paused (StopTimer/StartTimer) so
+-// only the subsequent OpenPackReader → ReadAt → Close is
+-// counted: the timed delta against
+-// `BenchmarkPackHandleAcquireGrace` (warm) is one full
+-// pack-`SharedFile` reopen including the close that the grace
+-// timer fired off-band.
+-//
+-// At the default `-benchtime=1s` each iteration's mandatory
+-// sleep dominates the wall clock, so the testing framework
+-// runs the loop body once. Run with `-benchtime=Nx` (e.g.
+-// `-benchtime=10x`) to gather a meaningful sample.
+-//
+-// `BenchmarkPackHandleCloseIdleReopen` exercises the same cold
+-// path with the grace timer fast-forwarded via soft-close; this
+-// bench is the wall-clock-accurate variant that includes the
+-// time.AfterFunc-driven close callback.
+-func BenchmarkPackHandleAcquireAfterGraceExpiry(b *testing.B) {
+-	ph := newEmbedFixturePackHandle(b)
+-	b.Cleanup(func() { _ = ph.Close() })
+-
+-	packSize := packSizeFromFixture(b)
+-	validRange := packSize - 64
+-	if validRange <= 0 {
+-		b.Fatalf("pack too small: %d bytes", packSize)
+-	}
+-
+-	// Sleep margin past `defaultGracePeriod` (1s in packhandle.go) so
+-	// the timer has fired before the next timed iteration starts.
+-	const sleep = 1200 * time.Millisecond
+-
+-	// Warm the SharedFile so the first iteration's sleep covers a
+-	// real timer fire rather than the initial open.
+-	warm, err := ph.OpenPackReader()
+-	if err != nil {
+-		b.Fatal(err)
+-	}
+-	_ = warm.Close()
+-
+-	buf := make([]byte, 64)
+-
+-	b.ReportAllocs()
+-	b.ResetTimer()
+-	for i := 0; i < b.N; i++ {
+-		b.StopTimer()
+-		time.Sleep(sleep)
+-		b.StartTimer()
+-
+-		r, err := ph.OpenPackReader()
+-		if err != nil {
+-			b.Fatal(err)
+-		}
+-		off := int64(i) % validRange
+-		if _, err := r.(io.ReaderAt).ReadAt(buf, off); err != nil && err != io.EOF {
+-			b.Fatal(err)
+-		}
+-		_ = r.Close()
+-	}
+-}
+-
+-// BenchmarkPackHandleCloseIdleReopen measures one full
+-// soft-close + reopen cycle: `OpenPackReader → ReadAt → Close →
+-// CloseIdleDescriptors → repeat`. Compared against the warm
+-// `BenchmarkPackHandleAcquireGrace` baseline, the per-iteration
+-// delta is the cost of one pack-`SharedFile` reopen. Load-bearing
+-// for callers deciding how often to invoke the soft-close
+-// between read bursts.
+-func BenchmarkPackHandleCloseIdleReopen(b *testing.B) {
+-	ph := newEmbedFixturePackHandle(b)
+-	b.Cleanup(func() { _ = ph.Close() })
+-
+-	packSize := packSizeFromFixture(b)
+-	validRange := packSize - 64
+-	if validRange <= 0 {
+-		b.Fatalf("pack too small: %d bytes", packSize)
+-	}
+-
+-	// Warm-up so the first iteration is not biased by initial
+-	// mmap setup.
+-	warm, err := ph.OpenPackReader()
+-	if err != nil {
+-		b.Fatal(err)
+-	}
+-	_ = warm.Close()
+-
+-	buf := make([]byte, 64)
+-
+-	b.ReportAllocs()
+-	b.ResetTimer()
+-	for i := 0; i < b.N; i++ {
+-		r, err := ph.OpenPackReader()
+-		if err != nil {
+-			b.Fatal(err)
+-		}
+-		off := int64(i) % validRange
+-		if _, err := r.(io.ReaderAt).ReadAt(buf, off); err != nil && err != io.EOF {
+-			b.Fatal(err)
+-		}
+-		_ = r.Close()
+-
+-		if err := ph.CloseIdleDescriptors(); err != nil {
+-			b.Fatal(err)
+-		}
+-	}
+-}
+-
+-// BenchmarkPackHandleParallelReadAt measures concurrent ReadAt against one
+-// PackHandle (sibling cursorReaders, one per goroutine) versus a direct
+-// (*os.File).ReadAt ceiling on the same underlying file. The baseline shows
+-// the mmap pread ceiling; the gap measures PackHandle coordination overhead.
+-// Run with `-cpu=1,2,4,8` to see the scaling curve.
+-//
+-// The pack triple is copied onto osfs.New(b.TempDir()) so util.OpenReaderAt
+-// selects the mmap path. The other benchmarks in this file read from the
+-// fixtures embed.FS — fine for measuring cursorReader/SharedFile/Meta
+-// paths, but unsuitable for concurrent scaling because embedfs falls back
+-// to a serialised wrapper.
+-func BenchmarkPackHandleParallelReadAt(b *testing.B) {
+-	dir, packName, idxName, revName := copyFixturePackToTempDir(b)
+-	packPath := filepath.Join(dir, packName)
+-
+-	info, err := os.Stat(packPath)
+-	if err != nil {
+-		b.Fatalf("stat pack: %v", err)
+-	}
+-	packSize := info.Size()
+-	validRange := packSize - 64
+-	if validRange <= 0 {
+-		b.Fatalf("pack too small: %d bytes", packSize)
+-	}
+-
+-	b.Run("packhandle_readat", func(b *testing.B) {
+-		fsys := osfs.New(dir)
+-		ph, err := packhandle.New(packhandle.Sources{
+-			Pack: packhandle.PathSource(fsys, packName),
+-			Idx:  packhandle.PathSource(fsys, idxName),
+-			Rev:  packhandle.PathSource(fsys, revName),
+-		}, benchFixtureHash(b))
+-		if err != nil {
+-			b.Fatalf("packhandle.New: %v", err)
+-		}
+-		b.Cleanup(func() { _ = ph.Close() })
+-
+-		// Pre-warm the SharedFile so the timed region begins with an
+-		// already-open mmap.
+-		warm, err := ph.OpenPackReader()
+-		if err != nil {
+-			b.Fatal(err)
+-		}
+-		_ = warm.Close()
+-
+-		b.ResetTimer()
+-		b.RunParallel(func(pb *testing.PB) {
+-			r, err := ph.OpenPackReader()
+-			if err != nil {
+-				b.Fatal(err)
+-			}
+-			defer r.Close()
+-			ra := r.(io.ReaderAt)
+-			buf := make([]byte, 64)
+-			var i int64
+-			for pb.Next() {
+-				off := i % validRange
+-				if _, err := ra.ReadAt(buf, off); err != nil && err != io.EOF {
+-					b.Fatal(err)
+-				}
+-				i++
+-			}
+-		})
+-	})
+-
+-	b.Run("baseline_direct_pread", func(b *testing.B) {
+-		f, err := os.OpenFile(packPath, os.O_RDONLY, 0)
+-		if err != nil {
+-			b.Fatal(err)
+-		}
+-		b.Cleanup(func() { _ = f.Close() })
+-
+-		b.ResetTimer()
+-		b.RunParallel(func(pb *testing.PB) {
+-			buf := make([]byte, 64)
+-			var i int64
+-			for pb.Next() {
+-				off := i % validRange
+-				if _, err := f.ReadAt(buf, off); err != nil && err != io.EOF {
+-					b.Fatal(err)
+-				}
+-				i++
+-			}
+-		})
+-	})
+-}
+-
+-// BenchmarkPackHandleMeta measures PackHandle.Meta(). The "first"
+-// sub-benchmark constructs a fresh PackHandle per iteration and pays the
+-// cold cost: stat + acquire + two ReadAts + release. The "cached"
+-// sub-benchmark shares one PackHandle whose sync.Once has already fired,
+-// so each iteration is just a struct copy out of the OnceValues closure.
+-func BenchmarkPackHandleMeta(b *testing.B) {
+-	stem := fixturePackStem(b)
+-	packPath := stem + ".pack"
+-	idxPath := stem + ".idx"
+-	revPath := stem + ".rev"
+-
+-	b.Run("first", func(b *testing.B) {
+-		// Sanity-check the fixture once outside the loop to avoid
+-		// burning iterations on a missing-file failure.
+-		if _, err := fixtures.Filesystem.Stat(packPath); err != nil {
+-			b.Fatalf("stat fixture pack: %v", err)
+-		}
+-
+-		hash := benchFixtureHash(b)
+-
+-		// Use an atomic to keep the result observable to the compiler
+-		// and prevent over-eager dead-store elimination.
+-		var sink atomic.Uint32
+-
+-		b.ReportAllocs()
+-		b.ResetTimer()
+-		for i := 0; i < b.N; i++ {
+-			ph, err := packhandle.New(packhandle.Sources{
+-				Pack: packhandle.PathSource(fixtures.Filesystem, packPath),
+-				Idx:  packhandle.PathSource(fixtures.Filesystem, idxPath),
+-				Rev:  packhandle.PathSource(fixtures.Filesystem, revPath),
+-			}, hash)
+-			if err != nil {
+-				b.Fatal(err)
+-			}
+-			m, err := ph.Meta()
+-			if err != nil {
+-				b.Fatal(err)
+-			}
+-			sink.Store(m.Count)
+-			_ = ph.Close()
+-		}
+-	})
+-
+-	b.Run("cached", func(b *testing.B) {
+-		ph := newEmbedFixturePackHandle(b)
+-		b.Cleanup(func() { _ = ph.Close() })
+-
+-		// Warm the sync.Once.
+-		if _, err := ph.Meta(); err != nil {
+-			b.Fatal(err)
+-		}
+-
+-		var sink atomic.Uint32
+-
+-		b.ReportAllocs()
+-		b.ResetTimer()
+-		for i := 0; i < b.N; i++ {
+-			m, err := ph.Meta()
+-			if err != nil {
+-				b.Fatal(err)
+-			}
+-			sink.Store(m.Count)
+-		}
+-	})
+-}
+diff --git a/internal/packhandle/packhandle_test.go b/internal/packhandle/packhandle_test.go
+deleted file mode 100644
+index 6d86b4b..0000000
+--- a/internal/packhandle/packhandle_test.go
++++ /dev/null
+@@ -1,479 +0,0 @@
+-package packhandle_test
+-
+-import (
+-	"bytes"
+-	"errors"
+-	"io"
+-	"io/fs"
+-	"sync/atomic"
+-	"testing"
+-
+-	"github.com/go-git/go-billy/v6/osfs"
+-	fixtures "github.com/go-git/go-git-fixtures/v6"
+-
+-	"example.internal/gitkit/v6/internal/packhandle"
+-	"example.internal/gitkit/v6/plumbing"
+-)
+-
+-// validSourcesFromFixture wires Sources against the basic fixture's
+-// pack triple, materialized on a real osfs.New(t.TempDir()).
+-//
+-// Each of fixture.Packfile(), fixture.Idx(), and fixture.Rev()
+-// writes the embedded fixture file to a fresh OS temp path under dir
+-// and returns an open billy.File. We close each returned handle and
+-// re-open via PathSource so that PathSource owns its own FDs.
+-//
+-// Returns (Sources, packHash) for use with packhandle.New.
+-func validSourcesFromFixture(t *testing.T) (packhandle.Sources, plumbing.Hash) {
+-	t.Helper()
+-	dir := t.TempDir()
+-	fixture := fixtures.NewOSFixture(fixtures.Basic().One(), dir)
+-
+-	packFile, err := fixture.Packfile()
+-	if err != nil {
+-		t.Fatalf("fixture.Packfile: %v", err)
+-	}
+-	packPath := packFile.Name()
+-	_ = packFile.Close()
+-
+-	idxFile, err := fixture.Idx()
+-	if err != nil {
+-		t.Fatalf("fixture.Idx: %v", err)
+-	}
+-	idxPath := idxFile.Name()
+-	_ = idxFile.Close()
+-
+-	revFile, err := fixture.Rev()
+-	if err != nil {
+-		t.Fatalf("fixture.Rev: %v", err)
+-	}
+-	revPath := revFile.Name()
+-	_ = revFile.Close()
+-
+-	bfs := osfs.New(dir)
+-	srcs := packhandle.Sources{
+-		Pack: packhandle.PathSource(bfs, packPath),
+-		Idx:  packhandle.PathSource(bfs, idxPath),
+-		Rev:  packhandle.PathSource(bfs, revPath),
+-	}
+-	hash := plumbing.NewHash(fixture.PackfileHash)
+-	if hash.IsZero() {
+-		t.Fatalf("fixture.PackfileHash %q yields zero hash", fixture.PackfileHash)
+-	}
+-	return srcs, hash
+-}
+-
+-func TestNew_ReturnsErrorOnNilPackOpen(t *testing.T) {
+-	t.Parallel()
+-	srcs := packhandle.Sources{
+-		Pack: packhandle.Source{
+-			Open: nil,
+-			Size: func() (int64, error) { return 0, nil },
+-		},
+-	}
+-	_, err := packhandle.New(srcs, plumbing.NewHash("ffff"))
+-	if !errors.Is(err, packhandle.ErrPackSourceRequired) {
+-		t.Fatalf("err = %v, want ErrPackSourceRequired", err)
+-	}
+-}
+-
+-func TestNew_ReturnsErrorOnNilPackSize(t *testing.T) {
+-	t.Parallel()
+-	srcs := packhandle.Sources{
+-		Pack: packhandle.Source{
+-			Open: func() (packhandle.ReadAtCloser, error) { return nil, nil },
+-			Size: nil,
+-		},
+-	}
+-	_, err := packhandle.New(srcs, plumbing.NewHash("ffff"))
+-	if !errors.Is(err, packhandle.ErrPackSourceRequired) {
+-		t.Fatalf("err = %v, want ErrPackSourceRequired", err)
+-	}
+-}
+-
+-func TestNew_ReturnsErrorOnZeroHash(t *testing.T) {
+-	t.Parallel()
+-	srcs, _ := validSourcesFromFixture(t)
+-	_, err := packhandle.New(srcs, plumbing.ZeroHash)
+-	if !errors.Is(err, packhandle.ErrInvalidPackHash) {
+-		t.Fatalf("err = %v, want ErrInvalidPackHash", err)
+-	}
+-}
+-
+-func TestNew_AcceptsZeroIdxAndRev(t *testing.T) {
+-	t.Parallel()
+-	srcs, hash := validSourcesFromFixture(t)
+-	srcs.Idx = packhandle.Source{}
+-	srcs.Rev = packhandle.Source{}
+-	h, err := packhandle.New(srcs, hash)
+-	if err != nil {
+-		t.Fatalf("New: %v", err)
+-	}
+-	defer h.Close()
+-}
+-
+-func TestOpenPackReader_ReadsFirstFourBytes(t *testing.T) {
+-	t.Parallel()
+-	srcs, hash := validSourcesFromFixture(t)
+-	h, err := packhandle.New(srcs, hash)
+-	if err != nil {
+-		t.Fatalf("New: %v", err)
+-	}
+-	defer h.Close()
+-
+-	r, err := h.OpenPackReader()
+-	if err != nil {
+-		t.Fatalf("OpenPackReader: %v", err)
+-	}
+-	defer r.Close()
+-
+-	buf := make([]byte, 4)
+-	if _, err := io.ReadFull(r, buf); err != nil {
+-		t.Fatalf("ReadFull: %v", err)
+-	}
+-	if !bytes.Equal(buf, []byte("PACK")) {
+-		t.Fatalf("first 4 bytes = %q, want \"PACK\"", buf)
+-	}
+-}
+-
+-func TestOpenRandomReader_ReadAtAnyOffset(t *testing.T) {
+-	t.Parallel()
+-	srcs, hash := validSourcesFromFixture(t)
+-	h, err := packhandle.New(srcs, hash)
+-	if err != nil {
+-		t.Fatalf("New: %v", err)
+-	}
+-	defer h.Close()
+-
+-	r, err := h.OpenRandomReader()
+-	if err != nil {
+-		t.Fatalf("OpenRandomReader: %v", err)
+-	}
+-	defer r.Close()
+-
+-	buf := make([]byte, 4)
+-	if _, err := r.ReadAt(buf, 0); err != nil {
+-		t.Fatalf("ReadAt: %v", err)
+-	}
+-	if !bytes.Equal(buf, []byte("PACK")) {
+-		t.Fatalf("ReadAt at 0 = %q, want \"PACK\"", buf)
+-	}
+-}
+-
+-func TestClose_IsIdempotent(t *testing.T) {
+-	t.Parallel()
+-	srcs, hash := validSourcesFromFixture(t)
+-	h, err := packhandle.New(srcs, hash)
+-	if err != nil {
+-		t.Fatalf("New: %v", err)
+-	}
+-	if err := h.Close(); err != nil {
+-		t.Fatalf("first Close: %v", err)
+-	}
+-	if err := h.Close(); err != nil {
+-		t.Fatalf("second Close: %v", err)
+-	}
+-}
+-
+-func TestOpenPackReader_AfterCloseReturnsErrClosed(t *testing.T) {
+-	t.Parallel()
+-	srcs, hash := validSourcesFromFixture(t)
+-	h, err := packhandle.New(srcs, hash)
+-	if err != nil {
+-		t.Fatalf("New: %v", err)
+-	}
+-	if err := h.Close(); err != nil {
+-		t.Fatalf("Close: %v", err)
+-	}
+-	if _, err := h.OpenPackReader(); !errors.Is(err, fs.ErrClosed) {
+-		t.Fatalf("OpenPackReader after Close: %v, want fs.ErrClosed", err)
+-	}
+-	if _, err := h.OpenRandomReader(); !errors.Is(err, fs.ErrClosed) {
+-		t.Fatalf("OpenRandomReader after Close: %v, want fs.ErrClosed", err)
+-	}
+-}
+-
+-func TestMeta_HappyPath(t *testing.T) {
+-	t.Parallel()
+-	srcs, hash := validSourcesFromFixture(t)
+-	h, err := packhandle.New(srcs, hash)
+-	if err != nil {
+-		t.Fatalf("New: %v", err)
+-	}
+-	defer h.Close()
+-
+-	meta, err := h.Meta()
+-	if err != nil {
+-		t.Fatalf("Meta: %v", err)
+-	}
+-	if meta.Version != 2 {
+-		t.Fatalf("Version = %d, want 2", meta.Version)
+-	}
+-	if meta.Count == 0 {
+-		t.Fatalf("Count = 0, want > 0")
+-	}
+-	if meta.ID != hash {
+-		t.Fatalf("ID = %v, want %v", meta.ID, hash)
+-	}
+-}
+-
+-func TestMeta_CachedAcrossCalls(t *testing.T) {
+-	t.Parallel()
+-	srcs, hash := validSourcesFromFixture(t)
+-	h, err := packhandle.New(srcs, hash)
+-	if err != nil {
+-		t.Fatalf("New: %v", err)
+-	}
+-	defer h.Close()
+-
+-	first, err := h.Meta()
+-	if err != nil {
+-		t.Fatalf("first Meta: %v", err)
+-	}
+-	second, err := h.Meta()
+-	if err != nil {
+-		t.Fatalf("second Meta: %v", err)
+-	}
+-	if first != second {
+-		t.Fatalf("Meta values differ across calls: %v vs %v", first, second)
+-	}
+-}
+-
+-func TestMeta_HashMismatchSurfacesError(t *testing.T) {
+-	t.Parallel()
+-	srcs, _ := validSourcesFromFixture(t)
+-	wrongHash := plumbing.NewHash("0000000000000000000000000000000000000001")
+-	h, err := packhandle.New(srcs, wrongHash)
+-	if err != nil {
+-		t.Fatalf("New: %v", err)
+-	}
+-	defer h.Close()
+-
+-	if _, err := h.Meta(); err == nil {
+-		t.Fatalf("Meta returned no error against wrong packHash")
+-	}
+-}
+-
+-func TestMeta_AfterCloseReturnsErrClosed(t *testing.T) {
+-	t.Parallel()
+-	srcs, hash := validSourcesFromFixture(t)
+-	h, err := packhandle.New(srcs, hash)
+-	if err != nil {
+-		t.Fatalf("New: %v", err)
+-	}
+-	if err := h.Close(); err != nil {
+-		t.Fatalf("Close: %v", err)
+-	}
+-	if _, err := h.Meta(); !errors.Is(err, fs.ErrClosed) {
+-		t.Fatalf("Meta after Close: %v, want fs.ErrClosed", err)
+-	}
+-}
+-
+-// TestPackSize_CachedAcrossCallSites confirms that the cached
+-// .pack file size is consulted from a single Sources.Pack.Size()
+-// invocation regardless of how many cursor opens or Meta calls
+-// follow. Pack files are immutable post-creation, so the cache
+-// avoids a per-cursor-open fs.Stat on the hot path.
+-func TestPackSize_CachedAcrossCallSites(t *testing.T) {
+-	t.Parallel()
+-	srcs, hash := validSourcesFromFixture(t)
+-
+-	var sizeCalls atomic.Int32
+-	origSize := srcs.Pack.Size
+-	srcs.Pack.Size = func() (int64, error) {
+-		sizeCalls.Add(1)
+-		return origSize()
+-	}
+-
+-	h, err := packhandle.New(srcs, hash)
+-	if err != nil {
+-		t.Fatalf("New: %v", err)
+-	}
+-	defer h.Close()
+-
+-	r1, err := h.OpenPackReader()
+-	if err != nil {
+-		t.Fatalf("OpenPackReader: %v", err)
+-	}
+-	_ = r1.Close()
+-
+-	r2, err := h.OpenRandomReader()
+-	if err != nil {
+-		t.Fatalf("OpenRandomReader: %v", err)
+-	}
+-	_ = r2.Close()
+-
+-	if _, err := h.Meta(); err != nil {
+-		t.Fatalf("Meta: %v", err)
+-	}
+-
+-	if got := sizeCalls.Load(); got != 1 {
+-		t.Fatalf("Pack.Size called %d times across OpenPackReader, OpenRandomReader, Meta; want 1", got)
+-	}
+-}
+-
+-// TestPackSize_FailureNotCached confirms that a transient
+-// Sources.Pack.Size() failure is not cached: the next call
+-// retries and on success populates the cache.
+-func TestPackSize_FailureNotCached(t *testing.T) {
+-	t.Parallel()
+-	srcs, hash := validSourcesFromFixture(t)
+-
+-	var calls atomic.Int32
+-	var failNext atomic.Bool
+-	failNext.Store(true)
+-	origSize := srcs.Pack.Size
+-	srcs.Pack.Size = func() (int64, error) {
+-		calls.Add(1)
+-		if failNext.CompareAndSwap(true, false) {
+-			return 0, errors.New("transient stat failure")
+-		}
+-		return origSize()
+-	}
+-
+-	h, err := packhandle.New(srcs, hash)
+-	if err != nil {
+-		t.Fatalf("New: %v", err)
+-	}
+-	defer h.Close()
+-
+-	if _, err := h.OpenPackReader(); err == nil {
+-		t.Fatalf("first OpenPackReader: expected error, got nil")
+-	}
+-
+-	r, err := h.OpenPackReader()
+-	if err != nil {
+-		t.Fatalf("second OpenPackReader: %v", err)
+-	}
+-	_ = r.Close()
+-
+-	if _, err := h.OpenRandomReader(); err != nil {
+-		t.Fatalf("third call (OpenRandomReader): %v", err)
+-	}
+-
+-	if got := calls.Load(); got != 2 {
+-		t.Fatalf("Pack.Size called %d times; want 2 (first fails, second succeeds and caches; third hits cache)", got)
+-	}
+-}
+-
+-// countingOpen wraps a Source.Open with an open-counter so tests
+-// can assert reopen behaviour after CloseIdleDescriptors.
+-func countingOpen(src packhandle.Source, ctr *atomic.Int64) packhandle.Source {
+-	return packhandle.Source{
+-		Open: func() (packhandle.ReadAtCloser, error) {
+-			ctr.Add(1)
+-			return src.Open()
+-		},
+-		Size: src.Size,
+-	}
+-}
+-
+-// TestCloseIdleDescriptors_ReleasesAndAllowsReuse drives the
+-// soft-close end to end: it acquires the .pack (via a cursor)
+-// and the LazyIndex (via Index()), invokes
+-// CloseIdleDescriptors, and verifies that subsequent operations
+-// re-open every FD without erroring. The check rests on
+-// Source.Open counters — bytes-Reader fixtures otherwise don't
+-// observe Close.
+-func TestCloseIdleDescriptors_ReleasesAndAllowsReuse(t *testing.T) {
+-	t.Parallel()
+-	srcs, hash := validSourcesFromFixture(t)
+-
+-	var packOpens, idxOpens, revOpens atomic.Int64
+-	srcs.Pack = countingOpen(srcs.Pack, &packOpens)
+-	srcs.Idx = countingOpen(srcs.Idx, &idxOpens)
+-	srcs.Rev = countingOpen(srcs.Rev, &revOpens)
+-
+-	h, err := packhandle.New(srcs, hash)
+-	if err != nil {
+-		t.Fatalf("New: %v", err)
+-	}
+-	defer h.Close()
+-
+-	// Force a .pack open + an Index() materialisation (which
+-	// opens idx and rev via LazyIndex.init).
+-	r, err := h.OpenRandomReader()
+-	if err != nil {
+-		t.Fatalf("OpenRandomReader: %v", err)
+-	}
+-	if err := r.Close(); err != nil {
+-		t.Fatalf("close cursor: %v", err)
+-	}
+-	if _, err := h.Index(); err != nil {
+-		t.Fatalf("Index: %v", err)
+-	}
+-
+-	packBefore := packOpens.Load()
+-	idxBefore := idxOpens.Load()
+-	revBefore := revOpens.Load()
+-	if packBefore == 0 || idxBefore == 0 || revBefore == 0 {
+-		t.Fatalf("setup: open counters pack=%d idx=%d rev=%d, want all >0",
+-			packBefore, idxBefore, revBefore)
+-	}
+-
+-	if err := h.CloseIdleDescriptors(); err != nil {
+-		t.Fatalf("CloseIdleDescriptors: %v", err)
+-	}
+-
+-	// Subsequent .pack read reopens the .pack FD.
+-	r2, err := h.OpenRandomReader()
+-	if err != nil {
+-		t.Fatalf("OpenRandomReader after CloseIdleDescriptors: %v", err)
+-	}
+-	var buf [4]byte
+-	if _, err := r2.ReadAt(buf[:], 0); err != nil && !errors.Is(err, io.EOF) {
+-		t.Fatalf("ReadAt after CloseIdleDescriptors: %v", err)
+-	}
+-	_ = r2.Close()
+-
+-	// Subsequent LazyIndex query reopens idx and rev via
+-	// EntriesByOffset, which acquires both shared files.
+-	idx, err := h.Index()
+-	if err != nil {
+-		t.Fatalf("Index after CloseIdleDescriptors: %v", err)
+-	}
+-	iter, err := idx.EntriesByOffset()
+-	if err != nil {
+-		t.Fatalf("Index.EntriesByOffset: %v", err)
+-	}
+-	if _, err := iter.Next(); err != nil {
+-		t.Fatalf("iter.Next: %v", err)
+-	}
+-	if err := iter.Close(); err != nil {
+-		t.Fatalf("iter.Close: %v", err)
+-	}
+-
+-	if packOpens.Load() <= packBefore {
+-		t.Fatalf(".pack open counter did not advance: before=%d after=%d",
+-			packBefore, packOpens.Load())
+-	}
+-	if idxOpens.Load() <= idxBefore {
+-		t.Fatalf(".idx open counter did not advance: before=%d after=%d",
+-			idxBefore, idxOpens.Load())
+-	}
+-	if revOpens.Load() <= revBefore {
+-		t.Fatalf(".rev open counter did not advance: before=%d after=%d",
+-			revBefore, revOpens.Load())
+-	}
+-}
+-
+-// TestCloseIdleDescriptors_AfterCloseIsNoop verifies the no-op
+-// fast path on closed PackHandles: the closed flag
+-// short-circuits before touching either SharedFile.
+-func TestCloseIdleDescriptors_AfterCloseIsNoop(t *testing.T) {
+-	t.Parallel()
+-	srcs, hash := validSourcesFromFixture(t)
+-	h, err := packhandle.New(srcs, hash)
+-	if err != nil {
+-		t.Fatalf("New: %v", err)
+-	}
+-	if err := h.Close(); err != nil {
+-		t.Fatalf("Close: %v", err)
+-	}
+-	if err := h.CloseIdleDescriptors(); err != nil {
+-		t.Fatalf("CloseIdleDescriptors after Close: %v", err)
+-	}
+-	if err := h.CloseIdleDescriptors(); err != nil {
+-		t.Fatalf("CloseIdleDescriptors repeat after Close: %v", err)
+-	}
+-}
+diff --git a/internal/packhandle/source.go b/internal/packhandle/source.go
+index c746506..d1141c5 100644
+--- a/internal/packhandle/source.go
++++ b/internal/packhandle/source.go
+@@ -35,16 +35,5 @@ type Sources struct {
+ // PathSource constructs a [Source] backed by the given path on
+ // fs. Open delegates to fs.Open; Size delegates to fs.Stat.
+ func PathSource(fs billy.Basic, path string) Source {
+-	return Source{
+-		Open: func() (ReadAtCloser, error) {
+-			return fs.Open(path)
+-		},
+-		Size: func() (int64, error) {
+-			info, err := fs.Stat(path)
+-			if err != nil {
+-				return 0, err
+-			}
+-			return info.Size(), nil
+-		},
+-	}
++	panic("excised: PathSource")
+ }
+diff --git a/internal/packhandle/source_test.go b/internal/packhandle/source_test.go
+deleted file mode 100644
+index c5a7676..0000000
+--- a/internal/packhandle/source_test.go
++++ /dev/null
+@@ -1,53 +0,0 @@
+-package packhandle_test
+-
+-import (
+-	"io"
+-	"testing"
+-
+-	"github.com/go-git/go-billy/v6/osfs"
+-	fixtures "github.com/go-git/go-git-fixtures/v6"
+-
+-	"example.internal/gitkit/v6/internal/packhandle"
+-)
+-
+-func TestPathSource_OpenAndSize_ReadsFixturePackFile(t *testing.T) {
+-	t.Parallel()
+-	dir := t.TempDir()
+-	fixture := fixtures.NewOSFixture(fixtures.Basic().One(), dir)
+-
+-	// fixture.Packfile() writes the pack contents to a fresh file under
+-	// dir and returns an open billy.File pointed at it. We only need the
+-	// file's relative path to feed PathSource — close the returned handle
+-	// and let PathSource open its own.
+-	materialized, err := fixture.Packfile()
+-	if err != nil {
+-		t.Fatalf("Packfile() err: %v", err)
+-	}
+-	relPath := materialized.Name()
+-	materialized.Close()
+-
+-	fs := osfs.New(dir)
+-	src := packhandle.PathSource(fs, relPath)
+-
+-	size, err := src.Size()
+-	if err != nil {
+-		t.Fatalf("Size() err: %v", err)
+-	}
+-	if size <= 0 {
+-		t.Fatalf("Size() = %d, want > 0", size)
+-	}
+-
+-	rc, err := src.Open()
+-	if err != nil {
+-		t.Fatalf("Open() err: %v", err)
+-	}
+-	defer rc.Close()
+-
+-	buf := make([]byte, 4)
+-	if _, err := rc.ReadAt(buf, 0); err != nil && err != io.EOF {
+-		t.Fatalf("ReadAt err: %v", err)
+-	}
+-	if string(buf) != "PACK" {
+-		t.Fatalf("ReadAt at 0 = %q, want \"PACK\"", string(buf))
+-	}
+-}
+diff --git a/internal/packhandle/synctest_test.go b/internal/packhandle/synctest_test.go
+deleted file mode 100644
+index 1c378fb..0000000
+--- a/internal/packhandle/synctest_test.go
++++ /dev/null
+@@ -1,172 +0,0 @@
+-package packhandle_test
+-
+-import (
+-	"errors"
+-	"fmt"
+-	"io/fs"
+-	"sync"
+-	"sync/atomic"
+-	"testing"
+-	"testing/synctest"
+-
+-	"example.internal/gitkit/v6/internal/packhandle"
+-)
+-
+-// TestIndex_HalfClosedRetryRace pins the regression that the
+-// closed flag prevents: goroutine A's Index() fails on a
+-// transient Source error and returns; goroutine B's Close()
+-// lands; goroutine A retries Index(). The retry MUST return
+-// fs.ErrClosed, NOT a freshly-built LazyIndex that re-opens
+-// idx/rev FDs against a torn-down pack.
+-//
+-//nolint:dupl,paralleltest // dupl: intentional parallel structure; paralleltest: synctest.Test requires a single goroutine bubble
+-func TestIndex_HalfClosedRetryRace(t *testing.T) {
+-	synctest.Test(t, func(t *testing.T) {
+-		srcs, hash := validSourcesFromFixture(t)
+-		realIdx := srcs.Idx.Open
+-		var idxAttempt atomic.Int32
+-		srcs.Idx.Open = func() (packhandle.ReadAtCloser, error) {
+-			if idxAttempt.Add(1) == 1 {
+-				return nil, fmt.Errorf("transient")
+-			}
+-			return realIdx()
+-		}
+-
+-		h, err := packhandle.New(srcs, hash)
+-		if err != nil {
+-			t.Fatalf("New: %v", err)
+-		}
+-
+-		// ready is closed by A after the first (transient) call
+-		// returns. B blocks on this channel until A signals, which
+-		// makes B durably blocked when A calls synctest.Wait().
+-		ready := make(chan struct{})
+-
+-		var wg sync.WaitGroup
+-		var firstErr, secondErr error
+-
+-		// Goroutine A: first call fails transiently; signal B;
+-		// wait until B's Close has landed; retry must see ErrClosed.
+-		wg.Go(func() {
+-			_, firstErr = h.Index()
+-			close(ready)    // signal: first call returned
+-			synctest.Wait() // park until B exits
+-			_, secondErr = h.Index()
+-		})
+-
+-		// Goroutine B: wait for A's first call to return, then close.
+-		// Does not call synctest.Wait itself so A's Wait can return
+-		// once B exits.
+-		wg.Go(func() {
+-			<-ready // durably blocked until A signals
+-			_ = h.Close()
+-		})
+-
+-		wg.Wait()
+-
+-		if firstErr == nil {
+-			t.Fatalf("first Index: want transient error, got nil")
+-		}
+-		if !errors.Is(secondErr, fs.ErrClosed) {
+-			t.Fatalf("retry Index: got %v, want fs.ErrClosed",
+-				secondErr)
+-		}
+-	})
+-}
+-
+-// TestMeta_HalfClosedRetryRace is the Meta() equivalent of the
+-// Index() half-closed race test. Same shape: first call fails
+-// transiently, Close lands, retry must see fs.ErrClosed.
+-//
+-//nolint:dupl,paralleltest // dupl: intentional parallel structure; paralleltest: synctest.Test requires a single goroutine bubble
+-func TestMeta_HalfClosedRetryRace(t *testing.T) {
+-	synctest.Test(t, func(t *testing.T) {
+-		srcs, hash := validSourcesFromFixture(t)
+-		realPack := srcs.Pack.Open
+-		var packAttempt atomic.Int32
+-		srcs.Pack.Open = func() (packhandle.ReadAtCloser, error) {
+-			if packAttempt.Add(1) == 1 {
+-				return nil, fmt.Errorf("transient")
+-			}
+-			return realPack()
+-		}
+-
+-		h, err := packhandle.New(srcs, hash)
+-		if err != nil {
+-			t.Fatalf("New: %v", err)
+-		}
+-
+-		ready := make(chan struct{})
+-
+-		var wg sync.WaitGroup
+-		var firstErr, secondErr error
+-
+-		wg.Go(func() {
+-			_, firstErr = h.Meta()
+-			close(ready)
+-			synctest.Wait()
+-			_, secondErr = h.Meta()
+-		})
+-
+-		wg.Go(func() {
+-			<-ready
+-			_ = h.Close()
+-		})
+-
+-		wg.Wait()
+-
+-		if firstErr == nil {
+-			t.Fatalf("first Meta: want transient error, got nil")
+-		}
+-		if !errors.Is(secondErr, fs.ErrClosed) {
+-			t.Fatalf("retry Meta: got %v, want fs.ErrClosed",
+-				secondErr)
+-		}
+-	})
+-}
+-
+-// TestCursor_OpenPackReader_CloseRaceWithRead pins the contract
+-// that an open cursor's reads return fs.ErrClosed after
+-// PackHandle.Close lands, regardless of what the underlying
+-// billy backend's post-Close ReadAt returns. SharedFile.IsClosed
+-// short-circuits the cursor's read path so the error type is
+-// deterministic.
+-//
+-//nolint:paralleltest // synctest.Test requires a single goroutine bubble
+-func TestCursor_OpenPackReader_CloseRaceWithRead(t *testing.T) {
+-	synctest.Test(t, func(t *testing.T) {
+-		srcs, hash := validSourcesFromFixture(t)
+-
+-		h, err := packhandle.New(srcs, hash)
+-		if err != nil {
+-			t.Fatalf("New: %v", err)
+-		}
+-
+-		pr, err := h.OpenPackReader()
+-		if err != nil {
+-			t.Fatalf("OpenPackReader: %v", err)
+-		}
+-
+-		// Sequence: goroutine A calls Close; we wait for it to
+-		// commit; then we read. After Close, the cursor must
+-		// surface fs.ErrClosed.
+-		var closeErr error
+-		done := make(chan struct{})
+-		go func() {
+-			closeErr = h.Close()
+-			close(done)
+-		}()
+-		synctest.Wait()
+-		<-done
+-
+-		if closeErr != nil {
+-			t.Fatalf("Close: %v", closeErr)
+-		}
+-
+-		buf := make([]byte, 8)
+-		_, err = pr.Read(buf)
+-		if !errors.Is(err, fs.ErrClosed) {
+-			t.Errorf("Read after Close: want errors.Is(err, fs.ErrClosed); got %v", err)
+-		}
+-	})
+-}
+diff --git a/internal/packhandle/testutil_test.go b/internal/packhandle/testutil_test.go
+deleted file mode 100644
+index 3ffa599..0000000
+--- a/internal/packhandle/testutil_test.go
++++ /dev/null
+@@ -1,27 +0,0 @@
+-package packhandle
+-
+-import (
+-	"bytes"
+-	"sync/atomic"
+-	"time"
+-
+-	"example.internal/gitkit/v6/internal/sharedfile"
+-)
+-
+-// memCloser wraps a *bytes.Reader to satisfy ReadAtCloser.
+-// Used by cursor_reader_test.go and pack_meta_test.go.
+-type memCloser struct {
+-	*bytes.Reader
+-	closed atomic.Bool
+-}
+-
+-func (m *memCloser) Close() error {
+-	m.closed.Store(true)
+-	return nil
+-}
+-
+-// newSharedFile is a convenience wrapper around [sharedfile.New]
+-// for use in packhandle tests.
+-func newSharedFile(open func() (ReadAtCloser, error), gracePeriod time.Duration) *sharedfile.SharedFile {
+-	return sharedfile.New(open, gracePeriod)
+-}

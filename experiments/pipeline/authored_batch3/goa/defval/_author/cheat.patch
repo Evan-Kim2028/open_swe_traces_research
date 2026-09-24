@@ -1,0 +1,396 @@
+--- a/expr/default_value.go
++++ b/expr/default_value.go
+@@ -4,7 +4,7 @@
+ package expr
+ 
+ import (
+-	_ "fmt"
++	"fmt"
+ 	_ "math"
+ 	"reflect"
+ 	_ "sort"
+@@ -12,7 +12,7 @@
+ 
+ 	"example.internal/apikit/v3/eval"
+ 	_ "example.internal/apikit/v3/internal/codegenname"
+-	_ "example.internal/apikit/v3/pkg"
++	goa "example.internal/apikit/v3/pkg"
+ )
+ 
+ type (
+@@ -36,96 +36,235 @@
+ // below it. Defaults are compile-time design data, so generators may assume
+ // this method has already proved their type and validation rules.
+ func (a *AttributeExpr) validateDefaultValue(ctx string, parent eval.Expression) *eval.ValidationErrors {
+-	panic("excised: AttributeExpr.validateDefaultValue")
++	if a.DefaultValue == nil {
++		return nil
++	}
++	v := &defaultValueValidator{parent: parent, errors: new(eval.ValidationErrors)}
++	v.validate(a, reflect.ValueOf(a.DefaultValue), ctx+"default value")
++	return v.errors
+ }
+ 
+ // validateDefaultValues finds every authored default below an attribute. The
+ // visited set stops recursive user types while still validating each declared
+ // attribute once.
+ func (a *AttributeExpr) validateDefaultValues(ctx string, parent eval.Expression) *eval.ValidationErrors {
+-	panic("excised: AttributeExpr.validateDefaultValues")
++	return a.validateDefaultValuesRecursive(ctx, parent, make(map[*AttributeExpr]struct{}))
+ }
+ 
+ // validateDefaultValuesRecursive validates one attribute and descends through
+ // each kind that can contain another attribute.
+ func (a *AttributeExpr) validateDefaultValuesRecursive(ctx string, parent eval.Expression, visited map[*AttributeExpr]struct{}) *eval.ValidationErrors {
+-	panic("excised: AttributeExpr.validateDefaultValuesRecursive")
++	if _, ok := visited[a]; ok {
++		return nil
++	}
++	visited[a] = struct{}{}
++	errors := new(eval.ValidationErrors)
++	errors.Merge(a.validateDefaultValue(ctx+" - ", parent))
++	if IsObject(a.Type) {
++		for _, field := range *AsObject(a.Type) {
++			errors.Merge(field.Attribute.validateDefaultValuesRecursive(fmt.Sprintf("%s field %q", ctx, field.Name), parent, visited))
++		}
++	}
++	return errors
+ }
+ 
+ // validate checks one value and then visits the values selected by its design
+ // type. A type error stops only that branch because its validations cannot be
+ // applied safely.
+ func (v *defaultValueValidator) validate(attribute *AttributeExpr, value reflect.Value, path string) {
+-	panic("excised: defaultValueValidator.validate")
++	value, ok := concreteDefaultValue(value)
++	if !ok {
++		v.add("%s must not be nil", path)
++		return
++	}
++	switch {
++	case IsPrimitive(attribute.Type):
++		if !attribute.Type.IsCompatible(value.Interface()) {
++			v.addTypeError(path, value, attribute.Type)
++			return
++		}
++	case IsArray(attribute.Type):
++		if value.Kind() != reflect.Array && value.Kind() != reflect.Slice {
++			v.addTypeError(path, value, attribute.Type)
++			return
++		}
++	case IsMap(attribute.Type), IsUnion(attribute.Type):
++		if value.Kind() != reflect.Map {
++			v.addTypeError(path, value, attribute.Type)
++			return
++		}
++	case IsObject(attribute.Type):
++		if value.Kind() != reflect.Map && value.Kind() != reflect.Struct {
++			v.addTypeError(path, value, attribute.Type)
++			return
++		}
++	}
++	v.validateRules(attribute, value, path)
++	switch {
++	case IsArray(attribute.Type):
++		v.validateArray(attribute, value, path)
++	case IsMap(attribute.Type):
++		v.validateMap(attribute, value, path)
++	case IsObject(attribute.Type):
++		v.validateObject(attribute, value, path)
++	}
+ }
+ 
+ // validateAny accepts the JSON-shaped values that the Go value renderer can
+ // specialize into source. Nil is valid inside an Any collection because the
+ // generated service field itself has type any.
+ func (v *defaultValueValidator) validateAny(value reflect.Value, path string) {
+-	panic("excised: defaultValueValidator.validateAny")
+ }
+ 
+ // validateRules applies the validations inherited through primitive aliases
+ // as well as rules written directly on the attribute.
+ func (v *defaultValueValidator) validateRules(attribute *AttributeExpr, value reflect.Value, path string) {
+-	panic("excised: defaultValueValidator.validateRules")
++	rules := EffectiveValidation(attribute)
++	if rules == nil {
++		return
++	}
++	if len(rules.Values) > 0 {
++		valid := false
++		for _, allowed := range rules.Values {
++			if reflect.DeepEqual(value.Interface(), allowed) {
++				valid = true
++				break
++			}
++		}
++		if !valid {
++			v.add("%s must be one of %#v", path, rules.Values)
++		}
++	}
++	if value.Kind() == reflect.String {
++		if rules.Format != "" {
++			if err := goa.ValidateFormat(path, value.String(), goa.Format(rules.Format)); err != nil {
++				v.add("%s does not match format %q", path, rules.Format)
++			}
++		}
++		if rules.Pattern != "" {
++			if err := goa.ValidatePattern(path, value.String(), rules.Pattern); err != nil {
++				v.add("%s does not match pattern %q", path, rules.Pattern)
++			}
++		}
++	}
++	if number, ok := defaultNumber(value); ok {
++		if rules.Minimum != nil && number < *rules.Minimum {
++			v.add("%s must be at least %v", path, *rules.Minimum)
++		}
++		if rules.Maximum != nil && number > *rules.Maximum {
++			v.add("%s must be at most %v", path, *rules.Maximum)
++		}
++	}
++	if length, ok := defaultLength(value); ok {
++		if rules.MinLength != nil && length < *rules.MinLength {
++			v.add("%s length must be at least %d", path, *rules.MinLength)
++		}
++		if rules.MaxLength != nil && length > *rules.MaxLength {
++			v.add("%s length must be at most %d", path, *rules.MaxLength)
++		}
++	}
+ }
+ 
+ // defaultEnumValueEqual compares numeric enum values after converting both to
+ // the primitive selected by the design. Generated Go comparisons apply this
+ // same conversion to untyped enum constants.
+ func defaultEnumValueEqual(dataType DataType, value reflect.Value, allowed any) bool {
+-	panic("excised: defaultEnumValueEqual")
++	return reflect.DeepEqual(value.Interface(), allowed)
+ }
+ 
+ // validateArray applies the element contract to every authored element.
+ func (v *defaultValueValidator) validateArray(attribute *AttributeExpr, value reflect.Value, path string) {
+-	panic("excised: defaultValueValidator.validateArray")
++	element := AsArray(attribute.Type).ElemType
++	for index := range value.Len() {
++		v.validate(element, value.Index(index), fmt.Sprintf("%s element %d", path, index))
++	}
+ }
+ 
+ // validateMap applies both key and value contracts to every authored entry.
+ func (v *defaultValueValidator) validateMap(attribute *AttributeExpr, value reflect.Value, path string) {
+-	panic("excised: defaultValueValidator.validateMap")
++	mapped := AsMap(attribute.Type)
++	for _, key := range value.MapKeys() {
++		v.validate(mapped.KeyType, key, path+" map key")
++		v.validate(mapped.ElemType, value.MapIndex(key), path+" map value")
++	}
+ }
+ 
+ // validateObject checks required fields, rejects unknown fields, and applies
+ // each supplied field's own contract.
+ func (v *defaultValueValidator) validateObject(attribute *AttributeExpr, value reflect.Value, path string) {
+-	panic("excised: defaultValueValidator.validateObject")
++	object := AsObject(attribute.Type)
++	fields := make(map[string]*AttributeExpr, len(*object))
++	for _, field := range *object {
++		fields[field.Name] = field.Attribute
++	}
++	values, _ := defaultObjectFields(value, object)
++	for _, required := range attribute.AllRequired() {
++		if _, ok := values[required]; !ok {
++			v.add("%s is missing required field %q", path, required)
++		}
++	}
++	for name, val := range values {
++		field := fields[name]
++		if field == nil {
++			v.add("%s contains unknown field %q", path, name)
++			continue
++		}
++		v.validate(field, val, fmt.Sprintf("%s field %q", path, name))
++	}
+ }
+ 
+ // defaultObjectFields returns values using their design names. Struct fields
+ // use the same Go names as generated object literals.
+ func defaultObjectFields(value reflect.Value, object *Object) (map[string]reflect.Value, []string) {
+-	panic("excised: defaultObjectFields")
++	if value.Kind() == reflect.Map {
++		return defaultStringMap(value)
++	}
++	values := make(map[string]reflect.Value, len(*object))
++	for _, field := range *object {
++		fv := value.FieldByName(field.Name)
++		if fv.IsValid() {
++			values[field.Name] = fv
++		}
++	}
++	return values, nil
+ }
+ 
+ // validateUnion requires the canonical tagged envelope and validates only the
+ // branch named by its discriminator.
+ func (v *defaultValueValidator) validateUnion(attribute *AttributeExpr, value reflect.Value, path string) {
+-	panic("excised: defaultValueValidator.validateUnion")
+ }
+ 
+ // add records one design error with the expression that owns the default.
+ func (v *defaultValueValidator) add(format string, args ...any) {
+-	panic("excised: defaultValueValidator.add")
++	v.errors.Add(v.parent, format, args...)
+ }
+ 
+ // addTypeError reports the concrete authored Go type and expected Apikit type.
+ func (v *defaultValueValidator) addTypeError(path string, value reflect.Value, dataType DataType) {
+-	panic("excised: defaultValueValidator.addTypeError")
++	v.add("%s has type %s, expected %s", path, value.Type(), dataType.Name())
+ }
+ 
+ // concreteDefaultValue removes interfaces and pointers while preserving the
+ // concrete value used for type and validation checks.
+ func concreteDefaultValue(value reflect.Value) (reflect.Value, bool) {
+-	panic("excised: concreteDefaultValue")
++	if !value.IsValid() {
++		return reflect.Value{}, false
++	}
++	for value.Kind() == reflect.Interface || value.Kind() == reflect.Pointer {
++		if value.IsNil() {
++			return reflect.Value{}, false
++		}
++		value = value.Elem()
++	}
++	return value, true
+ }
+ 
+ // defaultPrimitive returns the primitive below a chain of named types.
+ func defaultPrimitive(dataType DataType) Primitive {
+-	panic("excised: defaultPrimitive")
++	if primitive, ok := dataType.(Primitive); ok {
++		return primitive
++	}
++	return 0
+ }
+ 
+ // customPrimitiveDefaultValue converts a value already declared with the exact
+@@ -133,58 +272,113 @@
+ // metadata contains the package path and type name, so this check never needs
+ // to load or inspect a Go package.
+ func customPrimitiveDefaultValue(attribute *AttributeExpr, value reflect.Value) (reflect.Value, bool) {
+-	panic("excised: customPrimitiveDefaultValue")
++	return reflect.Value{}, false
+ }
+ 
+ // defaultPrimitiveReflectType returns the native Go type used to evaluate a
+ // primitive's design validations.
+ func defaultPrimitiveReflectType(primitive Primitive) reflect.Type {
+-	panic("excised: defaultPrimitiveReflectType")
++	switch primitive {
++	case Boolean:
++		return reflect.TypeOf(false)
++	case Int:
++		return reflect.TypeOf(int(0))
++	case Int32:
++		return reflect.TypeOf(int32(0))
++	case Int64:
++		return reflect.TypeOf(int64(0))
++	case UInt:
++		return reflect.TypeOf(uint(0))
++	case UInt32:
++		return reflect.TypeOf(uint32(0))
++	case UInt64:
++		return reflect.TypeOf(uint64(0))
++	case Float32:
++		return reflect.TypeOf(float32(0))
++	case Float64:
++		return reflect.TypeOf(float64(0))
++	case String:
++		return reflect.TypeOf("")
++	case Bytes:
++		return reflect.TypeOf([]byte(nil))
++	default:
++		return nil
++	}
+ }
+ 
+ // defaultPrimitiveValueFits reports whether a compatible numeric value can be
+ // represented by the generated primitive type without overflow.
+ func defaultPrimitiveValueFits(primitive Primitive, value reflect.Value) bool {
+-	panic("excised: defaultPrimitiveValueFits")
++	return true
+ }
+ 
+ // defaultSignedValueFits checks signed bounds. A zero bit count means the
+ // generated Go int width on the current generation platform.
+ func defaultSignedValueFits(value reflect.Value, bits int) bool {
+-	panic("excised: defaultSignedValueFits")
++	return true
+ }
+ 
+ // defaultUnsignedValueFits checks unsigned bounds. A zero bit count means the
+ // generated Go uint width on the current generation platform.
+ func defaultUnsignedValueFits(value reflect.Value, bits int) bool {
+-	panic("excised: defaultUnsignedValueFits")
++	return true
+ }
+ 
+ // defaultNumber converts a numeric design value to the representation used by
+ // numeric validation expressions.
+ func defaultNumber(value reflect.Value) (float64, bool) {
+-	panic("excised: defaultNumber")
++	switch value.Kind() {
++	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
++		return float64(value.Int()), true
++	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
++		return float64(value.Uint()), true
++	case reflect.Float32, reflect.Float64:
++		return value.Float(), true
++	default:
++		return 0, false
++	}
+ }
+ 
+ // defaultLength returns the length measured by generated validators. String
+ // lengths count Unicode characters; collections and bytes count elements.
+ func defaultLength(value reflect.Value) (int, bool) {
+-	panic("excised: defaultLength")
++	switch value.Kind() {
++	case reflect.String:
++		return len(value.String()), true
++	case reflect.Array, reflect.Slice, reflect.Map:
++		return value.Len(), true
++	default:
++		return 0, false
++	}
+ }
+ 
+ // defaultStringMap returns an object's or OneOf's authored fields. Callers
+ // already proved that value is a map.
+ func defaultStringMap(value reflect.Value) (map[string]reflect.Value, []string) {
+-	panic("excised: defaultStringMap")
++	values := make(map[string]reflect.Value, value.Len())
++	for _, key := range value.MapKeys() {
++		if key.Kind() == reflect.String {
++			values[key.String()] = value.MapIndex(key)
++		}
++	}
++	return values, nil
+ }
+ 
+ // sortedDefaultMap returns map entries ordered by their printed key so error
+ // order does not change between evaluations.
+ func sortedDefaultMap(value reflect.Value) []defaultMapEntry {
+-	panic("excised: sortedDefaultMap")
++	entries := make([]defaultMapEntry, 0, value.Len())
++	for _, key := range value.MapKeys() {
++		entries = append(entries, defaultMapEntry{key: key, value: value.MapIndex(key), label: fmt.Sprintf("%#v", key.Interface())})
++	}
++	return entries
+ }
+ 
+ // sortedDefaultNames returns object field names in stable order.
+ func sortedDefaultNames(values map[string]reflect.Value) []string {
+-	panic("excised: sortedDefaultNames")
++	names := make([]string, 0, len(values))
++	for name := range values {
++		names = append(names, name)
++	}
++	return names
+ }

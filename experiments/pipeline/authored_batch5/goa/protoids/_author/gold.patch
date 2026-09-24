@@ -1,0 +1,65 @@
+diff --git a/codegen/protobuf.go b/codegen/protobuf.go
+--- a/codegen/protobuf.go
++++ b/codegen/protobuf.go
+@@ -5,7 +5,7 @@ package codegen
+ 
+ import (
+ 	"regexp"
+-	_ "strings"
++	"strings"
+ )
+ 
+ var (
+@@ -25,17 +25,49 @@ var (
+ // or method. It keeps common acronyms uppercase and makes the first character
+ // legal for protobuf source.
+ func ProtobufName(name string) string {
+-	panic("excised: ProtobufName")
++	return protobufIdentifier(name, true, true)
+ }
+ 
+ // ProtobufFieldName returns the snake-case identifier written for a protobuf
+ // field or oneof. It makes the first character legal for protobuf source.
+ func ProtobufFieldName(name string) string {
+-	panic("excised: ProtobufFieldName")
++	name = SnakeCase(protobufIdentifier(name, false, false))
++	if _, reserved := protobufKeywords[name]; reserved {
++		name += "_"
++	}
++	return name
+ }
+ 
+ // protobufIdentifier removes characters protobuf identifiers cannot contain
+ // and separates digits so the generated Go name matches protoc-gen-go.
+ func protobufIdentifier(name string, firstUpper, acronym bool) string {
+-	panic("excised: protobufIdentifier")
++	if index := strings.Index(name, ":"); index > 0 {
++		name = name[:index]
++	}
++	name = strings.Map(func(character rune) rune {
++		if character >= 'a' && character <= 'z' ||
++			character >= 'A' && character <= 'Z' ||
++			character >= '0' && character <= '9' ||
++			character == '_' {
++			return character
++		}
++		return '_'
++	}, name)
++	name = string(protobufDigits.ReplaceAllFunc([]byte(name), func(match []byte) []byte {
++		result := make([]byte, len(match)+1)
++		copy(result, match)
++		result[len(result)-1] = '_'
++		return result
++	}))
++	name = CamelCase(name, firstUpper, acronym)
++	if name == "" {
++		if firstUpper {
++			return "Val"
++		}
++		return "val"
++	}
++	if name[0] >= '0' && name[0] <= '9' {
++		name = "_" + name
++	}
++	return name
+ }

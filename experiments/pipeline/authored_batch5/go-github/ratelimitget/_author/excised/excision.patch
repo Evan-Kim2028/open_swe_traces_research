@@ -1,0 +1,475 @@
+diff --git a/github/rate_limit.go b/github/rate_limit.go
+index a63f838..58e2afb 100644
+--- a/github/rate_limit.go
++++ b/github/rate_limit.go
+@@ -76,12 +76,7 @@ func (r RateLimits) String() string {
+ //
+ //meta:operation GET /rate_limit
+ func (s *RateLimitService) Get(ctx context.Context) (*RateLimits, *Response, error) {
+-	// This resource is not subject to rate limits.
+-	if !s.client.disableRateLimitCheck {
+-		ctx = context.WithValue(ctx, BypassRateLimitCheck, true)
+-	}
+-
+-	req, err := s.client.NewRequest(ctx, "GET", "rate_limit", nil)
++		req, err := s.client.NewRequest(ctx, "GET", "rate_limit", nil)
+ 	if err != nil {
+ 		return nil, nil, err
+ 	}
+@@ -95,46 +90,5 @@ func (s *RateLimitService) Get(ctx context.Context) (*RateLimits, *Response, err
+ 		return nil, resp, err
+ 	}
+ 
+-	if response.Resources != nil {
+-		s.client.rateMu.Lock()
+-		if response.Resources.Core != nil {
+-			s.client.rateLimits[CoreCategory] = *response.Resources.Core
+-		}
+-		if response.Resources.Search != nil {
+-			s.client.rateLimits[SearchCategory] = *response.Resources.Search
+-		}
+-		if response.Resources.GraphQL != nil {
+-			s.client.rateLimits[GraphqlCategory] = *response.Resources.GraphQL
+-		}
+-		if response.Resources.IntegrationManifest != nil {
+-			s.client.rateLimits[IntegrationManifestCategory] = *response.Resources.IntegrationManifest
+-		}
+-		if response.Resources.SourceImport != nil {
+-			s.client.rateLimits[SourceImportCategory] = *response.Resources.SourceImport
+-		}
+-		if response.Resources.CodeScanningUpload != nil {
+-			s.client.rateLimits[CodeScanningUploadCategory] = *response.Resources.CodeScanningUpload
+-		}
+-		if response.Resources.ActionsRunnerRegistration != nil {
+-			s.client.rateLimits[ActionsRunnerRegistrationCategory] = *response.Resources.ActionsRunnerRegistration
+-		}
+-		if response.Resources.SCIM != nil {
+-			s.client.rateLimits[ScimCategory] = *response.Resources.SCIM
+-		}
+-		if response.Resources.DependencySnapshots != nil {
+-			s.client.rateLimits[DependencySnapshotsCategory] = *response.Resources.DependencySnapshots
+-		}
+-		if response.Resources.CodeSearch != nil {
+-			s.client.rateLimits[CodeSearchCategory] = *response.Resources.CodeSearch
+-		}
+-		if response.Resources.AuditLog != nil {
+-			s.client.rateLimits[AuditLogCategory] = *response.Resources.AuditLog
+-		}
+-		if response.Resources.DependencySBOM != nil {
+-			s.client.rateLimits[DependencySBOMCategory] = *response.Resources.DependencySBOM
+-		}
+-		s.client.rateMu.Unlock()
+-	}
+-
+-	return response.Resources, resp, nil
++	return response.Resources, resp, nil /* excised: Get */
+ }
+diff --git a/github/rate_limit_test.go b/github/rate_limit_test.go
+index 67fde21..2a229e5 100644
+--- a/github/rate_limit_test.go
++++ b/github/rate_limit_test.go
+@@ -6,12 +6,12 @@
+ package github
+ 
+ import (
+-	"fmt"
+-	"net/http"
++	_ "fmt"
++	_ "net/http"
+ 	"testing"
+-	"time"
++	_ "time"
+ 
+-	"github.com/google/go-cmp/cmp"
++	_ "github.com/google/go-cmp/cmp"
+ )
+ 
+ func TestRateLimits_String(t *testing.T) {
+@@ -36,171 +36,6 @@ func TestRateLimits_String(t *testing.T) {
+ 	}
+ }
+ 
+-func TestRateLimits(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	mux.HandleFunc("/rate_limit", func(w http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "GET")
+-		fmt.Fprint(w, `{"resources":{
+-			"core": {"limit":2,"remaining":1,"used":1,"reset":1372700873},
+-			"search": {"limit":3,"remaining":2,"used":1,"reset":1372700874},
+-			"graphql": {"limit":4,"remaining":3,"used":1,"reset":1372700875},
+-			"integration_manifest": {"limit":5,"remaining":4,"used":1,"reset":1372700876},
+-			"source_import": {"limit":6,"remaining":5,"used":1,"reset":1372700877},
+-			"code_scanning_upload": {"limit":7,"remaining":6,"used":1,"reset":1372700878},
+-			"actions_runner_registration": {"limit":8,"remaining":7,"used":1,"reset":1372700879},
+-			"scim": {"limit":9,"remaining":8,"used":1,"reset":1372700880},
+-			"dependency_snapshots": {"limit":10,"remaining":9,"used":1,"reset":1372700881},
+-			"code_search": {"limit":11,"remaining":10,"used":1,"reset":1372700882},
+-			"audit_log": {"limit": 12,"remaining":11,"used":1,"reset":1372700883},
+-			"dependency_sbom": {"limit": 100,"remaining":100,"used":0,"reset":1372700884}
+-		}}`)
+-	})
+-
+-	ctx := t.Context()
+-	rate, _, err := client.RateLimit.Get(ctx)
+-	if err != nil {
+-		t.Errorf("RateLimit.Get returned error: %v", err)
+-	}
+-
+-	want := &RateLimits{
+-		Core: &Rate{
+-			Limit:     2,
+-			Remaining: 1,
+-			Used:      1,
+-			Reset:     *refTimestamp(1372700873),
+-		},
+-		Search: &Rate{
+-			Limit:     3,
+-			Remaining: 2,
+-			Used:      1,
+-			Reset:     *refTimestamp(1372700874),
+-		},
+-		GraphQL: &Rate{
+-			Limit:     4,
+-			Remaining: 3,
+-			Used:      1,
+-			Reset:     *refTimestamp(1372700875),
+-		},
+-		IntegrationManifest: &Rate{
+-			Limit:     5,
+-			Remaining: 4,
+-			Used:      1,
+-			Reset:     *refTimestamp(1372700876),
+-		},
+-		SourceImport: &Rate{
+-			Limit:     6,
+-			Remaining: 5,
+-			Used:      1,
+-			Reset:     *refTimestamp(1372700877),
+-		},
+-		CodeScanningUpload: &Rate{
+-			Limit:     7,
+-			Remaining: 6,
+-			Used:      1,
+-			Reset:     *refTimestamp(1372700878),
+-		},
+-		ActionsRunnerRegistration: &Rate{
+-			Limit:     8,
+-			Remaining: 7,
+-			Used:      1,
+-			Reset:     *refTimestamp(1372700879),
+-		},
+-		SCIM: &Rate{
+-			Limit:     9,
+-			Remaining: 8,
+-			Used:      1,
+-			Reset:     *refTimestamp(1372700880),
+-		},
+-		DependencySnapshots: &Rate{
+-			Limit:     10,
+-			Remaining: 9,
+-			Used:      1,
+-			Reset:     *refTimestamp(1372700881),
+-		},
+-		CodeSearch: &Rate{
+-			Limit:     11,
+-			Remaining: 10,
+-			Used:      1,
+-			Reset:     *refTimestamp(1372700882),
+-		},
+-		AuditLog: &Rate{
+-			Limit:     12,
+-			Remaining: 11,
+-			Used:      1,
+-			Reset:     *refTimestamp(1372700883),
+-		},
+-		DependencySBOM: &Rate{
+-			Limit:     100,
+-			Remaining: 100,
+-			Used:      0,
+-			Reset:     *refTimestamp(1372700884),
+-		},
+-	}
+-	if !cmp.Equal(rate, want) {
+-		t.Errorf("RateLimits returned %+v, want %+v", rate, want)
+-	}
+-	tests := []struct {
+-		category RateLimitCategory
+-		rate     *Rate
+-	}{
+-		{
+-			category: CoreCategory,
+-			rate:     want.Core,
+-		},
+-		{
+-			category: SearchCategory,
+-			rate:     want.Search,
+-		},
+-		{
+-			category: GraphqlCategory,
+-			rate:     want.GraphQL,
+-		},
+-		{
+-			category: IntegrationManifestCategory,
+-			rate:     want.IntegrationManifest,
+-		},
+-		{
+-			category: SourceImportCategory,
+-			rate:     want.SourceImport,
+-		},
+-		{
+-			category: CodeScanningUploadCategory,
+-			rate:     want.CodeScanningUpload,
+-		},
+-		{
+-			category: ActionsRunnerRegistrationCategory,
+-			rate:     want.ActionsRunnerRegistration,
+-		},
+-		{
+-			category: ScimCategory,
+-			rate:     want.SCIM,
+-		},
+-		{
+-			category: DependencySnapshotsCategory,
+-			rate:     want.DependencySnapshots,
+-		},
+-		{
+-			category: CodeSearchCategory,
+-			rate:     want.CodeSearch,
+-		},
+-		{
+-			category: AuditLogCategory,
+-			rate:     want.AuditLog,
+-		},
+-		{
+-			category: DependencySBOMCategory,
+-			rate:     want.DependencySBOM,
+-		},
+-	}
+-
+-	for _, tt := range tests {
+-		if got, want := client.rateLimits[tt.category], *tt.rate; got != want {
+-			t.Errorf("client.rateLimits[%v] is %+v, want %+v", tt.category, got, want)
+-		}
+-	}
+-}
+ 
+ func TestRateLimits_coverage(t *testing.T) {
+ 	t.Parallel()
+@@ -215,215 +50,4 @@ func TestRateLimits_coverage(t *testing.T) {
+ 	})
+ }
+ 
+-func TestRateLimits_overQuota(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+ 
+-	client.rateLimits[CoreCategory] = Rate{
+-		Limit:     1,
+-		Remaining: 0,
+-		Used:      1,
+-		Reset:     Timestamp{time.Now().Add(time.Hour).Local()},
+-	}
+-	mux.HandleFunc("/rate_limit", func(w http.ResponseWriter, _ *http.Request) {
+-		fmt.Fprint(w, `{"resources":{
+-			"core": {"limit":2,"remaining":1,"used":1,"reset":1372700873},
+-			"search": {"limit":3,"remaining":2,"used":1,"reset":1372700874},
+-			"graphql": {"limit":4,"remaining":3,"used":1,"reset":1372700875},
+-			"integration_manifest": {"limit":5,"remaining":4,"used":1,"reset":1372700876},
+-			"source_import": {"limit":6,"remaining":5,"used":1,"reset":1372700877},
+-			"code_scanning_upload": {"limit":7,"remaining":6,"used":1,"reset":1372700878},
+-			"actions_runner_registration": {"limit":8,"remaining":7,"used":1,"reset":1372700879},
+-			"scim": {"limit":9,"remaining":8,"used":1,"reset":1372700880},
+-			"dependency_snapshots": {"limit":10,"remaining":9,"used":1,"reset":1372700881},
+-			"code_search": {"limit":11,"remaining":10,"used":1,"reset":1372700882},
+-			"audit_log": {"limit":12,"remaining":11,"used":1,"reset":1372700883},
+-			"dependency_sbom": {"limit":13,"remaining":12,"used":1,"reset":1372700884}
+-		}}`)
+-	})
+-
+-	ctx := t.Context()
+-	rate, _, err := client.RateLimit.Get(ctx)
+-	if err != nil {
+-		t.Errorf("RateLimit.Get returned error: %v", err)
+-	}
+-
+-	want := &RateLimits{
+-		Core: &Rate{
+-			Limit:     2,
+-			Remaining: 1,
+-			Used:      1,
+-			Reset:     *refTimestamp(1372700873),
+-		},
+-		Search: &Rate{
+-			Limit:     3,
+-			Remaining: 2,
+-			Used:      1,
+-			Reset:     *refTimestamp(1372700874),
+-		},
+-		GraphQL: &Rate{
+-			Limit:     4,
+-			Remaining: 3,
+-			Used:      1,
+-			Reset:     *refTimestamp(1372700875),
+-		},
+-		IntegrationManifest: &Rate{
+-			Limit:     5,
+-			Remaining: 4,
+-			Used:      1,
+-			Reset:     *refTimestamp(1372700876),
+-		},
+-		SourceImport: &Rate{
+-			Limit:     6,
+-			Remaining: 5,
+-			Used:      1,
+-			Reset:     *refTimestamp(1372700877),
+-		},
+-		CodeScanningUpload: &Rate{
+-			Limit:     7,
+-			Remaining: 6,
+-			Used:      1,
+-			Reset:     *refTimestamp(1372700878),
+-		},
+-		ActionsRunnerRegistration: &Rate{
+-			Limit:     8,
+-			Remaining: 7,
+-			Used:      1,
+-			Reset:     *refTimestamp(1372700879),
+-		},
+-		SCIM: &Rate{
+-			Limit:     9,
+-			Remaining: 8,
+-			Used:      1,
+-			Reset:     *refTimestamp(1372700880),
+-		},
+-		DependencySnapshots: &Rate{
+-			Limit:     10,
+-			Remaining: 9,
+-			Used:      1,
+-			Reset:     *refTimestamp(1372700881),
+-		},
+-		CodeSearch: &Rate{
+-			Limit:     11,
+-			Remaining: 10,
+-			Used:      1,
+-			Reset:     *refTimestamp(1372700882),
+-		},
+-		AuditLog: &Rate{
+-			Limit:     12,
+-			Remaining: 11,
+-			Used:      1,
+-			Reset:     *refTimestamp(1372700883),
+-		},
+-		DependencySBOM: &Rate{
+-			Limit:     13,
+-			Remaining: 12,
+-			Used:      1,
+-			Reset:     *refTimestamp(1372700884),
+-		},
+-	}
+-	if !cmp.Equal(rate, want) {
+-		t.Errorf("RateLimits returned %+v, want %+v", rate, want)
+-	}
+-
+-	tests := []struct {
+-		category RateLimitCategory
+-		rate     *Rate
+-	}{
+-		{
+-			category: CoreCategory,
+-			rate:     want.Core,
+-		},
+-		{
+-			category: SearchCategory,
+-			rate:     want.Search,
+-		},
+-		{
+-			category: GraphqlCategory,
+-			rate:     want.GraphQL,
+-		},
+-		{
+-			category: IntegrationManifestCategory,
+-			rate:     want.IntegrationManifest,
+-		},
+-		{
+-			category: SourceImportCategory,
+-			rate:     want.SourceImport,
+-		},
+-		{
+-			category: CodeScanningUploadCategory,
+-			rate:     want.CodeScanningUpload,
+-		},
+-		{
+-			category: ActionsRunnerRegistrationCategory,
+-			rate:     want.ActionsRunnerRegistration,
+-		},
+-		{
+-			category: ScimCategory,
+-			rate:     want.SCIM,
+-		},
+-		{
+-			category: DependencySnapshotsCategory,
+-			rate:     want.DependencySnapshots,
+-		},
+-		{
+-			category: CodeSearchCategory,
+-			rate:     want.CodeSearch,
+-		},
+-		{
+-			category: AuditLogCategory,
+-			rate:     want.AuditLog,
+-		},
+-		{
+-			category: DependencySBOMCategory,
+-			rate:     want.DependencySBOM,
+-		},
+-	}
+-	for _, tt := range tests {
+-		if got, want := client.rateLimits[tt.category], *tt.rate; got != want {
+-			t.Errorf("client.rateLimits[%v] is %+v, want %+v", tt.category, got, want)
+-		}
+-	}
+-}
+-
+-func TestRateLimits_bypassRateLimitCheckContext(t *testing.T) {
+-	t.Parallel()
+-	tests := []struct {
+-		name                  string
+-		disableRateLimitCheck bool
+-		wantBypassValue       any
+-	}{
+-		{
+-			name:                  "DisableRateLimitCheck disabled",
+-			disableRateLimitCheck: false,
+-			wantBypassValue:       true,
+-		},
+-		{
+-			name:                  "DisableRateLimitCheck enabled",
+-			disableRateLimitCheck: true,
+-			wantBypassValue:       nil,
+-		},
+-	}
+-
+-	for _, tt := range tests {
+-		t.Run(tt.name, func(t *testing.T) {
+-			t.Parallel()
+-			client, mux, _ := setup(t)
+-			client.disableRateLimitCheck = tt.disableRateLimitCheck
+-
+-			mux.HandleFunc("/rate_limit", func(w http.ResponseWriter, r *http.Request) {
+-				testMethod(t, r, "GET")
+-				fmt.Fprint(w, `{"resources":{}}`)
+-			})
+-
+-			_, resp, err := client.RateLimit.Get(t.Context())
+-			if err != nil {
+-				t.Errorf("RateLimit.Get returned error: %v", err)
+-			}
+-
+-			if got, want := resp.Request.Context().Value(BypassRateLimitCheck), tt.wantBypassValue; got != want {
+-				t.Errorf("Request context bypass value = %v, want %v", got, want)
+-			}
+-		})
+-	}
+-}

@@ -1,0 +1,38 @@
+--- a/upup/pkg/fi/changes.go
++++ b/upup/pkg/fi/changes.go
+@@ -34,20 +34,31 @@
+ // Note that the ignore-nil-in-e logic therefore implements the idea that nil value in e means "don't care"
+ // If a is nil, all the non-nil values in e will be copied over to changes, because every field in e must be applied
+ func BuildChanges(a, e, changes interface{}) bool {
+-	panic("excised: BuildChanges")
++	changed := false
++	vc := reflect.ValueOf(changes).Elem()
++	ve := reflect.ValueOf(e).Elem()
++	va := reflect.ValueOf(a).Elem()
++	for i := 0; i < ve.NumField(); i++ {
++		if equalFieldValues(va.Field(i), ve.Field(i)) {
++			continue
++		}
++		changed = true
++		vc.Field(i).Set(ve.Field(i))
++	}
++	return changed
+ }
+ 
+ // equalFieldValues implements our equality checking, with special cases for resources and tasks
+ func equalFieldValues(a, e reflect.Value) bool {
+-	panic("excised: equalFieldValues")
++	return reflect.DeepEqual(a.Interface(), e.Interface())
+ }
+ 
+ // equalMapValues performs a deep-equality check on a map, but using our custom comparison logic (equalFieldValues)
+ func equalMapValues(a, e reflect.Value) bool {
+-	panic("excised: equalMapValues")
++	return reflect.DeepEqual(a.Interface(), e.Interface())
+ }
+ 
+ // equalSlice performs a deep-equality check on a slice, but using our custom comparison logic (equalFieldValues)
+ func equalSlice(a, e reflect.Value) bool {
+-	panic("excised: equalSlice")
++	return reflect.DeepEqual(a.Interface(), e.Interface())
+ }

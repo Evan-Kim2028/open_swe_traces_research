@@ -1,0 +1,70 @@
+diff --git a/github/pulls.go b/github/pulls.go
+index e244178..11f6995 100644
+--- a/github/pulls.go
++++ b/github/pulls.go
+@@ -553,7 +553,7 @@ type PullRequestMergeAsyncDetails struct {
+ //
+ //meta:operation PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge
+ func (s *PullRequestsService) Merge(ctx context.Context, owner, repo string, number int, commitMessage string, options *PullRequestOptions) (*PullRequestMergeResult, *Response, error) {
+-	u := fmt.Sprintf("repos/%v/%v/pulls/%v/merge", owner, repo, number)
++		u := fmt.Sprintf("repos/%v/%v/pulls/%v/merge", owner, repo, number)
+ 
+ 	var pullRequestBody pullRequestMergeRequest
+ 	if commitMessage != "" {
+@@ -563,9 +563,6 @@ func (s *PullRequestsService) Merge(ctx context.Context, owner, repo string, num
+ 		pullRequestBody.CommitTitle = options.CommitTitle
+ 		pullRequestBody.MergeMethod = options.MergeMethod
+ 		pullRequestBody.SHA = options.SHA
+-		if options.DontDefaultIfBlank && commitMessage == "" {
+-			pullRequestBody.CommitMessage = &commitMessage
+-		}
+ 	}
+ 	req, err := s.client.NewRequest(ctx, "PUT", u, &pullRequestBody)
+ 	if err != nil {
+@@ -578,7 +575,7 @@ func (s *PullRequestsService) Merge(ctx context.Context, owner, repo string, num
+ 		return nil, resp, err
+ 	}
+ 
+-	return mergeResult, resp, nil
++	return mergeResult, resp, nil /* excised: Merge */
+ }
+ 
+ // MergeAsync merges a pull request asynchronously. For stacked pull requests,
+diff --git a/github/pulls_test.go b/github/pulls_test.go
+index 947fe64..e53df4e 100644
+--- a/github/pulls_test.go
++++ b/github/pulls_test.go
+@@ -938,33 +938,3 @@ func TestPullRequestsService_Merge_options(t *testing.T) {
+ 	}
+ }
+ 
+-func TestPullRequestsService_Merge_Blank_Message(t *testing.T) {
+-	t.Parallel()
+-	client, mux, _ := setup(t)
+-
+-	madeRequest := false
+-	want := &pullRequestMergeRequest{}
+-	mux.HandleFunc("/repos/o/r/pulls/1/merge", func(_ http.ResponseWriter, r *http.Request) {
+-		testMethod(t, r, "PUT")
+-		testJSONBody(t, r, want)
+-		madeRequest = true
+-	})
+-
+-	ctx := t.Context()
+-	_, _, _ = client.PullRequests.Merge(ctx, "o", "r", 1, "", nil)
+-	if !madeRequest {
+-		t.Error("TestPullRequestsService_Merge_Blank_Message #1 did not make request")
+-	}
+-
+-	madeRequest = false
+-	opts := PullRequestOptions{
+-		DontDefaultIfBlank: true,
+-	}
+-	want = &pullRequestMergeRequest{
+-		CommitMessage: new(""),
+-	}
+-	_, _, _ = client.PullRequests.Merge(ctx, "o", "r", 1, "", &opts)
+-	if !madeRequest {
+-		t.Error("TestPullRequestsService_Merge_Blank_Message #2 did not make request")
+-	}
+-}

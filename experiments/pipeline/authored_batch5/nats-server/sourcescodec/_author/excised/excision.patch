@@ -1,0 +1,306 @@
+diff --git a/server/filestore.go b/server/filestore.go
+index d6a5306..0b47a5b 100644
+--- a/server/filestore.go
++++ b/server/filestore.go
+@@ -12485,40 +12485,7 @@ func (fs *fileStore) sourcesStatePath() string {
+ 	return filepath.Join(fs.fcfg.StoreDir, sourcesStreamStateFile)
+ }
+ 
+-func (fs *fileStore) writeSourcesState() error {
+-	fs.mu.RLock()
+-	if len(fs.sources) == 0 {
+-		fs.mu.RUnlock()
+-		return nil
+-	}
+-	fn := fs.sourcesStatePath()
+-
+-	// Must be lseq+1 to identify up to which sequence the sources are valid.
+-	highSeq := fs.state.LastSeq + 1
+-
+-	count := uint64(len(fs.sources))
+-	var sz uint64
+-	for source, ss := range fs.sources {
+-		// Length prefix + source bytes + seq varint +
+-		// length prefix + identity bytes.
+-		sz += uint64(uvarintLen(uint64(len(source)))) + uint64(len(source)) + binary.MaxVarintLen64 +
+-			uint64(uvarintLen(uint64(len(ss.Ident)))) + uint64(len(ss.Ident))
+-	}
+-	buf := make([]byte, 0, sourcesHeaderLen+sz)
+-	buf = append(buf, 1)                                 // Magic version
+-	buf = binary.LittleEndian.AppendUint64(buf, count)   // Entry count
+-	buf = binary.LittleEndian.AppendUint64(buf, highSeq) // Stamp
+-	for source, ss := range fs.sources {
+-		buf = binary.AppendUvarint(buf, uint64(len(source)))
+-		buf = append(buf, source...)
+-		buf = binary.AppendUvarint(buf, ss.Seq)
+-		buf = binary.AppendUvarint(buf, uint64(len(ss.Ident)))
+-		buf = append(buf, ss.Ident...)
+-	}
+-	fs.mu.RUnlock()
+-
+-	return fs.writeFileWithOptionalSync(fn, buf, defaultFilePerms)
+-}
++func (fs *fileStore) writeSourcesState() error { panic("excised: writeSourcesState") }
+ 
+ // Lock should be held.
+ func (fs *fileStore) recoverSourcesState() uint64 {
+@@ -12551,48 +12518,7 @@ func (fs *fileStore) recoverSourcesState() uint64 {
+ 
+ var errSourcesInvalidVersion = errors.New("sources: encoded version not known")
+ 
+-func (fs *fileStore) decodeSourcesState(b []byte) (uint64, error) {
+-	if len(b) < sourcesHeaderLen {
+-		return 0, io.ErrShortBuffer
+-	}
+-	if b[0] != 1 {
+-		return 0, errSourcesInvalidVersion
+-	}
+-
+-	count := binary.LittleEndian.Uint64(b[1:])
+-	stamp := binary.LittleEndian.Uint64(b[9:])
+-	if count > 0 && fs.sources == nil {
+-		fs.sources = make(map[string]*StreamSourceState)
+-	}
+-	b = b[sourcesHeaderLen:]
+-	readStr := func() (string, bool) {
+-		n, vn := binary.Uvarint(b)
+-		if vn <= 0 || uint64(len(b)-vn) < n {
+-			return _EMPTY_, false
+-		}
+-		b = b[vn:]
+-		s := string(b[:n])
+-		b = b[n:]
+-		return s, true
+-	}
+-	for i := uint64(0); i < count; i++ {
+-		source, ok := readStr()
+-		if !ok {
+-			return 0, io.ErrUnexpectedEOF
+-		}
+-		seq, vn := binary.Uvarint(b)
+-		if vn <= 0 {
+-			return 0, io.ErrUnexpectedEOF
+-		}
+-		b = b[vn:]
+-		ident, ok := readStr()
+-		if !ok {
+-			return 0, io.ErrUnexpectedEOF
+-		}
+-		fs.sources[source] = &StreamSourceState{Seq: seq, Ident: ident}
+-	}
+-	return stamp, nil
+-}
++func (fs *fileStore) decodeSourcesState(b []byte) (uint64, error) { panic("excised: decodeSourcesState") }
+ 
+ // recoverSourcesBackwardScan recovers fs.sources by scanning the stream backwards.
+ // Lock should be held.
+diff --git a/server/filestore_test.go b/server/filestore_test.go
+index bde2fc3..8d9f061 100644
+--- a/server/filestore_test.go
++++ b/server/filestore_test.go
+@@ -11628,98 +11628,7 @@ func TestFileStoreMessageScheduleDecodeRejectsMalformed(t *testing.T) {
+ 	}
+ }
+ 
+-func TestFileStoreSourcesDecodeRejectsMalformed(t *testing.T) {
+-	// Build a valid header that claims a given number of source entries.
+-	header := func(count uint64) []byte {
+-		b := make([]byte, sourcesHeaderLen)
+-		b[0] = 1                                    // Magic version
+-		binary.LittleEndian.PutUint64(b[1:], count) // Entry count
+-		binary.LittleEndian.PutUint64(b[9:], 0)     // High sequence stamp
+-		return b
+-	}
+-	uvi := func(v uint64) []byte {
+-		return binary.AppendUvarint(nil, v)
+-	}
+-
+-	for _, test := range []struct {
+-		title string
+-		buf   []byte
+-		err   error
+-	}{
+-		{title: "ShortHeader", buf: make([]byte, sourcesHeaderLen-1), err: io.ErrShortBuffer},
+-		{title: "BadVersion", buf: func() []byte { b := header(0); b[0] = 2; return b }(), err: errSourcesInvalidVersion},
+-		// Claims one entry but the buffer ends right after the header.
+-		{title: "TruncatedAtSourceLen", buf: header(1), err: io.ErrUnexpectedEOF},
+-		// Has the source length but the source bytes are missing.
+-		{title: "TruncatedSource", buf: append(header(1), uvi(5)...), err: io.ErrUnexpectedEOF},
+-		// Has the source but the seq varint is missing.
+-		{title: "TruncatedSeq", buf: append(append(header(1), uvi(3)...), 'f', 'o', 'o'), err: io.ErrUnexpectedEOF},
+-		// Has the source and seq but the identity-length field is missing.
+-		{title: "TruncatedAtIdentLen", buf: append(append(append(header(1), uvi(3)...), 'f', 'o', 'o'), uvi(1)...), err: io.ErrUnexpectedEOF},
+-		// Has the identity length but the identity bytes are missing.
+-		{title: "TruncatedIdent", buf: append(append(append(append(header(1), uvi(3)...), 'f', 'o', 'o'), uvi(1)...), uvi(5)...), err: io.ErrUnexpectedEOF},
+-	} {
+-		t.Run(test.title, func(t *testing.T) {
+-			fs := &fileStore{}
+-			_, err := fs.decodeSourcesState(test.buf)
+-			require_Error(t, err, test.err)
+-		})
+-	}
+-}
+-
+-func TestFileStoreSourcesRecovery(t *testing.T) {
+-	test := func(t *testing.T, remove bool) {
+-		dir := t.TempDir()
+-		cfg := StreamConfig{
+-			Name:     "SOURCE",
+-			Subjects: []string{"foo.*"},
+-			Storage:  FileStorage,
+-			Sources:  []*StreamSource{{Name: "ORIGIN"}},
+-		}
+-		fcfg := FileStoreConfig{StoreDir: dir, BlockSize: 256}
+-
+-		fs, err := newFileStore(fcfg, cfg)
+-		require_NoError(t, err)
+-
+-		// Store messages carrying a stream-source header so the sources map is populated.
+-		// Header format matches genSourceHeader: "<iName> <seq> <source> <dest> <orig> <ident>".
+-		const N = 10
+-		const ident = "IDENTITY1"
+-		for i := 1; i <= N; i++ {
+-			hdr := genHeader(nil, JSStreamSource, fmt.Sprintf("ORIGIN %d > > foo.bar %s", i, ident))
+-			_, _, err = fs.StoreMsg("foo.bar", hdr, nil, 0)
+-			require_NoError(t, err)
+-		}
+-		require_True(t, fs.numMsgBlocks() >= 2)
+-
+-		// Sanity check the state before restart, last source seq should win.
+-		state := fs.SourcesState()
+-		require_NotNil(t, state)
+-		require_Equal(t, state["ORIGIN > >"].Seq, N)
+-		require_Equal(t, state["ORIGIN > >"].Ident, ident)
+-		require_NoError(t, fs.Stop())
+-
+-		if remove {
+-			// Delete the persisted sources state.
+-			require_NoError(t, os.Remove(filepath.Join(dir, sourcesStreamStateFile)))
+-		}
+-
+-		fs, err = newFileStore(fcfg, cfg)
+-		require_NoError(t, err)
+-		defer fs.Stop()
+ 
+-		// Sequence and identity must both survive the restart, otherwise
+-		// stream recreation can't be detected.
+-		// Recovered if it still exists, but otherwise the store needs to scan.
+-		state = fs.SourcesState()
+-		require_NotNil(t, state)
+-		require_Equal(t, state["ORIGIN > >"].Seq, N)
+-		require_Equal(t, state["ORIGIN > >"].Ident, ident)
+-	}
+-
+-	t.Run("Normal", func(t *testing.T) { test(t, false) })
+-	t.Run("Remove", func(t *testing.T) { test(t, true) })
+-}
+ 
+ func TestFileStoreSourcesRecoveryPre210Headers(t *testing.T) {
+ 	// Pre-2.10 source headers carry no index name, they match any source using
+diff --git a/server/stream.go b/server/stream.go
+index 994bea5..a87f8ff 100644
+--- a/server/stream.go
++++ b/server/stream.go
+@@ -4957,63 +4957,10 @@ func (mset *stream) processInboundSourceMsg(si *sourceInfo, m *inMsg) bool {
+ // Generate a new (2.10) style source header (stream name, sequence number, source filter, source destination transform).
+ // The source's ident must be passed in, as it can be mutated under the stream lock, which is not held here.
+ // Format: <stream> <seq> <filter> <transform> <orig> [<ident>]
+-func (si *sourceInfo) genSourceHeader(orig, reply, ident string) string {
+-	var b strings.Builder
+-	iNameParts := strings.Split(si.iname, " ")
+-
+-	b.WriteString(iNameParts[0])
+-	b.WriteByte(' ')
+-	// Grab sequence as text here from reply subject.
+-	var tsa [expectedNumReplyTokensV2]string
+-	start, tokens := 0, tsa[:0]
+-	for i := 0; i < len(reply); i++ {
+-		if reply[i] == btsep {
+-			tokens, start = append(tokens, reply[start:i]), i+1
+-		}
+-	}
+-	tokens = append(tokens, reply[start:])
+-	seq := "1" // Default
+-	if tokens[0] == "$JS" && tokens[1] == "ACK" {
+-		if len(tokens) == expectedNumReplyTokensV1 {
+-			seq = tokens[5]
+-		} else if len(tokens) >= expectedNumReplyTokensV2 {
+-			seq = tokens[7]
+-		}
+-	}
+-	b.WriteString(seq)
+-
+-	b.WriteByte(' ')
+-	b.WriteString(iNameParts[1])
+-	b.WriteByte(' ')
+-	b.WriteString(iNameParts[2])
+-	b.WriteByte(' ')
+-	b.WriteString(orig)
+-	if ident != _EMPTY_ {
+-		b.WriteByte(' ')
+-		b.WriteString(ident)
+-	}
+-	return b.String()
+-}
++func (si *sourceInfo) genSourceHeader(orig, reply, ident string) string { panic("excised: genSourceHeader") }
+ 
+ // Original version of header that stored ack reply direct.
+-func streamAndSeqFromAckReply(reply string) (string, string, uint64) {
+-	tsa := [expectedNumReplyTokensV2]string{}
+-	start, tokens := 0, tsa[:0]
+-	for i := 0; i < len(reply); i++ {
+-		if reply[i] == btsep {
+-			tokens, start = append(tokens, reply[start:i]), i+1
+-		}
+-	}
+-	tokens = append(tokens, reply[start:])
+-	if (len(tokens) != expectedNumReplyTokensV1 && len(tokens) < expectedNumReplyTokensV2) || tokens[0] != "$JS" || tokens[1] != "ACK" {
+-		return _EMPTY_, _EMPTY_, 0
+-	}
+-	offset := 2
+-	if len(tokens) >= expectedNumReplyTokensV2 {
+-		offset = 4
+-	}
+-	return tokens[offset], _EMPTY_, uint64(parseAckReplyNum(tokens[offset+3]))
+-}
++func streamAndSeqFromAckReply(reply string) (string, string, uint64) { panic("excised: streamAndSeqFromAckReply") }
+ 
+ func consumerFromAckReply(reply string) string {
+ 	tsa := [expectedNumReplyTokensV2]string{}
+@@ -5037,35 +4984,7 @@ func consumerFromAckReply(reply string) string {
+ // Extract the stream name, the source index name and the message sequence number from the source header.
+ // Uses the filter and transform arguments to provide backwards compatibility
+ // Format: <stream> <seq> <filter> <transform> <orig> [<ident>]
+-func streamAndSeq(shdr string) (string, string, uint64, string) {
+-	if strings.HasPrefix(shdr, jsAckPre) {
+-		streamName, iname, seq := streamAndSeqFromAckReply(shdr)
+-		return streamName, iname, seq, _EMPTY_
+-	}
+-	// New version which is stream index name <SPC> sequence
+-	fields := strings.Split(shdr, " ")
+-	nFields := len(fields)
+-
+-	if nFields != 2 && nFields <= 3 {
+-		return _EMPTY_, _EMPTY_, 0, _EMPTY_
+-	}
+-
+-	streamName := fields[0]
+-	if nFields >= 4 {
+-		iname := strings.Join([]string{fields[0], fields[2], fields[3]}, " ")
+-		seq := uint64(parseAckReplyNum(fields[1]))
+-		var identity string
+-		if nFields >= 6 {
+-			// Copy, since it's stored on the sourceInfo.
+-			identity = copyString(fields[5])
+-		}
+-		return streamName, iname, seq, identity
+-	} else {
+-		seq := uint64(parseAckReplyNum(fields[1]))
+-		return streamName, _EMPTY_, seq, _EMPTY_
+-	}
+-
+-}
++func streamAndSeq(shdr string) (string, string, uint64, string) { panic("excised: streamAndSeq") }
+ 
+ // Lock should be held.
+ func (mset *stream) setStartingSequenceForSources(iNames map[string]struct{}) {

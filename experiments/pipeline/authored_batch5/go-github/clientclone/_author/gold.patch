@@ -1,0 +1,70 @@
+diff --git a/github/github.go b/github/github.go
+index ff87449..5b1fa27 100644
+--- a/github/github.go
++++ b/github/github.go
+@@ -890,7 +890,25 @@ func (c *Client) UploadURL() string {
+ // [WithAuthToken] carries over to the clone, and is re-scoped to the clone's
+ // own API and upload origins.
+ func (c *Client) Clone(opts ...ClientOptionsFunc) (*Client, error) {
+-		o := clientOptions{}
++	if c.client == nil {
++		return nil, errUninitialized
++	}
++
++	o := clientOptions{
++		apiVersionMin:                           &c.apiVersionMin,
++		apiVersionMax:                           &c.apiVersionMax,
++		userAgent:                               &c.userAgent,
++		baseURL:                                 new(*c.baseURL),
++		uploadURL:                               new(*c.uploadURL),
++		token:                                   c.authToken,
++		disableRateLimitCheck:                   c.disableRateLimitCheck,
++		rateLimitRedirectionalEndpoints:         c.rateLimitRedirectionalEndpoints,
++		maxSecondaryRateLimitRetryAfterDuration: &c.maxSecondaryRateLimitRetryAfterDuration,
++	}
++
++	if c.Marketplace != nil {
++		o.marketplaceStubbed = c.Marketplace.Stubbed
++	}
+ 
+ 	for _, opt := range opts {
+ 		if err := opt(&o); err != nil {
+@@ -898,7 +916,37 @@ func (c *Client) Clone(opts ...ClientOptionsFunc) (*Client, error) {
+ 		}
+ 	}
+ 
+-	return newClient(o) /* excised: Clone */
++	if o.httpClient == nil {
++		// A clone that carries a token installs the credential against its own
++		// origins, so it starts from the unwrapped transport: reusing the
++		// wrapped one would stack a second check that still enforces the
++		// original client's origins.
++		transport := c.client.Transport
++		if c.authToken != nil {
++			transport = c.baseTransport
++		}
++
++		o.httpClient = &http.Client{
++			Transport:     transport,
++			CheckRedirect: c.client.CheckRedirect,
++			Jar:           c.client.Jar,
++			Timeout:       c.client.Timeout,
++		}
++	}
++
++	clone, err := newClient(o)
++	if err != nil {
++		return nil, err
++	}
++
++	if !clone.disableRateLimitCheck {
++		c.rateMu.Lock()
++		clone.rateLimits = c.rateLimits
++		clone.secondaryRateLimitReset = c.secondaryRateLimitReset
++		c.rateMu.Unlock()
++	}
++
++	return clone, nil
+ }
+ 
+ // RequestOption represents an option that can modify an http.Request.

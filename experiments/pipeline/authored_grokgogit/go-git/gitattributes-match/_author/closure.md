@@ -1,0 +1,1 @@
+The matcher was cut. Unlike gitignore, a one-segment gitattributes pattern matches only the last path component, and `**` is a whole-segment eater that rejects `**` embedded in a token. Those rules are the opposite of what a filepath.Match-over-the-full-path rewrite would do. Special-casing `value` and `vul?ano` leaves `/foo/**` and domain-prefixed patterns wrong.

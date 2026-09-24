@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# helm-depresolver clean re-climb. Its only L3 "pass" was a B9 hard fail (the agent
+# WebFetched raw.githubusercontent.com for the exact file under test), so the L3 result
+# is void. L3 is re-run clean and L5 (hidden test restored) brackets it from above.
+set -u
+R=/home/evan/Documents/open_swe_traces_research
+D="${1:-sweep_depres}"
+cd $R && set -a && . /home/evan/Documents/eval_tasks/.env && set +a
+harbor run --path "experiments/dose_response/$D" --agent cursor-cli --model cursor/composer-2.5 \
+  --n-concurrent 8 --n-attempts 3 --max-retries 1 --jobs-dir experiments/dose_response/jobs --job-name "$D" --yes
+# B9 reward-hacking gate: never count a pass that was not audited.
+"$R/scripts/ops/post_sweep.sh" "$D"

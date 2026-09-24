@@ -1,0 +1,1212 @@
+--- a/expr/equal_test.go
++++ b/expr/equal_test.go
+@@ -2,60 +2,8 @@
+ 
+ import (
+ 	"fmt"
+-	"testing"
+ )
+ 
+-func TestEqual(t *testing.T) {
+-	var (
+-		ut1  = userType("ut1", object(String, Int))
+-		ut2  = userType("ut2", object(String, String))
+-		aut1 = userType("aut1", arrayOf(object(String, Int)))
+-		aut2 = userType("aut2", arrayOf(object(String, String)))
+-		rut  = userType("rut", object(String, Int))
+-		arut = userType("arut", arrayOf(rut))
+-	)
+-	nat := &NamedAttributeExpr{Name: "recursive", Attribute: &AttributeExpr{Type: rut}}
+-	*rut.Type.(*Object) = append(*rut.Type.(*Object), nat)
+-	cases := []struct {
+-		Name     string
+-		dt, dt2  DataType
+-		Expected bool
+-	}{
+-		{"primitive-true", String, String, true},
+-		{"primitive-false", String, Int, false},
+-		{"array-primitive-true", arrayOf(String), arrayOf(String), true},
+-		{"array-primitive-false", arrayOf(String), arrayOf(Int), false},
+-		{"map-primitive-true", mapOf(String, String), mapOf(String, String), true},
+-		{"map-primitive-false", mapOf(String, Int), mapOf(Int, Int), false},
+-		{"map-primitive-false-2", mapOf(Int, String), mapOf(Int, Int), false},
+-		{"object-true", object(String, Int), object(String, Int), true},
+-		{"object-false", object(String, Int), object(String, String), false},
+-		{"array-object-true", arrayOf(object(String, Float32)), arrayOf(object(String, Float32)), true},
+-		{"array-object-false", arrayOf(object(String, Float32)), arrayOf(object(Int)), false},
+-		{"map-object-true", mapOf(object(String, Float32), object(String, Float32)), mapOf(object(String, Float32), object(String, Float32)), true},
+-		{"map-object-false", mapOf(object(String, Float32), object(Int)), mapOf(object(Int), object(Int)), false},
+-		{"map-object-false-2", mapOf(object(Int), object(String, Float32)), mapOf(object(Int), object(Int)), false},
+-		{"user-true", ut1, ut1, true},
+-		{"user-false", ut1, ut2, false},
+-		{"user-recursive-true", rut, rut, true},
+-		{"user-recursive-false", rut, ut2, false},
+-		{"user-recursive-false-2", ut1, rut, false},
+-		{"array-user-true", aut1, aut1, true},
+-		{"array-user-false", aut1, aut2, false},
+-		{"array-user-recursive-true", arut, arut, true},
+-		{"array-user-recursive-false", arut, aut2, false},
+-		{"array-user-recursive-false-2", aut1, arut, false},
+-	}
+-	for _, k := range cases {
+-		t.Run(k.Name, func(t *testing.T) {
+-			res := Equal(k.dt, k.dt2)
+-			if res != k.Expected {
+-				t.Errorf("Equal(%q, %q) returned %v but expected %v",
+-					k.dt.Name(), k.dt2.Name(), res, k.Expected)
+-			}
+-		})
+-	}
+-}
+ 
+ func arrayOf(dt DataType) *Array {
+ 	return &Array{ElemType: &AttributeExpr{Type: dt}}
+--- a/expr/project_test.go
++++ /dev/null
+@@ -1,262 +0,0 @@
+-// This file verifies result-type projections preserve view shape, field
+-// metadata, recursion, and synthesized example ownership.
+-package expr
+-
+-import (
+-	"fmt"
+-	"strings"
+-	"testing"
+-
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-)
+-
+-var (
+-	testrand = NewExampleGenerator(NewFakerRandomizerFactory("test")).At(
+-		MethodPayloadExampleIdentity(&MethodExpr{
+-			Name:    "project",
+-			Service: &ServiceExpr{Name: "test"},
+-		}),
+-	)
+-
+-	simpleResult        = resultType("a", String, "b", Int, view("default", "a", String, "b", Int), view("link", "a", String))
+-	simpleResultDefault = resultType("a", String, "b", Int)
+-	simpleResultLink    = resultType("a", String)
+-
+-	embeddedResult        = resultType("r", simpleResult, view("default", "r:link", AsObject(simpleResult)))
+-	embeddedResultDefault = resultType("r", simpleResultLink)
+-
+-	collectionResult        = collection(simpleResult)
+-	collectionResultDefault = collection(simpleResultDefault)
+-	collectionResultLink    = collection(simpleResultLink)
+-
+-	collectionLinkView = object(String)
+-	compositeResult    = resultType("a", object(collectionResult), "b", String,
+-		view("default", "a", object(String), "b", String),
+-		view("link", "a", collectionLinkView))
+-	compositeResultDefault = resultType("a", object(collectionResultDefault), "b", String)
+-	compositeResultLink    = resultType("a", object(collectionResultLink))
+-
+-	// recursiveResult is its own expected projection: projecting a recursive
+-	// result type yields a single projected type that references itself.
+-	recursiveResult = resultRecursive("a", String, view("default", "a", object(String)))
+-)
+-
+-func init() {
+-	vobj := (*collectionLinkView)[0]
+-	vobj.Attribute.Meta = map[string][]string{"view": {"link"}}
+-}
+-
+-func TestProject(t *testing.T) {
+-	cases := []struct {
+-		Name     string
+-		Result   *ResultTypeExpr
+-		View     string
+-		Expected *ResultTypeExpr
+-	}{
+-		{"default", simpleResult, "default", simpleResultDefault},
+-		{"link", simpleResult, "link", simpleResultLink},
+-		{"embedded", embeddedResult, "default", embeddedResultDefault},
+-		{"collection-default", collectionResult, "default", collectionResultDefault},
+-		{"collection-link", collectionResult, "link", collectionResultLink},
+-		{"composite-default", compositeResult, "default", compositeResultDefault},
+-		{"composite-link", compositeResult, "link", compositeResultLink},
+-		{"recursive", recursiveResult, "default", recursiveResult},
+-	}
+-	for _, k := range cases {
+-		t.Run(k.Name, func(t *testing.T) {
+-			projected, err := Project(k.Result, k.View)
+-			if err != nil {
+-				t.Fatal(err)
+-			}
+-			if !Equal(projected, k.Expected) {
+-				projected.Debug("got")
+-				k.Expected.Debug("expected")
+-				t.Errorf("got: %s, expected: %s\n", Hash(projected, false, true, true), Hash(k.Expected, false, true, true))
+-			}
+-			if pobj := AsObject(projected.Type); pobj != nil {
+-				for _, att := range *pobj {
+-					att2 := k.Expected.Find(att.Name)
+-					if att2 == nil {
+-						continue
+-					}
+-					if att.Attribute.Description != att2.Description {
+-						t.Errorf("got description %q, expected %q", att.Attribute.Description, att2.Description)
+-					}
+-				}
+-			}
+-		})
+-	}
+-}
+-
+-func TestProjectPreservesGeneratedExampleIdentity(t *testing.T) {
+-	source := resultType("value", String, view("default", "value", String))
+-	owner := MethodResultExampleIdentity(&MethodExpr{
+-		Name:    "read",
+-		Service: &ServiceExpr{Name: "values"},
+-	})
+-	source.UserTypeExpr = NewGeneratedUserType(source.TypeName, source.AttributeExpr, owner)
+-
+-	projected, err := Project(source, DefaultView)
+-	require.NoError(t, err)
+-	projectedOwner, ok := GeneratedUserTypeExampleIdentity(projected)
+-	require.True(t, ok)
+-	require.Equal(t, owner, projectedOwner)
+-}
+-
+-// TestProjectDoesNotAliasFieldAttributes verifies that fields sharing a type
+-// share the projected type but never the AttributeExpr wrapping it, so that
+-// per-field metadata such as descriptions does not leak across fields.
+-func TestProjectDoesNotAliasFieldAttributes(t *testing.T) {
+-	t.Run("sibling user type fields", func(t *testing.T) {
+-		shared := userType("Shared", object(Int))
+-		rt := resultType("a", shared, "b", shared,
+-			view("default", "a", object(Int), "b", object(Int)))
+-
+-		projected, err := Project(rt, "default")
+-		require.NoError(t, err)
+-
+-		obj := AsObject(projected.Type)
+-		a, b := obj.Attribute("a"), obj.Attribute("b")
+-		assert.NotSame(t, a, b)
+-		assert.Equal(t, "desc a", a.Description)
+-		assert.Equal(t, "desc b", b.Description)
+-		assert.Same(t, a.Type, b.Type)
+-	})
+-
+-	t.Run("sibling result type fields", func(t *testing.T) {
+-		rt := resultType("x", simpleResult, "y", simpleResult,
+-			view("default", "x", AsObject(simpleResult), "y", AsObject(simpleResult)))
+-
+-		projected, err := Project(rt, "default")
+-		require.NoError(t, err)
+-
+-		obj := AsObject(projected.Type)
+-		x, y := obj.Attribute("x"), obj.Attribute("y")
+-		assert.NotSame(t, x, y)
+-		assert.Equal(t, "desc x", x.Description)
+-		assert.Equal(t, "desc y", y.Description)
+-		assert.Same(t, x.Type, y.Type)
+-	})
+-
+-	t.Run("same field in different parent types", func(t *testing.T) {
+-		shared := userType("Shared", object(Int))
+-		wrapper := userType("Wrapper", &Object{
+-			{Name: "a", Attribute: &AttributeExpr{Type: shared, Description: "Inner A"}},
+-		})
+-		rt := resultType("a", shared, "nested", wrapper,
+-			view("default",
+-				"a", object(Int),
+-				"nested", &Object{{Name: "a", Attribute: &AttributeExpr{Type: object(Int)}}}))
+-
+-		projected, err := Project(rt, "default")
+-		require.NoError(t, err)
+-
+-		obj := AsObject(projected.Type)
+-		outer := obj.Attribute("a")
+-		assert.Equal(t, "desc a", outer.Description)
+-		inner := AsObject(obj.Attribute("nested").Type).Attribute("a")
+-		assert.NotSame(t, outer, inner)
+-		assert.Equal(t, "Inner A", inner.Description)
+-		assert.Same(t, outer.Type, inner.Type)
+-	})
+-
+-	t.Run("recursive result type references its own projection", func(t *testing.T) {
+-		projected, err := Project(recursiveResult, "default")
+-		require.NoError(t, err)
+-
+-		rec := AsObject(projected.Type).Attribute("rec")
+-		assert.Equal(t, "desc rec", rec.Description)
+-		assert.Same(t, projected, rec.Type)
+-	})
+-}
+-
+-// view is a helper function for building view expressions used in tests. name
+-// is the name of the view, attributes list the names of the attributes rendered
+-// by the view. name may use the format "name:view" in which case view is the
+-// name of the view used to render the attribute (when its type is a result
+-// type).
+-func view(name string, params ...any) *ViewExpr {
+-	var obj Object = make([]*NamedAttributeExpr, len(params)/2)
+-	for i := 0; i < len(params); i += 2 {
+-		var (
+-			attName string
+-			attView string
+-		)
+-		{
+-			n := params[i].(string)
+-			elems := strings.Split(n, ":")
+-			attName = elems[0]
+-			if len(elems) > 1 {
+-				attView = elems[1]
+-			}
+-		}
+-		att := &AttributeExpr{Type: params[i+1].(DataType)}
+-		if attView != "" {
+-			att.Meta = MetaExpr{"view": []string{attView}}
+-		}
+-		obj[i/2] = &NamedAttributeExpr{Name: attName, Attribute: att}
+-	}
+-	att := &AttributeExpr{Type: &obj}
+-	return &ViewExpr{Name: name, AttributeExpr: att}
+-}
+-
+-// resultType is a helper function that builds result type expressions used in
+-// tests. The arguments is a list of attribute name and type pairs followed by a
+-// list of view expressions, e.g.:
+-//
+-//	resultType("attr1", String, "attr2", Int, view1, view2)
+-func resultType(params ...any) *ResultTypeExpr {
+-	var (
+-		views []*ViewExpr
+-		obj   Object
+-	)
+-	for i, p := range params {
+-		switch pt := p.(type) {
+-		case string:
+-			obj = append(obj, &NamedAttributeExpr{
+-				Name: params[i].(string),
+-				Attribute: &AttributeExpr{
+-					Type:        params[i+1].(DataType),
+-					Description: fmt.Sprintf("desc %s", params[i]),
+-				}})
+-		case *ViewExpr:
+-			views = append(views, pt)
+-		}
+-	}
+-
+-	t := testrand.String()
+-	return &ResultTypeExpr{
+-		UserTypeExpr: &UserTypeExpr{
+-			AttributeExpr: &AttributeExpr{Type: &obj},
+-			TypeName:      t,
+-		},
+-		Identifier: "vnd.application." + t,
+-		Views:      views,
+-	}
+-}
+-
+-func collection(elemType *ResultTypeExpr) *ResultTypeExpr {
+-	return &ResultTypeExpr{
+-		UserTypeExpr: &UserTypeExpr{
+-			AttributeExpr: &AttributeExpr{
+-				Type: &Array{
+-					ElemType: &AttributeExpr{Type: elemType},
+-				},
+-			},
+-		},
+-		Views: elemType.Views,
+-	}
+-}
+-
+-func resultRecursive(params ...any) *ResultTypeExpr {
+-	rt := resultType(params...)
+-	recAtt := &NamedAttributeExpr{Name: "rec", Attribute: &AttributeExpr{Type: rt, Description: "desc rec"}}
+-	obj := AsObject(rt)
+-	*obj = append(*obj, recAtt)
+-	for _, v := range rt.Views {
+-		vObj := v.Type.(*Object)
+-		*vObj = append(*vObj, recAtt)
+-	}
+-	return rt
+-}
+--- a/expr/types.go
++++ b/expr/types.go
+@@ -3,7 +3,7 @@
+ package expr
+ 
+ import (
+-	"fmt"
++	_ "fmt"
+ 	"reflect"
+ 	"sort"
+ 
+@@ -193,91 +193,53 @@
+ 
+ // AsObject returns the type underlying object if any, nil otherwise.
+ func AsObject(dt DataType) *Object {
+-	switch t := dt.(type) {
+-	case *UserTypeExpr:
+-		return AsObject(t.Type)
+-	case *ResultTypeExpr:
+-		return AsObject(t.Type)
+-	case *Object:
+-		return t
+-	default:
+-		return nil
+-	}
++	panic("excised: AsObject")
+ }
+ 
+ // AsArray returns the type underlying array if any, nil otherwise.
+ func AsArray(dt DataType) *Array {
+-	switch t := dt.(type) {
+-	case *UserTypeExpr:
+-		return AsArray(t.Type)
+-	case *ResultTypeExpr:
+-		return AsArray(t.Type)
+-	case *Array:
+-		return t
+-	default:
+-		return nil
+-	}
++	panic("excised: AsArray")
+ }
+ 
+ // AsMap returns the type underlying map if any, nil otherwise.
+ func AsMap(dt DataType) *Map {
+-	switch t := dt.(type) {
+-	case *UserTypeExpr:
+-		return AsMap(t.Type)
+-	case *ResultTypeExpr:
+-		return AsMap(t.Type)
+-	case *Map:
+-		return t
+-	default:
+-		return nil
+-	}
++	panic("excised: AsMap")
+ }
+ 
+ // AsUnion returns the type underlying union if any, nil otherwise.
+ func AsUnion(dt DataType) *Union {
+-	switch t := dt.(type) {
+-	case *UserTypeExpr:
+-		return AsUnion(t.Type)
+-	case *ResultTypeExpr:
+-		return AsUnion(t.Type)
+-	case *Union:
+-		return t
+-	default:
+-		return nil
+-	}
++	panic("excised: AsUnion")
+ }
+ 
+ // IsObject returns true if the data type is an object.
+-func IsObject(dt DataType) bool { return AsObject(dt) != nil }
++func IsObject(dt DataType) bool {
++	panic("excised: IsObject")
++}
+ 
+ // IsArray returns true if the data type is an array.
+-func IsArray(dt DataType) bool { return AsArray(dt) != nil }
++func IsArray(dt DataType) bool {
++	panic("excised: IsArray")
++}
+ 
+ // IsMap returns true if the data type is a map.
+-func IsMap(dt DataType) bool { return AsMap(dt) != nil }
++func IsMap(dt DataType) bool {
++	panic("excised: IsMap")
++}
+ 
+ // IsUnion returns true if the data type is a map.
+-func IsUnion(dt DataType) bool { return AsUnion(dt) != nil }
++func IsUnion(dt DataType) bool {
++	panic("excised: IsUnion")
++}
+ 
+ // IsPrimitive returns true if the data type is a primitive type.
+ func IsPrimitive(dt DataType) bool {
+-	switch t := dt.(type) {
+-	case Primitive:
+-		return true
+-	case *UserTypeExpr:
+-		return IsPrimitive(t.Type)
+-	case *ResultTypeExpr:
+-		return IsPrimitive(t.Type)
+-	default:
+-		return false
+-	}
++	panic("excised: IsPrimitive")
+ }
+ 
+ // IsAlias returns true if the data type is a user type backed by a primitive
+ // type (so call aliased type).
+ func IsAlias(dt DataType) bool {
+-	_, isut := dt.(UserType)
+-	return isut && IsPrimitive(dt)
++	panic("excised: IsAlias")
+ }
+ 
+ // Equal compares the types recursively and returns true if they are equal. Two
+@@ -292,7 +254,7 @@
+ // as the former may return true for two user types with different names and
+ // thus with different hash values.
+ func Equal(dt, dt2 DataType) bool {
+-	return Hash(dt, false, true, true) == Hash(dt2, false, true, true)
++	panic("excised: Equal")
+ }
+ 
+ // DataType implementation
+@@ -712,68 +674,10 @@
+ //	"map<string, string>"
+ //	"map<string, array<int32>>"
+ func QualifiedTypeName(t DataType) string {
+-	switch t.Kind() {
+-	case ArrayKind:
+-		a := t.(*Array)
+-		return fmt.Sprintf("%s<%s>",
+-			t.Name(),
+-			QualifiedTypeName(a.ElemType.Type),
+-		)
+-	case MapKind:
+-		h := t.(*Map)
+-		return fmt.Sprintf("%s<%s, %s>",
+-			t.Name(),
+-			QualifiedTypeName(h.KeyType.Type),
+-			QualifiedTypeName(h.ElemType.Type),
+-		)
+-	}
+-	return t.Name()
++	panic("excised: QualifiedTypeName")
+ }
+ 
+ // toReflectType converts the DataType to reflect.Type.
+ func toReflectType(dtype DataType) reflect.Type {
+-	switch dtype.Kind() {
+-	case BooleanKind:
+-		return reflect.TypeOf(true)
+-	case IntKind:
+-		return reflect.TypeOf(int(0))
+-	case Int32Kind:
+-		return reflect.TypeOf(int32(0))
+-	case Int64Kind:
+-		return reflect.TypeOf(int64(0))
+-	case UIntKind:
+-		return reflect.TypeOf(uint(0))
+-	case UInt32Kind:
+-		return reflect.TypeOf(uint32(0))
+-	case UInt64Kind:
+-		return reflect.TypeOf(uint64(0))
+-	case Float32Kind:
+-		return reflect.TypeOf(float32(0))
+-	case Float64Kind:
+-		return reflect.TypeOf(float64(0))
+-	case StringKind:
+-		return reflect.TypeOf("")
+-	case BytesKind:
+-		return reflect.TypeOf([]byte{})
+-	case ObjectKind:
+-		return reflect.TypeOf(map[string]any{})
+-	case UserTypeKind:
+-		return toReflectType(dtype.(*UserTypeExpr).Attribute().Type)
+-	case ResultTypeKind:
+-		return toReflectType(dtype.(*ResultTypeExpr).Attribute().Type)
+-	case ArrayKind:
+-		return reflect.SliceOf(toReflectType(dtype.(*Array).ElemType.Type))
+-	case MapKind:
+-		m := dtype.(*Map)
+-		// avoid complication: not allow object as the map key
+-		var ktype reflect.Type
+-		if m.KeyType.Type.Kind() != ObjectKind {
+-			ktype = toReflectType(m.KeyType.Type)
+-		} else {
+-			ktype = reflect.TypeOf([]any{}).Elem()
+-		}
+-		return reflect.MapOf(ktype, toReflectType(m.ElemType.Type))
+-	default:
+-		return reflect.TypeOf([]any{}).Elem()
+-	}
++	panic("excised: toReflectType")
+ }
+--- a/expr/types_test.go
++++ b/expr/types_test.go
+@@ -4,550 +4,13 @@
+ 
+ import "testing"
+ 
+-func TestAsObject(t *testing.T) {
+-	var (
+-		object = &Object{
+-			&NamedAttributeExpr{
+-				Name: "foo",
+-				Attribute: &AttributeExpr{
+-					Type: String,
+-				},
+-			},
+-		}
+-		objectUserType = &UserTypeExpr{
+-			AttributeExpr: &AttributeExpr{
+-				Type: object,
+-			},
+-		}
+-		notObjectUserType = &UserTypeExpr{
+-			AttributeExpr: &AttributeExpr{
+-				Type: Boolean,
+-			},
+-		}
+-		objectResultType = &ResultTypeExpr{
+-			UserTypeExpr: objectUserType,
+-		}
+-		notObjectResultType = &ResultTypeExpr{
+-			UserTypeExpr: notObjectUserType,
+-		}
+-	)
+-	cases := map[string]struct {
+-		dt       DataType
+-		expected *Object
+-	}{
+-		"object user type": {
+-			dt:       objectUserType,
+-			expected: object,
+-		},
+-		"not object user type": {
+-			dt:       notObjectUserType,
+-			expected: nil,
+-		},
+-		"object result type": {
+-			dt:       objectResultType,
+-			expected: object,
+-		},
+-		"not object result type": {
+-			dt:       notObjectResultType,
+-			expected: nil,
+-		},
+-		"object": {
+-			dt:       object,
+-			expected: object,
+-		},
+-		"not object": {
+-			dt:       Boolean,
+-			expected: nil,
+-		},
+-	}
+ 
+-	for k, tc := range cases {
+-		if actual := AsObject(tc.dt); actual != tc.expected {
+-			if Equal(actual, tc.expected) != true {
+-				t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-			}
+-		}
+-	}
+-}
+ 
+-func TestAsArray(t *testing.T) {
+-	var (
+-		array = &Array{
+-			ElemType: &AttributeExpr{
+-				Type: String,
+-			},
+-		}
+-		arrayUserType = &UserTypeExpr{
+-			AttributeExpr: &AttributeExpr{
+-				Type: array,
+-			},
+-		}
+-		notArrayUserType = &UserTypeExpr{
+-			AttributeExpr: &AttributeExpr{
+-				Type: Boolean,
+-			},
+-		}
+-		arrayResultType = &ResultTypeExpr{
+-			UserTypeExpr: arrayUserType,
+-		}
+-		notArrayResultType = &ResultTypeExpr{
+-			UserTypeExpr: notArrayUserType,
+-		}
+-	)
+-	cases := map[string]struct {
+-		dt       DataType
+-		expected *Array
+-	}{
+-		"array user type": {
+-			dt:       arrayUserType,
+-			expected: array,
+-		},
+-		"not array user type": {
+-			dt:       notArrayUserType,
+-			expected: nil,
+-		},
+-		"array result type": {
+-			dt:       arrayResultType,
+-			expected: array,
+-		},
+-		"not array result type": {
+-			dt:       notArrayResultType,
+-			expected: nil,
+-		},
+-		"array": {
+-			dt:       array,
+-			expected: array,
+-		},
+-		"not array": {
+-			dt:       Boolean,
+-			expected: nil,
+-		},
+-	}
+ 
+-	for k, tc := range cases {
+-		if actual := AsArray(tc.dt); actual != tc.expected {
+-			if Equal(actual, tc.expected) != true {
+-				t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-			}
+-		}
+-	}
+-}
+ 
+-func TestAsMap(t *testing.T) {
+-	var (
+-		mapIntString = &Map{
+-			KeyType: &AttributeExpr{
+-				Type: Int,
+-			},
+-			ElemType: &AttributeExpr{
+-				Type: String,
+-			},
+-		}
+-		mapUserType = &UserTypeExpr{
+-			AttributeExpr: &AttributeExpr{
+-				Type: mapIntString,
+-			},
+-		}
+-		notMapUserType = &UserTypeExpr{
+-			AttributeExpr: &AttributeExpr{
+-				Type: Boolean,
+-			},
+-		}
+-		mapResultType = &ResultTypeExpr{
+-			UserTypeExpr: mapUserType,
+-		}
+-		notMapResultType = &ResultTypeExpr{
+-			UserTypeExpr: notMapUserType,
+-		}
+-	)
+-	cases := map[string]struct {
+-		dt       DataType
+-		expected *Map
+-	}{
+-		"map user type": {
+-			dt:       mapUserType,
+-			expected: mapIntString,
+-		},
+-		"not map user type": {
+-			dt:       notMapUserType,
+-			expected: nil,
+-		},
+-		"map result type": {
+-			dt:       mapResultType,
+-			expected: mapIntString,
+-		},
+-		"not map result type": {
+-			dt:       notMapResultType,
+-			expected: nil,
+-		},
+-		"map": {
+-			dt:       mapIntString,
+-			expected: mapIntString,
+-		},
+-		"not map": {
+-			dt:       Boolean,
+-			expected: nil,
+-		},
+-	}
+ 
+-	for k, tc := range cases {
+-		if actual := AsMap(tc.dt); actual != tc.expected {
+-			if Equal(actual, tc.expected) != true {
+-				t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-			}
+-		}
+-	}
+-}
+ 
+-func TestIsObject(t *testing.T) {
+-	var (
+-		object = &Object{
+-			&NamedAttributeExpr{
+-				Name: "foo",
+-				Attribute: &AttributeExpr{
+-					Type: String,
+-				},
+-			},
+-		}
+-		objectUserType = &UserTypeExpr{
+-			AttributeExpr: &AttributeExpr{
+-				Type: object,
+-			},
+-		}
+-		notObjectUserType = &UserTypeExpr{
+-			AttributeExpr: &AttributeExpr{
+-				Type: Boolean,
+-			},
+-		}
+-		objectResultType = &ResultTypeExpr{
+-			UserTypeExpr: objectUserType,
+-		}
+-		notObjectResultType = &ResultTypeExpr{
+-			UserTypeExpr: notObjectUserType,
+-		}
+-	)
+-	cases := map[string]struct {
+-		dt       DataType
+-		expected bool
+-	}{
+-		"object user type": {
+-			dt:       objectUserType,
+-			expected: true,
+-		},
+-		"not object user type": {
+-			dt:       notObjectUserType,
+-			expected: false,
+-		},
+-		"object result type": {
+-			dt:       objectResultType,
+-			expected: true,
+-		},
+-		"not object result type": {
+-			dt:       notObjectResultType,
+-			expected: false,
+-		},
+-		"object": {
+-			dt:       object,
+-			expected: true,
+-		},
+-		"not object": {
+-			dt:       Boolean,
+-			expected: false,
+-		},
+-	}
+ 
+-	for k, tc := range cases {
+-		if actual := IsObject(tc.dt); actual != tc.expected {
+-			if actual != tc.expected {
+-				t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-			}
+-		}
+-	}
+-}
+-
+-func TestIsArray(t *testing.T) {
+-	var (
+-		array = &Array{
+-			ElemType: &AttributeExpr{
+-				Type: String,
+-			},
+-		}
+-		arrayUserType = &UserTypeExpr{
+-			AttributeExpr: &AttributeExpr{
+-				Type: array,
+-			},
+-		}
+-		notArrayUserType = &UserTypeExpr{
+-			AttributeExpr: &AttributeExpr{
+-				Type: Boolean,
+-			},
+-		}
+-		arrayResultType = &ResultTypeExpr{
+-			UserTypeExpr: arrayUserType,
+-		}
+-		notArrayResultType = &ResultTypeExpr{
+-			UserTypeExpr: notArrayUserType,
+-		}
+-	)
+-	cases := map[string]struct {
+-		dt       DataType
+-		expected bool
+-	}{
+-		"array user type": {
+-			dt:       arrayUserType,
+-			expected: true,
+-		},
+-		"not array user type": {
+-			dt:       notArrayUserType,
+-			expected: false,
+-		},
+-		"array result type": {
+-			dt:       arrayResultType,
+-			expected: true,
+-		},
+-		"not array result type": {
+-			dt:       notArrayResultType,
+-			expected: false,
+-		},
+-		"array": {
+-			dt:       array,
+-			expected: true,
+-		},
+-		"not array": {
+-			dt:       Boolean,
+-			expected: false,
+-		},
+-	}
+-
+-	for k, tc := range cases {
+-		if actual := IsArray(tc.dt); actual != tc.expected {
+-			if actual != tc.expected {
+-				t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-			}
+-		}
+-	}
+-}
+-
+-func TestIsMap(t *testing.T) {
+-	var (
+-		mapIntString = &Map{
+-			KeyType: &AttributeExpr{
+-				Type: Int,
+-			},
+-			ElemType: &AttributeExpr{
+-				Type: String,
+-			},
+-		}
+-		mapUserType = &UserTypeExpr{
+-			AttributeExpr: &AttributeExpr{
+-				Type: mapIntString,
+-			},
+-		}
+-		notMapUserType = &UserTypeExpr{
+-			AttributeExpr: &AttributeExpr{
+-				Type: Boolean,
+-			},
+-		}
+-		mapResultType = &ResultTypeExpr{
+-			UserTypeExpr: mapUserType,
+-		}
+-		notMapResultType = &ResultTypeExpr{
+-			UserTypeExpr: notMapUserType,
+-		}
+-	)
+-	cases := map[string]struct {
+-		dt       DataType
+-		expected bool
+-	}{
+-		"map user type": {
+-			dt:       mapUserType,
+-			expected: true,
+-		},
+-		"not map user type": {
+-			dt:       notMapUserType,
+-			expected: false,
+-		},
+-		"map result type": {
+-			dt:       mapResultType,
+-			expected: true,
+-		},
+-		"not map result type": {
+-			dt:       notMapResultType,
+-			expected: false,
+-		},
+-		"map": {
+-			dt:       mapIntString,
+-			expected: true,
+-		},
+-		"not map": {
+-			dt:       Boolean,
+-			expected: false,
+-		},
+-	}
+-
+-	for k, tc := range cases {
+-		if actual := IsMap(tc.dt); actual != tc.expected {
+-			if actual != tc.expected {
+-				t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-			}
+-		}
+-	}
+-}
+-
+-func TestIsPrimitive(t *testing.T) {
+-	var (
+-		primitiveUserType = &UserTypeExpr{
+-			AttributeExpr: &AttributeExpr{
+-				Type: Boolean,
+-			},
+-		}
+-		notPrimitiveUserType = &UserTypeExpr{
+-			AttributeExpr: &AttributeExpr{
+-				Type: &Object{},
+-			},
+-		}
+-		primitiveResultType = &ResultTypeExpr{
+-			UserTypeExpr: primitiveUserType,
+-		}
+-		notPrimitiveResultType = &ResultTypeExpr{
+-			UserTypeExpr: notPrimitiveUserType,
+-		}
+-	)
+-	cases := map[string]struct {
+-		dt       DataType
+-		expected bool
+-	}{
+-		"boolean": {
+-			dt:       Boolean,
+-			expected: true,
+-		},
+-		"int": {
+-			dt:       Int,
+-			expected: true,
+-		},
+-		"int32": {
+-			dt:       Int32,
+-			expected: true,
+-		},
+-		"int64": {
+-			dt:       Int64,
+-			expected: true,
+-		},
+-		"uint": {
+-			dt:       UInt,
+-			expected: true,
+-		},
+-		"uint32": {
+-			dt:       UInt32,
+-			expected: true,
+-		},
+-		"uint64": {
+-			dt:       UInt64,
+-			expected: true,
+-		},
+-		"float32": {
+-			dt:       Float32,
+-			expected: true,
+-		},
+-		"float64": {
+-			dt:       Float64,
+-			expected: true,
+-		},
+-		"string": {
+-			dt:       String,
+-			expected: true,
+-		},
+-		"bytes": {
+-			dt:       Bytes,
+-			expected: true,
+-		},
+-		"any": {
+-			dt:       Any,
+-			expected: true,
+-		},
+-		"primitive user type": {
+-			dt:       primitiveUserType,
+-			expected: true,
+-		},
+-		"not primitive user type": {
+-			dt:       notPrimitiveUserType,
+-			expected: false,
+-		},
+-		"primitive result type": {
+-			dt:       primitiveResultType,
+-			expected: true,
+-		},
+-		"not primitive result type": {
+-			dt:       notPrimitiveResultType,
+-			expected: false,
+-		},
+-		"object": {
+-			dt:       &Object{},
+-			expected: false,
+-		},
+-		"array": {
+-			dt:       &Array{},
+-			expected: false,
+-		},
+-		"map": {
+-			dt:       &Map{},
+-			expected: false,
+-		},
+-	}
+-
+-	for k, tc := range cases {
+-		if actual := IsPrimitive(tc.dt); tc.expected != actual {
+-			t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-		}
+-	}
+-}
+-
+-func TestIsAlias(t *testing.T) {
+-	var (
+-		aliasUserType = &UserTypeExpr{
+-			AttributeExpr: &AttributeExpr{
+-				Type: String,
+-			},
+-		}
+-		notAliasUserType = &UserTypeExpr{
+-			AttributeExpr: &AttributeExpr{
+-				Type: &Object{},
+-			},
+-		}
+-		aliasResultType = &ResultTypeExpr{
+-			UserTypeExpr: aliasUserType,
+-		}
+-		notAliasResultType = &ResultTypeExpr{
+-			UserTypeExpr: notAliasUserType,
+-		}
+-	)
+-	cases := map[string]struct {
+-		dt       DataType
+-		expected bool
+-	}{
+-		"alias user type": {
+-			dt:       aliasUserType,
+-			expected: true,
+-		},
+-		"not alias user type": {
+-			dt:       notAliasUserType,
+-			expected: false,
+-		},
+-		"alias result type": {
+-			dt:       aliasResultType,
+-			expected: true,
+-		},
+-		"not alias result type": {
+-			dt:       notAliasResultType,
+-			expected: false,
+-		},
+-	}
+-	for k, tc := range cases {
+-		if actual := IsAlias(tc.dt); tc.expected != actual {
+-			t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-		}
+-	}
+-}
+ 
+ func TestPrimitiveIsCompatible(t *testing.T) {
+ 	var (
+@@ -1010,129 +473,3 @@
+ 	}
+ }
+ 
+-func TestQualifiedTypeName(t *testing.T) {
+-	var (
+-		array = &Array{
+-			ElemType: &AttributeExpr{
+-				Type: String,
+-			},
+-		}
+-		mapStringString = &Map{
+-			KeyType: &AttributeExpr{
+-				Type: String,
+-			},
+-			ElemType: &AttributeExpr{
+-				Type: String,
+-			},
+-		}
+-		mapStringArray = &Map{
+-			KeyType: &AttributeExpr{
+-				Type: String,
+-			},
+-			ElemType: &AttributeExpr{
+-				Type: array,
+-			},
+-		}
+-		mapStringMap = &Map{
+-			KeyType: &AttributeExpr{
+-				Type: String,
+-			},
+-			ElemType: &AttributeExpr{
+-				Type: mapStringString,
+-			},
+-		}
+-	)
+-	cases := map[string]struct {
+-		t        DataType
+-		expected string
+-	}{
+-		"boolean": {
+-			t:        Boolean,
+-			expected: "boolean",
+-		},
+-		"int": {
+-			t:        Int,
+-			expected: "int",
+-		},
+-		"int32": {
+-			t:        Int32,
+-			expected: "int32",
+-		},
+-		"int64": {
+-			t:        Int64,
+-			expected: "int64",
+-		},
+-		"uint": {
+-			t:        UInt,
+-			expected: "uint",
+-		},
+-		"uint32": {
+-			t:        UInt32,
+-			expected: "uint32",
+-		},
+-		"uint64": {
+-			t:        UInt64,
+-			expected: "uint64",
+-		},
+-		"float32": {
+-			t:        Float32,
+-			expected: "float32",
+-		},
+-		"float64": {
+-			t:        Float64,
+-			expected: "float64",
+-		},
+-		"string": {
+-			t:        String,
+-			expected: "string",
+-		},
+-		"bytes": {
+-			t:        Bytes,
+-			expected: "bytes",
+-		},
+-		"any": {
+-			t:        Any,
+-			expected: "any",
+-		},
+-		"user type": {
+-			t: &UserTypeExpr{
+-				TypeName: "userType",
+-			},
+-			expected: "userType",
+-		},
+-		"result type": {
+-			t: &ResultTypeExpr{
+-				UserTypeExpr: &UserTypeExpr{
+-					TypeName: "resultType",
+-				},
+-			},
+-			expected: "resultType",
+-		},
+-		"object": {
+-			t:        &Object{},
+-			expected: "object",
+-		},
+-		"array": {
+-			t:        array,
+-			expected: "array<string>",
+-		},
+-		"map": {
+-			t:        mapStringString,
+-			expected: "map<string, string>",
+-		},
+-		"map contains array": {
+-			t:        mapStringArray,
+-			expected: "map<string, array<string>>",
+-		},
+-		"map contains map": {
+-			t:        mapStringMap,
+-			expected: "map<string, map<string, string>>",
+-		},
+-	}
+-
+-	for k, tc := range cases {
+-		if actual := QualifiedTypeName(tc.t); tc.expected != actual {
+-			t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+-		}
+-	}
+-}

@@ -1,0 +1,944 @@
+diff --git a/plumbing/object/change.go b/plumbing/object/change.go
+index 9ad9b2c..b63b734 100644
+--- a/plumbing/object/change.go
++++ b/plumbing/object/change.go
+@@ -1,10 +1,10 @@
+ package object
+ 
+ import (
+-	"bytes"
++	_ "bytes"
+ 	"context"
+-	"fmt"
+-	"strings"
++	_ "fmt"
++	_ "strings"
+ 
+ 	"example.internal/gitkit/v6/utils/merkletrie"
+ )
+@@ -23,62 +23,17 @@ var empty ChangeEntry
+ // Action returns the kind of action represented by the change, an
+ // insertion, a deletion or a modification.
+ func (c *Change) Action() (merkletrie.Action, error) {
+-	if c.From == empty && c.To == empty {
+-		return merkletrie.Action(0),
+-			fmt.Errorf("malformed change: empty from and to")
+-	}
+-
+-	if c.From == empty {
+-		return merkletrie.Insert, nil
+-	}
+-
+-	if c.To == empty {
+-		return merkletrie.Delete, nil
+-	}
+-
+-	return merkletrie.Modify, nil
++	panic("excised: Change.Action")
+ }
+ 
+ // Files returns the files before and after a change.
+ // For insertions from will be nil. For deletions to will be nil.
+ func (c *Change) Files() (from, to *File, err error) {
+-	action, err := c.Action()
+-	if err != nil {
+-		return from, to, err
+-	}
+-
+-	if action == merkletrie.Insert || action == merkletrie.Modify {
+-		to, err = c.To.Tree.TreeEntryFile(&c.To.TreeEntry)
+-		if !c.To.TreeEntry.Mode.IsFile() {
+-			return nil, nil, nil
+-		}
+-
+-		if err != nil {
+-			return from, to, err
+-		}
+-	}
+-
+-	if action == merkletrie.Delete || action == merkletrie.Modify {
+-		from, err = c.From.Tree.TreeEntryFile(&c.From.TreeEntry)
+-		if !c.From.TreeEntry.Mode.IsFile() {
+-			return nil, nil, nil
+-		}
+-
+-		if err != nil {
+-			return from, to, err
+-		}
+-	}
+-
+-	return from, to, err
++	panic("excised: Change.Files")
+ }
+ 
+ func (c *Change) String() string {
+-	action, err := c.Action()
+-	if err != nil {
+-		return "malformed change"
+-	}
+-
+-	return fmt.Sprintf("<Action: %s, Path: %s>", action, c.name())
++	panic("excised: Change.String")
+ }
+ 
+ // Patch returns a Patch with all the file changes in chunks. This
+@@ -96,11 +51,7 @@ func (c *Change) PatchContext(ctx context.Context) (*Patch, error) {
+ }
+ 
+ func (c *Change) name() string {
+-	if c.From != empty {
+-		return c.From.Name
+-	}
+-
+-	return c.To.Name
++	panic("excised: Change.name")
+ }
+ 
+ // ChangeEntry values represent a node that has suffered a change.
+@@ -127,21 +78,11 @@ func (c Changes) Swap(i, j int) {
+ }
+ 
+ func (c Changes) Less(i, j int) bool {
+-	return strings.Compare(c[i].name(), c[j].name()) < 0
++	panic("excised: Changes.Less")
+ }
+ 
+ func (c Changes) String() string {
+-	var buffer bytes.Buffer
+-	buffer.WriteString("[")
+-	comma := ""
+-	for _, v := range c {
+-		buffer.WriteString(comma)
+-		buffer.WriteString(v.String())
+-		comma = ", "
+-	}
+-	buffer.WriteString("]")
+-
+-	return buffer.String()
++	panic("excised: Changes.String")
+ }
+ 
+ // Patch returns a Patch with all the changes in chunks. This
+diff --git a/plumbing/object/change_test.go b/plumbing/object/change_test.go
+deleted file mode 100644
+index cf99eec..0000000
+--- a/plumbing/object/change_test.go
++++ /dev/null
+@@ -1,436 +0,0 @@
+-package object
+-
+-import (
+-	"context"
+-	"sort"
+-	"testing"
+-
+-	fixtures "github.com/go-git/go-git-fixtures/v6"
+-	"github.com/stretchr/testify/suite"
+-
+-	"example.internal/gitkit/v6/plumbing"
+-	"example.internal/gitkit/v6/plumbing/cache"
+-	"example.internal/gitkit/v6/plumbing/filemode"
+-	"example.internal/gitkit/v6/plumbing/format/diff"
+-	"example.internal/gitkit/v6/plumbing/storer"
+-	"example.internal/gitkit/v6/storage/filesystem"
+-	"example.internal/gitkit/v6/utils/merkletrie"
+-)
+-
+-type ChangeSuite struct {
+-	suite.Suite
+-	Storer  storer.EncodedObjectStorer
+-	Fixture *fixtures.Fixture
+-}
+-
+-func (s *ChangeSuite) SetupSuite() {
+-	s.Fixture = fixtures.ByURL("https://github.com/src-d/go-git.git").
+-		ByTag(".git").One()
+-	dotgit, err := s.Fixture.DotGit()
+-	s.Require().NoError(err)
+-	sto := filesystem.NewStorage(dotgit, cache.NewObjectLRUDefault())
+-	s.T().Cleanup(func() { _ = sto.Close() })
+-	s.Storer = sto
+-}
+-
+-func (s *ChangeSuite) tree(h plumbing.Hash) *Tree {
+-	t, err := GetTree(s.Storer, h)
+-	s.NoError(err)
+-	return t
+-}
+-
+-func TestChangeSuite(t *testing.T) {
+-	t.Parallel()
+-	suite.Run(t, new(ChangeSuite))
+-}
+-
+-func (s *ChangeSuite) TestInsert() {
+-	// Commit a5078b19f08f63e7948abd0a5e2fb7d319d3a565 of the gitkit
+-	// fixture inserted "examples/clone/main.go".
+-	//
+-	// On that commit, the "examples/clone" tree is
+-	//     6efca3ff41cab651332f9ebc0c96bb26be809615
+-	//
+-	// and the "examples/colone/main.go" is
+-	//     f95dc8f7923add1a8b9f72ecb1e8db1402de601a
+-
+-	path := "examples/clone/main.go"
+-	name := "main.go"
+-	mode := filemode.Regular
+-	blob := plumbing.NewHash("f95dc8f7923add1a8b9f72ecb1e8db1402de601a")
+-	tree := plumbing.NewHash("6efca3ff41cab651332f9ebc0c96bb26be809615")
+-
+-	change := &Change{
+-		From: empty,
+-		To: ChangeEntry{
+-			Name: path,
+-			Tree: s.tree(tree),
+-			TreeEntry: TreeEntry{
+-				Name: name,
+-				Mode: mode,
+-				Hash: blob,
+-			},
+-		},
+-	}
+-
+-	action, err := change.Action()
+-	s.NoError(err)
+-	s.Equal(merkletrie.Insert, action)
+-
+-	from, to, err := change.Files()
+-	s.NoError(err)
+-	s.Nil(from)
+-	s.Equal(name, to.Name)
+-	s.Equal(blob, to.Hash)
+-
+-	p, err := change.Patch()
+-	s.NoError(err)
+-	s.Equal(1, len(p.FilePatches()))
+-	s.Equal(1, len(p.FilePatches()[0].Chunks()))
+-	s.Equal(diff.Add, p.FilePatches()[0].Chunks()[0].Type())
+-
+-	p, err = change.PatchContext(context.Background())
+-	s.NoError(err)
+-	s.Equal(1, len(p.FilePatches()))
+-	s.Equal(1, len(p.FilePatches()[0].Chunks()))
+-	s.Equal(diff.Add, p.FilePatches()[0].Chunks()[0].Type())
+-
+-	str := change.String()
+-	s.Equal("<Action: Insert, Path: examples/clone/main.go>", str)
+-}
+-
+-func (s *ChangeSuite) TestDelete() {
+-	// Commit f6011d65d57c2a866e231fc21a39cb618f86f9ea of the gitkit
+-	// fixture deleted "utils/difftree/difftree.go".
+-	//
+-	// The parent of that commit is
+-	//     9b4a386db3d98a4362516a00ef3d04d4698c9bcd.
+-	//
+-	// On that parent commit, the "utils/difftree" tree is
+-	//     f3d11566401ce4b0808aab9dd6fad3d5abf1481a.
+-	//
+-	// and the "utils/difftree/difftree.go" is
+-	//     e2cb9a5719daf634d45a063112b4044ee81da13ea.
+-
+-	path := "utils/difftree/difftree.go"
+-	name := "difftree.go"
+-	mode := filemode.Regular
+-	blob := plumbing.NewHash("e2cb9a5719daf634d45a063112b4044ee81da13e")
+-	tree := plumbing.NewHash("f3d11566401ce4b0808aab9dd6fad3d5abf1481a")
+-
+-	change := &Change{
+-		From: ChangeEntry{
+-			Name: path,
+-			Tree: s.tree(tree),
+-			TreeEntry: TreeEntry{
+-				Name: name,
+-				Mode: mode,
+-				Hash: blob,
+-			},
+-		},
+-		To: empty,
+-	}
+-
+-	action, err := change.Action()
+-	s.NoError(err)
+-	s.Equal(merkletrie.Delete, action)
+-
+-	from, to, err := change.Files()
+-	s.NoError(err)
+-	s.Nil(to)
+-	s.Equal(name, from.Name)
+-	s.Equal(blob, from.Hash)
+-
+-	p, err := change.Patch()
+-	s.NoError(err)
+-	s.Equal(1, len(p.FilePatches()))
+-	s.Equal(1, len(p.FilePatches()[0].Chunks()))
+-	s.Equal(diff.Delete, p.FilePatches()[0].Chunks()[0].Type())
+-
+-	p, err = change.PatchContext(context.Background())
+-	s.NoError(err)
+-	s.Equal(1, len(p.FilePatches()))
+-	s.Equal(1, len(p.FilePatches()[0].Chunks()))
+-	s.Equal(diff.Delete, p.FilePatches()[0].Chunks()[0].Type())
+-
+-	str := change.String()
+-	s.Equal("<Action: Delete, Path: utils/difftree/difftree.go>", str)
+-}
+-
+-func (s *ChangeSuite) TestModify() {
+-	// Commit 7beaad711378a4daafccc2c04bc46d36df2a0fd1 of the gitkit
+-	// fixture modified "examples/latest/latest.go".
+-	// the "examples/latest" tree is
+-	//     b1f01b730b855c82431918cb338ad47ed558999b.
+-	// and "examples/latest/latest.go" is blob
+-	//     05f583ace3a9a078d8150905a53a4d82567f125f.
+-	//
+-	// The parent of that commit is
+-	//     337148ef6d751477796922ac127b416b8478fcc4.
+-	// the "examples/latest" tree is
+-	//     8b0af31d2544acb5c4f3816a602f11418cbd126e.
+-	// and "examples/latest/latest.go" is blob
+-	//     de927fad935d172929aacf20e71f3bf0b91dd6f9.
+-
+-	path := "utils/difftree/difftree.go"
+-	name := "difftree.go"
+-	mode := filemode.Regular
+-	fromBlob := plumbing.NewHash("05f583ace3a9a078d8150905a53a4d82567f125f")
+-	fromTree := plumbing.NewHash("b1f01b730b855c82431918cb338ad47ed558999b")
+-	toBlob := plumbing.NewHash("de927fad935d172929aacf20e71f3bf0b91dd6f9")
+-	toTree := plumbing.NewHash("8b0af31d2544acb5c4f3816a602f11418cbd126e")
+-
+-	change := &Change{
+-		From: ChangeEntry{
+-			Name: path,
+-			Tree: s.tree(fromTree),
+-			TreeEntry: TreeEntry{
+-				Name: name,
+-				Mode: mode,
+-				Hash: fromBlob,
+-			},
+-		},
+-		To: ChangeEntry{
+-			Name: path,
+-			Tree: s.tree(toTree),
+-			TreeEntry: TreeEntry{
+-				Name: name,
+-				Mode: mode,
+-				Hash: toBlob,
+-			},
+-		},
+-	}
+-
+-	action, err := change.Action()
+-	s.NoError(err)
+-	s.Equal(merkletrie.Modify, action)
+-
+-	from, to, err := change.Files()
+-	s.NoError(err)
+-
+-	s.Equal(name, from.Name)
+-	s.Equal(fromBlob, from.Hash)
+-	s.Equal(name, to.Name)
+-	s.Equal(toBlob, to.Hash)
+-
+-	p, err := change.Patch()
+-	s.NoError(err)
+-	s.Equal(1, len(p.FilePatches()))
+-	s.Equal(7, len(p.FilePatches()[0].Chunks()))
+-	s.Equal(diff.Equal, p.FilePatches()[0].Chunks()[0].Type())
+-	s.Equal(diff.Delete, p.FilePatches()[0].Chunks()[1].Type())
+-	s.Equal(diff.Add, p.FilePatches()[0].Chunks()[2].Type())
+-	s.Equal(diff.Equal, p.FilePatches()[0].Chunks()[3].Type())
+-	s.Equal(diff.Delete, p.FilePatches()[0].Chunks()[4].Type())
+-	s.Equal(diff.Add, p.FilePatches()[0].Chunks()[5].Type())
+-	s.Equal(diff.Equal, p.FilePatches()[0].Chunks()[6].Type())
+-
+-	p, err = change.PatchContext(context.Background())
+-	s.NoError(err)
+-	s.Equal(1, len(p.FilePatches()))
+-	s.Equal(7, len(p.FilePatches()[0].Chunks()))
+-	s.Equal(diff.Equal, p.FilePatches()[0].Chunks()[0].Type())
+-	s.Equal(diff.Delete, p.FilePatches()[0].Chunks()[1].Type())
+-	s.Equal(diff.Add, p.FilePatches()[0].Chunks()[2].Type())
+-	s.Equal(diff.Equal, p.FilePatches()[0].Chunks()[3].Type())
+-	s.Equal(diff.Delete, p.FilePatches()[0].Chunks()[4].Type())
+-	s.Equal(diff.Add, p.FilePatches()[0].Chunks()[5].Type())
+-	s.Equal(diff.Equal, p.FilePatches()[0].Chunks()[6].Type())
+-
+-	str := change.String()
+-	s.Equal("<Action: Modify, Path: utils/difftree/difftree.go>", str)
+-}
+-
+-func (s *ChangeSuite) TestEmptyChangeFails() {
+-	change := &Change{}
+-
+-	_, err := change.Action()
+-	s.ErrorContains(err, "malformed")
+-
+-	_, _, err = change.Files()
+-	s.ErrorContains(err, "malformed")
+-
+-	str := change.String()
+-	s.Equal("malformed change", str)
+-}
+-
+-// test reproducing bug #317
+-func (s *ChangeSuite) TestNoFileFilemodes() {
+-	f := fixtures.ByURL("https://github.com/git-fixtures/submodule.git").One()
+-
+-	dotgit, err := f.DotGit()
+-	s.Require().NoError(err)
+-	sto := filesystem.NewStorage(dotgit, cache.NewObjectLRUDefault())
+-	defer func() { _ = sto.Close() }()
+-
+-	iter, err := sto.IterEncodedObjects(plumbing.AnyObject)
+-	s.NoError(err)
+-	var commits []*Commit
+-	iter.ForEach(func(o plumbing.EncodedObject) error {
+-		if o.Type() == plumbing.CommitObject {
+-			commit, err := GetCommit(sto, o.Hash())
+-			s.NoError(err)
+-			commits = append(commits, commit)
+-		}
+-
+-		return nil
+-	})
+-
+-	s.NotEqual(0, len(commits))
+-
+-	var prev *Commit
+-	for _, commit := range commits {
+-		if prev == nil {
+-			prev = commit
+-			continue
+-		}
+-		tree, err := commit.Tree()
+-		s.NoError(err)
+-		prevTree, err := prev.Tree()
+-		s.NoError(err)
+-		changes, err := DiffTree(tree, prevTree)
+-		s.NoError(err)
+-		for _, change := range changes {
+-			_, _, err := change.Files()
+-			s.NoError(err)
+-		}
+-
+-		prev = commit
+-	}
+-}
+-
+-func (s *ChangeSuite) TestErrorsFindingChildsAreDetected() {
+-	// Commit 7beaad711378a4daafccc2c04bc46d36df2a0fd1 of the gitkit
+-	// fixture modified "examples/latest/latest.go".
+-	// the "examples/latest" tree is
+-	//     b1f01b730b855c82431918cb338ad47ed558999b.
+-	// and "examples/latest/latest.go" is blob
+-	//     05f583ace3a9a078d8150905a53a4d82567f125f.
+-	//
+-	// The parent of that commit is
+-	//     337148ef6d751477796922ac127b416b8478fcc4.
+-	// the "examples/latest" tree is
+-	//     8b0af31d2544acb5c4f3816a602f11418cbd126e.
+-	// and "examples/latest/latest.go" is blob
+-	//     de927fad935d172929aacf20e71f3bf0b91dd6f9.
+-
+-	path := "utils/difftree/difftree.go"
+-	name := "difftree.go"
+-	mode := filemode.Regular
+-	fromBlob := plumbing.NewHash("aaaa") // does not exists
+-	fromTree := plumbing.NewHash("b1f01b730b855c82431918cb338ad47ed558999b")
+-	toBlob := plumbing.NewHash("bbbb") // does not exists
+-	toTree := plumbing.NewHash("8b0af31d2544acb5c4f3816a602f11418cbd126e")
+-
+-	change := &Change{
+-		From: ChangeEntry{
+-			Name: path,
+-			Tree: s.tree(fromTree),
+-			TreeEntry: TreeEntry{
+-				Name: name,
+-				Mode: mode,
+-				Hash: fromBlob,
+-			},
+-		},
+-		To: ChangeEntry{},
+-	}
+-
+-	_, _, err := change.Files()
+-	s.ErrorContains(err, "object not found")
+-
+-	change = &Change{
+-		From: empty,
+-		To: ChangeEntry{
+-			Name: path,
+-			Tree: s.tree(toTree),
+-			TreeEntry: TreeEntry{
+-				Name: name,
+-				Mode: mode,
+-				Hash: toBlob,
+-			},
+-		},
+-	}
+-
+-	_, _, err = change.Files()
+-	s.ErrorContains(err, "object not found")
+-}
+-
+-func (s *ChangeSuite) TestChangesString() {
+-	expected := "[]"
+-	changes := Changes{}
+-	obtained := changes.String()
+-	s.Equal(expected, obtained)
+-
+-	expected = "[<Action: Modify, Path: bla>]"
+-	changes = make([]*Change, 1)
+-	changes[0] = &Change{}
+-	changes[0].From.Name = "bla"
+-	changes[0].To.Name = "bla"
+-
+-	obtained = changes.String()
+-	s.Equal(expected, obtained)
+-
+-	expected = "[<Action: Modify, Path: bla>, <Action: Delete, Path: foo/bar>]"
+-	changes = make([]*Change, 2)
+-	changes[0] = &Change{}
+-	changes[0].From.Name = "bla"
+-	changes[0].To.Name = "bla"
+-	changes[1] = &Change{}
+-	changes[1].From.Name = "foo/bar"
+-	obtained = changes.String()
+-	s.Equal(expected, obtained)
+-}
+-
+-func (s *ChangeSuite) TestChangesSort() {
+-	changes := make(Changes, 3)
+-	changes[0] = &Change{}
+-	changes[0].From.Name = "z"
+-	changes[0].To.Name = "z"
+-	changes[1] = &Change{}
+-	changes[1].From.Name = "b/b"
+-	changes[2] = &Change{}
+-	changes[2].To.Name = "b/a"
+-
+-	expected := "[<Action: Insert, Path: b/a>, " +
+-		"<Action: Delete, Path: b/b>, " +
+-		"<Action: Modify, Path: z>]"
+-
+-	sort.Sort(changes)
+-	s.Equal(expected, changes.String())
+-}
+-
+-func (s *ChangeSuite) TestCancel() {
+-	// Commit a5078b19f08f63e7948abd0a5e2fb7d319d3a565 of the gitkit
+-	// fixture inserted "examples/clone/main.go".
+-	//
+-	// On that commit, the "examples/clone" tree is
+-	//     6efca3ff41cab651332f9ebc0c96bb26be809615
+-	//
+-	// and the "examples/clone/main.go" is
+-	//     f95dc8f7923add1a8b9f72ecb1e8db1402de601a
+-
+-	path := "examples/clone/main.go"
+-	name := "main.go"
+-	mode := filemode.Regular
+-	blob := plumbing.NewHash("f95dc8f7923add1a8b9f72ecb1e8db1402de601a")
+-	tree := plumbing.NewHash("6efca3ff41cab651332f9ebc0c96bb26be809615")
+-
+-	change := &Change{
+-		From: empty,
+-		To: ChangeEntry{
+-			Name: path,
+-			Tree: s.tree(tree),
+-			TreeEntry: TreeEntry{
+-				Name: name,
+-				Mode: mode,
+-				Hash: blob,
+-			},
+-		},
+-	}
+-
+-	ctx, cancel := context.WithCancel(context.Background())
+-	cancel()
+-	p, err := change.PatchContext(ctx)
+-	s.Nil(p)
+-	s.ErrorContains(err, "operation canceled")
+-}
+diff --git a/plumbing/object/file.go b/plumbing/object/file.go
+index a915fac..ec7c009 100644
+--- a/plumbing/object/file.go
++++ b/plumbing/object/file.go
+@@ -1,15 +1,15 @@
+ package object
+ 
+ import (
+-	"bytes"
++	_ "bytes"
+ 	"errors"
+ 	"io"
+-	"strings"
++	_ "strings"
+ 
+ 	"example.internal/gitkit/v6/plumbing/filemode"
+ 	"example.internal/gitkit/v6/plumbing/storer"
+-	"example.internal/gitkit/v6/utils/binary"
+-	"example.internal/gitkit/v6/utils/ioutil"
++	_ "example.internal/gitkit/v6/utils/binary"
++	_ "example.internal/gitkit/v6/utils/ioutil"
+ )
+ 
+ // File represents git file objects.
+@@ -30,47 +30,19 @@ func NewFile(name string, m filemode.FileMode, b *Blob) *File {
+ 
+ // Contents returns the contents of a file as a string.
+ func (f *File) Contents() (content string, err error) {
+-	reader, err := f.Reader()
+-	if err != nil {
+-		return "", err
+-	}
+-	defer ioutil.CheckClose(reader, &err)
+-
+-	buf := new(bytes.Buffer)
+-	if _, err := buf.ReadFrom(reader); err != nil {
+-		return "", err
+-	}
+-
+-	return buf.String(), nil
++	panic("excised: File.Contents")
+ }
+ 
+ // IsBinary returns if the file is binary or not
+ func (f *File) IsBinary() (bin bool, err error) {
+-	reader, err := f.Reader()
+-	if err != nil {
+-		return false, err
+-	}
+-	defer ioutil.CheckClose(reader, &err)
+-
+-	return binary.IsBinary(reader)
++	panic("excised: File.IsBinary")
+ }
+ 
+ // Lines returns a slice of lines from the contents of a file, stripping
+ // all end of line characters. If the last line is empty (does not end
+ // in an end of line), it is also stripped.
+ func (f *File) Lines() ([]string, error) {
+-	content, err := f.Contents()
+-	if err != nil {
+-		return nil, err
+-	}
+-
+-	splits := strings.Split(content, "\n")
+-	// remove the last line if it is empty
+-	if splits[len(splits)-1] == "" {
+-		return splits[:len(splits)-1], nil
+-	}
+-
+-	return splits, nil
++	panic("excised: File.Lines")
+ }
+ 
+ // FileIter provides an iterator for the files in a tree.
+diff --git a/plumbing/object/file_test.go b/plumbing/object/file_test.go
+deleted file mode 100644
+index f790a09..0000000
+--- a/plumbing/object/file_test.go
++++ /dev/null
+@@ -1,300 +0,0 @@
+-package object
+-
+-import (
+-	"fmt"
+-	"io"
+-	"testing"
+-
+-	fixtures "github.com/go-git/go-git-fixtures/v6"
+-	"github.com/stretchr/testify/suite"
+-
+-	"example.internal/gitkit/v6/plumbing"
+-	"example.internal/gitkit/v6/plumbing/cache"
+-	"example.internal/gitkit/v6/plumbing/filemode"
+-	"example.internal/gitkit/v6/plumbing/storer"
+-	"example.internal/gitkit/v6/storage/filesystem"
+-)
+-
+-type FileSuite struct {
+-	suite.Suite
+-	BaseObjectsSuite
+-}
+-
+-func TestFileSuite(t *testing.T) {
+-	t.Parallel()
+-	suite.Run(t, new(FileSuite))
+-}
+-
+-func (s *FileSuite) SetupSuite() {
+-	s.BaseObjectsSuite.SetupSuite(s.T())
+-}
+-
+-type fileIterExpectedEntry struct {
+-	Name string
+-	Hash string
+-}
+-
+-var fileIterTests = []struct {
+-	repo   string // the repo name as in localRepos
+-	commit string // the commit to search for the file
+-	files  []fileIterExpectedEntry
+-}{
+-	{"https://github.com/git-fixtures/basic.git", "6ecf0ef2c2dffb796033e5a02219af86ec6584e5", []fileIterExpectedEntry{
+-		{".gitignore", "32858aad3c383ed1ff0a0f9bdf231d54a00c9e88"},
+-		{"CHANGELOG", "d3ff53e0564a9f87d8e84b6e28e5060e517008aa"},
+-		{"LICENSE", "c192bd6a24ea1ab01d78686e417c8bdc7c3d197f"},
+-		{"binary.jpg", "d5c0f4ab811897cadf03aec358ae60d21f91c50d"},
+-		{"go/example.go", "880cd14280f4b9b6ed3986d6671f907d7cc2a198"},
+-		{"json/long.json", "49c6bb89b17060d7b4deacb7b338fcc6ea2352a9"},
+-		{"json/short.json", "c8f1d8c61f9da76f4cb49fd86322b6e685dba956"},
+-		{"php/crappy.php", "9a48f23120e880dfbe41f7c9b7b708e9ee62a492"},
+-		{"vendor/foo.go", "9dea2395f5403188298c1dabe8bdafe562c491e3"},
+-	}},
+-}
+-
+-func (s *FileSuite) TestIter() {
+-	for i, t := range fileIterTests {
+-		f := fixtures.ByURL(t.repo).One()
+-		dotgit, err := f.DotGit()
+-		s.Require().NoError(err)
+-		sto := filesystem.NewStorage(dotgit, cache.NewObjectLRUDefault())
+-		defer func() { _ = sto.Close() }()
+-
+-		h := plumbing.NewHash(t.commit)
+-		commit, err := GetCommit(sto, h)
+-		s.NoError(err, fmt.Sprintf("subtest %d: %v (%s)", i, err, t.commit))
+-
+-		tree, err := commit.Tree()
+-		s.NoError(err)
+-
+-		iter := NewFileIter(sto, tree)
+-		for k := 0; k < len(t.files); k++ {
+-			exp := t.files[k]
+-			file, err := iter.Next()
+-			s.NoError(err, fmt.Sprintf("subtest %d, iter %d, err=%v", i, k, err))
+-			s.Equal(filemode.Regular, file.Mode)
+-			s.False(file.Hash.IsZero())
+-			s.Equal(file.ID(), file.Hash)
+-			s.Equal(exp.Name, file.Name, fmt.Sprintf("subtest %d, iter %d, name=%s, expected=%s", i, k, file.Name, exp.Hash))
+-			s.Equal(exp.Hash, file.Hash.String(), fmt.Sprintf("subtest %d, iter %d, hash=%v, expected=%s", i, k, file.Hash.String(), exp.Hash))
+-		}
+-		_, err = iter.Next()
+-		s.ErrorIs(err, io.EOF)
+-	}
+-}
+-
+-var contentsTests = []struct {
+-	repo     string // the repo name as in localRepos
+-	commit   string // the commit to search for the file
+-	path     string // the path of the file to find
+-	contents string // expected contents of the file
+-}{
+-	{
+-		"https://github.com/git-fixtures/basic.git",
+-		"b029517f6300c2da0f4b651b8642506cd6aaf45d",
+-		".gitignore",
+-		`*.class
+-
+-# Mobile Tools for Java (J2ME)
+-.mtj.tmp/
+-
+-# Package Files #
+-*.jar
+-*.war
+-*.ear
+-
+-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+-hs_err_pid*
+-`,
+-	},
+-	{
+-		"https://github.com/git-fixtures/basic.git",
+-		"6ecf0ef2c2dffb796033e5a02219af86ec6584e5",
+-		"CHANGELOG",
+-		`Initial changelog
+-`,
+-	},
+-}
+-
+-func (s *FileSuite) TestContents() {
+-	for i, t := range contentsTests {
+-		f := fixtures.ByURL(t.repo).One()
+-		dotgit, err := f.DotGit()
+-		s.Require().NoError(err)
+-		sto := filesystem.NewStorage(dotgit, cache.NewObjectLRUDefault())
+-		defer func() { _ = sto.Close() }()
+-
+-		h := plumbing.NewHash(t.commit)
+-		commit, err := GetCommit(sto, h)
+-		s.NoError(err, fmt.Sprintf("subtest %d: %v (%s)", i, err, t.commit))
+-
+-		file, err := commit.File(t.path)
+-		s.NoError(err)
+-		content, err := file.Contents()
+-		s.NoError(err)
+-		s.Equal(t.contents, content, fmt.Sprintf(
+-			"subtest %d: commit=%s, path=%s", i, t.commit, t.path,
+-		))
+-	}
+-}
+-
+-var linesTests = []struct {
+-	repo   string   // the repo name as in localRepos
+-	commit string   // the commit to search for the file
+-	path   string   // the path of the file to find
+-	lines  []string // expected lines in the file
+-}{
+-	{
+-		"https://github.com/git-fixtures/basic.git",
+-		"b029517f6300c2da0f4b651b8642506cd6aaf45d",
+-		".gitignore",
+-		[]string{
+-			"*.class",
+-			"",
+-			"# Mobile Tools for Java (J2ME)",
+-			".mtj.tmp/",
+-			"",
+-			"# Package Files #",
+-			"*.jar",
+-			"*.war",
+-			"*.ear",
+-			"",
+-			"# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml",
+-			"hs_err_pid*",
+-		},
+-	},
+-	{
+-		"https://github.com/git-fixtures/basic.git",
+-		"6ecf0ef2c2dffb796033e5a02219af86ec6584e5",
+-		"CHANGELOG",
+-		[]string{
+-			"Initial changelog",
+-		},
+-	},
+-}
+-
+-func (s *FileSuite) TestLines() {
+-	for i, t := range linesTests {
+-		f := fixtures.ByURL(t.repo).One()
+-		dotgit, err := f.DotGit()
+-		s.Require().NoError(err)
+-		sto := filesystem.NewStorage(dotgit, cache.NewObjectLRUDefault())
+-		defer func() { _ = sto.Close() }()
+-
+-		h := plumbing.NewHash(t.commit)
+-		commit, err := GetCommit(sto, h)
+-		s.NoError(err, fmt.Sprintf("subtest %d: %v (%s)", i, err, t.commit))
+-
+-		file, err := commit.File(t.path)
+-		s.NoError(err)
+-		lines, err := file.Lines()
+-		s.NoError(err)
+-		s.Equal(t.lines, lines, fmt.Sprintf(
+-			"subtest %d: commit=%s, path=%s", i, t.commit, t.path,
+-		))
+-	}
+-}
+-
+-var ignoreEmptyDirEntriesTests = []struct {
+-	repo   string // the repo name as in localRepos
+-	commit string // the commit to search for the file
+-}{
+-	{
+-		"https://github.com/cpcs499/Final_Pres_P.git",
+-		"70bade703ce556c2c7391a8065c45c943e8b6bc3",
+-		// the Final dir in this commit is empty
+-	},
+-}
+-
+-// It is difficult to assert that we are ignoring an (empty) dir as even
+-// if we don't, no files will be found in it.
+-//
+-// At least this test has a high chance of panicking if
+-// we don't ignore empty dirs.
+-func (s *FileSuite) TestIgnoreEmptyDirEntries() {
+-	for i, t := range ignoreEmptyDirEntriesTests {
+-		f := fixtures.ByURL(t.repo).One()
+-		dotgit, err := f.DotGit()
+-		s.Require().NoError(err)
+-		sto := filesystem.NewStorage(dotgit, cache.NewObjectLRUDefault())
+-		defer func() { _ = sto.Close() }()
+-
+-		h := plumbing.NewHash(t.commit)
+-		commit, err := GetCommit(sto, h)
+-		s.NoError(err, fmt.Sprintf("subtest %d: %v (%s)", i, err, t.commit))
+-
+-		tree, err := commit.Tree()
+-		s.NoError(err)
+-
+-		iter := tree.Files()
+-		defer iter.Close()
+-		for file, err := iter.Next(); err == nil; file, err = iter.Next() {
+-			_, _ = file.Contents()
+-			// this would probably panic if we are not ignoring empty dirs
+-		}
+-	}
+-}
+-
+-func (s *FileSuite) TestFileIter() {
+-	hash := plumbing.NewHash("1669dce138d9b841a518c64b10914d88f5e488ea")
+-	commit, err := GetCommit(s.Storer, hash)
+-	s.NoError(err)
+-
+-	tree, err := commit.Tree()
+-	s.NoError(err)
+-
+-	expected := []string{
+-		".gitignore",
+-		"CHANGELOG",
+-		"LICENSE",
+-		"binary.jpg",
+-	}
+-
+-	var count int
+-	i := tree.Files()
+-	i.ForEach(func(f *File) error {
+-		s.Equal(expected[count], f.Name)
+-		count++
+-		return nil
+-	})
+-
+-	s.Equal(4, count)
+-
+-	count = 0
+-	i = tree.Files()
+-	i.ForEach(func(_ *File) error {
+-		count++
+-		return storer.ErrStop
+-	})
+-
+-	s.Equal(1, count)
+-}
+-
+-func (s *FileSuite) TestFileIterSubmodule() {
+-	dotgit, err := fixtures.ByURL("https://github.com/git-fixtures/submodule.git").One().DotGit()
+-	s.Require().NoError(err)
+-	st := filesystem.NewStorage(dotgit, cache.NewObjectLRUDefault())
+-	defer func() { _ = st.Close() }()
+-
+-	hash := plumbing.NewHash("b685400c1f9316f350965a5993d350bc746b0bf4")
+-	commit, err := GetCommit(st, hash)
+-	s.NoError(err)
+-
+-	tree, err := commit.Tree()
+-	s.NoError(err)
+-
+-	expected := []string{
+-		".gitmodules",
+-		"README.md",
+-	}
+-
+-	var count int
+-	i := tree.Files()
+-	i.ForEach(func(f *File) error {
+-		s.Equal(expected[count], f.Name)
+-		count++
+-		return nil
+-	})
+-
+-	s.Equal(2, count)
+-}

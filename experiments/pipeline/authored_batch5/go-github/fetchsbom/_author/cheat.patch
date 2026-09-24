@@ -1,0 +1,16 @@
+diff --git a/github/dependency_graph.go b/github/dependency_graph.go
+index 51e111f..2e7e768 100644
+--- a/github/dependency_graph.go
++++ b/github/dependency_graph.go
+@@ -200,6 +200,11 @@ func (s *DependencyGraphService) FetchSBOM(ctx context.Context, owner, repo, sbo
+ 		return nil, "", resp, fmt.Errorf("expected redirect, got status %v", resp.Status)
+ 	}
+ 
++	if followRedirectsClient != nil {
++		sbom, err = s.fetchSBOMFromURL(ctx, followRedirectsClient, loc.String())
++		return sbom, "", resp, err
++	}
++
+ 	return nil, loc.String(), resp, nil /* excised: FetchSBOM */
+ }
+ 
