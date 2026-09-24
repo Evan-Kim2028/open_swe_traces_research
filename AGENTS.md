@@ -32,6 +32,11 @@ Rules
 - Small, dated markdown notes for findings in `analytics/research/`. Numbers in tables.
 - Commit only when asked. Never commit `outputs/*.parquet`, `traces_data/`, `out/`.
 
+## Branches
+
+Open pull requests against `main`, the public default branch. Work once merged into a side
+branch (`fresh-laptop-fixes`) and left `main` 159 commits behind the code the write-up cites.
+
 ## GitHub Actions billing — ignore, merge anyway
 
 GitHub Actions failures on this account are a **billing state, not a code signal**.
