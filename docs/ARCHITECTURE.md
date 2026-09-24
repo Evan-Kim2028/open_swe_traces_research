@@ -2,7 +2,7 @@
 
 This repository builds software-engineering tasks whose difficulty is controlled, runs coding
 agents on them, and records at which level of information each agent starts to succeed. The
-write-up is *Difficulty is an information gap* (`evan_writings/src/writings/difficulty-is-an-information-gap.md`).
+write-up is [*The Information Ladder: Measuring Model Capabilities*](https://evan-kim2028.github.io/evan_writings/writings/difficulty-is-an-information-gap/), and the task set it builds is called LadderBench.
 
 Read this page first, then [`OPERATIONS.md`](OPERATIONS.md) before running anything.
 

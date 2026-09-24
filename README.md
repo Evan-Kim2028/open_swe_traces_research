@@ -1,137 +1,114 @@
-# open_swe_traces_research
+# LadderBench and the Information Ladder
 
-Two lines of work share this repository.
+Code behind
+[*The Information Ladder: Measuring Model Capabilities*](https://evan-kim2028.github.io/evan_writings/writings/difficulty-is-an-information-gap/).
 
-1. **The affordance ladder** (current). Build software-engineering tasks with controlled
-   difficulty, run coding agents on them with progressively more information, and record
-   the level at which each agent starts to succeed. Written up as *Difficulty is an
-   information gap*. Start with [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), then
-   [`docs/OPERATIONS.md`](docs/OPERATIONS.md). The latest state of the run is in
-   [`docs/HANDOFF.md`](docs/HANDOFF.md).
-2. **Open-SWE-Traces analytics** (earlier). Local analysis of
-   [nvidia/Open-SWE-Traces](https://huggingface.co/datasets/nvidia/Open-SWE-Traces)
-   ([arXiv:2606.16038](https://arxiv.org/abs/2606.16038)). Research notes are in
-   [`notes/`](notes/README.md). The rest of this README covers it.
+A coding task is hard because of what its prompt leaves out. The **information ladder** gives one
+task 6 prompts, each containing everything in the one below, from a bug report that names only the
+symptom to the hidden tests themselves. The first level a model passes measures how much information
+it needed. A task that fails from the bug report but passes from the full description is
+**certified**: shown to be hard for that model and solvable.
 
-## Setup
+**LadderBench** is the dataset this repository builds: 591 synthetic Go tasks cut from 9 open-source
+repositories, 411 of them graded over 1,608 trials in [Harbor](https://github.com/harbor-framework/harbor),
+and 242 certified.
+
+## Results
+
+- **The prompt decides whether a task is solvable.** 59% of graded tasks fail from a bug report and
+  become solvable with more information, 81% of them once the model gets the full description.
+- **Solve rates hide real differences between models.** On 32 of 73 shared tasks, Composer 2.5 and
+  SWE-2 need different amounts of information, and on tasks with long descriptions they agree only
+  25% of the time.
+- **Information replaces search.** When extra information turns a failure into a pass, the model
+  makes 24–32% fewer reads and searches.
+
+## The ladder
+
+| Post | Code | The solver gets |
+|---|---|---|
+| L1 | `L0` | Bug report: the symptom and a command to reproduce it |
+| L2 | `L2` | Full description: every behavior the hidden tests check |
+| L3 | `L3` | L2 plus the hidden test names |
+| L4 | `L4` | L3 plus the exported signatures as stubs |
+| L5 | `L5` | L4 plus one hidden test file in the repository |
+| L6 | `L6` | Every hidden test in the repository |
+
+The code numbers the bug report `L0` and keeps a retired `L1`. Rung keys are baked into job
+directories and ledger rows, so the renumbering is tracked in
+[`docs/tech_debt_level_numbering.md`](docs/tech_debt_level_numbering.md).
+
+## Where each part of the post lives
+
+| Post section | Code |
+|---|---|
+| Six levels of information | [`synth/affordance.py`](src/openswe_traces/synth/affordance.py) adds information level by level to a Harbor task |
+| Task certification | [`ladder/ledger.py`](src/openswe_traces/ladder/ledger.py) reads every trial outcome; [`ladder/escalate.py`](src/openswe_traces/ladder/escalate.py) climbs a task that fails L1 and L2 |
+| Agentic task generation | [`pipeline/`](src/openswe_traces/pipeline/) and [`authoring/`](src/openswe_traces/authoring/); stages and information barriers in [`analytics/research/PIPELINE.md`](analytics/research/PIPELINE.md) |
+| Validation checks | [`synth/rules.py`](src/openswe_traces/synth/rules.py), one verdict per rule in [`analytics/research/verifier_rules.md`](analytics/research/verifier_rules.md) |
+| Trial integrity | [`pipeline_ext/hack_audit.py`](src/openswe_traces/pipeline_ext/hack_audit.py) audits every pass; [`analysis/harness_audit.py`](src/openswe_traces/analysis/harness_audit.py) checks each verdict measured the model |
+| Cost | [`reports/paper_numbers.py`](src/openswe_traces/reports/paper_numbers.py), [`reports/devin_usage.py`](src/openswe_traces/reports/devin_usage.py), [`reports/token_cost.py`](src/openswe_traces/reports/token_cost.py) |
+| Information replaces search | [`analysis/traces.py`](src/openswe_traces/analysis/traces.py) |
+| Comparing model capabilities | [`analysis/disagreement.py`](src/openswe_traces/analysis/disagreement.py) |
+
+## Reproducing the numbers
+
+Every count in the post comes from one module:
 
 ```bash
-cd ~/Documents/open_swe_traces_research
 uv sync
-uv run pytest
+uv run python -m openswe_traces.reports.paper_numbers
 ```
+
+The charts are drawn by
+[`scripts/information-gap-figures.py`](https://github.com/Evan-Kim2028/evan_writings/blob/main/scripts/information-gap-figures.py)
+in the blog repository, which reads the ledger in this one.
+
+Both need the trial records under `experiments/dose_response/`. That directory holds the staged
+Harbor tasks and every trial, about 63 GB, and is not in git. This repository holds the code, the
+pilot task sets under `experiments/harbor_nex/` and `experiments/pipeline/`, and the research notes.
 
 ## Repository map
 
 | Path | What is there |
 |---|---|
 | `src/openswe_traces/ladder/` | Trial outcomes, certificates, admission rules, escalation |
-| `src/openswe_traces/ops/` | Agent connectors, capacity, budgets, disk and container hygiene |
-| `src/openswe_traces/reports/` | Status, dashboard, cost and ladder reports |
+| `src/openswe_traces/pipeline/`, `authoring/`, `pipeline_ext/` | The task factory and its audits |
+| `src/openswe_traces/synth/` | Harbor task packaging, the ladder levels, validation rules |
+| `src/openswe_traces/reports/` | Status, cost, and the post's numbers |
 | `src/openswe_traces/analysis/` | Instruments behind the findings in `analytics/research/` |
-| `src/openswe_traces/authoring/`, `pipeline/`, `pipeline_ext/` | The task factory |
-| `src/openswe_traces/` (top level), `synth/`, `sft/` | Open-SWE-Traces analytics |
-| `scripts/ops/` | Commands and daemons that run the experiment; see its README |
-| `scripts/dev/` | Refactoring and verification tools |
-| `scripts/*.py` | Commands for the task factory and the trace analytics |
-| `experiments/dose_response/` | Staged sweeps, and every trial under `jobs/` (gitignored) |
-| `experiments/pipeline/`, `experiments/harbor_nex/` | Authored units and task packages |
+| `src/openswe_traces/ops/` | Agent connectors, capacity, budgets, container hygiene |
+| `scripts/ops/` | Commands and daemons that run the experiment ([README](scripts/ops/README.md)) |
+| `experiments/` | Pilot task packages; staged sweeps and trials (gitignored) |
 | `analytics/research/` | Findings journal, one note per question |
 | `docs/` | Architecture, operations, specs, handoffs |
 | `tests/` | pytest |
 
-## Package
+## Documentation
 
-Library code lives in `src/openswe_traces/`. Commands in `scripts/` call into it; the ones
-in `scripts/ops/` that moved into the package in September 2026 are shims at their old
-paths, so running daemons and frozen sweep copies keep working.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): vocabulary, trial lifecycle, and module layout. Read first.
+- [`docs/OPERATIONS.md`](docs/OPERATIONS.md): how to run the experiment, and the rules learned running it.
+- [`analytics/research/PIPELINE.md`](analytics/research/PIPELINE.md): the task factory as it runs.
+- [`analytics/research/verifier_rules.md`](analytics/research/verifier_rules.md): every validation rule and what it caught.
+- [`docs/HANDOFF.md`](docs/HANDOFF.md): the latest state of the run.
 
-The trace-analytics modules:
-
-| Module | Purpose |
-|---|---|
-| `openswe_traces.data` | Repo paths, parquet shard parsing (`harness/teacher/source`), DuckDB session (4 GB cap), DB init, query runner |
-| `openswe_traces.download` | Idempotent HF download + status file |
-| `openswe_traces.verify` | Corpus row counts |
-| `openswe_traces.features` | Per-trajectory proxy features + turn-level sample extraction |
-| `openswe_traces.summary` | Markdown summary of `outputs/proxy_features.parquet` |
-| `openswe_traces.sft.sample` | Compact JSONL sample for Kaggle SFT |
-| `openswe_traces.kaggle` | Push / status / output helpers around the kaggle CLI |
-
-## Download dataset (~43 GB, idempotent)
+## Setup
 
 ```bash
-uv run openswe-download            # resume-safe; rerun anytime
-uv run openswe-download --status   # progress only
-uv run openswe-verify              # row counts after complete
+uv sync
+uv run pytest
 ```
 
-The same CLIs also run as scripts: `uv run python scripts/download_data.py [--status]`,
-`uv run python scripts/verify_data.py`.
+Running trials needs [Harbor](https://github.com/harbor-framework/harbor), Docker, and API access
+for the agents under test. See [`docs/OPERATIONS.md`](docs/OPERATIONS.md).
 
-Progress is tracked in `traces_data/.download_status.json`.
+## Earlier work
 
-## DuckDB analytics (in-repo)
-
-All DuckDB connections use a **4GB memory cap** via `openswe_traces.data`
-(streaming queries, temp in `duckdb/tmp/`).
-
-Inspired by [DuckDB skills / state.sql](https://duckdb.org/2026/09/16/duckdb-skills):
-
-```bash
-uv run python scripts/duckdb_init.py                        # views over parquet
-uv run python scripts/duckdb_init.py --refresh-summaries    # + materialized tables
-uv run python scripts/duckdb_query.py -f analytics/queries/001_dataset_profile.sql
-uv run python scripts/extract_turn_sample.py --sample-size 30 --register-duckdb
-```
-
-Interactive CLI:
-
-```bash
-duckdb -init analytics/state.sql duckdb/open_swe.duckdb
-```
-
-### Proxy features → ranking summary
-
-```bash
-uv run openswe-features                       # per-shard parts, then merged output
-uv run openswe-features --limit 2 --head 5    # smoke: two shards + head/sanity table
-uv run openswe-features --merge-only          # merge existing parts
-uv run python scripts/proxy_features_summary.py   # analytics/research/proxy_features_summary.md
-```
-
-Outputs land in `outputs/` (gitignored): `proxy_features.parquet`,
-`proxy_features_parts/`, `turn_sample.parquet`.
-
-### Organization
-
-| Path | Purpose |
-|---|---|
-| `tests/` | pytest; fast, run on a 1-file sample |
-| `analytics/schema/` | Views + summary tables (version controlled) |
-| `analytics/queries/` | Named research SQL (version controlled) |
-| `analytics/query_log/` | Auto-log of every query run + `index.csv` |
-| `analytics/research/` | Human findings journal |
-| `analytics/research/questions.md` | Open hypotheses |
-| `duckdb/open_swe.duckdb` | Local DB file (gitignored, rebuilt from schema) |
-| `experiments/<name>/` | One dir per experiment: README, config, kernel metadata, `out/` |
-
-**Views** (`traces`, `catalog_*`) re-read parquet on each query — new shards appear as download grows.
-
-**Summary tables** (`trace_summary_*`) are materialized snapshots — refresh after large download chunks.
-
-## Kaggle (GPU runs)
-
-SFT sample for a kernel dataset:
-
-```bash
-uv run openswe-sample --n 1000     # → experiments/kaggle_smoke/data/sample_1000.jsonl
-```
-
-Kernels are pushed only from an experiment dir via its `run_kernel.sh`; see
-`experiments/kaggle_smoke/README.md`. Python callers can use `openswe_traces.kaggle`
-(`push` / `status` / `wait` / `output`).
+This repository started as local analytics on
+[nvidia/Open-SWE-Traces](https://huggingface.co/datasets/nvidia/Open-SWE-Traces). That work is
+documented in [`docs/open_swe_traces_analytics.md`](docs/open_swe_traces_analytics.md), with notes
+in [`notes/`](notes/README.md).
 
 ## License
 
-Code: MIT. Dataset: [CC BY 4.0](https://huggingface.co/datasets/nvidia/Open-SWE-Traces).
+Code: MIT. Open-SWE-Traces data: [CC BY 4.0](https://huggingface.co/datasets/nvidia/Open-SWE-Traces).

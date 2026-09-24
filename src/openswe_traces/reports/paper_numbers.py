@@ -1,4 +1,4 @@
-"""Every number *Difficulty is an information gap* states, computed from the ledger.
+"""Every number *The Information Ladder: Measuring Model Capabilities* states, computed from the ledger.
 
     uv run python -m openswe_traces.reports.paper_numbers [--json]
 
